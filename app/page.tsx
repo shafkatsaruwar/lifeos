@@ -103,11 +103,11 @@ const toDateKey = (value: Date) => {
 const formatEventTime = (value: string) => new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 const getGreeting = (date: Date) => {
   const hour = date.getHours();
-  if (hour < 5) return "Still up, Mohammed?";
-  if (hour < 12) return "Good morning, Mohammed.";
-  if (hour < 17) return "Good afternoon, Mohammed.";
-  if (hour < 22) return "Good evening, Mohammed.";
-  return "Good night, Mohammed.";
+  if (hour < 5) return "Still Up, Mohammed?";
+  if (hour < 12) return "Good Morning, Mohammed.";
+  if (hour < 17) return "Good Afternoon, Mohammed.";
+  if (hour < 22) return "Good Evening, Mohammed.";
+  return "Good Night, Mohammed.";
 };
 const priorityRank: Record<Task["priority"], number> = { High: 0, Medium: 1, Low: 2 };
 const normalizeTask = (task: Partial<Task>): Task => ({
