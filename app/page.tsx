@@ -485,7 +485,7 @@ export default function LifeOS() {
         </header>
         <AnimatePresence mode="wait">
           <motion.div key={view} className="page" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
-            {view === "Dashboard" && <Dashboard tasks={tasks} projects={projectItems} brainCount={brainItems.length} onComplete={complete} onFocus={openFocus} onCapture={() => setCapture(true)} onGo={go} onNewTask={() => setComposer("task")} onTaskMenu={setActionTaskId} />}
+            {view === "Dashboard" && <Dashboard tasks={tasks} projects={projectItems} brainCount={brainItems.length} onComplete={complete} onFocus={openFocus} onCapture={() => setCapture(true)} onGo={go} onNewTask={() => setComposer("task")} onTaskMenu={setActionTaskId} events={calendarEvents} />}
             {view === "Projects" && <Projects projects={projectItems} tasks={tasks} onNew={() => setComposer("project")} onAction={setActionProjectName} onOpen={setSelectedProjectName} />}
             {view === "Tasks" && <Tasks tasks={tasks} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} />}
             {view === "Calendar" && <CalendarView events={calendarEvents} weekStartsMonday={settingsState.weekStartsMonday} onNew={() => setCalendarComposer(true)} onImport={() => setCalendarImporter(true)} onEdit={setEditingCalendarEventId} />}
@@ -513,7 +513,7 @@ export default function LifeOS() {
   );
 }
 
-function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture, onGo, onNewTask, onTaskMenu }: { tasks: Task[]; projects: Project[]; brainCount: number; onComplete: (id: number) => void; onFocus: (id?: number) => void; onCapture: () => void; onGo: (view: View) => void; onNewTask: () => void; onTaskMenu: (id: number) => void }) {
+function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture, onGo, onNewTask, onTaskMenu, events }: { tasks: Task[]; projects: Project[]; brainCount: number; onComplete: (id: number) => void; onFocus: (id?: number) => void; onCapture: () => void; onGo: (view: View) => void; onNewTask: () => void; onTaskMenu: (id: number) => void; events: CalendarEvent[] }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const tick = window.setInterval(() => setNow(new Date()), 60_000);
@@ -521,6 +521,8 @@ function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture
   }, []);
   const readyPriorities = tasks.slice(0, 3).filter(task => !task.done && !task.canceled).length;
   const nextTask = tasks.find(task => !task.done && !task.canceled) ?? tasks[0];
+  const todayKey = toDateKey(now);
+  const todayEvents = events.filter(event => event.start.slice(0, 10) === todayKey).sort((a, b) => a.start.localeCompare(b.start));
   return <>
     <section className="welcome">
       <div><p className="eyebrow">{now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p><h1>{getGreeting(now)}</h1><p>Here’s what deserves your attention today.</p></div>
@@ -540,7 +542,13 @@ function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture
       </section>
       <section className="card schedule">
         <div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>Today’s schedule</h2></div><button onClick={() => onGo("Calendar")}>View calendar</button></div>
-        {[["09:30", "Deep work — Synapse", "10:15"], ["11:00", "Team sync", "11:30"], ["14:00", "Photography edit", "15:30"]].map((event, i) => <div className="event" key={event[0]}><div><strong>{event[0]}</strong><span>{event[2]}</span></div><i className={`event-line e${i}`} /><div><strong>{event[1]}</strong><span>{i === 1 ? "Google Meet" : "Focus block"}</span></div></div>)}
+        {todayEvents.length ? todayEvents.map((event, i) => {
+          const start = new Date(event.start);
+          const end = event.end ? new Date(event.end) : new Date(start.getTime() + 45 * 60_000);
+          const startTime = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
+          const endTime = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
+          return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong><span>{event.notes || (event.source === "LifeOS" ? "Focus block" : event.source)}</span></div></div>;
+        }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p></div>}
       </section>
       <section className="card projects-card">
         <div className="card-head"><div><span className="section-icon orange"><FolderKanban size={14} /></span><h2>Active projects</h2></div><button onClick={() => onGo("Projects")}>All projects <ArrowRight size={14} /></button></div>
