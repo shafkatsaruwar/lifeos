@@ -532,7 +532,7 @@ function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture
   return <>
     <section className="welcome">
       <div><p className="eyebrow">{now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p><h1>{getGreeting(now)}</h1><p>Here’s what deserves your attention today.</p></div>
-      <div className="day-score"><span>Today</span><strong>{readyPriorities}<span>/{tasks.length}</span></strong><small>priorities ready</small></div>
+      <div className="day-score"><span>Today</span>{readyPriorities === 0 && tasks.length > 0 && tasks.every(t => t.done || t.canceled) ? <><strong>All Done</strong><small style={{ textTransform: "none" }}>for Today</small></> : <><strong>{readyPriorities}<span>/{tasks.length}</span></strong><small>priorities ready</small></>}</div>
     </section>
     <div className="dashboard-grid">
       <section className="card priorities">
