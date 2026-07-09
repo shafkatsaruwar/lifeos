@@ -526,7 +526,7 @@ function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture
     return () => window.clearInterval(tick);
   }, []);
   const readyPriorities = tasks.slice(0, 3).filter(task => !task.done && !task.canceled).length;
-  const nextTask = tasks.find(task => !task.done && !task.canceled) ?? tasks[0];
+  const nextTask = tasks.find(task => !task.done && !task.canceled);
   const todayKey = toDateKey(now);
   const todayEvents = events.filter(event => event.start.slice(0, 10) === todayKey).sort((a, b) => a.start.localeCompare(b.start));
   return <>
