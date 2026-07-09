@@ -453,6 +453,9 @@ export default function LifeOS() {
     .filter(x => x.toLowerCase().includes(query.toLowerCase())), [projectItems, query, tasks]);
 
   const activeTask = tasks.find(task => task.id === activeTaskId) ?? tasks[0];
+  if (fullscreenProject && projectItems.find(p => p.name === fullscreenProject)) {
+    return <FullscreenProject project={projectItems.find(p => p.name === fullscreenProject)!} tasks={tasks} onExit={() => setFullscreenProject(null)} linkTask={linkTaskToProject} />;
+  }
   if (focus) {
     if (!activeTask) return <EmptyFocus onExit={() => { setFocus(false); setView("Dashboard"); }} onNewTask={() => { setFocus(false); setComposer("task"); }} />;
     return <FocusMode task={activeTask} tasks={tasks} onSwitch={setActiveTaskId} onUpdateChecklist={updateTaskChecklist} onUpdateChecklistProgress={updateTaskChecklistProgress} onComplete={complete} onExit={() => { setFocus(false); setView("Dashboard"); }} />;
@@ -475,7 +478,6 @@ export default function LifeOS() {
       </aside>
 
       <main>
-        {fullscreenProject && projectItems.find(p => p.name === fullscreenProject) && <div style={{ position: "absolute", inset: 0, zIndex: 100, background: "var(--canvas)", overflow: "auto" }}><div style={{ padding: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--line)", position: "sticky", top: 0, background: "var(--panel)" }}><h2 style={{ margin: 0 }}>{fullscreenProject}</h2><button onClick={() => setFullscreenProject(null)} style={{ border: 0, background: "transparent", cursor: "pointer", fontSize: "16px" }}>✕</button></div><div style={{ padding: "24px", maxWidth: "1200px", margin: "0 auto" }}><ProjectDetailModal project={projectItems.find(p => p.name === fullscreenProject)!} tasks={tasks} close={() => setFullscreenProject(null)} linkTask={linkTaskToProject} /></div></div>}
         {!fullscreenProject && <>
         <header className="topbar">
           <IconButton label="Open navigation" onClick={() => setSidebar(true)}><Menu size={19} /></IconButton>
@@ -675,6 +677,65 @@ function ComingSoon({ view, onFocus }: { view: View; onFocus: () => void }) {
 
 function EmptyFocus({ onExit, onNewTask }: { onExit: () => void; onNewTask: () => void }) {
   return <div className="focus-mode empty-focus"><header><div className="brand"><div className="brand-mark light"><span /><span /><span /></div><span>LifeOS</span></div><button onClick={onExit}><X size={16} /> Exit focus <kbd>Esc</kbd></button></header><main><section className="empty-state"><div><Focus size={28} /></div><p className="eyebrow">Nothing to focus on</p><h1>Your priorities are clear.</h1><p>You deleted every priority, and LifeOS respected it. Add a new one when you’re ready to choose the next lane.</p><button className="primary" onClick={onNewTask}><Plus size={16} /> Add priority</button></section></main></div>;
+}
+
+function FullscreenProject({ project, tasks, onExit, linkTask }: { project: Project; tasks: Task[]; onExit: () => void; linkTask: (id: number, project: Project) => void }) {
+  const linkedTasks = tasks.filter(task => task.project === project.name);
+  const activeTasks = linkedTasks.filter(task => !task.done && !task.canceled);
+  const availableTasks = tasks.filter(task => task.project !== project.name && !task.done && !task.canceled);
+  const topTask = [...activeTasks].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority])[0];
+  const nextDue = [...activeTasks].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0];
+  return <div style={{ minHeight: "100vh", background: "var(--canvas)", display: "flex", flexDirection: "column" }}>
+    <div style={{ height: "65px", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", padding: "0 38px", gap: "16px" }}>
+      <button onClick={onExit} style={{ border: "1px solid var(--line)", background: "var(--panel)", cursor: "pointer", borderRadius: "8px", padding: "8px 12px", fontSize: "11px", display: "flex", alignItems: "center", gap: "6px" }}><ArrowRight size={14} style={{ transform: "rotate(180deg)" }} /> Back</button>
+      <h1 style={{ margin: 0, fontSize: "24px", flex: 1 }}>{project.name}</h1>
+      <span style={{ fontSize: "12px", color: "var(--muted)" }}>{project.kind === "maintenance" ? "Maintenance system" : "Finishable project"}</span>
+    </div>
+    <div style={{ flex: 1, overflow: "auto", padding: "32px 48px" }}>
+      <div style={{ maxWidth: "1000px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "32px" }}>
+          <div style={{ border: "1px solid var(--line)", borderRadius: "12px", padding: "16px", background: "var(--panel)" }}>
+            <span style={{ display: "block", color: "var(--muted)", fontSize: "9px", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: "8px" }}>Next due</span>
+            <strong style={{ fontSize: "14px" }}>{nextDue?.due ?? "Nothing due"}</strong>
+          </div>
+          <div style={{ border: "1px solid var(--line)", borderRadius: "12px", padding: "16px", background: "var(--panel)" }}>
+            <span style={{ display: "block", color: "var(--muted)", fontSize: "9px", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: "8px" }}>Highest priority</span>
+            <strong style={{ fontSize: "14px" }}>{topTask?.priority ?? "Clear"}</strong>
+          </div>
+          <div style={{ border: "1px solid var(--line)", borderRadius: "12px", padding: "16px", background: "var(--panel)" }}>
+            <span style={{ display: "block", color: "var(--muted)", fontSize: "9px", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: "8px" }}>Energy load</span>
+            <strong style={{ fontSize: "14px" }}>{topTask ? `${topTask.energy} · ${topTask.focusMinutes}m` : "Clear"}</strong>
+          </div>
+        </div>
+        <div style={{ border: "1px solid var(--line)", borderRadius: "12px", overflow: "hidden", marginBottom: "32px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 80px 105px", gap: "10px", alignItems: "center", background: "var(--canvas)", padding: "10px 12px", color: "var(--muted)", fontSize: "8px", textTransform: "uppercase", letterSpacing: ".08em", borderBottom: "1px solid var(--line)" }}>
+            <span>Task</span><span>Due</span><span>Priority</span><span>Focus</span>
+          </div>
+          {linkedTasks.length ? linkedTasks.map(task => <div key={task.id} style={{ display: "grid", gridTemplateColumns: "1fr 90px 80px 105px", gap: "10px", alignItems: "center", padding: "12px", borderTop: "1px solid var(--line)", opacity: task.done || task.canceled ? 0.5 : 1 }}>
+            <strong style={{ textDecoration: task.done || task.canceled ? "line-through" : "none" }}>{task.title}</strong>
+            <span style={{ color: "var(--muted)" }}>{task.canceled ? "Canceled" : task.done ? "Done" : task.due}</span>
+            <em style={{ fontStyle: "normal", fontSize: "8px", padding: "3px 7px", borderRadius: "10px", width: "max-content", background: task.priority === "High" ? "#cf625a15" : task.priority === "Medium" ? "#cc8a2515" : "#4f8bc415", color: task.priority === "High" ? "#cf625a" : task.priority === "Medium" ? "#cc8a25" : "#4f8bc4" }}>{task.priority}</em>
+            <span style={{ color: "var(--muted)" }}>{task.focusMinutes}m · {task.energy}</span>
+          </div>) : <div style={{ padding: "24px", textAlign: "center", color: "var(--muted)" }}>No tasks linked yet</div>}
+        </div>
+        {availableTasks.length > 0 && <div style={{ border: "1px solid var(--line)", borderRadius: "12px", padding: "16px", background: "var(--panel)" }}>
+          <div style={{ marginBottom: "16px" }}>
+            <strong style={{ display: "block", fontSize: "11px", marginBottom: "4px" }}>Link existing tasks</strong>
+            <span style={{ color: "var(--muted)", fontSize: "9px", display: "block" }}>Pull loose tasks into {project.name}</span>
+          </div>
+          <div style={{ display: "grid", gap: "8px" }}>
+            {availableTasks.slice(0, 10).map(task => <button key={task.id} onClick={() => linkTask(task.id, project)} style={{ border: "1px solid var(--line)", background: "var(--canvas)", borderRadius: "8px", padding: "10px", display: "grid", gridTemplateColumns: "1fr auto", gap: "10px", alignItems: "center", cursor: "pointer", textAlign: "left", fontSize: "10px" }}>
+              <div>
+                <strong style={{ display: "block" }}>{task.title}</strong>
+                <small style={{ color: "var(--muted)", display: "block", marginTop: "4px" }}>{task.project} · {task.due} · {task.focusMinutes}m</small>
+              </div>
+              <em style={{ fontStyle: "normal", fontSize: "8px", padding: "3px 7px", borderRadius: "10px", background: task.priority === "High" ? "#cf625a15" : task.priority === "Medium" ? "#cc8a2515" : "#4f8bc415", color: task.priority === "High" ? "#cf625a" : task.priority === "Medium" ? "#cc8a25" : "#4f8bc4" }}>{task.priority}</em>
+            </button>)}
+          </div>
+        </div>}
+      </div>
+    </div>
+  </div>;
 }
 
 function FocusMode({ task, tasks, onSwitch, onUpdateChecklist, onUpdateChecklistProgress, onComplete, onExit }: { task: Task; tasks: Task[]; onSwitch: (id: number) => void; onUpdateChecklist: (id: number, checklist: string[]) => void; onUpdateChecklistProgress: (id: number, progress: boolean[]) => void; onComplete: (id: number) => void; onExit: () => void }) {
