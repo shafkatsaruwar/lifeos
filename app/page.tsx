@@ -485,7 +485,7 @@ export default function LifeOS() {
         </header>
         <AnimatePresence mode="wait">
           <motion.div key={view} className="page" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
-            {view === "Dashboard" && <Dashboard tasks={tasks} projects={projectItems} brainCount={brainItems.length} onComplete={complete} onFocus={openFocus} onCapture={() => setCapture(true)} onGo={go} onNewTask={() => setComposer("task")} onTaskMenu={setActionTaskId} events={calendarEvents} />}
+            {view === "Dashboard" && <Dashboard tasks={tasks} projects={projectItems} brainCount={brainItems.length} onComplete={complete} onFocus={openFocus} onCapture={() => setCapture(true)} onGo={go} onNewTask={() => setComposer("task")} onTaskMenu={setActionTaskId} events={calendarEvents} onOpenProject={setSelectedProjectName} />}
             {view === "Projects" && <Projects projects={projectItems} tasks={tasks} onNew={() => setComposer("project")} onAction={setActionProjectName} onOpen={setSelectedProjectName} />}
             {view === "Tasks" && <Tasks tasks={tasks} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} />}
             {view === "Calendar" && <CalendarView events={calendarEvents} weekStartsMonday={settingsState.weekStartsMonday} onNew={() => setCalendarComposer(true)} onImport={() => setCalendarImporter(true)} onEdit={setEditingCalendarEventId} />}
@@ -513,7 +513,7 @@ export default function LifeOS() {
   );
 }
 
-function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture, onGo, onNewTask, onTaskMenu, events }: { tasks: Task[]; projects: Project[]; brainCount: number; onComplete: (id: number) => void; onFocus: (id?: number) => void; onCapture: () => void; onGo: (view: View) => void; onNewTask: () => void; onTaskMenu: (id: number) => void; events: CalendarEvent[] }) {
+function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture, onGo, onNewTask, onTaskMenu, events, onOpenProject }: { tasks: Task[]; projects: Project[]; brainCount: number; onComplete: (id: number) => void; onFocus: (id?: number) => void; onCapture: () => void; onGo: (view: View) => void; onNewTask: () => void; onTaskMenu: (id: number) => void; events: CalendarEvent[]; onOpenProject: (name: string) => void }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const tick = window.setInterval(() => setNow(new Date()), 60_000);
@@ -552,7 +552,7 @@ function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture
       </section>
       <section className="card projects-card">
         <div className="card-head"><div><span className="section-icon orange"><FolderKanban size={14} /></span><h2>Active projects</h2></div><button onClick={() => onGo("Projects")}>All projects <ArrowRight size={14} /></button></div>
-        {projects.slice(0, 3).map(p => <div className="project-row" key={p.name}><div className="project-glyph" style={{ color: p.color, background: `${p.color}16` }}><p.icon size={17} /></div><div><strong>{p.name}</strong><small className={`project-kind ${p.kind}`}>{p.kind === "maintenance" ? "Maintenance" : "Project"}</small><div className="progress"><i style={{ width: `${p.progress}%`, background: p.color }} /></div></div><span>{p.kind === "maintenance" ? "∞" : `${p.progress}%`}</span></div>)}
+        {projects.slice(0, 3).map(p => <div className="project-row" key={p.name} onClick={() => onOpenProject(p.name)} style={{ cursor: "pointer" }}><div className="project-glyph" style={{ color: p.color, background: `${p.color}16` }}><p.icon size={17} /></div><div><strong>{p.name}</strong><small className={`project-kind ${p.kind}`}>{p.kind === "maintenance" ? "Maintenance" : "Project"}</small><div className="progress"><i style={{ width: `${p.progress}%`, background: p.color }} /></div></div><span>{p.kind === "maintenance" ? "∞" : `${p.progress}%`}</span></div>)}
       </section>
       <section className="card inbox-card">
         <div className="card-head"><div><span className="section-icon green"><Brain size={14} /></span><h2>Brain inbox</h2></div><span className="count">{brainCount} uncategorized</span></div>
