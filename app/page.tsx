@@ -81,11 +81,7 @@ const initialBrainItems = [
   "Recipe idea: pistachio cardamom cake",
 ];
 
-const initialCalendarEvents: CalendarEvent[] = [
-  { id: "lifeos-deep-work", title: "Deep work — Synapse", start: new Date().toISOString().slice(0, 10) + "T09:30", end: new Date().toISOString().slice(0, 10) + "T10:15", source: "LifeOS", color: "#665df6" },
-  { id: "lifeos-team-sync", title: "Team sync", start: new Date().toISOString().slice(0, 10) + "T11:00", end: new Date().toISOString().slice(0, 10) + "T11:30", source: "LifeOS", color: "#4b8bdc" },
-  { id: "lifeos-photo-edit", title: "Photography edit", start: new Date().toISOString().slice(0, 10) + "T14:00", end: new Date().toISOString().slice(0, 10) + "T15:30", source: "LifeOS", color: "#e48b6b" },
-];
+const initialCalendarEvents: CalendarEvent[] = [];
 
 const defaultFocusChecklist = ["Choose the next visible step", "Make one meaningful pass", "Leave a clear handoff note"];
 const focusChecklistTemplates = [
