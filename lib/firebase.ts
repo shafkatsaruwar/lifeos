@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, set, get, remove } from 'firebase/database';
+import { getDatabase, ref, set, get, remove, onValue } from 'firebase/database';
 
 let app: any;
 let database: any;
@@ -24,4 +24,4 @@ export function getClientDatabase() {
   return database;
 }
 
-export { ref, set, get, remove };
+export { ref, set, get, remove, onValue };

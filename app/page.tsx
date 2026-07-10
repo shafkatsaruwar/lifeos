@@ -31,7 +31,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { syncDataToFirebase, loadDataFromFirebase } from "@/lib/dataSync";
+import { syncDataToFirebase, loadDataFromFirebase, listenToFirebaseChanges, stopListeningToFirebaseChanges } from "@/lib/dataSync";
 import {
   Aperture, Archive, ArrowRight, Brain, CalendarDays, Check, CheckCircle2,
   ChevronDown, Circle, Clock3, Command, FileText, Flame, Focus, FolderKanban,
@@ -448,6 +448,52 @@ export default function LifeOS() {
     window.localStorage.setItem(BRAIN_STORAGE_KEY, JSON.stringify(brainItems));
     syncDataToFirebase('brain', brainItems);
   }, [brainItems, brainHydrated]);
+
+  useEffect(() => {
+    if (!tasksHydrated) return;
+    const unsubscribe = listenToFirebaseChanges('tasks', (data) => {
+      if (Array.isArray(data)) setTasks(data.map(task => normalizeTask(task)));
+    });
+    return () => stopListeningToFirebaseChanges('tasks');
+  }, [tasksHydrated]);
+
+  useEffect(() => {
+    if (!projectsHydrated) return;
+    const unsubscribe = listenToFirebaseChanges('projects', (data) => {
+      if (Array.isArray(data)) {
+        setProjectItems(data.map((project: Partial<Project>) => {
+          const iconName = project.iconName && projectIcons[project.iconName] ? project.iconName : "FolderKanban";
+          return {
+            name: project.name ?? "Untitled project",
+            desc: project.desc ?? "A space for meaningful work.",
+            progress: project.progress ?? 0,
+            color: project.color ?? "#625af6",
+            iconName,
+            icon: projectIcons[iconName],
+            tasks: project.tasks ?? 0,
+            kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+          };
+        }));
+      }
+    });
+    return () => stopListeningToFirebaseChanges('projects');
+  }, [projectsHydrated]);
+
+  useEffect(() => {
+    if (!calendarHydrated) return;
+    const unsubscribe = listenToFirebaseChanges('calendar', (data) => {
+      if (Array.isArray(data)) setCalendarEvents(data);
+    });
+    return () => stopListeningToFirebaseChanges('calendar');
+  }, [calendarHydrated]);
+
+  useEffect(() => {
+    if (!brainHydrated) return;
+    const unsubscribe = listenToFirebaseChanges('brain', (data) => {
+      if (Array.isArray(data)) setBrainItems(data.filter(item => typeof item === "string"));
+    });
+    return () => stopListeningToFirebaseChanges('brain');
+  }, [brainHydrated]);
 
   const complete = (id: number) => setTasks(items => items.map(t => t.id === id ? { ...t, done: !t.done } : t));
   const flash = useCallback((message: string) => {
