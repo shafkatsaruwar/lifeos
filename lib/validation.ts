@@ -7,6 +7,7 @@ export const TaskSchema = z.object({
   project: z.string(),
   color: z.string(),
   due: z.string(), // ISO date format
+  startTime: z.string().optional(), // HH:MM format, e.g., "14:30"
   priority: z.enum(['High', 'Medium', 'Low']),
   focusMinutes: z.number().min(5).max(240),
   energy: z.enum(['Low', 'Medium', 'High']),

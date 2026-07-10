@@ -19,33 +19,69 @@ describe('Task Helpers', () => {
   });
 
   describe('checkDoubleBooking', () => {
-    it('detects conflict on same date', () => {
-      const tasks = [mockTask(), mockTask({ id: 2 })];
-      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10');
-      expect(conflicts).toHaveLength(2);
+    it('detects time overlap on same date', () => {
+      const tasks = [
+        mockTask({ startTime: '14:00', focusMinutes: 60 }),
+        mockTask({ id: 2, startTime: '14:30', focusMinutes: 45 }),
+      ];
+      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10', '14:30', 45);
+      expect(conflicts).toHaveLength(1);
+    });
+
+    it('allows non-overlapping times on same date', () => {
+      const tasks = [
+        mockTask({ startTime: '14:00', focusMinutes: 45 }),
+        mockTask({ id: 2, startTime: '15:00', focusMinutes: 60 }),
+      ];
+      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10', '16:00', 45);
+      expect(conflicts).toHaveLength(0);
+    });
+
+    it('ignores tasks without start time', () => {
+      const tasks = [
+        mockTask({ startTime: undefined }),
+        mockTask({ id: 2, startTime: '14:00', focusMinutes: 60 }),
+      ];
+      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10', '14:30', 45);
+      expect(conflicts).toHaveLength(1);
     });
 
     it('ignores completed tasks', () => {
-      const tasks = [mockTask({ done: true }), mockTask({ id: 2 })];
-      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10');
+      const tasks = [
+        mockTask({ done: true, startTime: '14:00', focusMinutes: 60 }),
+        mockTask({ id: 2, startTime: '14:30', focusMinutes: 45 }),
+      ];
+      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10', '14:30', 45);
       expect(conflicts).toHaveLength(1);
     });
 
     it('ignores canceled tasks', () => {
-      const tasks = [mockTask({ canceled: true }), mockTask({ id: 2 })];
-      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10');
+      const tasks = [
+        mockTask({ canceled: true, startTime: '14:00', focusMinutes: 60 }),
+        mockTask({ id: 2, startTime: '14:30', focusMinutes: 45 }),
+      ];
+      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10', '14:30', 45);
       expect(conflicts).toHaveLength(1);
     });
 
-    it('ignores different dates', () => {
-      const tasks = [mockTask(), mockTask({ id: 2, due: '2026-07-11' })];
-      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10');
-      expect(conflicts).toHaveLength(1);
+    it('ignores different dates even if times overlap', () => {
+      const tasks = [
+        mockTask({ startTime: '14:00', focusMinutes: 60 }),
+        mockTask({ id: 2, due: '2026-07-11', startTime: '14:30', focusMinutes: 45 }),
+      ];
+      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10', '14:30', 45);
+      expect(conflicts).toHaveLength(0);
     });
 
     it('ignores same task ID', () => {
-      const tasks = [mockTask({ id: 1 })];
-      const conflicts = checkDoubleBooking(tasks, 1, '2026-07-10');
+      const tasks = [mockTask({ startTime: '14:00', focusMinutes: 60 })];
+      const conflicts = checkDoubleBooking(tasks, 1, '2026-07-10', '14:00', 60);
+      expect(conflicts).toHaveLength(0);
+    });
+
+    it('returns empty array if no start time provided', () => {
+      const tasks = [mockTask({ startTime: '14:00', focusMinutes: 60 })];
+      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10');
       expect(conflicts).toHaveLength(0);
     });
   });

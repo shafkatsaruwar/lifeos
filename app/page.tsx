@@ -35,6 +35,7 @@ import { syncDataToFirebase, loadDataFromFirebase, listenToFirebaseChanges, stop
 import { signInWithGoogle, signOut, onAuthStateChanged, getClientAuth, getRedirectResult } from "@/lib/firebase";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, ERROR_MESSAGES, STORAGE_KEYS } from "@/lib/constants";
+import { checkDoubleBooking, formatDueDate, toDateKey, isValidTimeFormat } from "@/lib/helpers";
 import {
   Aperture, Archive, ArrowRight, Brain, CalendarDays, Check, CheckCircle2,
   ChevronDown, Circle, Clock3, Command, FileText, Flame, Focus, FolderKanban,
@@ -45,7 +46,7 @@ import {
 
 type View = "Dashboard" | "Focus" | "Projects" | "Tasks" | "Calendar" | "Brain" | "Knowledge" | "Resources" | "Settings";
 type EnergyLevel = "Low" | "Medium" | "High";
-type Task = { id: number; title: string; project: string; color: string; due: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; checklist?: string[]; checklistProgress?: boolean[]; done?: boolean; canceled?: boolean };
+type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; checklist?: string[]; checklistProgress?: boolean[]; done?: boolean; canceled?: boolean };
 type ProjectKind = "maintenance" | "finishable";
 type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban";
 type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string };
@@ -127,25 +128,7 @@ const focusChecklistTemplates = [
   { name: "Study", items: ["Pick the exact section", "Active recall before notes", "Write the confusing question"] },
 ];
 
-const toDateKey = (value: Date) => {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
 const formatEventTime = (value: string) => new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-const formatDueDate = (dateStr: string) => {
-  const date = new Date(dateStr + "T12:00");
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const todayKey = toDateKey(today);
-  const tomorrowKey = toDateKey(tomorrow);
-  if (dateStr === todayKey) return "Today";
-  if (dateStr === tomorrowKey) return "Tomorrow";
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-};
 const getGreeting = (date: Date) => {
   const hour = date.getHours();
   if (hour < 5) return "Still Up, Mohammed?";
@@ -575,7 +558,7 @@ export default function LifeOS() {
     setCalendarImporter(false);
     flash(`${events.length} iCal event${events.length === 1 ? "" : "s"} imported`);
   };
-  const updateTask = (id: number, updates: Pick<Task, "title" | "focusMinutes" | "energy" | "project" | "color" | "due">) => {
+  const updateTask = (id: number, updates: Pick<Task, "title" | "focusMinutes" | "energy" | "project" | "color" | "due" | "startTime">) => {
     setTasks(items => items.map(task => task.id === id ? { ...task, ...updates } : task));
     setEditingTaskId(null);
     flash("Priority updated");
@@ -902,14 +885,6 @@ const tasksToCalendarEvents = (tasks: Task[]): CalendarEvent[] => {
     }));
 };
 
-const checkDoubleBooking = (tasks: Task[], taskId: number, newDate: string): Task[] => {
-  return tasks.filter(task =>
-    task.id !== taskId &&
-    task.due === newDate &&
-    !task.done &&
-    !task.canceled
-  );
-};
 
 function CalendarView({ events, weekStartsMonday, onNew, onImport, onEdit }: { events: CalendarEvent[]; weekStartsMonday: boolean; onNew: (date: string) => void; onImport: () => void; onEdit: (id: string) => void }) {
   const [cursor, setCursor] = useState(() => new Date());
@@ -1436,18 +1411,19 @@ function ProjectDetailModal({ project, tasks, close, linkTask, onFullscreen }: {
   return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="project-detail-modal" onMouseDown={event => event.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot" style={{ color: project.color, background: `${project.color}16` }}><project.icon size={16} /></div><div><strong>{project.name}</strong><span>{project.kind === "maintenance" ? "Maintenance / ongoing" : "Finishable project"} · {activeTasks.length} active tasks</span></div><div style={{ display: "flex", gap: "8px" }}>{onFullscreen && <button onClick={onFullscreen} aria-label="Open fullscreen" title="Open fullscreen"><Maximize size={18} style={{ color: "var(--muted)" }} /></button>}<button onClick={close} aria-label="Close"><X size={18} /></button></div></div><div className="project-detail-summary"><div><span>Next due</span><strong>{nextDue ? formatDueDate(nextDue.due) : "Nothing due"}</strong></div><div><span>Highest priority</span><strong>{topTask?.priority ?? "Clear"}</strong></div><div><span>Energy load</span><strong>{topTask ? `${topTask.energy} · ${topTask.focusMinutes}m` : "Clear"}</strong></div></div><div className="project-detail-list"><div className="project-detail-head"><span>Task</span><span>Due</span><span>Priority</span><span>Focus</span></div>{linkedTasks.length ? linkedTasks.map(task => <div className={`project-detail-row ${task.done ? "done" : ""} ${task.canceled ? "canceled" : ""}`} key={task.id}><strong>{task.title}</strong><span>{task.canceled ? "Canceled" : task.done ? "Done" : formatDueDate(task.due)}</span><em className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</em><span>{task.focusMinutes}m · {task.energy}</span></div>) : <div className="priority-empty"><strong>No tasks linked yet.</strong><p>Link an existing task below, or choose this project when creating a new task.</p></div>}</div><div className="link-task-panel"><div><strong>Link existing tasks</strong><span>Pull loose tasks into {project.name} so this project view is actually useful.</span></div>{availableTasks.length ? <div className="link-task-list">{availableTasks.slice(0, 6).map(task => <button key={task.id} type="button" onClick={() => linkTask(task.id, project)}><span><strong>{task.title}</strong><small>{task.project} · {formatDueDate(task.due)} · {task.focusMinutes}m</small></span><em className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</em><Plus size={15} /></button>)}</div> : <p>No loose active tasks to link right now.</p>}</div></motion.div></motion.div>;
 }
 
-function EditTaskModal({ task, projects, tasks, close, save }: { task: Task; projects: Project[]; tasks: Task[]; close: () => void; save: (updates: Pick<Task, "title" | "focusMinutes" | "energy" | "project" | "color" | "due">) => void }) {
+function EditTaskModal({ task, projects, tasks, close, save }: { task: Task; projects: Project[]; tasks: Task[]; close: () => void; save: (updates: Pick<Task, "title" | "focusMinutes" | "energy" | "project" | "color" | "due" | "startTime">) => void }) {
   const [title, setTitle] = useState(task.title);
   const [projectName, setProjectName] = useState(task.project);
   const [focusMinutes, setFocusMinutes] = useState(String(task.focusMinutes));
   const [energy, setEnergy] = useState<EnergyLevel>(task.energy);
   const [dueDate, setDueDate] = useState(task.due);
+  const [startTime, setStartTime] = useState(task.startTime ?? "");
   const parsedMinutes = Math.max(5, Math.min(240, Number(focusMinutes) || 45));
   const linkedProject = projects.find(project => project.name === projectName);
-  const doubleBooked = checkDoubleBooking(tasks, task.id, dueDate);
+  const doubleBooked = checkDoubleBooking(tasks, task.id, dueDate, startTime, parsedMinutes);
   return (
     <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <motion.form className="create-modal" onMouseDown={event => event.stopPropagation()} onSubmit={event => { event.preventDefault(); if (title.trim()) save({ title: title.trim(), project: linkedProject?.name ?? "Inbox", color: linkedProject?.color ?? "#625af6", focusMinutes: parsedMinutes, energy, due: dueDate }); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}>
+      <motion.form className="create-modal" onMouseDown={event => event.stopPropagation()} onSubmit={event => { event.preventDefault(); if (title.trim()) save({ title: title.trim(), project: linkedProject?.name ?? "Inbox", color: linkedProject?.color ?? "#625af6", focusMinutes: parsedMinutes, energy, due: dueDate, startTime: startTime || undefined }); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}>
         <div className="capture-head">
           <div className="brain-dot"><Pencil size={16} /></div>
           <div><strong>Edit priority</strong><span>Update the project link, focus length, energy cost, and schedule.</span></div>
@@ -1462,10 +1438,12 @@ function EditTaskModal({ task, projects, tasks, close, save }: { task: Task; pro
         </select>
         <label htmlFor="edit-task-due">Schedule for</label>
         <input id="edit-task-due" type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} />
+        <label htmlFor="edit-task-time">Start time (optional)</label>
+        <input id="edit-task-time" type="time" value={startTime} onChange={event => setStartTime(event.target.value)} />
         {doubleBooked.length > 0 && (
           <div style={{ background: "rgba(255, 107, 107, 0.1)", border: "1px solid rgba(255, 107, 107, 0.3)", borderRadius: "6px", padding: "12px", marginTop: "8px", fontSize: "12px", color: "#ff6b6b" }}>
-            <strong>⚠️ Double booking detected</strong>
-            <p style={{ margin: "4px 0 0 0" }}>{doubleBooked.map(t => t.title).join(", ")} already scheduled for this date</p>
+            <strong>⚠️ Time conflict detected</strong>
+            <p style={{ margin: "4px 0 0 0" }}>{doubleBooked.map(t => t.title).join(", ")} scheduled at overlapping times</p>
           </div>
         )}
         <div className="focus-edit-grid">
