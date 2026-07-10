@@ -31,6 +31,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { syncDataToFirebase, loadDataFromFirebase } from "@/lib/dataSync";
 import {
   Aperture, Archive, ArrowRight, Brain, CalendarDays, Check, CheckCircle2,
   ChevronDown, Circle, Clock3, Command, FileText, Flame, Focus, FolderKanban,
@@ -296,6 +297,7 @@ export default function LifeOS() {
   useEffect(() => {
     if (!settingsHydrated) return;
     window.localStorage.setItem(DARK_STORAGE_KEY, JSON.stringify(dark));
+    syncDataToFirebase('dark', dark);
   }, [dark, settingsHydrated]);
   useEffect(() => {
     if (!settingsHydrated) return;
@@ -303,23 +305,33 @@ export default function LifeOS() {
     document.documentElement.classList.toggle("compact", settingsState.compactMode);
     document.documentElement.classList.toggle("reduce-motion", settingsState.reduceMotion);
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settingsState));
+    syncDataToFirebase('settings', settingsState);
   }, [settingsState, settingsHydrated]);
   useEffect(() => {
-    try {
-      const savedTasks = window.localStorage.getItem(TASKS_STORAGE_KEY);
-      if (savedTasks) {
-        const parsed = JSON.parse(savedTasks);
-        if (Array.isArray(parsed)) setTasks(parsed.map(task => normalizeTask(task)));
+    (async () => {
+      try {
+        const firebaseTasks = await loadDataFromFirebase('tasks');
+        if (firebaseTasks && Array.isArray(firebaseTasks)) {
+          setTasks(firebaseTasks.map(task => normalizeTask(task)));
+          setTasksHydrated(true);
+          return;
+        }
+        const savedTasks = window.localStorage.getItem(TASKS_STORAGE_KEY);
+        if (savedTasks) {
+          const parsed = JSON.parse(savedTasks);
+          if (Array.isArray(parsed)) setTasks(parsed.map(task => normalizeTask(task)));
+        }
+      } catch {
+        window.localStorage.removeItem(TASKS_STORAGE_KEY);
+      } finally {
+        setTasksHydrated(true);
       }
-    } catch {
-      window.localStorage.removeItem(TASKS_STORAGE_KEY);
-    } finally {
-      setTasksHydrated(true);
-    }
+    })();
   }, []);
   useEffect(() => {
     if (!tasksHydrated) return;
     window.localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
+    syncDataToFirebase('tasks', tasks);
   }, [tasks, tasksHydrated]);
   useEffect(() => {
     if (!tasks.length) {
@@ -329,12 +341,11 @@ export default function LifeOS() {
     if (!tasks.some(task => task.id === activeTaskId)) setActiveTaskId(tasks[0].id);
   }, [activeTaskId, tasks]);
   useEffect(() => {
-    try {
-      const savedProjects = window.localStorage.getItem(PROJECTS_STORAGE_KEY);
-      if (savedProjects) {
-        const parsed = JSON.parse(savedProjects);
-        if (Array.isArray(parsed)) {
-          setProjectItems(parsed.map((project: Partial<Project>) => {
+    (async () => {
+      try {
+        const firebaseProjects = await loadDataFromFirebase('projects');
+        if (firebaseProjects && Array.isArray(firebaseProjects)) {
+          setProjectItems(firebaseProjects.map((project: Partial<Project>) => {
             const iconName = project.iconName && projectIcons[project.iconName] ? project.iconName : "FolderKanban";
             return {
               name: project.name ?? "Untitled project",
@@ -347,54 +358,95 @@ export default function LifeOS() {
               kind: project.kind === "maintenance" ? "maintenance" : "finishable",
             };
           }));
+          setProjectsHydrated(true);
+          return;
         }
+        const savedProjects = window.localStorage.getItem(PROJECTS_STORAGE_KEY);
+        if (savedProjects) {
+          const parsed = JSON.parse(savedProjects);
+          if (Array.isArray(parsed)) {
+            setProjectItems(parsed.map((project: Partial<Project>) => {
+              const iconName = project.iconName && projectIcons[project.iconName] ? project.iconName : "FolderKanban";
+              return {
+                name: project.name ?? "Untitled project",
+                desc: project.desc ?? "A space for meaningful work.",
+                progress: project.progress ?? 0,
+                color: project.color ?? "#625af6",
+                iconName,
+                icon: projectIcons[iconName],
+                tasks: project.tasks ?? 0,
+                kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+              };
+            }));
+          }
+        }
+      } catch {
+        window.localStorage.removeItem(PROJECTS_STORAGE_KEY);
+      } finally {
+        setProjectsHydrated(true);
       }
-    } catch {
-      window.localStorage.removeItem(PROJECTS_STORAGE_KEY);
-    } finally {
-      setProjectsHydrated(true);
-    }
+    })();
   }, []);
   useEffect(() => {
     if (!projectsHydrated) return;
-    window.localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projectItems.map(({ icon, ...project }) => project)));
+    const projectsForStorage = projectItems.map(({ icon, ...project }) => project);
+    window.localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projectsForStorage));
+    syncDataToFirebase('projects', projectsForStorage);
   }, [projectItems, projectsHydrated]);
   useEffect(() => {
-    try {
-      const savedEvents = window.localStorage.getItem(CALENDAR_STORAGE_KEY);
-      if (savedEvents) {
-        const parsed = JSON.parse(savedEvents);
-        if (Array.isArray(parsed)) setCalendarEvents(parsed);
-      } else {
+    (async () => {
+      try {
+        const firebaseEvents = await loadDataFromFirebase('calendar');
+        if (firebaseEvents && Array.isArray(firebaseEvents)) {
+          setCalendarEvents(firebaseEvents);
+          setCalendarHydrated(true);
+          return;
+        }
+        const savedEvents = window.localStorage.getItem(CALENDAR_STORAGE_KEY);
+        if (savedEvents) {
+          const parsed = JSON.parse(savedEvents);
+          if (Array.isArray(parsed)) setCalendarEvents(parsed);
+        } else {
+          setCalendarEvents(initialCalendarEvents);
+        }
+      } catch {
+        window.localStorage.removeItem(CALENDAR_STORAGE_KEY);
         setCalendarEvents(initialCalendarEvents);
+      } finally {
+        setCalendarHydrated(true);
       }
-    } catch {
-      window.localStorage.removeItem(CALENDAR_STORAGE_KEY);
-      setCalendarEvents(initialCalendarEvents);
-    } finally {
-      setCalendarHydrated(true);
-    }
+    })();
   }, []);
   useEffect(() => {
     if (!calendarHydrated) return;
     window.localStorage.setItem(CALENDAR_STORAGE_KEY, JSON.stringify(calendarEvents));
+    syncDataToFirebase('calendar', calendarEvents);
   }, [calendarEvents, calendarHydrated]);
   useEffect(() => {
-    try {
-      const savedBrain = window.localStorage.getItem(BRAIN_STORAGE_KEY);
-      if (savedBrain) {
-        const parsed = JSON.parse(savedBrain);
-        if (Array.isArray(parsed)) setBrainItems(parsed.filter(item => typeof item === "string"));
+    (async () => {
+      try {
+        const firebaseBrain = await loadDataFromFirebase('brain');
+        if (firebaseBrain && Array.isArray(firebaseBrain)) {
+          setBrainItems(firebaseBrain.filter(item => typeof item === "string"));
+          setBrainHydrated(true);
+          return;
+        }
+        const savedBrain = window.localStorage.getItem(BRAIN_STORAGE_KEY);
+        if (savedBrain) {
+          const parsed = JSON.parse(savedBrain);
+          if (Array.isArray(parsed)) setBrainItems(parsed.filter(item => typeof item === "string"));
+        }
+      } catch {
+        window.localStorage.removeItem(BRAIN_STORAGE_KEY);
+      } finally {
+        setBrainHydrated(true);
       }
-    } catch {
-      window.localStorage.removeItem(BRAIN_STORAGE_KEY);
-    } finally {
-      setBrainHydrated(true);
-    }
+    })();
   }, []);
   useEffect(() => {
     if (!brainHydrated) return;
     window.localStorage.setItem(BRAIN_STORAGE_KEY, JSON.stringify(brainItems));
+    syncDataToFirebase('brain', brainItems);
   }, [brainItems, brainHydrated]);
 
   const complete = (id: number) => setTasks(items => items.map(t => t.id === id ? { ...t, done: !t.done } : t));
