@@ -4,13 +4,28 @@ import { getClientDatabase } from './firebase';
 const USER_ID = 'default-user'; // In future, use actual user ID from auth
 const listeners: Map<string, Unsubscribe> = new Map();
 
+function cleanUndefined(obj: any): any {
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanUndefined(item));
+  }
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([_, value]) => value !== undefined)
+        .map(([key, value]) => [key, cleanUndefined(value)])
+    );
+  }
+  return obj;
+}
+
 export async function syncDataToFirebase(key: string, data: any) {
   if (!process.env.NEXT_PUBLIC_FIREBASE_DB_URL) return;
   if (typeof window === 'undefined') return; // Don't sync on server
   try {
     const database = getClientDatabase();
     if (!database) return;
-    await set(ref(database, `users/${USER_ID}/${key}`), data);
+    const cleanedData = cleanUndefined(data);
+    await set(ref(database, `users/${USER_ID}/${key}`), cleanedData);
   } catch (error) {
     console.error(`Failed to sync ${key} to Firebase:`, error);
   }
@@ -39,24 +54,34 @@ export function listenToFirebaseChanges(key: string, callback: (data: any) => vo
 
   try {
     const database = getClientDatabase();
-    if (!database) return () => {};
+    if (!database) {
+      console.warn('Firebase database not initialized');
+      return () => {};
+    }
 
     // Unsubscribe from previous listener if exists
     if (listeners.has(key)) {
       const unsubscribe = listeners.get(key);
-      unsubscribe?.();
+      if (unsubscribe) {
+        unsubscribe();
+      }
     }
 
     // Set up real-time listener
     const unsubscribe = onValue(
       ref(database, `users/${USER_ID}/${key}`),
       (snapshot) => {
-        if (snapshot.exists()) {
-          callback(snapshot.val());
+        try {
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            callback(data);
+          }
+        } catch (err) {
+          console.error(`Error processing ${key} update:`, err);
         }
       },
       (error) => {
-        console.error(`Failed to listen to ${key} changes:`, error);
+        console.error(`Firebase listener error for ${key}:`, error);
       }
     );
 
