@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Aperture, Archive, ArrowRight, Brain, CalendarDays, Check, CheckCircle2,
@@ -829,32 +829,45 @@ function CommandPalette({ query, setQuery, results, close, go, onFocus, onCaptur
 function CaptureModal({ close, add }: { close: () => void; add: (s: string) => void }) {
   const [text, setText] = useState("");
   const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        recognitionRef.current = new SpeechRecognition();
+      }
+    }
+  }, []);
+
   const handleVoiceCapture = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
+    if (!recognitionRef.current) {
       alert("Voice capture is not supported in your browser");
       return;
     }
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
-    recognition.onresult = (event: any) => {
-      let interimTranscript = "";
+
+    if (isListening) {
+      recognitionRef.current.stop();
+      return;
+    }
+
+    recognitionRef.current.continuous = true;
+    recognitionRef.current.interimResults = true;
+    recognitionRef.current.onstart = () => setIsListening(true);
+    recognitionRef.current.onend = () => setIsListening(false);
+    recognitionRef.current.onresult = (event: any) => {
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
           setText(prev => prev + (prev ? " " : "") + transcript);
-        } else {
-          interimTranscript += transcript;
         }
       }
     };
-    if (isListening) recognition.stop();
-    else recognition.start();
+    recognitionRef.current.onerror = () => setIsListening(false);
+    recognitionRef.current.start();
   };
-  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="capture-modal" onMouseDown={e => e.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><Brain size={16} /></div><div><strong>Quick capture</strong><span>Send it to your Brain inbox</span></div><button onClick={close}><X size={18} /></button></div><div style={{ display: "flex", gap: "10px", alignItems: "center", padding: "0 18px", marginBottom: "10px" }}><textarea autoFocus placeholder="What’s on your mind?" value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && text.trim()) add(text.trim()); }} style={{ flex: 1, margin: 0 }} /><button onClick={handleVoiceCapture} style={{ border: "1px solid var(--line)", background: isListening ? "var(--accent)" : "var(--canvas)", color: isListening ? "white" : "var(--muted)", cursor: "pointer", borderRadius: "8px", width: "40px", height: "40px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }} title="Voice capture"><Mic size={18} /></button></div><div className="capture-footer"><span>Organize it later. Just get it out.</span><button disabled={!text.trim()} onClick={() => text.trim() && add(text.trim())}>Capture <kbd>⌘ ↵</kbd></button></div></motion.div></motion.div>;
+
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="capture-modal" onMouseDown={e => e.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><Brain size={16} /></div><div><strong>Quick capture</strong><span>Send it to your Brain inbox</span></div><button onClick={close}><X size={18} /></button></div><div style={{ display: "flex", gap: "10px", alignItems: "flex-end", padding: "0 18px", marginBottom: "10px" }}><textarea autoFocus placeholder="What’s on your mind?" value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && text.trim()) add(text.trim()); }} style={{ flex: 1, margin: 0, minHeight: "120px" }} /><button onClick={handleVoiceCapture} style={{ border: `1px solid ${isListening ? "var(--accent)" : "var(--line)"}`, background: isListening ? "var(--accent)" : "var(--canvas)", color: isListening ? "white" : "var(--muted)", cursor: "pointer", borderRadius: "8px", width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .2s" }} title="Voice capture"><Mic size={20} /></button></div><div className="capture-footer"><span>Organize it later. Just get it out.</span><button disabled={!text.trim()} onClick={() => text.trim() && add(text.trim())}>Capture <kbd>⌘ ↵</kbd></button></div></motion.div></motion.div>;
 }
 
 function BreakModal({ close, done }: { close: () => void; done: () => void }) {
