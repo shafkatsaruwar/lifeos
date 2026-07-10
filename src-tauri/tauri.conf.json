@@ -38,29 +38,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "macOS": {
-      "frameworks": [],
-      "minimumSystemVersion": "11.0",
-      "signingIdentity": null,
-      "entitlements": null,
-      "exceptionDomain": null,
-      "dmg": {
-        "background": null,
-        "format": "UDZO",
-        "windowX": 200,
-        "windowY": 200,
-        "windowWidth": 540,
-        "windowHeight": 380,
-        "iconWidth": 100,
-        "iconHeight": 100,
-        "folderX": 300,
-        "folderY": 320,
-        "appX": 240,
-        "appY": 320,
-        "appFolderX": null,
-        "appFolderY": null
-      }
-    },
+    "frameworks": [],
+    "minimumSystemVersion": "11.0",
+    "signingIdentity": null,
+    "entitlements": null
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }
