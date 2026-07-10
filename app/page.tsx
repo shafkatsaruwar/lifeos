@@ -529,6 +529,7 @@ function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture
   const nextTask = tasks.find(task => !task.done && !task.canceled);
   const todayKey = toDateKey(now);
   const todayEvents = events.filter(event => event.start.slice(0, 10) === todayKey).sort((a, b) => a.start.localeCompare(b.start));
+  const todayTasksDue = tasks.filter(task => task.due === "Today" && !task.done && !task.canceled && !tasks.slice(0, 3).includes(task));
   return <>
     <section className="welcome">
       <div><p className="eyebrow">{now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p><h1>{getGreeting(now)}</h1><p>Here’s what deserves your attention today.</p></div>
@@ -555,6 +556,15 @@ function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture
           const endTime = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
           return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong><span>{event.notes || (event.source === "LifeOS" ? "Focus block" : event.source)}</span></div></div>;
         }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p></div>}
+      </section>
+      <section className="card" style={{ gridColumn: "1 / -1" }}>
+        <div className="card-head"><div><span className="section-icon green"><ListTodo size={14} /></span><h2>Today’s tasks</h2></div><button onClick={() => onGo("Tasks")}>View all</button></div>
+        {todayTasksDue.length ? <div style={{ display: "grid", gap: "8px", padding: "12px 15px" }}>{todayTasksDue.slice(0, 4).map(task => <div key={task.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px", borderRadius: "8px", background: "var(--canvas)", cursor: "pointer" }} onClick={() => onTaskMenu(task.id)}>
+          <div style={{ width: "12px", height: "12px", borderRadius: "3px", background: task.color, flexShrink: 0 }} />
+          <strong style={{ fontSize: "11px", flex: 1 }}>{task.title}</strong>
+          <span style={{ fontSize: "8px", color: "var(--muted)" }}>{task.project}</span>
+          <em style={{ fontStyle: "normal", fontSize: "8px", padding: "2px 6px", borderRadius: "6px", background: task.priority === "High" ? "#cf625a15" : task.priority === "Medium" ? "#cc8a2515" : "#4f8bc415", color: task.priority === "High" ? "#cf625a" : task.priority === "Medium" ? "#cc8a25" : "#4f8bc4" }}>{task.priority}</em>
+        </div>)}{todayTasksDue.length > 4 && <div style={{ padding: "8px", textAlign: "center", color: "var(--muted)", fontSize: "10px" }}>+{todayTasksDue.length - 4} more</div>}</div> : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No tasks due today outside of priorities</p></div>}
       </section>
       <section className="card projects-card">
         <div className="card-head"><div><span className="section-icon orange"><FolderKanban size={14} /></span><h2>Active projects</h2></div><button onClick={() => onGo("Projects")}>All projects <ArrowRight size={14} /></button></div>
