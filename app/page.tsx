@@ -46,6 +46,7 @@ type EnergyLevel = "Low" | "Medium" | "High";
 type Task = { id: number; title: string; project: string; color: string; due: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; checklist?: string[]; checklistProgress?: boolean[]; done?: boolean; canceled?: boolean };
 type ProjectKind = "maintenance" | "finishable";
 type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban";
+type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string };
 type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind };
 type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal"; color: string; notes?: string };
 type SettingsState = {
@@ -236,6 +237,8 @@ export default function LifeOS() {
   const [projectsHydrated, setProjectsHydrated] = useState(false);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(initialCalendarEvents);
   const [calendarHydrated, setCalendarHydrated] = useState(false);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [resourcesHydrated, setResourcesHydrated] = useState(false);
   const [composer, setComposer] = useState<"task" | "project" | null>(null);
   const [calendarComposer, setCalendarComposer] = useState(false);
   const [defaultEventDate, setDefaultEventDate] = useState<string | null>(null);
@@ -778,6 +781,7 @@ export default function LifeOS() {
             {view === "Projects" && <Projects projects={projectItems} tasks={tasks} onNew={() => setComposer("project")} onAction={setActionProjectName} onOpen={setSelectedProjectName} />}
             {view === "Tasks" && <Tasks tasks={tasks} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} />}
             {view === "Calendar" && <CalendarView events={[...calendarEvents, ...tasksToCalendarEvents(tasks)]} weekStartsMonday={settingsState.weekStartsMonday} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={setEditingCalendarEventId} />}
+            {view === "Resources" && <ResourcesView resources={resources} onDelete={(id) => { setResources(r => r.filter(res => res.id !== id)); flash("Resource deleted"); }} onReplace={(id, file) => { flash("Resource updated"); }} onDownload={(resource) => { const a = document.createElement('a'); a.href = resource.url; a.download = resource.name; a.click(); }} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} />}
             {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} onLogout={handleLogout} />}
             {!["Dashboard", "Projects", "Tasks", "Calendar", "Brain", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
@@ -794,7 +798,7 @@ export default function LifeOS() {
         {calendarImporter && <CalendarImportModal key="calendar-import-modal" close={() => setCalendarImporter(false)} add={importCalendarEvents} />}
         {breakOpen && <BreakModal key="break-modal" close={() => setBreakOpen(false)} done={() => { setBreakOpen(false); flash("Break complete — ease back in"); }} />}
         {actionTaskId !== null && tasks.find(task => task.id === actionTaskId) && <TaskActionsModal key={`task-actions-${actionTaskId}`} task={tasks.find(task => task.id === actionTaskId)!} close={() => setActionTaskId(null)} edit={() => { setEditingTaskId(actionTaskId); setActionTaskId(null); }} toggleCanceled={() => toggleCanceled(actionTaskId)} remove={() => deleteTask(actionTaskId)} />}
-        {editingTaskId !== null && tasks.find(task => task.id === editingTaskId) && <EditTaskModal key={`edit-task-${editingTaskId}`} task={tasks.find(task => task.id === editingTaskId)!} projects={projectItems} close={() => setEditingTaskId(null)} save={(updates) => updateTask(editingTaskId, updates)} />}
+        {editingTaskId !== null && tasks.find(task => task.id === editingTaskId) && <EditTaskModal key={`edit-task-${editingTaskId}`} task={tasks.find(task => task.id === editingTaskId)!} tasks={tasks} projects={projectItems} close={() => setEditingTaskId(null)} save={(updates) => updateTask(editingTaskId, updates)} />}
         {editingProjectName && projectItems.find(project => project.name === editingProjectName) && <EditProjectModal key={`edit-project-${editingProjectName}`} project={projectItems.find(project => project.name === editingProjectName)!} close={() => setEditingProjectName(null)} save={(name, desc) => updateProject(editingProjectName, name, desc)} />}
         {actionProjectName && projectItems.find(project => project.name === actionProjectName) && <ProjectActionsModal key={`project-actions-${actionProjectName}`} project={projectItems.find(project => project.name === actionProjectName)!} close={() => setActionProjectName(null)} setKind={(kind) => updateProjectKind(actionProjectName, kind)} onDelete={() => deleteProject(actionProjectName)} onEdit={() => { setEditingProjectName(actionProjectName); setActionProjectName(null); }} />}
         {selectedProjectName && projectItems.find(project => project.name === selectedProjectName) && <ProjectDetailModal key={`project-detail-${selectedProjectName}`} project={projectItems.find(project => project.name === selectedProjectName)!} tasks={tasks} close={() => setSelectedProjectName(null)} linkTask={linkTaskToProject} onFullscreen={() => { setFullscreenProject(selectedProjectName); setSelectedProjectName(null); }} />}
@@ -891,6 +895,15 @@ const tasksToCalendarEvents = (tasks: Task[]): CalendarEvent[] => {
     }));
 };
 
+const checkDoubleBooking = (tasks: Task[], taskId: number, newDate: string): Task[] => {
+  return tasks.filter(task =>
+    task.id !== taskId &&
+    task.due === newDate &&
+    !task.done &&
+    !task.canceled
+  );
+};
+
 function CalendarView({ events, weekStartsMonday, onNew, onImport, onEdit }: { events: CalendarEvent[]; weekStartsMonday: boolean; onNew: (date: string) => void; onImport: () => void; onEdit: (id: string) => void }) {
   const [cursor, setCursor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => toDateKey(new Date()));
@@ -960,6 +973,66 @@ function BrainView({ items, onCapture, onArchive }: { items: string[]; onCapture
   const [newest, setNewest] = useState(true);
   const visibleItems = (newest ? items : [...items].reverse()).map((item, index) => ({ item, sourceIndex: newest ? index : items.length - 1 - index }));
   return <><div className="page-title"><div><p className="eyebrow">Capture first. Organize later.</p><h1>Brain inbox</h1><p>A safe place for everything on your mind.</p></div><button className="primary" onClick={onCapture}><Plus size={16} /> Capture thought</button></div><div className="brain-layout"><section className="card brain-list"><div className="brain-filter"><strong>{items.length} thoughts</strong><button onClick={() => setNewest(value => !value)}>{newest ? "Newest" : "Oldest"} first <ChevronDown size={14} /></button></div>{visibleItems.map(({ item, sourceIndex }) => <div className="brain-row" key={`${item}-${sourceIndex}`}><div className="brain-dot"><Sparkles size={15} /></div><div><strong>{item}</strong><p>Captured {sourceIndex === 0 ? "just now" : `${sourceIndex + 1} hours ago`} · Unsorted</p></div><button aria-label={`Delete ${item}`} title="Delete thought" onClick={() => onArchive(sourceIndex)}><Trash2 size={15} /></button></div>)}</section><aside className="brain-aside"><div className="soft-card"><Inbox size={20} /><strong>Inbox zero is not the goal.</strong><p>Your brain is for having ideas, not holding them. Capture freely; sort when you’re ready.</p></div></aside></div></>;
+}
+
+function ResourcesView({ resources, onDelete, onReplace, onDownload }: { resources: Resource[]; onDelete: (id: string) => void; onReplace: (id: string, file: File) => void; onDownload: (resource: Resource) => void }) {
+  const fileInputRef = { current: null as HTMLInputElement | null };
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const handleReplace = (id: string) => {
+    setSelectedId(id);
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.onchange = (e: any) => {
+      if (e.target.files[0]) {
+        onReplace(id, e.target.files[0]);
+        setSelectedId(null);
+      }
+    };
+    input.click();
+  };
+
+  return <>
+    <div className="page-title">
+      <div>
+        <p className="eyebrow">Keep & organize</p>
+        <h1>Resources</h1>
+        <p>Download, replace, or remove files and assets.</p>
+      </div>
+    </div>
+    <div className="brain-layout">
+      <section className="card brain-list">
+        {resources.length ? (
+          resources.map(resource => (
+            <div className="brain-row" key={resource.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between' }}>
+              <div style={{ flex: 1 }}>
+                <strong>{resource.name}</strong>
+                <p>{resource.type} · {formatFileSize(resource.size)} · {new Date(resource.uploadedAt).toLocaleDateString()}</p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => onDownload(resource)} title="Download" style={{ padding: '6px 12px', fontSize: '12px', background: '#625af6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Download</button>
+                <button onClick={() => handleReplace(resource.id)} title="Replace" disabled={selectedId === resource.id} style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(200, 200, 200, 0.2)', border: '1px solid rgba(200, 200, 200, 0.4)', borderRadius: '4px', cursor: 'pointer' }}>Replace</button>
+                <button onClick={() => onDelete(resource.id)} title="Delete" style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(255, 107, 107, 0.2)', color: '#ff6b6b', border: '1px solid rgba(255, 107, 107, 0.3)', borderRadius: '4px', cursor: 'pointer' }}>Delete</button>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="priority-empty">
+            <strong>No resources yet.</strong>
+            <p>Upload files and keep them organized in one place.</p>
+          </div>
+        )}
+      </section>
+    </div>
+  </>;
 }
 
 function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
@@ -1355,7 +1428,7 @@ function ProjectDetailModal({ project, tasks, close, linkTask, onFullscreen }: {
   return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="project-detail-modal" onMouseDown={event => event.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot" style={{ color: project.color, background: `${project.color}16` }}><project.icon size={16} /></div><div><strong>{project.name}</strong><span>{project.kind === "maintenance" ? "Maintenance / ongoing" : "Finishable project"} · {activeTasks.length} active tasks</span></div><div style={{ display: "flex", gap: "8px" }}>{onFullscreen && <button onClick={onFullscreen} aria-label="Open fullscreen" title="Open fullscreen"><Maximize size={18} style={{ color: "var(--muted)" }} /></button>}<button onClick={close} aria-label="Close"><X size={18} /></button></div></div><div className="project-detail-summary"><div><span>Next due</span><strong>{nextDue ? formatDueDate(nextDue.due) : "Nothing due"}</strong></div><div><span>Highest priority</span><strong>{topTask?.priority ?? "Clear"}</strong></div><div><span>Energy load</span><strong>{topTask ? `${topTask.energy} · ${topTask.focusMinutes}m` : "Clear"}</strong></div></div><div className="project-detail-list"><div className="project-detail-head"><span>Task</span><span>Due</span><span>Priority</span><span>Focus</span></div>{linkedTasks.length ? linkedTasks.map(task => <div className={`project-detail-row ${task.done ? "done" : ""} ${task.canceled ? "canceled" : ""}`} key={task.id}><strong>{task.title}</strong><span>{task.canceled ? "Canceled" : task.done ? "Done" : formatDueDate(task.due)}</span><em className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</em><span>{task.focusMinutes}m · {task.energy}</span></div>) : <div className="priority-empty"><strong>No tasks linked yet.</strong><p>Link an existing task below, or choose this project when creating a new task.</p></div>}</div><div className="link-task-panel"><div><strong>Link existing tasks</strong><span>Pull loose tasks into {project.name} so this project view is actually useful.</span></div>{availableTasks.length ? <div className="link-task-list">{availableTasks.slice(0, 6).map(task => <button key={task.id} type="button" onClick={() => linkTask(task.id, project)}><span><strong>{task.title}</strong><small>{task.project} · {formatDueDate(task.due)} · {task.focusMinutes}m</small></span><em className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</em><Plus size={15} /></button>)}</div> : <p>No loose active tasks to link right now.</p>}</div></motion.div></motion.div>;
 }
 
-function EditTaskModal({ task, projects, close, save }: { task: Task; projects: Project[]; close: () => void; save: (updates: Pick<Task, "title" | "focusMinutes" | "energy" | "project" | "color" | "due">) => void }) {
+function EditTaskModal({ task, projects, tasks, close, save }: { task: Task; projects: Project[]; tasks: Task[]; close: () => void; save: (updates: Pick<Task, "title" | "focusMinutes" | "energy" | "project" | "color" | "due">) => void }) {
   const [title, setTitle] = useState(task.title);
   const [projectName, setProjectName] = useState(task.project);
   const [focusMinutes, setFocusMinutes] = useState(String(task.focusMinutes));
@@ -1363,7 +1436,41 @@ function EditTaskModal({ task, projects, close, save }: { task: Task; projects: 
   const [dueDate, setDueDate] = useState(task.due);
   const parsedMinutes = Math.max(5, Math.min(240, Number(focusMinutes) || 45));
   const linkedProject = projects.find(project => project.name === projectName);
-  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.form className="create-modal" onMouseDown={event => event.stopPropagation()} onSubmit={event => { event.preventDefault(); if (title.trim()) save({ title: title.trim(), project: linkedProject?.name ?? "Inbox", color: linkedProject?.color ?? "#625af6", focusMinutes: parsedMinutes, energy, due: dueDate }); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><Pencil size={16} /></div><div><strong>Edit priority</strong><span>Update the project link, focus length, energy cost, and schedule.</span></div><button type="button" onClick={close} aria-label="Close"><X size={18} /></button></div><label htmlFor="edit-task-name">Priority name</label><input id="edit-task-name" autoFocus value={title} onChange={event => setTitle(event.target.value)} /><label htmlFor="edit-task-project">Linked project</label><select id="edit-task-project" value={projectName} onChange={event => setProjectName(event.target.value)}><option value="Inbox">Inbox / no project</option>{projects.map(project => <option key={project.name} value={project.name}>{project.name}</option>)}</select><label htmlFor="edit-task-due">Schedule for</label><input id="edit-task-due" type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} /><div className="focus-edit-grid"><label htmlFor="edit-focus-minutes">Focus time<input id="edit-focus-minutes" type="number" min={5} max={240} step={5} value={focusMinutes} onChange={event => setFocusMinutes(event.target.value)} /></label><label>Energy needed<div className="energy-picker">{(["Low", "Medium", "High"] as EnergyLevel[]).map(level => <button key={level} type="button" className={energy === level ? "selected" : ""} onClick={() => setEnergy(level)}>{level}</button>)}</div></label></div><div className="create-actions"><button type="button" onClick={close}>Cancel</button><button className="primary" disabled={!title.trim()} type="submit">Save changes</button></div></motion.form></motion.div>;
+  const doubleBooked = checkDoubleBooking(tasks, task.id, dueDate);
+  return (
+    <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.form className="create-modal" onMouseDown={event => event.stopPropagation()} onSubmit={event => { event.preventDefault(); if (title.trim()) save({ title: title.trim(), project: linkedProject?.name ?? "Inbox", color: linkedProject?.color ?? "#625af6", focusMinutes: parsedMinutes, energy, due: dueDate }); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}>
+        <div className="capture-head">
+          <div className="brain-dot"><Pencil size={16} /></div>
+          <div><strong>Edit priority</strong><span>Update the project link, focus length, energy cost, and schedule.</span></div>
+          <button type="button" onClick={close} aria-label="Close"><X size={18} /></button>
+        </div>
+        <label htmlFor="edit-task-name">Priority name</label>
+        <input id="edit-task-name" autoFocus value={title} onChange={event => setTitle(event.target.value)} />
+        <label htmlFor="edit-task-project">Linked project</label>
+        <select id="edit-task-project" value={projectName} onChange={event => setProjectName(event.target.value)}>
+          <option value="Inbox">Inbox / no project</option>
+          {projects.map(project => <option key={project.name} value={project.name}>{project.name}</option>)}
+        </select>
+        <label htmlFor="edit-task-due">Schedule for</label>
+        <input id="edit-task-due" type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} />
+        {doubleBooked.length > 0 && (
+          <div style={{ background: "rgba(255, 107, 107, 0.1)", border: "1px solid rgba(255, 107, 107, 0.3)", borderRadius: "6px", padding: "12px", marginTop: "8px", fontSize: "12px", color: "#ff6b6b" }}>
+            <strong>⚠️ Double booking detected</strong>
+            <p style={{ margin: "4px 0 0 0" }}>{doubleBooked.map(t => t.title).join(", ")} already scheduled for this date</p>
+          </div>
+        )}
+        <div className="focus-edit-grid">
+          <label htmlFor="edit-focus-minutes">Focus time<input id="edit-focus-minutes" type="number" min={5} max={240} step={5} value={focusMinutes} onChange={event => setFocusMinutes(event.target.value)} /></label>
+          <label>Energy needed<div className="energy-picker">{(["Low", "Medium", "High"] as EnergyLevel[]).map(level => <button key={level} type="button" className={energy === level ? "selected" : ""} onClick={() => setEnergy(level)}>{level}</button>)}</div></label>
+        </div>
+        <div className="create-actions">
+          <button type="button" onClick={close}>Cancel</button>
+          <button className="primary" disabled={!title.trim()} type="submit">Save changes</button>
+        </div>
+      </motion.form>
+    </motion.div>
+  );
 }
 
 function CreateModal({ kind, projects, close, submit }: { kind: "task" | "project"; projects: Project[]; close: () => void; submit: (value: string, projectKind?: ProjectKind, taskProject?: string, icon?: ProjectIcon) => void }) {
