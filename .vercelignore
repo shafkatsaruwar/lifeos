@@ -1,0 +1,12 @@
+node_modules
+.next
+dist
+out
+src-tauri/target
+.git
+.gitignore
+README.md
+TAURI_SETUP.md
+next.config.js.bak
+*.lock
+.DS_Store
