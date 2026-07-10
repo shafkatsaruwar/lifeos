@@ -296,6 +296,16 @@ export default function LifeOS() {
 
   useEffect(() => {
     const auth = getClientAuth();
+
+    // Check for test user ID in dev mode
+    const testUserId = typeof window !== 'undefined' ? sessionStorage.getItem('lifeos-user-id') : null;
+    if (testUserId === 'test-user-dev') {
+      setUser({ displayName: 'Test User', email: 'test@localhost' });
+      setUserId(testUserId);
+      setAuthLoading(false);
+      return;
+    }
+
     if (!auth) {
       setAuthLoading(false);
       return;
@@ -967,6 +977,13 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
     }
   };
 
+  const handleTestLogin = () => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('lifeos-user-id', 'test-user-dev');
+    }
+    onLoginSuccess();
+  };
+
   return (
     <div style={{
       display: 'flex',
@@ -1029,6 +1046,29 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
           }}>
             {error}
           </p>
+        )}
+
+        {typeof window !== 'undefined' && window.location.hostname === 'localhost' && (
+          <button
+            onClick={handleTestLogin}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              color: '#fff',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              marginTop: '12px'
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
+          >
+            Dev: Test Login
+          </button>
         )}
 
         <p style={{
