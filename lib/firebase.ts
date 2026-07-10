@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, set, get, remove, onValue } from 'firebase/database';
-import { getAuth, GoogleAuthProvider, signInWithRedirect, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithRedirect, signOut as firebaseSignOut, onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 
 let app: any;
 let database: any;
@@ -46,4 +46,4 @@ export async function signOut() {
   return firebaseSignOut(auth);
 }
 
-export { ref, set, get, remove, onValue, onAuthStateChanged };
+export { ref, set, get, remove, onValue, onAuthStateChanged, getRedirectResult };

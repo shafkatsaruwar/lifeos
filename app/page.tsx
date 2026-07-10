@@ -32,7 +32,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { syncDataToFirebase, loadDataFromFirebase, listenToFirebaseChanges, stopListeningToFirebaseChanges, pullAllDataFromFirebase, setUserId, getUserId } from "@/lib/dataSync";
-import { signInWithGoogle, signOut, onAuthStateChanged, getClientAuth } from "@/lib/firebase";
+import { signInWithGoogle, signOut, onAuthStateChanged, getClientAuth, getRedirectResult } from "@/lib/firebase";
 import {
   Aperture, Archive, ArrowRight, Brain, CalendarDays, Check, CheckCircle2,
   ChevronDown, Circle, Clock3, Command, FileText, Flame, Focus, FolderKanban,
@@ -289,6 +289,12 @@ export default function LifeOS() {
       setAuthLoading(false);
       return;
     }
+
+    // Handle redirect result from Google Sign-In
+    getRedirectResult(auth).catch(error => {
+      console.error('Redirect result error:', error);
+    });
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
