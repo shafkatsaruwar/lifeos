@@ -207,38 +207,6 @@ export default function LifeOS() {
   console.log('LifeOS component rendering');
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
-
-  useEffect(() => {
-    const auth = getClientAuth();
-    if (!auth) {
-      setAuthLoading(false);
-      return;
-    }
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        setUserId(currentUser.uid);
-      } else {
-        setUser(null);
-      }
-      setAuthLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  if (authLoading) {
-    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0a0a0a', color: '#fff' }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: '32px', marginBottom: '20px' }}>LifeOS</div>
-        <div style={{ fontSize: '14px', opacity: 0.6 }}>Loading...</div>
-      </div>
-    </div>;
-  }
-
-  if (!user) {
-    return <LoginPage onLoginSuccess={() => {}} />;
-  }
-
   const [view, setView] = useState<View>("Dashboard");
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [tasksHydrated, setTasksHydrated] = useState(false);
@@ -314,6 +282,25 @@ export default function LifeOS() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [focus, go, openFocus]);
+
+  useEffect(() => {
+    const auth = getClientAuth();
+    if (!auth) {
+      setAuthLoading(false);
+      return;
+    }
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        setUserId(currentUser.uid);
+      } else {
+        setUser(null);
+      }
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
   }, [dark]);
@@ -708,6 +695,19 @@ export default function LifeOS() {
 
   const filtered = useMemo(() => [...nav.map(n => n.name), ...projectItems.map(p => p.name), ...tasks.map(t => t.title)]
     .filter(x => x.toLowerCase().includes(query.toLowerCase())), [projectItems, query, tasks]);
+
+  if (authLoading) {
+    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0a0a0a', color: '#fff' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: '32px', marginBottom: '20px' }}>LifeOS</div>
+        <div style={{ fontSize: '14px', opacity: 0.6 }}>Loading...</div>
+      </div>
+    </div>;
+  }
+
+  if (!user) {
+    return <LoginPage onLoginSuccess={() => {}} />;
+  }
 
   const activeTask = tasks.find(task => task.id === activeTaskId) ?? tasks[0];
   if (fullscreenProject && projectItems.find(p => p.name === fullscreenProject)) {
