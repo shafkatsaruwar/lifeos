@@ -1,6 +1,6 @@
 'use client';
 
-import { DailyBriefing, Recommendation } from '@/lib/lifeos-kernel';
+import { DailyBriefing } from '@/lib/lifeos-kernel';
 import { motion } from 'framer-motion';
 import { ChevronRight, AlertCircle, Clock, Zap } from 'lucide-react';
 
@@ -12,108 +12,117 @@ interface BriefingProps {
 export default function Briefing({ briefing, onOpenModule }: BriefingProps) {
   return (
     <motion.div
-      className="briefing-container"
+      className="page"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
+      transition={{ duration: 0.3 }}
     >
-      {/* Greeting */}
-      <div className="briefing-greeting">
-        <motion.h1
-          initial={{ y: 10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.1 }}
-        >
-          {briefing.greeting}
-        </motion.h1>
+      {/* Welcome Section */}
+      <div className="welcome">
+        <div>
+          <p className="eyebrow">Daily Briefing</p>
+          <h1>{briefing.greeting}</h1>
+          <p>{briefing.explanation}</p>
+        </div>
       </div>
 
-      {/* Primary Recommendation */}
-      {briefing.primaryRecommendation && (
-        <motion.div
-          className="primary-recommendation"
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-        >
-          <div className="recommendation-header">
-            <Zap size={20} className="recommendation-icon" />
-            <div className="recommendation-title">
-              <h2>Today I'd focus on {briefing.primaryRecommendation.module}.</h2>
-            </div>
-          </div>
-
-          <p className="recommendation-why">
-            {briefing.primaryRecommendation.why}
-          </p>
-
-          <div className="recommendation-reasoning">
-            <div className="reasoning-item">
-              <span className="reasoning-label">Why:</span>
-              <span>{briefing.primaryRecommendation.reasoning.momentumFactor}</span>
-            </div>
-            <div className="reasoning-item">
-              <span className="reasoning-label">Time:</span>
-              <span>{briefing.primaryRecommendation.reasoning.timeAvailable}</span>
-            </div>
-            {briefing.primaryRecommendation.reasoning.constraints.length > 0 && (
-              <div className="reasoning-item">
-                <span className="reasoning-label">Note:</span>
-                <span>{briefing.primaryRecommendation.reasoning.constraints[0]}</span>
-              </div>
-            )}
-          </div>
-
-          <motion.button
-            className="primary-action"
-            onClick={() => onOpenModule?.(briefing.primaryRecommendation?.module || '')}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+      {/* Dashboard Grid */}
+      <div className="dashboard-grid">
+        {/* Primary Recommendation - Left Column */}
+        {briefing.primaryRecommendation && (
+          <motion.div
+            className="card"
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.1 }}
           >
-            {briefing.primaryRecommendation.action}
-            <ChevronRight size={16} />
-          </motion.button>
-        </motion.div>
-      )}
-
-      {/* Secondary Items */}
-      <motion.div
-        className="secondary-items"
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.3 }}
-      >
-        <h3>You also have:</h3>
-        <div className="items-list">
-          {briefing.secondaryItems.map((item, index) => (
-            <motion.div
-              key={index}
-              className="secondary-item"
-              initial={{ x: -10, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.4 + index * 0.1 }}
-            >
-              <div className="item-icon">
-                {item.type === 'deadline' && <Clock size={16} />}
-                {item.type === 'waiting' && <AlertCircle size={16} />}
-                {item.type === 'pattern' && <Zap size={16} />}
-                {item.type === 'opportunity' && <ChevronRight size={16} />}
+            <div className="card-head">
+              <div>
+                <div className="section-icon violet">
+                  <Zap size={16} />
+                </div>
+                <h2>Focus Today</h2>
               </div>
-              <p>{item.message}</p>
-            </motion.div>
-          ))}
-        </div>
-      </motion.div>
+            </div>
 
-      {/* Closing */}
-      <motion.div
-        className="briefing-closing"
-        initial={{ y: 10, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.6 }}
-      >
-        <p>Everything else can wait.</p>
-      </motion.div>
+            <div style={{ padding: '18px' }}>
+              <h3 style={{ fontSize: '16px', marginBottom: '12px', fontWeight: 700 }}>
+                {briefing.primaryRecommendation.module}
+              </h3>
+
+              <p style={{ fontSize: '12px', lineHeight: '1.6', marginBottom: '16px', color: 'var(--muted)' }}>
+                {briefing.primaryRecommendation.why}
+              </p>
+
+              <div style={{
+                background: 'var(--canvas)',
+                borderRadius: '10px',
+                padding: '12px',
+                marginBottom: '14px',
+                fontSize: '10px',
+                lineHeight: '1.6',
+                display: 'grid',
+                gap: '8px'
+              }}>
+                <div>
+                  <span style={{ color: 'var(--muted)', textTransform: 'uppercase', fontSize: '8px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Why</span>
+                  <div style={{ fontSize: '11px' }}>
+                    {briefing.primaryRecommendation.reasoning.momentumFactor}
+                  </div>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--muted)', textTransform: 'uppercase', fontSize: '8px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Time</span>
+                  <div style={{ fontSize: '11px' }}>
+                    {briefing.primaryRecommendation.reasoning.timeAvailable}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => onOpenModule?.(briefing.primaryRecommendation!.module)}
+                className="primary"
+                style={{ width: '100%' }}
+              >
+                {briefing.primaryRecommendation.action}
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Secondary Items - Right Column */}
+        <motion.div
+          className="card"
+          initial={{ y: 10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.15 }}
+        >
+          <div className="card-head">
+            <div>
+              <div className="section-icon blue">
+                <AlertCircle size={16} />
+              </div>
+              <h2>Also Notice</h2>
+            </div>
+          </div>
+
+          <div style={{ padding: '0' }}>
+            {briefing.secondaryItems.map((item, index) => (
+              <div
+                key={index}
+                style={{
+                  borderBottom: index < briefing.secondaryItems.length - 1 ? '1px solid var(--line)' : 'none',
+                  padding: '14px 18px',
+                  fontSize: '11px',
+                  lineHeight: '1.5'
+                }}
+              >
+                <p style={{ margin: 0 }}>{item.message}</p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      </div>
     </motion.div>
   );
 }
