@@ -38,10 +38,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "frameworks": [],
-    "minimumSystemVersion": "11.0",
-    "signingIdentity": null,
-    "entitlements": null
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": null,
+      "entitlements": null
+    },
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }
