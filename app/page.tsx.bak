@@ -1,34 +1,5 @@
 "use client";
 
-// LifeOS Module Architecture
-// ==========================
-// LifeOS is designed as a pluggable module system where each feature (Tasks, Calendar, Projects, Brain, etc.)
-// is an independent module that owns its own:
-// - Data structures and state management
-// - Logic and business rules
-// - Navigation and routing
-// - UI components and widgets
-//
-// The Dashboard is not a monolithic view that hardcodes all sections. Instead:
-// 1. Each module registers itself and declares what it contributes
-// 2. Modules can contribute: dashboard cards, quick actions, notifications, status summaries
-// 3. Dashboard discovers registered modules and renders their contributions
-// 4. Modules are sorted by order and rendered dynamically
-//
-// This architecture makes LifeOS highly extensible:
-// - New modules (Synapse, Photography, Finance, Career, AI) can be added without modifying Dashboard
-// - Modules can be toggled on/off without breaking the system
-// - Modules are independently testable and maintainable
-// - Future integrations (calendar sync, task automation, etc.) can be modules
-//
-// Gradual Implementation Plan:
-// Phase 1: TasksModule (priorities, today's tasks)
-// Phase 2: FocusModule (next focus, focus sessions)
-// Phase 3: CalendarModule (today's schedule, events)
-// Phase 4: ProjectsModule (active projects, project cards)
-// Phase 5: BrainModule (inbox, capture, notes)
-// Phase 6: Third-party modules (Synapse sync, photography workflows, etc.)
-
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -40,6 +11,11 @@ import {
 } from "lucide-react";
 
 type View = "Dashboard" | "Focus" | "Projects" | "Tasks" | "Calendar" | "Brain" | "Knowledge" | "Resources" | "Settings";
+type DashboardCardComponent = React.ComponentType<any>;
+type DashboardCard = { id: string; title: string; icon: typeof Home; component: DashboardCardComponent; gridColumn?: string; order?: number };
+type QuickAction = { id: string; label: string; icon: typeof Home; shortcut?: string; onClick: () => void };
+type ModuleContext = { tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; settings: SettingsState; onNavigate: (view: View) => void; onTaskMenu: (id: number) => void; onFocus: (id: number) => void; onComplete: (id: number) => void; onNewTask: () => void };
+type LifeOSModule = { name: string; dashboardCards: (context: ModuleContext) => DashboardCard[]; quickActions?: (context: ModuleContext) => QuickAction[] };
 type EnergyLevel = "Low" | "Medium" | "High";
 type Task = { id: number; title: string; project: string; color: string; due: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; checklist?: string[]; checklistProgress?: boolean[]; done?: boolean; canceled?: boolean };
 type ProjectKind = "maintenance" | "finishable";
@@ -200,6 +176,95 @@ const parseIcsEvents = (ics: string): CalendarEvent[] => {
 function IconButton({ children, onClick, label }: { children: React.ReactNode; onClick?: () => void; label: string }) {
   return <button onClick={onClick} aria-label={label} className="icon-button">{children}</button>;
 }
+
+const createModules = (context: ModuleContext): LifeOSModule[] => [
+  {
+    name: "tasks",
+    dashboardCards: (ctx) => [{
+      id: "tasks-priorities",
+      title: "Today's priorities",
+      icon: Zap,
+      component: ({ onGo, tasks, onComplete, onFocus, onTaskMenu, todayTasksDue, onNewTask }: any) => (
+        <section className="card priorities">
+          <div className="card-head"><div><span className="section-icon violet"><Zap size={14} /></span><h2>Today's priorities</h2></div><button onClick={() => onGo("Tasks")}>Plan day <ArrowRight size={14} /></button></div>
+          <div className="task-list">{tasks.length ? tasks.slice(0, 3).map((task: Task, i: number) => <div className={`task-row ${task.done ? "done" : ""} ${task.canceled ? "canceled" : ""}`} key={task.id}><button className="check" disabled={task.canceled} onClick={() => onComplete(task.id)}>{task.done ? <Check size={14} /> : task.canceled ? <X size={13} /> : <span>{i + 1}</span>}</button><button className="task-open" disabled={task.canceled} onClick={() => onFocus(task.id)}><strong>{task.title}</strong><p><i style={{ background: task.color }} />{task.project} <span>·</span> {task.canceled ? "Canceled" : task.due} <span>·</span> {task.focusMinutes} min <span>·</span> {task.energy} energy</p></button><button className="quick-focus" disabled={task.canceled} aria-label={`Focus on ${task.title}`} title="Focus on this task" onClick={() => onFocus(task.id)}><Focus size={15} /></button><button className="more" aria-label={`Actions for ${task.title}`} onClick={() => onTaskMenu(task.id)}><MoreHorizontal size={17} /></button></div>) : <div className="priority-empty"><strong>No priorities right now.</strong><p>Clean slate. Add one when your brain hands you the next thing.</p></div>}</div>
+          {todayTasksDue.length > 0 && <><div style={{ borderTop: "1px solid var(--line)", margin: "8px 0", paddingTop: "12px" }}><p style={{ fontSize: "9px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".08em", margin: "0 0 8px 0", fontWeight: 700, paddingLeft: "15px" }}>Today's other tasks</p><div className="task-list" style={{ margin: 0 }}>{todayTasksDue.slice(0, 2).map((task: Task) => <div className={`task-row ${task.done ? "done" : ""} ${task.canceled ? "canceled" : ""}`} key={task.id} style={{ opacity: .7, fontSize: "13px" }}><button className="check" disabled={task.canceled} onClick={() => onComplete(task.id)}>{task.done ? <Check size={12} /> : task.canceled ? <X size={11} /> : <span style={{ fontSize: "10px" }}>•</span>}</button><button className="task-open" disabled={task.canceled} onClick={() => onFocus(task.id)}><strong>{task.title}</strong><p><i style={{ background: task.color }} />{task.project} <span>·</span> {task.canceled ? "Canceled" : task.due} <span>·</span> {task.energy} energy</p></button><button className="more" aria-label={`Actions for ${task.title}`} onClick={() => onTaskMenu(task.id)}><MoreHorizontal size={15} /></button></div>)}</div>{todayTasksDue.length > 2 && <div style={{ padding: "4px 15px", fontSize: "9px", color: "var(--muted)" }}>+{todayTasksDue.length - 2} more</div>}</div></>}
+          <button className="add-row" onClick={onNewTask}><Plus size={15} /> Add priority</button>
+        </section>
+      ),
+      order: 1,
+    }],
+  },
+  {
+    name: "focus",
+    dashboardCards: (ctx) => [{
+      id: "focus-next",
+      title: "Next focus",
+      icon: Focus,
+      component: ({ nextTask, onFocus, onNewTask }: any) => (
+        <section className="focus-card">
+          <div className="focus-glow" />
+          <div className="card-head"><div><span className="section-icon dark-icon"><Focus size={14} /></span><h2>Next focus</h2></div><span className="ready"><i /> {nextTask ? "Ready" : "Clear"}</span></div>
+          <div className="focus-content"><p>{nextTask?.project ?? "You're all caught up"}</p><h3>{nextTask?.title ?? "What should we work on next?"}</h3><div className="focus-meta">{nextTask && <><span><Clock3 size={14} /> {nextTask.focusMinutes} min</span><span><Flame size={14} /> {nextTask.energy} energy</span></>}</div></div>
+          <button className="start-focus" onClick={() => nextTask ? onFocus(nextTask.id) : onNewTask()}><Focus size={16} /> {nextTask ? "Start focus session" : "Add priority"} <span>{nextTask ? "F" : "N"}</span></button>
+        </section>
+      ),
+      order: 2,
+    }],
+  },
+  {
+    name: "calendar",
+    dashboardCards: (ctx) => [{
+      id: "calendar-today",
+      title: "Today's schedule",
+      icon: CalendarDays,
+      component: ({ todayEvents, onGo }: any) => (
+        <section className="card schedule">
+          <div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>Today's schedule</h2></div><button onClick={() => onGo("Calendar")}>View calendar</button></div>
+          {todayEvents.length ? todayEvents.map((event: CalendarEvent, i: number) => {
+            const start = new Date(event.start);
+            const end = event.end ? new Date(event.end) : new Date(start.getTime() + 45 * 60_000);
+            const startTime = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
+            const endTime = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
+            return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong><span>{event.notes || (event.source === "LifeOS" ? "Focus block" : event.source)}</span></div></div>;
+          }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p></div>}
+        </section>
+      ),
+      order: 3,
+    }],
+  },
+  {
+    name: "projects",
+    dashboardCards: (ctx) => [{
+      id: "projects-active",
+      title: "Active projects",
+      icon: FolderKanban,
+      component: ({ projects, onGo, onOpenProject }: any) => (
+        <section className="card projects-card">
+          <div className="card-head"><div><span className="section-icon orange"><FolderKanban size={14} /></span><h2>Active projects</h2></div><button onClick={() => onGo("Projects")}>All projects <ArrowRight size={14} /></button></div>
+          {projects.slice(0, 3).map((p: Project) => <div className="project-row" key={p.name} onClick={() => onOpenProject(p.name)} style={{ cursor: "pointer" }}><div className="project-glyph" style={{ color: p.color, background: `${p.color}16` }}><p.icon size={17} /></div><div><strong>{p.name}</strong><small className={`project-kind ${p.kind}`}>{p.kind === "maintenance" ? "Maintenance" : "Project"}</small><div className="progress"><i style={{ width: `${p.progress}%`, background: p.color }} /></div></div><span>{p.kind === "maintenance" ? "∞" : `${p.progress}%`}</span></div>)}
+        </section>
+      ),
+      order: 4,
+    }],
+  },
+  {
+    name: "brain",
+    dashboardCards: (ctx) => [{
+      id: "brain-inbox",
+      title: "Brain inbox",
+      icon: Brain,
+      component: ({ brainCount, onCapture, brainItems }: any) => (
+        <section className="card inbox-card">
+          <div className="card-head"><div><span className="section-icon green"><Brain size={14} /></span><h2>Brain inbox</h2></div><span className="count">{brainCount} uncategorized</span></div>
+          <button className="capture-zone" onClick={onCapture}><Plus size={18} /><div><strong>Capture what's on your mind</strong><span>Idea, thought, link, anything…</span></div><kbd>B</kbd></button>
+          <div className="inbox-preview"><span>Recently captured</span>{brainItems.slice(0, 2).map((item: string, i: number) => <p key={i}>{item} <small>{i === 0 ? "12m" : "1h"}</small></p>)}</div>
+        </section>
+      ),
+      order: 5,
+    }],
+  },
+];
 
 export default function LifeOS() {
   const [view, setView] = useState<View>("Dashboard");
@@ -533,7 +598,7 @@ export default function LifeOS() {
         </header>
         <AnimatePresence mode="wait">
           <motion.div key={view} className="page" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
-            {view === "Dashboard" && <Dashboard tasks={tasks} projects={projectItems} brainCount={brainItems.length} onComplete={complete} onFocus={openFocus} onCapture={() => setCapture(true)} onGo={go} onNewTask={() => setComposer("task")} onTaskMenu={setActionTaskId} events={calendarEvents} onOpenProject={setSelectedProjectName} />}
+            {view === "Dashboard" && <Dashboard tasks={tasks} projects={projectItems} brainCount={brainItems.length} onComplete={complete} onFocus={openFocus} onCapture={() => setCapture(true)} onGo={go} onNewTask={() => setComposer("task")} onTaskMenu={setActionTaskId} events={calendarEvents} onOpenProject={setSelectedProjectName} brainItems={brainItems} settings={settings} />}
             {view === "Projects" && <Projects projects={projectItems} tasks={tasks} onNew={() => setComposer("project")} onAction={setActionProjectName} onOpen={setSelectedProjectName} />}
             {view === "Tasks" && <Tasks tasks={tasks} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} />}
             {view === "Calendar" && <CalendarView events={calendarEvents} weekStartsMonday={settingsState.weekStartsMonday} onNew={() => setCalendarComposer(true)} onImport={() => setCalendarImporter(true)} onEdit={setEditingCalendarEventId} />}
@@ -563,7 +628,7 @@ export default function LifeOS() {
   );
 }
 
-function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture, onGo, onNewTask, onTaskMenu, events, onOpenProject }: { tasks: Task[]; projects: Project[]; brainCount: number; onComplete: (id: number) => void; onFocus: (id?: number) => void; onCapture: () => void; onGo: (view: View) => void; onNewTask: () => void; onTaskMenu: (id: number) => void; events: CalendarEvent[]; onOpenProject: (name: string) => void }) {
+function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture, onGo, onNewTask, onTaskMenu, events, onOpenProject, brainItems, settings }: { tasks: Task[]; projects: Project[]; brainCount: number; onComplete: (id: number) => void; onFocus: (id?: number) => void; onCapture: () => void; onGo: (view: View) => void; onNewTask: () => void; onTaskMenu: (id: number) => void; events: CalendarEvent[]; onOpenProject: (name: string) => void; brainItems: string[]; settings: SettingsState }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const tick = window.setInterval(() => setNow(new Date()), 60_000);
@@ -573,46 +638,21 @@ function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture
   const nextTask = tasks.find(task => !task.done && !task.canceled);
   const todayKey = toDateKey(now);
   const todayEvents = events.filter(event => event.start.slice(0, 10) === todayKey).sort((a, b) => a.start.localeCompare(b.start));
-  const todayTasksDue = tasks.filter(task => task.due === "Today" && !task.done && !task.canceled && !tasks.slice(0, 3).includes(task));
+  const todayTasksDue = tasks.filter(task => task.due === “Today” && !task.done && !task.canceled && !tasks.slice(0, 3).includes(task));
+
+  const moduleContext: ModuleContext = { tasks, projects, events, brainItems, settings, onNavigate: onGo, onTaskMenu, onFocus, onComplete, onNewTask };
+  const modules = createModules(moduleContext);
+  const dashboardCards = modules.flatMap(m => m.dashboardCards(moduleContext)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
   return <>
-    <section className="welcome">
-      <div><p className="eyebrow">{now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p><h1>{getGreeting(now)}</h1><p>Here’s what deserves your attention today.</p></div>
-      <div className="day-score"><span>Today</span>{readyPriorities === 0 && tasks.length > 0 && tasks.every(t => t.done || t.canceled) ? <><strong>All Done</strong><small style={{ textTransform: "none" }}>for Today</small></> : <><strong>{readyPriorities}<span>/{tasks.length}</span></strong><small>priorities ready</small></>}</div>
+    <section className=”welcome”>
+      <div><p className=”eyebrow”>{now.toLocaleDateString(“en-US”, { weekday: “long”, month: “long”, day: “numeric” })}</p><h1>{getGreeting(now)}</h1><p>Here’s what deserves your attention today.</p></div>
+      <div className=”day-score”><span>Today</span>{readyPriorities === 0 && tasks.length > 0 && tasks.every(t => t.done || t.canceled) ? <><strong>All Done</strong><small style={{ textTransform: “none” }}>for Today</small></> : <><strong>{readyPriorities}<span>/{tasks.length}</span></strong><small>priorities ready</small></>}</div>
     </section>
-    <div className="dashboard-grid">
-      <section className="card priorities">
-        <div className="card-head"><div><span className="section-icon violet"><Zap size={14} /></span><h2>Today’s priorities</h2></div><button onClick={() => onGo("Tasks")}>Plan day <ArrowRight size={14} /></button></div>
-        <div className="task-list">{tasks.length ? tasks.slice(0, 3).map((task, i) => <div className={`task-row ${task.done ? "done" : ""} ${task.canceled ? "canceled" : ""}`} key={task.id}><button className="check" disabled={task.canceled} onClick={() => onComplete(task.id)}>{task.done ? <Check size={14} /> : task.canceled ? <X size={13} /> : <span>{i + 1}</span>}</button><button className="task-open" disabled={task.canceled} onClick={() => onFocus(task.id)}><strong>{task.title}</strong><p><i style={{ background: task.color }} />{task.project} <span>·</span> {task.canceled ? "Canceled" : task.due} <span>·</span> {task.focusMinutes} min <span>·</span> {task.energy} energy</p></button><button className="quick-focus" disabled={task.canceled} aria-label={`Focus on ${task.title}`} title="Focus on this task" onClick={() => onFocus(task.id)}><Focus size={15} /></button><button className="more" aria-label={`Actions for ${task.title}`} onClick={() => onTaskMenu(task.id)}><MoreHorizontal size={17} /></button></div>) : <div className="priority-empty"><strong>No priorities right now.</strong><p>Clean slate. Add one when your brain hands you the next thing.</p></div>}</div>
-        {todayTasksDue.length > 0 && <><div style={{ borderTop: "1px solid var(--line)", margin: "8px 0", paddingTop: "12px" }}><p style={{ fontSize: "9px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".08em", margin: "0 0 8px 0", fontWeight: 700, paddingLeft: "15px" }}>Today’s other tasks</p><div className="task-list" style={{ margin: 0 }}>{todayTasksDue.slice(0, 2).map(task => <div className={`task-row ${task.done ? "done" : ""} ${task.canceled ? "canceled" : ""}`} key={task.id} style={{ opacity: .7, fontSize: "13px" }}><button className="check" disabled={task.canceled} onClick={() => onComplete(task.id)}>{task.done ? <Check size={12} /> : task.canceled ? <X size={11} /> : <span style={{ fontSize: "10px" }}>•</span>}</button><button className="task-open" disabled={task.canceled} onClick={() => onFocus(task.id)}><strong>{task.title}</strong><p><i style={{ background: task.color }} />{task.project} <span>·</span> {task.canceled ? "Canceled" : task.due} <span>·</span> {task.energy} energy</p></button><button className="more" aria-label={`Actions for ${task.title}`} onClick={() => onTaskMenu(task.id)}><MoreHorizontal size={15} /></button></div>)}</div>{todayTasksDue.length > 2 && <div style={{ padding: "4px 15px", fontSize: "9px", color: "var(--muted)" }}>+{todayTasksDue.length - 2} more</div>}</div></>}
-        <button className="add-row" onClick={onNewTask}><Plus size={15} /> Add priority</button>
-      </section>
-      <section className="focus-card">
-        <div className="focus-glow" />
-        <div className="card-head"><div><span className="section-icon dark-icon"><Focus size={14} /></span><h2>Next focus</h2></div><span className="ready"><i /> {nextTask ? "Ready" : "Clear"}</span></div>
-        <div className="focus-content"><p>{nextTask?.project ?? "You're all caught up"}</p><h3>{nextTask?.title ?? "What should we work on next?"}</h3><div className="focus-meta">{nextTask && <><span><Clock3 size={14} /> {nextTask.focusMinutes} min</span><span><Flame size={14} /> {nextTask.energy} energy</span></>}</div></div>
-        <button className="start-focus" onClick={() => nextTask ? onFocus(nextTask.id) : onNewTask()}><Focus size={16} /> {nextTask ? "Start focus session" : "Add priority"} <span>{nextTask ? "F" : "N"}</span></button>
-      </section>
-      <section className="card schedule">
-        <div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>Today’s schedule</h2></div><button onClick={() => onGo("Calendar")}>View calendar</button></div>
-        {todayEvents.length ? todayEvents.map((event, i) => {
-          const start = new Date(event.start);
-          const end = event.end ? new Date(event.end) : new Date(start.getTime() + 45 * 60_000);
-          const startTime = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
-          const endTime = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
-          return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong><span>{event.notes || (event.source === "LifeOS" ? "Focus block" : event.source)}</span></div></div>;
-        }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p></div>}
-      </section>
-      <section className="card projects-card">
-        <div className="card-head"><div><span className="section-icon orange"><FolderKanban size={14} /></span><h2>Active projects</h2></div><button onClick={() => onGo("Projects")}>All projects <ArrowRight size={14} /></button></div>
-        {projects.slice(0, 3).map(p => <div className="project-row" key={p.name} onClick={() => onOpenProject(p.name)} style={{ cursor: "pointer" }}><div className="project-glyph" style={{ color: p.color, background: `${p.color}16` }}><p.icon size={17} /></div><div><strong>{p.name}</strong><small className={`project-kind ${p.kind}`}>{p.kind === "maintenance" ? "Maintenance" : "Project"}</small><div className="progress"><i style={{ width: `${p.progress}%`, background: p.color }} /></div></div><span>{p.kind === "maintenance" ? "∞" : `${p.progress}%`}</span></div>)}
-      </section>
-      <section className="card inbox-card">
-        <div className="card-head"><div><span className="section-icon green"><Brain size={14} /></span><h2>Brain inbox</h2></div><span className="count">{brainCount} uncategorized</span></div>
-        <button className="capture-zone" onClick={onCapture}><Plus size={18} /><div><strong>Capture what’s on your mind</strong><span>Idea, thought, link, anything…</span></div><kbd>B</kbd></button>
-        <div className="inbox-preview"><span>Recently captured</span><p>Explore a photo essay about late-night diners <small>12m</small></p><p>Research German student visa timeline <small>1h</small></p></div>
-      </section>
+    <div className=”dashboard-grid”>
+      {dashboardCards.map(card => <card.component key={card.id} tasks={tasks} projects={projects} brainCount={brainCount} onComplete={onComplete} onFocus={onFocus} onCapture={onCapture} onGo={onGo} onNewTask={onNewTask} onTaskMenu={onTaskMenu} todayEvents={todayEvents} onOpenProject={onOpenProject} nextTask={nextTask} todayTasksDue={todayTasksDue} brainItems={brainItems} />)}
     </div>
-    <p className="quote">“The main thing is to keep the main thing the main thing.” <span>— Stephen Covey</span></p>
+    <p className=”quote”>”The main thing is to keep the main thing the main thing.” <span>— Stephen Covey</span></p>
   </>;
 }
 
