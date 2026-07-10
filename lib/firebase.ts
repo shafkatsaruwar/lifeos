@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, set, get, remove, onValue } from 'firebase/database';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithRedirect, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
 
 let app: any;
 let database: any;
@@ -38,7 +38,7 @@ export function getClientAuth() {
 export async function signInWithGoogle() {
   const auth = getClientAuth();
   const provider = new GoogleAuthProvider();
-  return signInWithPopup(auth, provider);
+  return signInWithRedirect(auth, provider);
 }
 
 export async function signOut() {
