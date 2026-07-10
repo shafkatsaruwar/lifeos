@@ -148,7 +148,7 @@ const normalizeTask = (task: Partial<Task>): Task => ({
   priority: task.priority ?? "Medium",
   focusMinutes: task.focusMinutes ?? 45,
   energy: task.energy ?? "Medium",
-  checklist: Array.isArray(task.checklist) && task.checklist.length ? task.checklist : defaultFocusChecklist,
+  checklist: Array.isArray(task.checklist) ? task.checklist : [],
   done: task.done,
   canceled: task.canceled,
 });
@@ -407,7 +407,7 @@ export default function LifeOS() {
   };
   const addTask = (title: string, _projectKind?: ProjectKind, projectName = "Inbox") => {
     const linkedProject = projectItems.find(project => project.name === projectName);
-    setTasks(items => [...items, { id: Date.now(), title, project: linkedProject?.name ?? "Inbox", color: linkedProject?.color ?? "#625af6", due: "Today", priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, checklist: defaultFocusChecklist }]);
+    setTasks(items => [...items, { id: Date.now(), title, project: linkedProject?.name ?? "Inbox", color: linkedProject?.color ?? "#625af6", due: "Today", priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, checklist: [] }]);
     setComposer(null);
     flash(linkedProject ? `Task linked to ${linkedProject.name}` : "Task added to Today");
   };
@@ -795,14 +795,14 @@ function FocusMode({ task, tasks, onSwitch, onUpdateChecklist, onUpdateChecklist
   const totalSeconds = task.focusMinutes * 60;
   const [seconds, setSeconds] = useState(totalSeconds);
   const [running, setRunning] = useState(false);
-  const [checklist, setChecklist] = useState<string[]>(task.checklist?.length ? task.checklist : defaultFocusChecklist);
-  const nextChecklist = task.checklist?.length ? task.checklist : defaultFocusChecklist;
+  const [checklist, setChecklist] = useState<string[]>(task.checklist ?? []);
+  const nextChecklist = task.checklist ?? [];
   const [checks, setChecks] = useState<boolean[]>(() => task.checklistProgress?.length === nextChecklist.length ? task.checklistProgress : nextChecklist.map(() => false));
   const [sounds, setSounds] = useState(false);
   useEffect(() => {
     setSeconds(totalSeconds);
     setRunning(false);
-    const nextChecklist = task.checklist?.length ? task.checklist : defaultFocusChecklist;
+    const nextChecklist = task.checklist ?? [];
     setChecklist(nextChecklist);
     const savedProgress = task.checklistProgress?.length === nextChecklist.length ? task.checklistProgress : nextChecklist.map(() => false);
     setChecks(savedProgress);
