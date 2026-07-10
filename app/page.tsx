@@ -33,6 +33,8 @@ import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { syncDataToFirebase, loadDataFromFirebase, listenToFirebaseChanges, stopListeningToFirebaseChanges, pullAllDataFromFirebase, setUserId, getUserId } from "@/lib/dataSync";
 import { signInWithGoogle, signOut, onAuthStateChanged, getClientAuth, getRedirectResult } from "@/lib/firebase";
+import { logger } from "@/lib/logger";
+import { PRIORITY_RANK, TEST_USER, ERROR_MESSAGES, STORAGE_KEYS } from "@/lib/constants";
 import {
   Aperture, Archive, ArrowRight, Brain, CalendarDays, Check, CheckCircle2,
   ChevronDown, Circle, Clock3, Command, FileText, Flame, Focus, FolderKanban,
@@ -152,7 +154,8 @@ const getGreeting = (date: Date) => {
   if (hour < 22) return "Good Evening, Mohammed.";
   return "Good Night, Mohammed.";
 };
-const priorityRank: Record<Task["priority"], number> = { High: 0, Medium: 1, Low: 2 };
+// Use centralized priority ranking from constants
+const priorityRank = PRIORITY_RANK;
 const normalizeTask = (task: Partial<Task>): Task => ({
   id: task.id ?? Date.now(),
   title: task.title ?? "Untitled task",
@@ -216,7 +219,7 @@ function IconButton({ children, onClick, label }: { children: React.ReactNode; o
 }
 
 export default function LifeOS() {
-  console.log('LifeOS component rendering');
+  logger.debug('LifeOS component rendered');
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [view, setView] = useState<View>("Dashboard");
@@ -301,29 +304,33 @@ export default function LifeOS() {
     const auth = getClientAuth();
 
     // Check for test user ID in dev mode
-    const testUserId = typeof window !== 'undefined' ? sessionStorage.getItem('lifeos-user-id') : null;
-    if (testUserId === 'test-user-dev') {
-      setUser({ displayName: 'Test User', email: 'test@localhost' });
+    const testUserId = typeof window !== 'undefined' ? sessionStorage.getItem(STORAGE_KEYS.USER_ID) : null;
+    if (testUserId === TEST_USER.ID) {
+      logger.debug('Using test user for development');
+      setUser({ displayName: TEST_USER.DISPLAY_NAME, email: TEST_USER.EMAIL });
       setUserId(testUserId);
       setAuthLoading(false);
       return;
     }
 
     if (!auth) {
+      logger.warn('Firebase auth not initialized');
       setAuthLoading(false);
       return;
     }
 
     // Handle redirect result from Google Sign-In
     getRedirectResult(auth).catch(error => {
-      console.error('Redirect result error:', error);
+      logger.error('Redirect result error during auth', error as Error);
     });
 
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
+        logger.info('User authenticated', { uid: currentUser.uid, email: currentUser.email });
         setUser(currentUser);
         setUserId(currentUser.uid);
       } else {
+        logger.info('User not authenticated');
         setUser(null);
       }
       setAuthLoading(false);
@@ -1052,7 +1059,8 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
 
   const handleTestLogin = () => {
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('lifeos-user-id', 'test-user-dev');
+      sessionStorage.setItem(STORAGE_KEYS.USER_ID, TEST_USER.ID);
+      logger.debug('Test login initiated');
     }
     onLoginSuccess();
   };

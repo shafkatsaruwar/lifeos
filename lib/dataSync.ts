@@ -1,5 +1,9 @@
 import { ref, set, get, onValue, Unsubscribe } from 'firebase/database';
 import { getClientDatabase } from './firebase';
+import { logger } from './logger';
+import { withErrorHandling, retryOperation, isRetryableError } from './firebaseErrors';
+import { FIREBASE_PATHS } from './constants';
+import { validateTasks, validateProjects, validateCalendarEvents, validateSettings } from './validation';
 
 const listeners: Map<string, Unsubscribe> = new Map();
 
@@ -31,43 +35,84 @@ function cleanUndefined(obj: any): any {
 export async function syncDataToFirebase(key: string, data: any) {
   if (!process.env.NEXT_PUBLIC_FIREBASE_DB_URL) return;
   if (typeof window === 'undefined') return; // Don't sync on server
-  try {
+
+  return withErrorHandling(async () => {
     const database = getClientDatabase();
     if (!database) {
-      console.warn(`Database not initialized for sync ${key}`);
-      return;
+      throw new Error('Database not initialized');
     }
-    const cleanedData = cleanUndefined(data);
-    console.log(`Syncing ${key} to Firebase:`, cleanedData);
+
     const userId = getUserId();
     if (!userId) {
-      console.warn('No user ID available for sync');
-      return;
+      throw new Error('No user ID available');
     }
-    await set(ref(database, `users/${userId}/${key}`), cleanedData);
-    console.log(`Successfully synced ${key}`);
-  } catch (error) {
-    console.error(`Failed to sync ${key} to Firebase:`, error);
-  }
+
+    const cleanedData = cleanUndefined(data);
+    const path = FIREBASE_PATHS[key as keyof typeof FIREBASE_PATHS]?.(userId) || `users/${userId}/${key}`;
+
+    // Retry on network errors
+    await retryOperation(
+      () => set(ref(database, path), cleanedData),
+      3,
+      1000
+    );
+
+    logger.info(`Synced ${key} to Firebase`);
+  }, `syncDataToFirebase[${key}]`);
 }
 
 export async function loadDataFromFirebase(key: string) {
   if (!process.env.NEXT_PUBLIC_FIREBASE_DB_URL) return null;
   if (typeof window === 'undefined') return null; // Don't load on server
-  try {
+
+  return withErrorHandling(async () => {
     const database = getClientDatabase();
-    if (!database) return null;
+    if (!database) throw new Error('Database not initialized');
+
     const userId = getUserId();
-    if (!userId) return null;
-    const snapshot = await get(ref(database, `users/${userId}/${key}`));
-    if (snapshot.exists()) {
-      return snapshot.val();
+    if (!userId) throw new Error('No user ID available');
+
+    const path = FIREBASE_PATHS[key as keyof typeof FIREBASE_PATHS]?.(userId) || `users/${userId}/${key}`;
+    const snapshot = await retryOperation(
+      () => get(ref(database, path)),
+      3,
+      1000
+    );
+
+    if (!snapshot.exists()) {
+      logger.info(`No data found for ${key}`);
+      return null;
     }
-    return null;
-  } catch (error) {
-    console.error(`Failed to load ${key} from Firebase:`, error);
-    return null;
-  }
+
+    const data = snapshot.val();
+
+    // Validate data based on key
+    let validation;
+    switch (key) {
+      case 'tasks':
+        validation = validateTasks(data);
+        break;
+      case 'projects':
+        validation = validateProjects(data);
+        break;
+      case 'calendar':
+        validation = validateCalendarEvents(data);
+        break;
+      case 'settings':
+        validation = validateSettings(data);
+        break;
+      default:
+        return data;
+    }
+
+    if (validation && !validation.success) {
+      logger.warn(`Invalid ${key} data from Firebase`, { errors: validation.error.errors });
+      return null;
+    }
+
+    logger.info(`Loaded ${key} from Firebase`);
+    return data;
+  }, `loadDataFromFirebase[${key}]`);
 }
 
 export function listenToFirebaseChanges(key: string, callback: (data: any) => void) {
