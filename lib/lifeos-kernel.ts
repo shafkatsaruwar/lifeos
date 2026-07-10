@@ -106,7 +106,7 @@ export interface PersonalContext {
     description: string;
     from: string;
     since: Date;
-    importance: "critical" | "high" | "normal";
+    importance: "critical" | "high" | "normal" | "low";
   }>;
   concerns: Array<{
     description: string;
@@ -426,12 +426,16 @@ export function buildContext(observations: Observation[], memory: PersonalMemory
   // Extract concerns
   const concerns = observations
     .filter(o => o.type === "deadline" || o.type === "status")
-    .map(o => ({
-      description: o.fact,
-      relatedModules: [o.module],
-      severity: o.importance === "critical" || o.importance === "high" ? o.importance : "normal",
-      deadline: o.metadata.daysRemaining ? new Date(today.getTime() + o.metadata.daysRemaining * 24 * 60 * 60 * 1000) : undefined
-    }));
+    .map(o => {
+      const severity: "critical" | "high" | "normal" =
+        o.importance === "critical" || o.importance === "high" ? o.importance : "normal";
+      return {
+        description: o.fact,
+        relatedModules: [o.module],
+        severity,
+        deadline: o.metadata.daysRemaining ? new Date(today.getTime() + o.metadata.daysRemaining * 24 * 60 * 60 * 1000) : undefined
+      };
+    });
 
   return {
     date: today,
@@ -464,8 +468,8 @@ export function reasonAboutRecommendation(
 ): DailyBriefing {
 
   // Find the primary focus
-  let primaryModule = null;
-  let primaryReason = null;
+  let primaryModule = "Synapse";
+  let primaryReason = "Continue on Synapse; it's your core focus this season.";
 
   // Rule 1: Synapse milestone completion has highest priority
   const synapseProgress = observations.find(o => o.module === "Synapse" && o.type === "milestone");
@@ -475,7 +479,7 @@ export function reasonAboutRecommendation(
   }
 
   // Rule 2: If no active founder work, check Masters
-  if (!primaryModule && context.inferredSeasons.some(s => s.season === "Masters Season")) {
+  if (primaryModule === "Synapse" && !synapseProgress && context.inferredSeasons.some(s => s.season === "Masters Season")) {
     const mastersDue = observations.find(o => o.module === "Masters" && o.type === "deadline");
     if (mastersDue?.metadata.daysRemaining <= 14) {
       primaryModule = "Masters";
@@ -483,13 +487,7 @@ export function reasonAboutRecommendation(
     }
   }
 
-  // Rule 3: Default to primary role's active work
-  if (!primaryModule) {
-    primaryModule = "Synapse";
-    primaryReason = "Continue on Synapse; it's your core focus this season.";
-  }
-
-  const recommendation: Recommendation | null = primaryModule ? {
+  const recommendation: Recommendation = {
     module: primaryModule,
     action: primaryModule === "Synapse"
       ? "Continue onboarding screens for Caregiver Linking"
@@ -505,7 +503,7 @@ export function reasonAboutRecommendation(
       constraints: ["Orthodontist appointment at 2 PM (1 hour)"],
       opportunityCost: "Photography can wait another day"
     }
-  } : null;
+  };
 
   return {
     date: new Date(),
@@ -526,7 +524,7 @@ export function reasonAboutRecommendation(
         message: "Recruiter waiting for response — could handle in 30 minutes"
       }
     ],
-    explanation: recommendation?.why || "Taking a moment for you today.",
-    firstStep: recommendation?.action || "Start with what feels most important"
+    explanation: recommendation.why,
+    firstStep: recommendation.action
   };
 }
