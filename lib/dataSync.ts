@@ -1,8 +1,18 @@
 import { ref, set, get, onValue, Unsubscribe } from 'firebase/database';
 import { getClientDatabase } from './firebase';
 
-const USER_ID = 'default-user'; // In future, use actual user ID from auth
 const listeners: Map<string, Unsubscribe> = new Map();
+
+export function setUserId(userId: string) {
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem('lifeos-user-id', userId);
+  }
+}
+
+export function getUserId(): string | null {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem('lifeos-user-id');
+}
 
 function cleanUndefined(obj: any): any {
   if (Array.isArray(obj)) {
@@ -29,7 +39,12 @@ export async function syncDataToFirebase(key: string, data: any) {
     }
     const cleanedData = cleanUndefined(data);
     console.log(`Syncing ${key} to Firebase:`, cleanedData);
-    await set(ref(database, `users/${USER_ID}/${key}`), cleanedData);
+    const userId = getUserId();
+    if (!userId) {
+      console.warn('No user ID available for sync');
+      return;
+    }
+    await set(ref(database, `users/${userId}/${key}`), cleanedData);
     console.log(`Successfully synced ${key}`);
   } catch (error) {
     console.error(`Failed to sync ${key} to Firebase:`, error);
@@ -42,7 +57,9 @@ export async function loadDataFromFirebase(key: string) {
   try {
     const database = getClientDatabase();
     if (!database) return null;
-    const snapshot = await get(ref(database, `users/${USER_ID}/${key}`));
+    const userId = getUserId();
+    if (!userId) return null;
+    const snapshot = await get(ref(database, `users/${userId}/${key}`));
     if (snapshot.exists()) {
       return snapshot.val();
     }
@@ -76,8 +93,10 @@ export function listenToFirebaseChanges(key: string, callback: (data: any) => vo
     }
 
     // Set up real-time listener
+    const userId = getUserId();
+    if (!userId) return () => {};
     const unsubscribe = onValue(
-      ref(database, `users/${USER_ID}/${key}`),
+      ref(database, `users/${userId}/${key}`),
       (snapshot) => {
         try {
           console.log(`Listener fired for ${key}`, snapshot.exists());
