@@ -1,0 +1,78 @@
+import { checkDoubleBooking, formatDueDate, toDateKey } from '@/lib/helpers';
+import { Task } from '@/lib/validation';
+
+describe('Task Helpers', () => {
+  const today = new Date('2026-07-10');
+  const tomorrow = new Date('2026-07-11');
+  const nextWeek = new Date('2026-07-17');
+
+  const mockTask = (overrides?: Partial<Task>): Task => ({
+    id: 1,
+    title: 'Test Task',
+    project: 'Test',
+    color: '#625af6',
+    due: '2026-07-10',
+    priority: 'High',
+    focusMinutes: 45,
+    energy: 'High',
+    ...overrides,
+  });
+
+  describe('checkDoubleBooking', () => {
+    it('detects conflict on same date', () => {
+      const tasks = [mockTask(), mockTask({ id: 2 })];
+      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10');
+      expect(conflicts).toHaveLength(2);
+    });
+
+    it('ignores completed tasks', () => {
+      const tasks = [mockTask({ done: true }), mockTask({ id: 2 })];
+      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10');
+      expect(conflicts).toHaveLength(1);
+    });
+
+    it('ignores canceled tasks', () => {
+      const tasks = [mockTask({ canceled: true }), mockTask({ id: 2 })];
+      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10');
+      expect(conflicts).toHaveLength(1);
+    });
+
+    it('ignores different dates', () => {
+      const tasks = [mockTask(), mockTask({ id: 2, due: '2026-07-11' })];
+      const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10');
+      expect(conflicts).toHaveLength(1);
+    });
+
+    it('ignores same task ID', () => {
+      const tasks = [mockTask({ id: 1 })];
+      const conflicts = checkDoubleBooking(tasks, 1, '2026-07-10');
+      expect(conflicts).toHaveLength(0);
+    });
+  });
+
+  describe('formatDueDate', () => {
+    it('formats today as "Today"', () => {
+      expect(formatDueDate('2026-07-10')).toBe('Today');
+    });
+
+    it('formats tomorrow as "Tomorrow"', () => {
+      expect(formatDueDate('2026-07-11')).toBe('Tomorrow');
+    });
+
+    it('formats other dates as "Mon DD"', () => {
+      expect(formatDueDate('2026-07-17')).toMatch(/Jul \d+/);
+    });
+  });
+
+  describe('toDateKey', () => {
+    it('formats date as YYYY-MM-DD', () => {
+      const result = toDateKey(today);
+      expect(result).toBe('2026-07-10');
+    });
+
+    it('pads month and day with zeros', () => {
+      const earlyDate = new Date('2026-01-05');
+      expect(toDateKey(earlyDate)).toBe('2026-01-05');
+    });
+  });
+});
