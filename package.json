@@ -9,7 +9,7 @@
     "lint": "next lint",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "npm run build && tauri build"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
