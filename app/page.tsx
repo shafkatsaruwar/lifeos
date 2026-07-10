@@ -579,6 +579,86 @@ export default function LifeOS() {
       console.error("Sync error:", error);
     }
   };
+
+  const exportData = () => {
+    const payload = { exportedAt: new Date().toISOString(), tasks, projects: projectItems.map(({ icon, ...project }) => project), events: calendarEvents, brainItems, settings: settingsState, dark };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `lifeos-export-${toDateKey(new Date())}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    flash("LifeOS data exported");
+  };
+
+  const resetLocalData = () => {
+    if (!window.confirm("Reset LifeOS data? This will clear everything and reload.")) return;
+    setTasks([]);
+    setProjectItems([]);
+    setCalendarEvents([]);
+    setBrainItems([]);
+    setSettingsState(initialSettings);
+    setDark(false);
+    window.location.reload();
+  };
+
+  const importData = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json";
+    input.onchange = (event: any) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e: any) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (data.tasks && Array.isArray(data.tasks)) {
+            setTasks(data.tasks.map((task: any) => normalizeTask(task)));
+            await syncDataToFirebase('tasks', data.tasks);
+          }
+          if (data.projects && Array.isArray(data.projects)) {
+            setProjectItems(data.projects.map((project: Partial<Project>) => {
+              const iconName = project.iconName && projectIcons[project.iconName] ? project.iconName : "FolderKanban";
+              return {
+                name: project.name ?? "Untitled project",
+                desc: project.desc ?? "A space for meaningful work.",
+                progress: project.progress ?? 0,
+                color: project.color ?? "#625af6",
+                iconName,
+                icon: projectIcons[iconName],
+                tasks: project.tasks ?? 0,
+                kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+              };
+            }));
+            await syncDataToFirebase('projects', data.projects);
+          }
+          if (data.events && Array.isArray(data.events)) {
+            setCalendarEvents(data.events);
+            await syncDataToFirebase('calendar', data.events);
+          }
+          if (data.brainItems && Array.isArray(data.brainItems)) {
+            setBrainItems(data.brainItems.filter((item: any) => typeof item === "string"));
+            await syncDataToFirebase('brain', data.brainItems);
+          }
+          if (data.settings) {
+            setSettingsState(current => ({ ...current, ...data.settings }));
+            await syncDataToFirebase('settings', data.settings);
+          }
+          if (data.dark !== undefined) {
+            setDark(data.dark);
+            await syncDataToFirebase('dark', data.dark);
+          }
+          flash("✓ LifeOS data imported and synced to cloud");
+        } catch (err) {
+          alert("Invalid data file. Make sure you're using a LifeOS export.");
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
   const filtered = useMemo(() => [...nav.map(n => n.name), ...projectItems.map(p => p.name), ...tasks.map(t => t.title)]
     .filter(x => x.toLowerCase().includes(query.toLowerCase())), [projectItems, query, tasks]);
 
@@ -625,7 +705,7 @@ export default function LifeOS() {
             {view === "Tasks" && <Tasks tasks={tasks} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} />}
             {view === "Calendar" && <CalendarView events={calendarEvents} weekStartsMonday={settingsState.weekStartsMonday} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={setEditingCalendarEventId} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} />}
-            {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} />}
+            {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} />}
             {!["Dashboard", "Projects", "Tasks", "Calendar", "Brain", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
         </AnimatePresence>
@@ -776,7 +856,7 @@ function ToggleRow({ title, desc, checked, onChange }: { title: string; desc: st
   return <div className="setting-row"><div><strong>{title}</strong><p>{desc}</p></div><button className={`toggle ${checked ? "on" : ""}`} onClick={() => onChange(!checked)} aria-pressed={checked}><span /></button></div>;
 }
 
-function SettingsView({ dark, setDark, settings, update, tasks, projects, events, brainItems, flash, onSync }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void }) {
+function SettingsView({ dark, setDark, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void }) {
   const requestNotifications = async () => {
     if (!("Notification" in window)) {
       flash("Notifications are not supported here");
@@ -785,84 +865,7 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
     const permission = await Notification.requestPermission();
     flash(permission === "granted" ? "Browser notifications enabled" : "Notifications not enabled");
   };
-  const exportData = () => {
-    const payload = { exportedAt: new Date().toISOString(), tasks, projects: projects.map(({ icon, ...project }) => project), events, brainItems, settings, dark };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `lifeos-export-${toDateKey(new Date())}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    flash("LifeOS data exported");
-  };
-  const resetLocalData = () => {
-    if (!window.confirm("Reset LifeOS data? This will clear everything and reload.")) return;
-    setTasks([]);
-    setProjectItems([]);
-    setCalendarEvents([]);
-    setBrainItems([]);
-    setSettingsState(initialSettings);
-    setDark(false);
-    window.location.reload();
-  };
-  const importData = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "application/json";
-    input.onchange = (event: any) => {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async (e: any) => {
-        try {
-          const data = JSON.parse(e.target.result);
-          if (data.tasks && Array.isArray(data.tasks)) {
-            setTasks(data.tasks.map(task => normalizeTask(task)));
-            await syncDataToFirebase('tasks', data.tasks);
-          }
-          if (data.projects && Array.isArray(data.projects)) {
-            setProjectItems(data.projects.map((project: Partial<Project>) => {
-              const iconName = project.iconName && projectIcons[project.iconName] ? project.iconName : "FolderKanban";
-              return {
-                name: project.name ?? "Untitled project",
-                desc: project.desc ?? "A space for meaningful work.",
-                progress: project.progress ?? 0,
-                color: project.color ?? "#625af6",
-                iconName,
-                icon: projectIcons[iconName],
-                tasks: project.tasks ?? 0,
-                kind: project.kind === "maintenance" ? "maintenance" : "finishable",
-              };
-            }));
-            await syncDataToFirebase('projects', data.projects);
-          }
-          if (data.events && Array.isArray(data.events)) {
-            setCalendarEvents(data.events);
-            await syncDataToFirebase('calendar', data.events);
-          }
-          if (data.brainItems && Array.isArray(data.brainItems)) {
-            setBrainItems(data.brainItems.filter(item => typeof item === "string"));
-            await syncDataToFirebase('brain', data.brainItems);
-          }
-          if (data.settings) {
-            setSettingsState(current => ({ ...current, ...data.settings }));
-            await syncDataToFirebase('settings', data.settings);
-          }
-          if (data.dark !== undefined) {
-            setDark(data.dark);
-            await syncDataToFirebase('dark', data.dark);
-          }
-          flash("✓ LifeOS data imported and synced to cloud");
-        } catch (err) {
-          alert("Invalid data file. Make sure you're using a LifeOS export.");
-        }
-      };
-      reader.readAsText(file);
-    };
-    input.click();
-  };
-  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={exportData}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Appearance</h2></div></div><div className="settings-body"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{["#625af6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b", "#cf625a"].map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><ToggleRow title="Compact mode" desc="Tighten spacing when you want more on screen." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions for lower sensory load." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={exportData}><Download size={15} /> Export JSON</button><button onClick={importData}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={resetLocalData}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body shortcut-list"><div><kbd>/</kbd><span>Find anything</span></div><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>B</kbd><span>Quick capture</span></div><div><kbd>F</kbd><span>Start focus</span></div><div><kbd>N</kbd><span>New task</span></div><div><kbd>J / K</kbd><span>Switch focus task</span></div></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Workspace</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">MS</div><div><strong>Mohammed</strong><p>Personal workspace · LifeOS</p></div></div><p className="settings-note">Next obvious upgrades: account login, cloud sync, real Apple Calendar CalDAV sync, and custom project fields.</p></div></section></div></>;
+  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Appearance</h2></div></div><div className="settings-body"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{["#625af6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b", "#cf625a"].map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><ToggleRow title="Compact mode" desc="Tighten spacing when you want more on screen." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions for lower sensory load." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body shortcut-list"><div><kbd>/</kbd><span>Find anything</span></div><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>B</kbd><span>Quick capture</span></div><div><kbd>F</kbd><span>Start focus</span></div><div><kbd>N</kbd><span>New task</span></div><div><kbd>J / K</kbd><span>Switch focus task</span></div></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Workspace</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">MS</div><div><strong>Mohammed</strong><p>Personal workspace · LifeOS</p></div></div><p className="settings-note">Next obvious upgrades: account login, cloud sync, real Apple Calendar CalDAV sync, and custom project fields.</p></div></section></div></>;
 }
 
 function BrainView({ items, onCapture, onArchive }: { items: string[]; onCapture: () => void; onArchive: (index: number) => void }) {
