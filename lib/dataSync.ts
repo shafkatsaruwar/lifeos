@@ -23,9 +23,14 @@ export async function syncDataToFirebase(key: string, data: any) {
   if (typeof window === 'undefined') return; // Don't sync on server
   try {
     const database = getClientDatabase();
-    if (!database) return;
+    if (!database) {
+      console.warn(`Database not initialized for sync ${key}`);
+      return;
+    }
     const cleanedData = cleanUndefined(data);
+    console.log(`Syncing ${key} to Firebase:`, cleanedData);
     await set(ref(database, `users/${USER_ID}/${key}`), cleanedData);
+    console.log(`Successfully synced ${key}`);
   } catch (error) {
     console.error(`Failed to sync ${key} to Firebase:`, error);
   }
@@ -55,14 +60,17 @@ export function listenToFirebaseChanges(key: string, callback: (data: any) => vo
   try {
     const database = getClientDatabase();
     if (!database) {
-      console.warn('Firebase database not initialized');
+      console.warn('Firebase database not initialized for listener');
       return () => {};
     }
+
+    console.log(`Setting up listener for ${key}`);
 
     // Unsubscribe from previous listener if exists
     if (listeners.has(key)) {
       const unsubscribe = listeners.get(key);
       if (unsubscribe) {
+        console.log(`Unsubscribing from previous ${key} listener`);
         unsubscribe();
       }
     }
@@ -72,8 +80,10 @@ export function listenToFirebaseChanges(key: string, callback: (data: any) => vo
       ref(database, `users/${USER_ID}/${key}`),
       (snapshot) => {
         try {
+          console.log(`Listener fired for ${key}`, snapshot.exists());
           if (snapshot.exists()) {
             const data = snapshot.val();
+            console.log(`Received ${key} update:`, data);
             callback(data);
           }
         } catch (err) {
@@ -86,6 +96,7 @@ export function listenToFirebaseChanges(key: string, callback: (data: any) => vo
     );
 
     listeners.set(key, unsubscribe);
+    console.log(`Listener for ${key} set up successfully`);
     return unsubscribe;
   } catch (error) {
     console.error(`Failed to set up listener for ${key}:`, error);
@@ -110,4 +121,25 @@ export async function syncAllData(tasks: any, projects: any, events: any, brainI
     syncDataToFirebase('settings', settings),
     syncDataToFirebase('dark', dark),
   ]);
+}
+
+export async function pullAllDataFromFirebase() {
+  if (!process.env.NEXT_PUBLIC_FIREBASE_DB_URL) return null;
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const [tasks, projects, calendar, brain, settings, dark] = await Promise.all([
+      loadDataFromFirebase('tasks'),
+      loadDataFromFirebase('projects'),
+      loadDataFromFirebase('calendar'),
+      loadDataFromFirebase('brain'),
+      loadDataFromFirebase('settings'),
+      loadDataFromFirebase('dark'),
+    ]);
+
+    return { tasks, projects, calendar, brain, settings, dark };
+  } catch (error) {
+    console.error('Failed to pull data from Firebase:', error);
+    return null;
+  }
 }
