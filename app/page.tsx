@@ -36,6 +36,7 @@ import { signInWithGoogle, signOut, onAuthStateChanged, getClientAuth, getRedire
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, ERROR_MESSAGES, STORAGE_KEYS } from "@/lib/constants";
 import { checkDoubleBooking, formatDueDate, toDateKey, isValidTimeFormat } from "@/lib/helpers";
+import { getFileStorage } from "@/lib/fileStorage";
 import {
   Aperture, Archive, ArrowRight, Brain, CalendarDays, Check, CheckCircle2,
   ChevronDown, Circle, Clock3, Command, FileText, Flame, Focus, FolderKanban,
@@ -771,7 +772,7 @@ export default function LifeOS() {
             {view === "Projects" && <Projects projects={projectItems} tasks={tasks} onNew={() => setComposer("project")} onAction={setActionProjectName} onOpen={setSelectedProjectName} />}
             {view === "Tasks" && <Tasks tasks={tasks} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} />}
             {view === "Calendar" && <CalendarView events={[...calendarEvents, ...tasksToCalendarEvents(tasks)]} weekStartsMonday={settingsState.weekStartsMonday} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={setEditingCalendarEventId} />}
-            {view === "Resources" && <ResourcesView resources={resources} onDelete={(id) => { setResources(r => r.filter(res => res.id !== id)); flash("Resource deleted"); }} onReplace={(id, file) => { flash("Resource updated"); }} onDownload={(resource) => { const a = document.createElement('a'); a.href = resource.url; a.download = resource.name; a.click(); }} />}
+            {view === "Resources" && <ResourcesView resources={resources} onUpload={(file) => { const fileStorage = getFileStorage(); fileStorage.uploadFile(file).then(({ id, url }) => { const newResource: Resource = { id, name: file.name, type: file.type, size: file.size, url, uploadedAt: new Date().toISOString() }; setResources(r => [...r, newResource]); flash("File uploaded successfully"); }).catch(() => flash("Upload failed")); }} onDelete={(id) => { setResources(r => r.filter(res => res.id !== id)); flash("Resource deleted"); }} onReplace={(id, file) => { flash("Resource updated"); }} onDownload={(resource) => { const a = document.createElement('a'); a.href = resource.url; a.download = resource.name; a.click(); }} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} />}
             {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} onLogout={handleLogout} />}
             {!["Dashboard", "Projects", "Tasks", "Calendar", "Brain", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
@@ -957,9 +958,9 @@ function BrainView({ items, onCapture, onArchive }: { items: string[]; onCapture
   return <><div className="page-title"><div><p className="eyebrow">Capture first. Organize later.</p><h1>Brain inbox</h1><p>A safe place for everything on your mind.</p></div><button className="primary" onClick={onCapture}><Plus size={16} /> Capture thought</button></div><div className="brain-layout"><section className="card brain-list"><div className="brain-filter"><strong>{items.length} thoughts</strong><button onClick={() => setNewest(value => !value)}>{newest ? "Newest" : "Oldest"} first <ChevronDown size={14} /></button></div>{visibleItems.map(({ item, sourceIndex }) => <div className="brain-row" key={`${item}-${sourceIndex}`}><div className="brain-dot"><Sparkles size={15} /></div><div><strong>{item}</strong><p>Captured {sourceIndex === 0 ? "just now" : `${sourceIndex + 1} hours ago`} · Unsorted</p></div><button aria-label={`Delete ${item}`} title="Delete thought" onClick={() => onArchive(sourceIndex)}><Trash2 size={15} /></button></div>)}</section><aside className="brain-aside"><div className="soft-card"><Inbox size={20} /><strong>Inbox zero is not the goal.</strong><p>Your brain is for having ideas, not holding them. Capture freely; sort when you’re ready.</p></div></aside></div></>;
 }
 
-function ResourcesView({ resources, onDelete, onReplace, onDownload }: { resources: Resource[]; onDelete: (id: string) => void; onReplace: (id: string, file: File) => void; onDownload: (resource: Resource) => void }) {
-  const fileInputRef = { current: null as HTMLInputElement | null };
+function ResourcesView({ resources, onUpload, onDelete, onReplace, onDownload }: { resources: Resource[]; onUpload: (file: File) => void; onDelete: (id: string) => void; onReplace: (id: string, file: File) => void; onDownload: (resource: Resource) => void }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
@@ -967,6 +968,19 @@ function ResourcesView({ resources, onDelete, onReplace, onDownload }: { resourc
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const handleUpload = () => {
+    setIsUploading(true);
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.onchange = (e: any) => {
+      if (e.target.files[0]) {
+        onUpload(e.target.files[0]);
+        setIsUploading(false);
+      }
+    };
+    input.click();
   };
 
   const handleReplace = (id: string) => {
@@ -989,6 +1003,9 @@ function ResourcesView({ resources, onDelete, onReplace, onDownload }: { resourc
         <h1>Resources</h1>
         <p>Download, replace, or remove files and assets.</p>
       </div>
+      <button onClick={handleUpload} disabled={isUploading} style={{ padding: '8px 16px', fontSize: '14px', background: '#625af6', color: '#fff', border: 'none', borderRadius: '6px', cursor: isUploading ? 'not-allowed' : 'pointer', opacity: isUploading ? 0.6 : 1 }}>
+        {isUploading ? 'Uploading...' : '+ Upload file'}
+      </button>
     </div>
     <div className="brain-layout">
       <section className="card brain-list">
