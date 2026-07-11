@@ -111,11 +111,7 @@ const initialProjects: Project[] = [
   { name: "Career", desc: "Build leverage and create meaningful work.", progress: 54, color: "#4e8bd7", icon: UserRound, iconName: "UserRound", tasks: 3, kind: "maintenance" },
 ];
 
-const initialBrainItems = [
-  "Explore a photo essay about late-night diners",
-  "Research German student visa timeline",
-  "Recipe idea: pistachio cardamom cake",
-];
+const initialBrainItems: string[] = [];
 
 const initialCalendarEvents: CalendarEvent[] = [];
 
@@ -846,7 +842,7 @@ function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture
       <section className="card inbox-card">
         <div className="card-head"><div><span className="section-icon green"><Brain size={14} /></span><h2>Brain inbox</h2></div><span className="count">{brainCount} uncategorized</span></div>
         <button className="capture-zone" onClick={onCapture}><Plus size={18} /><div><strong>Capture what’s on your mind</strong><span>Idea, thought, link, anything…</span></div><kbd>B</kbd></button>
-        <div className="inbox-preview"><span>Recently captured</span><p>Explore a photo essay about late-night diners <small>12m</small></p><p>Research German student visa timeline <small>1h</small></p></div>
+        {brain.length > 0 && <div className="inbox-preview"><span>Recently captured</span>{brain.slice(0, 2).map((item, i) => <p key={i}>{item} <small>just now</small></p>)}</div>}
       </section>
     </div>
     <p className="quote">“The main thing is to keep the main thing the main thing.” <span>— Stephen Covey</span></p>
