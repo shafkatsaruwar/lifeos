@@ -842,7 +842,6 @@ function Dashboard({ tasks, projects, brainCount, onComplete, onFocus, onCapture
       <section className="card inbox-card">
         <div className="card-head"><div><span className="section-icon green"><Brain size={14} /></span><h2>Brain inbox</h2></div><span className="count">{brainCount} uncategorized</span></div>
         <button className="capture-zone" onClick={onCapture}><Plus size={18} /><div><strong>Capture what’s on your mind</strong><span>Idea, thought, link, anything…</span></div><kbd>B</kbd></button>
-        {brain.length > 0 && <div className="inbox-preview"><span>Recently captured</span>{brain.slice(0, 2).map((item, i) => <p key={i}>{item} <small>just now</small></p>)}</div>}
       </section>
     </div>
     <p className="quote">“The main thing is to keep the main thing the main thing.” <span>— Stephen Covey</span></p>
@@ -994,12 +993,12 @@ function ResourcesView({ resources, onUpload, onDelete, onReplace, onDownload }:
 
   return <>
     <div className="page-title">
-      <div>
+      <div style={{ flex: 1 }}>
         <p className="eyebrow">Keep & organize</p>
         <h1>Resources</h1>
         <p>Download, replace, or remove files and assets.</p>
       </div>
-      <button onClick={handleUpload} disabled={isUploading} style={{ padding: '8px 16px', fontSize: '14px', background: '#625af6', color: '#fff', border: 'none', borderRadius: '6px', cursor: isUploading ? 'not-allowed' : 'pointer', opacity: isUploading ? 0.6 : 1 }}>
+      <button onClick={handleUpload} disabled={isUploading} style={{ padding: '8px 16px', fontSize: '14px', background: '#625af6', color: '#fff', border: 'none', borderRadius: '6px', cursor: isUploading ? 'not-allowed' : 'pointer', opacity: isUploading ? 0.6 : 1, whiteSpace: 'nowrap', flexShrink: 0, marginTop: '2px' }}>
         {isUploading ? 'Uploading...' : '+ Upload file'}
       </button>
     </div>
