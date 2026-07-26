@@ -1601,7 +1601,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       </section>
       <div className="now-middle-section">
         <section className="card monthly-calendar-card">
-          <div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>Month overview</h2></div><button onClick={() => onGo("Calendar")}>Open calendar <ArrowRight size={14} /></button></div>
+          <div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>Next 5 days</h2></div><button onClick={() => onGo("Calendar")}>Open calendar <ArrowRight size={14} /></button></div>
           <div className="upcoming-days-list">
             {(() => {
               const today = new Date();
@@ -1617,12 +1617,12 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
                 const dayEvents = events.filter(e => e.start.startsWith(dateStr));
                 const isToday = dateStr === toDateKey(today);
                 const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-                const dateDisplay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                const dateNum = date.getDate();
                 return (
-                  <button key={dateStr} className={`upcoming-day-item ${isToday ? 'today' : ''} ${dayTasks.length > 0 ? 'has-tasks' : ''} ${dayEvents.length > 0 ? 'has-events' : ''}`} onClick={() => onGo("Calendar")}>
+                  <button key={dateStr} className={`upcoming-day-item ${isToday ? 'today' : ''} ${dayTasks.length > 0 ? 'has-tasks' : ''} ${dayEvents.length > 0 ? 'has-events' : ''}`} onClick={() => { window.location.href = `?view=Calendar&date=${dateStr}`; }}>
                     <div className="day-info">
                       <div className="day-name">{dayName}</div>
-                      <div className="day-date">{dateDisplay}</div>
+                      <div className="day-date">{dateNum}</div>
                     </div>
                     <div className="day-indicators">
                       {dayTasks.length > 0 && <span className="task-badge" style={{background: dayTasks[0].color}}>{dayTasks.length}</span>}
