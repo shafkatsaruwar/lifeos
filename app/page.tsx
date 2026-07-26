@@ -1622,7 +1622,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
                           onClick={() => {
                             const yesterday = toDateKey(new Date(today.getTime() - 24 * 60 * 60 * 1000));
                             const isFuture = dateStr > yesterday;
-                            if (isFuture) go("Calendar");
+                            if (isFuture) onGo("Calendar");
                           }}
                           style={{
                             borderColor: dayTasks.length > 0 ? dayTasks[0].color : undefined,
