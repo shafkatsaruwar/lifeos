@@ -138,9 +138,12 @@ const initialSettings: SettingsState = {
   momentumLog: [],
 };
 
-// Starter tasks can teach the product. Starter projects cannot: they belong to
-// someone else's life, so every new account begins with a genuinely empty Spaces area.
-const initialProjects: Project[] = [];
+// New users start with three empty project templates to explore the product
+const initialProjects: Project[] = [
+  { name: "Project 1", desc: "A focused project with a finish line.", progress: 0, color: "#625af6", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable" },
+  { name: "Project 2", desc: "A focused project with a finish line.", progress: 0, color: "#4b8bdc", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable" },
+  { name: "Project 3", desc: "A focused project with a finish line.", progress: 0, color: "#47a47b", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable" },
+];
 
 const starterTaskSignature = initialTasks.map(task => `${task.id}:${task.title}`).join("|");
 const isStarterTaskSet = (items: Task[]) => items.length === initialTasks.length && items.map(task => `${task.id}:${task.title}`).join("|") === starterTaskSignature;
