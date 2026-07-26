@@ -1637,6 +1637,72 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       </div>
       <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} />
     </div>
+    <section className="card week-brainstorm">
+      <div className="card-head">
+        <div><span className="section-icon blue"><Brain size={14} /></span><h2>Brainstorm the upcoming week</h2></div>
+        <button onClick={() => onGo("Calendar")}>Explore week <ArrowRight size={14} /></button>
+      </div>
+      {(() => {
+        const today = new Date();
+        const weekEnd = new Date(today);
+        weekEnd.setDate(weekEnd.getDate() + 7);
+        const weekTasks = tasks.filter(t => {
+          const dueDate = new Date(t.due);
+          return dueDate >= today && dueDate <= weekEnd && !t.done && !t.canceled;
+        });
+        const weekEvents = events.filter(e => {
+          const eventDate = new Date(e.start);
+          return eventDate >= today && eventDate <= weekEnd;
+        });
+        const upcomingSpaces = [...new Set([...weekTasks.map(t => t.project), ...weekTasks.filter(t => t.classId).map(t => t.classId)])].slice(0, 3);
+        const spaceInfo = upcomingSpaces.map(space => {
+          if (space?.startsWith?.('class:')) {
+            const classRecord = classes.find(c => c.id === space);
+            return classRecord ? { name: classRecord.code, color: classRecord.color } : null;
+          }
+          const project = projectItems.find(p => p.name === space);
+          return project ? { name: project.name, color: project.color } : null;
+        }).filter(Boolean);
+        return (
+          <div className="week-brainstorm-content">
+            <div className="week-stats">
+              <div className="week-stat">
+                <strong>{weekTasks.length}</strong>
+                <span>tasks</span>
+              </div>
+              <div className="week-stat">
+                <strong>{weekEvents.length}</strong>
+                <span>events</span>
+              </div>
+              {spaceInfo.length > 0 && <div className="week-stat">
+                <strong>{spaceInfo.length}</strong>
+                <span>active space{spaceInfo.length !== 1 ? 's' : ''}</span>
+              </div>}
+            </div>
+            {spaceInfo.length > 0 && (
+              <div className="week-spaces">
+                <p className="week-label">Focus areas</p>
+                <div className="space-dots">
+                  {spaceInfo.map((space, idx) => (
+                    <div key={idx} className="space-dot" style={{ background: space?.color }} title={space?.name} />
+                  ))}
+                </div>
+                <div className="space-names">
+                  {spaceInfo.map((space, idx) => (
+                    <span key={idx} style={{ fontSize: '9px', color: 'var(--muted)' }}>{space?.name}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {weekTasks.length === 0 && weekEvents.length === 0 && (
+              <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '9px', padding: '12px 0' }}>
+                <p>Nothing scheduled. A clear week to plan ahead.</p>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+    </section>
     <section className="card now-recommendations"><div className="card-head"><div><span className="section-icon orange"><Sparkles size={14} /></span><h2>Good next choices</h2></div><span className="count">Pick one — nothing starts automatically</span></div>
       {recommendations.length ? <div className="now-choice-list">{recommendations.map(task => <button key={task.id} className="now-choice" onClick={() => switchTo(task)}><i style={{ background: task.color }} /><div><strong>{task.title}</strong><p>{task.classId ? classes.find(item => item.id === task.classId)?.code : task.project} · {formatDueDate(task.due)} · {task.focusMinutes}m · {task.energy} energy</p></div><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><ArrowRight size={16} /></button>)}</div> : <div className="priority-empty"><strong>You’re clear.</strong><p>Add a task or capture a thought when something new arrives.</p></div>}
     </section>
