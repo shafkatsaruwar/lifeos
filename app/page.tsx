@@ -2383,7 +2383,7 @@ function CalendarView({ events, tasks, weekStartsMonday, onNew, onImport, onEdit
         {mode === "upcoming" ? <>
           <div className="calendar-toolbar upcoming-toolbar"><div><strong>What’s coming up</strong><span>Events and dated tasks, in order.</span></div><span className="count">{upcomingItems.length} upcoming</span></div>
           <div className="upcoming-list">
-            {upcomingItems.length ? upcomingItems.slice(0, 30).map(item => {
+            {upcomingItems.length ? upcomingItems.slice(0, 5).map(item => {
               const itemDate = new Date(`${item.date.slice(0, 10)}T12:00`);
               return <button key={`${item.kind}-${item.id}`} className="upcoming-item" onClick={() => item.kind === "event" ? onEdit(item.id) : onPlanTask(Number(item.id))}>
                 <time dateTime={item.date}><strong>{itemDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</strong><span>{itemDate.toLocaleDateString("en-US", { weekday: "short" })}</span></time>
