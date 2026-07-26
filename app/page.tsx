@@ -1730,7 +1730,8 @@ function LifeOSCopilot({ tasks, classes, events, current, recommendations, onCho
 }
 
 function LifeHubDatabasesView({ lifeHub, onUpdate }: { lifeHub: LifeHubState; onUpdate: (updates: Partial<LifeHubState>) => void }) {
-  const [activeDb, setActiveDb] = useState<LifeHubKey | null>(null);
+  const [selectedDbKey, setSelectedDbKey] = useState<LifeHubKey | null>(null);
+  const [isAddingItem, setIsAddingItem] = useState(false);
   const [formData, setFormData] = useState<Record<string, string>>({});
   const databases: { key: LifeHubKey; label: string; icon: string }[] = [
     { key: 'recipes', label: 'Recipes', icon: '🍳' }, { key: 'food', label: 'Food', icon: '🥗' }, { key: 'exercises', label: 'Exercises', icon: '💪' }, { key: 'trainings', label: 'Trainings', icon: '🏋️' }, { key: 'trips', label: 'Trips', icon: '✈️' }, { key: 'media', label: 'Media', icon: '📺' }, { key: 'tools', label: 'Tools', icon: '🛠️' }, { key: 'contacts', label: 'Contacts', icon: '👥' }, { key: 'documents', label: 'Documents', icon: '📄' }, { key: 'vault', label: 'Vault', icon: '🔐' }, { key: 'gallery', label: 'Gallery', icon: '🖼️' }, { key: 'vision', label: 'Vision', icon: '🎯' }, { key: 'habits', label: 'Habits', icon: '⭐' }, { key: 'archive', label: 'Archive', icon: '📦' },
@@ -1752,18 +1753,82 @@ function LifeHubDatabasesView({ lifeHub, onUpdate }: { lifeHub: LifeHubState; on
     archive: [{ name: 'title', type: 'text', placeholder: 'Archive title' }, { name: 'content', type: 'text', placeholder: 'Content summary' }, { name: 'date', type: 'text', placeholder: 'Date archived' }],
   };
   const handleAddItem = () => {
-    if (!activeDb) return;
-    const newItem = { id: `${activeDb}-${Date.now()}`, ...formData };
-    onUpdate({ [activeDb]: [...lifeHub[activeDb], newItem as any] });
+    if (!selectedDbKey) return;
+    const newItem = { id: `${selectedDbKey}-${Date.now()}`, ...formData };
+    onUpdate({ [selectedDbKey]: [...lifeHub[selectedDbKey], newItem as any] });
     setFormData({});
-    setActiveDb(null);
+    setIsAddingItem(false);
   };
+  const handleDeleteItem = (itemId: string) => {
+    if (!selectedDbKey) return;
+    onUpdate({ [selectedDbKey]: lifeHub[selectedDbKey].filter((item: any) => item.id !== itemId) });
+  };
+  if (selectedDbKey) {
+    const db = databases.find(d => d.key === selectedDbKey);
+    const items = lifeHub[selectedDbKey];
+    return <>
+      <div className="database-detail">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+          <button onClick={() => setSelectedDbKey(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center' }}>
+            <ArrowRight size={18} style={{ transform: 'rotate(180deg)' }} />
+          </button>
+          <div style={{ fontSize: '24px' }}>{db?.icon}</div>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '20px' }}>{db?.label}</h2>
+            <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '13px' }}>{items.length} item{items.length !== 1 ? 's' : ''}</p>
+          </div>
+          <button onClick={() => setIsAddingItem(true)} style={{ marginLeft: 'auto', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', cursor: 'pointer', fontWeight: 600 }} className="primary">Add Item</button>
+        </div>
+        <div className="database-items-list">
+          {items.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--muted)' }}>
+              <p>No items yet. Create your first one!</p>
+            </div>
+          ) : (
+            items.map((item: any) => (
+              <div key={item.id} className="database-item-card">
+                <div style={{ flex: 1 }}>
+                  <h4 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: 600 }}>{item.name || item.title || item.destination || item.habit || 'Untitled'}</h4>
+                  <div style={{ display: 'grid', gap: '4px', fontSize: '12px', color: 'var(--muted)' }}>
+                    {Object.entries(item).filter(([k]) => k !== 'id' && k !== 'name' && k !== 'title' && k !== 'destination' && k !== 'habit').map(([key, value]) => (
+                      <div key={key} style={{ display: 'flex', gap: '8px' }}>
+                        <span style={{ fontWeight: 600, textTransform: 'capitalize', minWidth: '60px' }}>{key}:</span>
+                        <span>{String(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={() => handleDeleteItem(item.id)} style={{ background: 'transparent', border: '1px solid var(--line)', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: 'var(--muted)' }}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+      {isAddingItem && <div className="modal-layer" onClick={() => setIsAddingItem(false)}>
+        <div className="create-modal" onClick={e => e.stopPropagation()}>
+          <h2 style={{ fontSize: '16px', margin: '0 0 18px', fontFamily: 'var(--font-display)' }}>Add {db?.label}</h2>
+          {fieldsByDatabase[selectedDbKey].map(field => (
+            <div key={field.name}>
+              <label style={{ display: 'block', marginBottom: '7px', color: 'var(--muted)', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>{field.placeholder}</label>
+              <input type={field.type} placeholder={field.placeholder} value={formData[field.name] || ''} onChange={e => setFormData({ ...formData, [field.name]: e.target.value })} />
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '18px' }}>
+            <button onClick={() => setIsAddingItem(false)} style={{ border: '1px solid var(--line)', background: 'transparent', borderRadius: '8px', padding: '0 13px', fontSize: '10px', height: '34px' }}>Cancel</button>
+            <button className="primary" onClick={handleAddItem}>Add Item</button>
+          </div>
+        </div>
+      </div>}
+    </>;
+  }
   return <>
     <div className="databases-view">
       <div className="databases-grid">
         {databases.map(db => {
           const count = lifeHub[db.key].length;
-          return <button key={db.key} className="database-card" onClick={() => { setActiveDb(db.key); setFormData({}); }} style={{ border: 0, background: 'inherit', cursor: 'pointer', padding: 0 }}>
+          return <button key={db.key} className="database-card" onClick={() => setSelectedDbKey(db.key)} style={{ border: 0, background: 'inherit', cursor: 'pointer', padding: 0 }}>
             <div className="database-icon">{db.icon}</div>
             <h3>{db.label}</h3>
             <span className="database-count">{count} item{count !== 1 ? 's' : ''}</span>
@@ -1772,21 +1837,6 @@ function LifeHubDatabasesView({ lifeHub, onUpdate }: { lifeHub: LifeHubState; on
         })}
       </div>
     </div>
-    {activeDb && <div className="modal-layer" onClick={() => setActiveDb(null)}>
-      <div className="create-modal" onClick={e => e.stopPropagation()}>
-        <h2 style={{ fontSize: '16px', margin: '0 0 18px', fontFamily: 'var(--font-display)' }}>Add {databases.find(d => d.key === activeDb)?.label}</h2>
-        {fieldsByDatabase[activeDb].map(field => (
-          <div key={field.name}>
-            <label style={{ display: 'block', marginBottom: '7px', color: 'var(--muted)', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>{field.placeholder}</label>
-            <input type={field.type} placeholder={field.placeholder} value={formData[field.name] || ''} onChange={e => setFormData({ ...formData, [field.name]: e.target.value })} />
-          </div>
-        ))}
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '18px' }}>
-          <button onClick={() => setActiveDb(null)} style={{ border: '1px solid var(--line)', background: 'transparent', borderRadius: '8px', padding: '0 13px', fontSize: '10px', height: '34px' }}>Cancel</button>
-          <button className="primary" onClick={handleAddItem}>Add Item</button>
-        </div>
-      </div>
-    </div>}
   </>;
 }
 
