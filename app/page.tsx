@@ -1586,6 +1586,61 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           <label className="handoff-field"><span>What is the smallest visible next step?</span><input value={handoff} onChange={event => setHandoff(event.target.value)} onBlur={() => handoff.trim() && onUpdateTask(current.id, { handoffNote: handoff.trim(), nextAction: handoff.trim() })} placeholder={current.nextAction || "Next visible step…"} /></label>
         </div> : <div className="priority-empty now-empty now-empty-productive"><div><strong>Nothing is claiming your attention.</strong><p>That’s not a void — it’s room to choose your next move on purpose.</p></div><div className="now-idle-actions"><button onClick={onStartAmbient}><TimerReset size={15} /><span><strong>I already started</strong><small>Track it without stopping</small></span></button><button onClick={onSmartCapture}><Sparkles size={15} /><span><strong>Make a task</strong><small>Say it naturally</small></span></button><button onClick={() => onGo("Today")}><CalendarDays size={15} /><span><strong>Protect time</strong><small>Plan a spot today</small></span></button></div></div>}
       </section>
+      <div className="now-middle-section">
+        <section className="card monthly-calendar-card">
+          <div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>Month overview</h2></div></div>
+          <div className="monthly-calendar">
+            {(() => {
+              const today = new Date();
+              const year = today.getFullYear();
+              const month = today.getMonth();
+              const firstDay = new Date(year, month, 1);
+              const lastDay = new Date(year, month + 1, 0);
+              const daysInMonth = lastDay.getDate();
+              const startDay = firstDay.getDay();
+              const monthName = firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+              const dayArray: (number | null)[] = Array(startDay).fill(null);
+              for (let i = 1; i <= daysInMonth; i++) dayArray.push(i);
+
+              return (
+                <>
+                  <div className="calendar-header">{monthName}</div>
+                  <div className="calendar-weekdays">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => <div key={day} className="weekday">{day}</div>)}
+                  </div>
+                  <div className="calendar-grid">
+                    {dayArray.map((day, index) => {
+                      if (day === null) return <div key={`empty-${index}`} className="calendar-day empty" />;
+                      const dateStr = toDateKey(new Date(year, month, day));
+                      const dayTasks = tasks.filter(t => t.due === dateStr && !t.done && !t.canceled);
+                      const isToday = dateStr === toDateKey(today);
+                      return (
+                        <button
+                          key={day}
+                          className={`calendar-day ${isToday ? 'today' : ''} ${dayTasks.length > 0 ? 'has-tasks' : ''}`}
+                          onClick={() => {
+                            const yesterday = toDateKey(new Date(today.getTime() - 24 * 60 * 60 * 1000));
+                            const isFuture = dateStr > yesterday;
+                            if (isFuture) go("Calendar");
+                          }}
+                          style={{
+                            borderColor: dayTasks.length > 0 ? dayTasks[0].color : undefined,
+                            background: isToday ? 'rgba(98, 90, 246, 0.1)' : dayTasks.length > 0 ? `${dayTasks[0].color}08` : undefined
+                          }}
+                        >
+                          <div className="day-number">{day}</div>
+                          {dayTasks.length > 0 && <div className="task-indicator"><span>{dayTasks.length}</span></div>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </section>
+      </div>
       <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} />
     </div>
     <section className="card now-recommendations"><div className="card-head"><div><span className="section-icon orange"><Sparkles size={14} /></span><h2>Good next choices</h2></div><span className="count">Pick one — nothing starts automatically</span></div>
