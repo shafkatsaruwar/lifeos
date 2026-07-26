@@ -99,3 +99,37 @@ export const isValidTimeFormat = (time: string): boolean => {
   const regex = /^([01]\d|2[0-3]):([0-5]\d)$/;
   return regex.test(time);
 };
+
+// Calculate days until a date and return formatted countdown text
+export const getCountdownText = (dueDate: string): { days: number; text: string; urgency: 'overdue' | 'critical' | 'soon' | 'upcoming' | 'future' } => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(`${dueDate}T00:00`);
+  const diff = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diff < 0) return { days: diff, text: `${Math.abs(diff)}d overdue`, urgency: 'overdue' };
+  if (diff === 0) return { days: diff, text: 'Due today', urgency: 'critical' };
+  if (diff === 1) return { days: diff, text: 'Due tomorrow', urgency: 'critical' };
+  if (diff <= 3) return { days: diff, text: `${diff}d left`, urgency: 'critical' };
+  if (diff <= 7) return { days: diff, text: `${diff}d left`, urgency: 'soon' };
+  if (diff <= 14) return { days: diff, text: `${diff}d left`, urgency: 'upcoming' };
+  return { days: diff, text: `${diff}d away`, urgency: 'future' };
+};
+
+// Get urgency color for countdown display
+export const getUrgencyColor = (urgency: 'overdue' | 'critical' | 'soon' | 'upcoming' | 'future'): string => {
+  switch (urgency) {
+    case 'overdue': return '#ff6b6b';
+    case 'critical': return '#ff8c42';
+    case 'soon': return '#ffd93d';
+    case 'upcoming': return '#6bcf7f';
+    case 'future': return '#4b8bdc';
+    default: return '#999';
+  }
+};
+
+// Get urgency percentage (0-100) for visual bars
+export const getUrgencyPercentage = (daysLeft: number, totalDays: number = 30): number => {
+  if (daysLeft < 0) return 100;
+  return Math.min(100, Math.round((1 - daysLeft / totalDays) * 100));
+};
