@@ -1730,10 +1730,64 @@ function LifeOSCopilot({ tasks, classes, events, current, recommendations, onCho
 }
 
 function LifeHubDatabasesView({ lifeHub, onUpdate }: { lifeHub: LifeHubState; onUpdate: (updates: Partial<LifeHubState>) => void }) {
+  const [activeDb, setActiveDb] = useState<LifeHubKey | null>(null);
+  const [formData, setFormData] = useState<Record<string, string>>({});
   const databases: { key: LifeHubKey; label: string; icon: string }[] = [
     { key: 'recipes', label: 'Recipes', icon: '🍳' }, { key: 'food', label: 'Food', icon: '🥗' }, { key: 'exercises', label: 'Exercises', icon: '💪' }, { key: 'trainings', label: 'Trainings', icon: '🏋️' }, { key: 'trips', label: 'Trips', icon: '✈️' }, { key: 'media', label: 'Media', icon: '📺' }, { key: 'tools', label: 'Tools', icon: '🛠️' }, { key: 'contacts', label: 'Contacts', icon: '👥' }, { key: 'documents', label: 'Documents', icon: '📄' }, { key: 'vault', label: 'Vault', icon: '🔐' }, { key: 'gallery', label: 'Gallery', icon: '🖼️' }, { key: 'vision', label: 'Vision', icon: '🎯' }, { key: 'habits', label: 'Habits', icon: '⭐' }, { key: 'archive', label: 'Archive', icon: '📦' },
   ];
-  return <div className="databases-view"><div className="databases-grid">{databases.map(db => { const count = lifeHub[db.key].length; return <section key={db.key} className="database-card"><div className="database-icon">{db.icon}</div><h3>{db.label}</h3><span className="database-count">{count} item{count !== 1 ? 's' : ''}</span><p className="database-desc">{count === 0 ? 'Add your first item' : `Manage your ${db.label.toLowerCase()}`}</p></section>; })}</div></div>;
+  const fieldsByDatabase: Record<LifeHubKey, { name: string; type: string; placeholder: string }[]> = {
+    recipes: [{ name: 'name', type: 'text', placeholder: 'Recipe name' }, { name: 'ingredients', type: 'text', placeholder: 'Ingredients (comma-separated)' }, { name: 'cookTime', type: 'text', placeholder: 'Cook time (e.g., 30 mins)' }, { name: 'servings', type: 'text', placeholder: 'Servings' }],
+    food: [{ name: 'name', type: 'text', placeholder: 'Food name' }, { name: 'type', type: 'text', placeholder: 'Type (breakfast, lunch, dinner, snack)' }, { name: 'calories', type: 'text', placeholder: 'Calories' }],
+    exercises: [{ name: 'name', type: 'text', placeholder: 'Exercise name' }, { name: 'type', type: 'text', placeholder: 'Type (cardio, strength, flexibility)' }, { name: 'duration', type: 'text', placeholder: 'Duration (minutes)' }, { name: 'sets', type: 'text', placeholder: 'Sets/Reps' }],
+    trainings: [{ name: 'name', type: 'text', placeholder: 'Training name' }, { name: 'type', type: 'text', placeholder: 'Type (course, certification, workshop)' }, { name: 'duration', type: 'text', placeholder: 'Duration' }, { name: 'instructor', type: 'text', placeholder: 'Instructor' }],
+    trips: [{ name: 'destination', type: 'text', placeholder: 'Destination' }, { name: 'dates', type: 'text', placeholder: 'Travel dates' }, { name: 'budget', type: 'text', placeholder: 'Budget' }, { name: 'activities', type: 'text', placeholder: 'Planned activities' }],
+    media: [{ name: 'title', type: 'text', placeholder: 'Title' }, { name: 'type', type: 'text', placeholder: 'Type (movie, show, podcast, book)' }, { name: 'status', type: 'text', placeholder: 'Status (watching, completed)' }],
+    tools: [{ name: 'name', type: 'text', placeholder: 'Tool name' }, { name: 'purpose', type: 'text', placeholder: 'What is it for?' }, { name: 'link', type: 'text', placeholder: 'Website/Link' }],
+    contacts: [{ name: 'name', type: 'text', placeholder: 'Contact name' }, { name: 'email', type: 'text', placeholder: 'Email' }, { name: 'phone', type: 'text', placeholder: 'Phone' }, { name: 'notes', type: 'text', placeholder: 'Notes' }],
+    documents: [{ name: 'title', type: 'text', placeholder: 'Document title' }, { name: 'type', type: 'text', placeholder: 'Type (contract, guide, template)' }, { name: 'location', type: 'text', placeholder: 'Storage location' }],
+    vault: [{ name: 'name', type: 'text', placeholder: 'Secret name' }, { name: 'type', type: 'text', placeholder: 'Type (password, key, token)' }, { name: 'value', type: 'text', placeholder: 'Value (encrypted)' }],
+    gallery: [{ name: 'title', type: 'text', placeholder: 'Photo/Image title' }, { name: 'date', type: 'text', placeholder: 'Date taken' }, { name: 'location', type: 'text', placeholder: 'Location' }],
+    vision: [{ name: 'goal', type: 'text', placeholder: 'Vision/Goal' }, { name: 'timeline', type: 'text', placeholder: 'Timeline' }, { name: 'milestones', type: 'text', placeholder: 'Key milestones' }],
+    habits: [{ name: 'habit', type: 'text', placeholder: 'Habit name' }, { name: 'frequency', type: 'text', placeholder: 'Frequency (daily, weekly, etc.)' }, { name: 'goal', type: 'text', placeholder: 'Goal/Target' }],
+    archive: [{ name: 'title', type: 'text', placeholder: 'Archive title' }, { name: 'content', type: 'text', placeholder: 'Content summary' }, { name: 'date', type: 'text', placeholder: 'Date archived' }],
+  };
+  const handleAddItem = () => {
+    if (!activeDb) return;
+    const newItem = { id: `${activeDb}-${Date.now()}`, ...formData };
+    onUpdate({ [activeDb]: [...lifeHub[activeDb], newItem as any] });
+    setFormData({});
+    setActiveDb(null);
+  };
+  return <>
+    <div className="databases-view">
+      <div className="databases-grid">
+        {databases.map(db => {
+          const count = lifeHub[db.key].length;
+          return <button key={db.key} className="database-card" onClick={() => { setActiveDb(db.key); setFormData({}); }} style={{ border: 0, background: 'inherit', cursor: 'pointer', padding: 0 }}>
+            <div className="database-icon">{db.icon}</div>
+            <h3>{db.label}</h3>
+            <span className="database-count">{count} item{count !== 1 ? 's' : ''}</span>
+            <p className="database-desc">{count === 0 ? 'Add your first item' : `Manage your ${db.label.toLowerCase()}`}</p>
+          </button>;
+        })}
+      </div>
+    </div>
+    {activeDb && <div className="modal-layer" onClick={() => setActiveDb(null)}>
+      <div className="create-modal" onClick={e => e.stopPropagation()}>
+        <h2 style={{ fontSize: '16px', margin: '0 0 18px', fontFamily: 'var(--font-display)' }}>Add {databases.find(d => d.key === activeDb)?.label}</h2>
+        {fieldsByDatabase[activeDb].map(field => (
+          <div key={field.name}>
+            <label style={{ display: 'block', marginBottom: '7px', color: 'var(--muted)', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>{field.placeholder}</label>
+            <input type={field.type} placeholder={field.placeholder} value={formData[field.name] || ''} onChange={e => setFormData({ ...formData, [field.name]: e.target.value })} />
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '18px' }}>
+          <button onClick={() => setActiveDb(null)} style={{ border: '1px solid var(--line)', background: 'transparent', borderRadius: '8px', padding: '0 13px', fontSize: '10px', height: '34px' }}>Cancel</button>
+          <button className="primary" onClick={handleAddItem}>Add Item</button>
+        </div>
+      </div>
+    </div>}
+  </>;
 }
 
 function LibraryView({ notes, classes, projects, resources, selectedNoteId, onSelectNote, onCreateNote, onUpdateNote, onDeleteNote, onImportNotes, onUpload, onDeleteResource, onReplaceResource, onDownload, lifeHub, onUpdateLifeHub }: { notes: Note[]; classes: ClassRecord[]; projects: Project[]; resources: Resource[]; selectedNoteId: string | null; onSelectNote: (id: string | null) => void; onCreateNote: () => void; onUpdateNote: (id: string, updates: Partial<Note>) => void; onDeleteNote: (id: string) => void; onImportNotes: (notes: Note[]) => void; onUpload: (file: File) => void | Promise<void>; onDeleteResource: (id: string) => void; onReplaceResource: (id: string, file: File) => void; onDownload: (resource: Resource) => void | Promise<void>; lifeHub: LifeHubState; onUpdateLifeHub: (updates: Partial<LifeHubState>) => void }) {
