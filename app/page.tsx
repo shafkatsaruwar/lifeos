@@ -80,8 +80,8 @@ const routedViews: Record<string, View> = {
   settings: "Settings", tasks: "Tasks",
 };
 const viewFromLocation = (): View => {
-  if (typeof window === "undefined") return "Life";
-  return routedViews[new URLSearchParams(window.location.search).get("view")?.toLowerCase() ?? ""] ?? "Life";
+  if (typeof window === "undefined") return "Now";
+  return routedViews[new URLSearchParams(window.location.search).get("view")?.toLowerCase() ?? ""] ?? "Now";
 };
 type SettingsState = {
   accent: string;
