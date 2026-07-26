@@ -1588,7 +1588,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       </section>
       <div className="now-middle-section">
         <section className="card monthly-calendar-card">
-          <div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>Month overview</h2></div></div>
+          <div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>Month overview</h2></div><button onClick={() => onGo("Calendar")}>Open calendar <ArrowRight size={14} /></button></div>
           <div className="monthly-calendar">
             {(() => {
               const today = new Date();
