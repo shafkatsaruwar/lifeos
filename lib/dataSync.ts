@@ -1,7 +1,7 @@
 import { ref, set, get, onValue, Unsubscribe } from 'firebase/database';
 import { getClientDatabase } from './firebase';
 import { logger } from './logger';
-import { withErrorHandling, retryOperation, isRetryableError } from './firebaseErrors';
+import { withErrorHandling, retryOperation } from './firebaseErrors';
 import { FIREBASE_PATHS } from './constants';
 import { validateTasks, validateProjects, validateCalendarEvents, validateSettings } from './validation';
 
@@ -25,7 +25,7 @@ function cleanUndefined(obj: any): any {
   if (obj !== null && typeof obj === 'object') {
     return Object.fromEntries(
       Object.entries(obj)
-        .filter(([_, value]) => value !== undefined)
+        .filter(([, value]) => value !== undefined)
         .map(([key, value]) => [key, cleanUndefined(value)])
     );
   }
@@ -176,7 +176,7 @@ export function stopListeningToFirebaseChanges(key: string) {
   }
 }
 
-export async function syncAllData(tasks: any, projects: any, events: any, brainItems: any, settings: any, dark: boolean) {
+export async function syncAllData(tasks: any, projects: any, events: any, brainItems: any, settings: any, dark: boolean, classes: any[] = [], notes: any[] = [], resources: any[] = [], life: any = null, school: any = null) {
   await Promise.all([
     syncDataToFirebase('tasks', tasks),
     syncDataToFirebase('projects', projects),
@@ -184,6 +184,11 @@ export async function syncAllData(tasks: any, projects: any, events: any, brainI
     syncDataToFirebase('brain', brainItems),
     syncDataToFirebase('settings', settings),
     syncDataToFirebase('dark', dark),
+    syncDataToFirebase('classes', classes),
+    syncDataToFirebase('notes', notes),
+    syncDataToFirebase('resources', resources),
+    ...(life ? [syncDataToFirebase('life', life)] : []),
+    ...(school ? [syncDataToFirebase('school', school)] : []),
   ]);
 }
 
@@ -192,16 +197,21 @@ export async function pullAllDataFromFirebase() {
   if (typeof window === 'undefined') return null;
 
   try {
-    const [tasks, projects, calendar, brain, settings, dark] = await Promise.all([
+    const [tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school] = await Promise.all([
       loadDataFromFirebase('tasks'),
       loadDataFromFirebase('projects'),
       loadDataFromFirebase('calendar'),
       loadDataFromFirebase('brain'),
       loadDataFromFirebase('settings'),
       loadDataFromFirebase('dark'),
+      loadDataFromFirebase('classes'),
+      loadDataFromFirebase('notes'),
+      loadDataFromFirebase('resources'),
+      loadDataFromFirebase('life'),
+      loadDataFromFirebase('school'),
     ]);
 
-    return { tasks, projects, calendar, brain, settings, dark };
+    return { tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school };
   } catch (error) {
     console.error('Failed to pull data from Firebase:', error);
     return null;

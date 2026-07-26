@@ -90,7 +90,7 @@ export class OfflineQueue {
         this.queue.shift();
         this.saveQueue();
         logger.info('Operation processed', { opId: operation.id });
-      } catch (error) {
+      } catch {
         operation.retries++;
 
         if (operation.retries >= operation.maxRetries) {

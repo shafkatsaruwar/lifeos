@@ -2,9 +2,16 @@ import { checkDoubleBooking, formatDueDate, toDateKey } from '@/lib/helpers';
 import { Task } from '@/lib/validation';
 
 describe('Task Helpers', () => {
-  const today = new Date('2026-07-10');
-  const tomorrow = new Date('2026-07-11');
-  const nextWeek = new Date('2026-07-17');
+  const today = new Date(2026, 6, 10, 12);
+
+  beforeAll(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(today);
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
 
   const mockTask = (overrides?: Partial<Task>): Task => ({
     id: 1,
@@ -22,7 +29,6 @@ describe('Task Helpers', () => {
     it('detects time overlap on same date', () => {
       const tasks = [
         mockTask({ startTime: '14:00', focusMinutes: 60 }),
-        mockTask({ id: 2, startTime: '14:30', focusMinutes: 45 }),
       ];
       const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10', '14:30', 45);
       expect(conflicts).toHaveLength(1);
@@ -66,7 +72,6 @@ describe('Task Helpers', () => {
 
     it('ignores different dates even if times overlap', () => {
       const tasks = [
-        mockTask({ startTime: '14:00', focusMinutes: 60 }),
         mockTask({ id: 2, due: '2026-07-11', startTime: '14:30', focusMinutes: 45 }),
       ];
       const conflicts = checkDoubleBooking(tasks, 3, '2026-07-10', '14:30', 45);
@@ -107,7 +112,7 @@ describe('Task Helpers', () => {
     });
 
     it('pads month and day with zeros', () => {
-      const earlyDate = new Date('2026-01-05');
+      const earlyDate = new Date(2026, 0, 5, 12);
       expect(toDateKey(earlyDate)).toBe('2026-01-05');
     });
   });

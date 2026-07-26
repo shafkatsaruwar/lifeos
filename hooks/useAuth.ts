@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { onAuthStateChanged, getRedirectResult, getClientAuth, signOut as firebaseSignOut, signInWithGoogle } from '@/lib/firebase';
-import { setUserId, getUserId } from '@/lib/dataSync';
+import { onAuthStateChanged, getClientAuth, signOut as firebaseSignOut, signInWithGoogle } from '@/lib/firebase';
+import { setUserId } from '@/lib/dataSync';
 import { logger } from '@/lib/logger';
 import { STORAGE_KEYS, TEST_USER } from '@/lib/constants';
 
@@ -46,12 +46,6 @@ export const useAuth = (): UseAuthReturn => {
       return;
     }
 
-    // Handle OAuth redirect result
-    getRedirectResult(auth).catch(err => {
-      logger.error('Redirect result error', err as Error);
-      setError('Authentication redirect failed');
-    });
-
     // Listen to auth state changes
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
@@ -90,7 +84,7 @@ export const useAuth = (): UseAuthReturn => {
     setLoading(true);
     setError(null);
     try {
-      await firebaseSignOut(getClientAuth());
+      await firebaseSignOut();
       setUser(null);
       setUserIdState(null);
       sessionStorage.removeItem(STORAGE_KEYS.USER_ID);

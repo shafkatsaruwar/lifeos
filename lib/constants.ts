@@ -5,6 +5,9 @@ export const STORAGE_KEYS = {
   PROJECTS: 'lifeos.projects.v1',
   CALENDAR: 'lifeos.calendar.v1',
   BRAIN: 'lifeos.brain.v1',
+  CLASSES: 'lifeos.classes.v1',
+  NOTES: 'lifeos.notes.v1',
+  RESOURCES: 'lifeos.resources.v1',
   SETTINGS: 'lifeos.settings.v1',
   DARK_MODE: 'lifeos.dark.v1',
 } as const;
@@ -15,6 +18,11 @@ export const FIREBASE_PATHS = {
   projects: (userId: string) => `users/${userId}/projects`,
   calendar: (userId: string) => `users/${userId}/calendar`,
   brain: (userId: string) => `users/${userId}/brain`,
+  classes: (userId: string) => `users/${userId}/classes`,
+  notes: (userId: string) => `users/${userId}/notes`,
+  resources: (userId: string) => `users/${userId}/resources`,
+  life: (userId: string) => `users/${userId}/life`,
+  school: (userId: string) => `users/${userId}/school`,
   settings: (userId: string) => `users/${userId}/settings`,
   dark: (userId: string) => `users/${userId}/dark`,
 } as const;
@@ -36,7 +44,7 @@ export const PRIORITY_RANK = {
 export const ENERGY_LEVELS = ['Low', 'Medium', 'High'] as const;
 
 // Project icons
-export const PROJECT_ICONS = ['Zap', 'Aperture', 'Sparkles', 'FileText', 'UserRound', 'FolderKanban'] as const;
+export const PROJECT_ICONS = ['Zap', 'Aperture', 'Sparkles', 'FileText', 'UserRound', 'FolderKanban', 'BriefcaseBusiness', 'Camera', 'Code2', 'HeartPulse', 'Utensils', 'BookOpen'] as const;
 
 // Accent colors
 export const ACCENT_COLORS = ['#625af6', '#4b8bdc', '#47a47b', '#d99b38', '#e48b6b', '#cf625a'] as const;

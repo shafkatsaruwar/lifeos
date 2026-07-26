@@ -25,8 +25,6 @@ export const checkDoubleBooking = (
   newStartTime?: string,
   newFocusMinutes: number = 45
 ): Task[] => {
-  const newTask = tasks.find(t => t.id === taskId);
-
   // If no start time provided, can't check time conflicts
   if (!newStartTime) {
     logger.debug('No start time provided, allowing any task on this date');

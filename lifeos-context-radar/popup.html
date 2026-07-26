@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LifeOS Context Radar</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <div class="brand"><span>✦</span><strong>LifeOS Context Radar</strong></div>
+      <p class="eyebrow">PRIVATE BROWSER SIGNAL</p>
+      <h1 id="headline">Checking this page…</h1>
+      <p id="detail">Only approved job sites are recognized. Nothing has been sent to LifeOS.</p>
+      <button id="start" disabled>Start in LifeOS</button>
+      <button id="ignore" class="secondary">Not now</button>
+      <details>
+        <summary>Privacy &amp; site controls</summary>
+        <p>Radar only recognizes the sites you turn on below. It does not read email, forms, passwords, or page content.</p>
+        <div id="site-toggles"></div>
+        <label for="lifeos-url">LifeOS address</label>
+        <input id="lifeos-url" type="url" />
+        <button id="save" class="secondary">Save settings</button>
+      </details>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

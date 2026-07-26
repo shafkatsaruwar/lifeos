@@ -1,0 +1,25 @@
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
+
+export type OutlookCalendarChoice = { id: string; name: string; color?: string; primary?: boolean };
+type OutlookTokens = { access_token: string; refresh_token?: string; expiry_date: number };
+export type StoredOutlookConnection = { encrypted: string; connectedAt: string; calendars?: OutlookCalendarChoice[]; selectedCalendarIds?: string[] };
+
+const required = (name: "MICROSOFT_OUTLOOK_CLIENT_ID" | "MICROSOFT_OUTLOOK_CLIENT_SECRET") => {
+  const value = process.env[name];
+  if (!value) throw new Error(`Outlook is not configured yet. Add ${name} in Vercel, then redeploy.`);
+  return value;
+};
+const key = (purpose: string) => createHash("sha256").update(`${required("MICROSOFT_OUTLOOK_CLIENT_SECRET")}:${purpose}`).digest();
+const b64 = (value: Buffer) => value.toString("base64url");
+const unb64 = (value: string) => Buffer.from(value, "base64url");
+export const outlookConfigured = () => Boolean(process.env.MICROSOFT_OUTLOOK_CLIENT_ID && process.env.MICROSOFT_OUTLOOK_CLIENT_SECRET);
+export const outlookClientId = () => required("MICROSOFT_OUTLOOK_CLIENT_ID");
+export const outlookTenant = () => process.env.MICROSOFT_OUTLOOK_TENANT_ID || "common";
+export const createOutlookState = (payload: Record<string, unknown>) => { const body = b64(Buffer.from(JSON.stringify(payload))); return `${body}.${createHmac("sha256", key("oauth-state")).update(body).digest("base64url")}`; };
+export const readOutlookState = <T,>(value: string): T | null => { const [body, signature] = value.split("."); if (!body || !signature) return null; const expected = createHmac("sha256", key("oauth-state")).update(body).digest(); const actual = unb64(signature); if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null; try { return JSON.parse(unb64(body).toString("utf8")) as T; } catch { return null; } };
+export const encryptOutlookTokens = (tokens: OutlookTokens) => { const iv = randomBytes(12); const cipher = createCipheriv("aes-256-gcm", key("tokens"), iv); const body = Buffer.concat([cipher.update(JSON.stringify(tokens), "utf8"), cipher.final()]); return [b64(iv), b64(cipher.getAuthTag()), b64(body)].join("."); };
+export const decryptOutlookTokens = (value: string): OutlookTokens => { const [iv, tag, body] = value.split("."); if (!iv || !tag || !body) throw new Error("Saved Outlook connection is invalid. Reconnect Outlook."); const decipher = createDecipheriv("aes-256-gcm", key("tokens"), unb64(iv)); decipher.setAuthTag(unb64(tag)); return JSON.parse(Buffer.concat([decipher.update(unb64(body)), decipher.final()]).toString("utf8")) as OutlookTokens; };
+const url = (uid: string, token: string) => { const base = (process.env.NEXT_PUBLIC_FIREBASE_DB_URL || "").replace(/\/$/, ""); if (!base) throw new Error("Firebase database is not configured."); return `${base}/users/${encodeURIComponent(uid)}/outlook.json?auth=${encodeURIComponent(token)}`; };
+export async function getOutlookConnection(uid: string, token: string) { const response = await fetch(url(uid, token), { cache: "no-store" }); if (!response.ok) throw new Error("Could not read your Outlook connection."); const value = await response.json() as StoredOutlookConnection | null; if (!value?.encrypted) return null; return { ...value, calendars: Array.isArray(value.calendars) ? value.calendars.filter((item): item is OutlookCalendarChoice => Boolean(item && typeof item.id === "string" && typeof item.name === "string")) : [], selectedCalendarIds: Array.isArray(value.selectedCalendarIds) ? value.selectedCalendarIds.filter((id): id is string => typeof id === "string") : [] }; }
+export async function saveOutlookConnection(uid: string, token: string, value: StoredOutlookConnection | null) { const response = await fetch(url(uid, token), { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(value), cache: "no-store" }); if (!response.ok) throw new Error("Could not save your Outlook connection. Check your Firebase Database rules, then try again."); }
+export async function refreshOutlookTokens(tokens: OutlookTokens) { if (tokens.expiry_date > Date.now() + 60_000) return tokens; if (!tokens.refresh_token) throw new Error("Your Outlook connection expired. Reconnect Outlook."); const response = await fetch(`https://login.microsoftonline.com/${outlookTenant()}/oauth2/v2.0/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: outlookClientId(), client_secret: required("MICROSOFT_OUTLOOK_CLIENT_SECRET"), refresh_token: tokens.refresh_token, grant_type: "refresh_token", scope: "offline_access Calendars.Read" }) }); const body = await response.json().catch(() => null); if (!response.ok || !body?.access_token) throw new Error(body?.error_description || "Your Outlook connection expired. Reconnect Outlook."); return { access_token: body.access_token, refresh_token: body.refresh_token || tokens.refresh_token, expiry_date: Date.now() + Number(body.expires_in || 3600) * 1000 }; }

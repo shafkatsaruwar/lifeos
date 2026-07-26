@@ -2,7 +2,7 @@
 
 import { DailyBriefing } from '@/lib/lifeos-kernel';
 import { motion } from 'framer-motion';
-import { ChevronRight, AlertCircle, Clock, Zap } from 'lucide-react';
+import { ChevronRight, AlertCircle, Zap } from 'lucide-react';
 
 interface BriefingProps {
   briefing: DailyBriefing;

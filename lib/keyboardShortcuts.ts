@@ -39,14 +39,13 @@ export class KeyboardShortcuts {
 
   private matchesShortcut(e: KeyboardEvent, config: ShortcutConfig): boolean {
     const key = e.key.toLowerCase();
-    const ctrlKey = e.ctrlKey || e.metaKey;
 
     return (
       key === config.key.toLowerCase() &&
-      (config.ctrl ? ctrlKey : !ctrlKey || e.ctrlKey === false) &&
-      (config.shift ? e.shiftKey : !e.shiftKey) &&
-      (config.alt ? e.altKey : !e.altKey) &&
-      (config.cmd ? e.metaKey : !e.metaKey || e.metaKey === false)
+      e.ctrlKey === Boolean(config.ctrl) &&
+      e.shiftKey === Boolean(config.shift) &&
+      e.altKey === Boolean(config.alt) &&
+      e.metaKey === Boolean(config.cmd)
     );
   }
 

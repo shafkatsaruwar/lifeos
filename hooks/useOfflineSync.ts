@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState } from 'react';
 import { getOfflineQueue, initializeOfflineQueue } from '@/lib/offlineQueue';
-import { getCrossTabSync, initializeCrossTabSync } from '@/lib/crossTabSync';
+import { initializeCrossTabSync } from '@/lib/crossTabSync';
 import { logger } from '@/lib/logger';
 import { syncDataToFirebase } from '@/lib/dataSync';
 
@@ -21,7 +21,7 @@ export const useOfflineSync = (): UseOfflineSyncReturn => {
   useEffect(() => {
     // Initialize offline queue and cross-tab sync
     const offlineQueue = initializeOfflineQueue();
-    const crossTabSync = initializeCrossTabSync();
+    initializeCrossTabSync();
 
     // Set up offline queue processor
     offlineQueue.setProcessCallback(async (operation) => {

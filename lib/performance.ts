@@ -1,4 +1,4 @@
-import { useCallback, useMemo, DependencyList } from 'react';
+import React from 'react';
 import { logger } from './logger';
 
 /**
@@ -10,7 +10,7 @@ export const withPerformanceTracking = <P extends object>(
 ) => {
   return (props: P) => {
     const start = performance.now();
-    const result = <Component {...props} />;
+    const result = React.createElement(Component, props);
     const duration = performance.now() - start;
 
     if (duration > 16) { // > 1 frame at 60fps
@@ -44,7 +44,7 @@ export const createDebouncedFunction = <T extends (...args: any[]) => void>(
   delay: number = 500,
   label: string = 'debounced'
 ): T => {
-  let timeoutId: NodeJS.Timeout | null = null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
   return ((...args: any[]) => {
     if (timeoutId) clearTimeout(timeoutId);

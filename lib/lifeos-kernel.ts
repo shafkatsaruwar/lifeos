@@ -360,7 +360,7 @@ export function generateMockObservations(): Observation[] {
 // REASONING ENGINE
 // ============================================
 
-export function buildContext(observations: Observation[], memory: PersonalMemory): PersonalContext {
+export function buildContext(observations: Observation[], _memory: PersonalMemory): PersonalContext {
   const today = new Date();
 
   // Infer seasons from observations

@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "LifeOS Context Radar",
+  "version": "1.0.0",
+  "description": "Privately spot approved job-application sites and ask before starting a LifeOS activity.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["https://linkedin.com/*", "https://*.linkedin.com/*", "https://indeed.com/*", "https://*.indeed.com/*", "https://handshake.com/*", "https://*.handshake.com/*", "https://greenhouse.io/*", "https://*.greenhouse.io/*", "https://lever.co/*", "https://*.lever.co/*", "https://coursera.org/*", "https://*.coursera.org/*"],
+  "action": { "default_title": "LifeOS Context Radar", "default_popup": "popup.html" },
+  "content_scripts": [{ "matches": ["https://linkedin.com/*", "https://*.linkedin.com/*", "https://indeed.com/*", "https://*.indeed.com/*", "https://handshake.com/*", "https://*.handshake.com/*", "https://greenhouse.io/*", "https://*.greenhouse.io/*", "https://lever.co/*", "https://*.lever.co/*", "https://coursera.org/*", "https://*.coursera.org/*"], "js": ["content.js"], "run_at": "document_idle" }],
+  "background": { "service_worker": "background.js", "type": "module" }
+}
