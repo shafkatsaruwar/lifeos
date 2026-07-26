@@ -13,6 +13,12 @@ export function setUserId(userId: string) {
   }
 }
 
+export function clearUserId() {
+  if (typeof window !== 'undefined') {
+    sessionStorage.removeItem('lifeos-user-id');
+  }
+}
+
 export function getUserId(): string | null {
   if (typeof window === 'undefined') return null;
   return sessionStorage.getItem('lifeos-user-id');

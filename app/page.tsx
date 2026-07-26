@@ -31,7 +31,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { syncDataToFirebase, loadDataFromFirebase, listenToFirebaseChanges, stopListeningToFirebaseChanges, pullAllDataFromFirebase, setUserId, getUserId } from "@/lib/dataSync";
+import { syncDataToFirebase, loadDataFromFirebase, listenToFirebaseChanges, stopListeningToFirebaseChanges, pullAllDataFromFirebase, setUserId, clearUserId, getUserId } from "@/lib/dataSync";
 import { signInWithGoogle, signOut, onAuthStateChanged, getClientAuth } from "@/lib/firebase";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
@@ -592,11 +592,24 @@ export default function LifeOS() {
         logger.info('User not authenticated');
         setUser(null);
         setCloudUserId(null);
+        clearUserId();
       }
       setAuthLoading(false);
     });
     return () => unsubscribe();
   }, []);
+  useEffect(() => {
+    if (cloudUserId === null) {
+      setTasks([]);
+      setProjectItems([]);
+      setClasses([]);
+      setNotes([]);
+      setResources([]);
+      setCalendarEvents([]);
+      setLifeHub(emptyLifeHub);
+      setSchoolHub(emptySchoolHub);
+    }
+  }, [cloudUserId]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
