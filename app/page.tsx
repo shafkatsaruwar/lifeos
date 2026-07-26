@@ -1602,59 +1602,35 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       <div className="now-middle-section">
         <section className="card monthly-calendar-card">
           <div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>Month overview</h2></div><button onClick={() => onGo("Calendar")}>Open calendar <ArrowRight size={14} /></button></div>
-          <div className="monthly-calendar">
+          <div className="upcoming-days-list">
             {(() => {
               const today = new Date();
-              const year = today.getFullYear();
-              const month = today.getMonth();
-              const firstDay = new Date(year, month, 1);
-              const lastDay = new Date(year, month + 1, 0);
-              const daysInMonth = lastDay.getDate();
-              const startDay = firstDay.getDay();
-              const monthName = firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-              const dayArray: (number | null)[] = Array(startDay).fill(null);
-              for (let i = 1; i <= daysInMonth; i++) dayArray.push(i);
-
-              return (
-                <>
-                  <div className="calendar-header">{monthName}</div>
-                  <div className="calendar-weekdays">
-                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => <div key={day} className="weekday">{day}</div>)}
-                  </div>
-                  <div className="calendar-grid">
-                    {dayArray.map((day, index) => {
-                      if (day === null) return <div key={`empty-${index}`} className="calendar-day empty" />;
-                      const dateStr = toDateKey(new Date(year, month, day));
-                      const dayTasks = tasks.filter(t => t.due === dateStr && !t.done && !t.canceled);
-                      const dayEvents = events.filter(e => e.start.startsWith(dateStr));
-                      const isToday = dateStr === toDateKey(today);
-                      const hasData = dayTasks.length > 0 || dayEvents.length > 0;
-                      return (
-                        <button
-                          key={day}
-                          className={`calendar-day ${isToday ? 'today' : ''} ${dayTasks.length > 0 ? 'has-tasks' : ''} ${dayEvents.length > 0 ? 'has-events' : ''}`}
-                          onClick={() => {
-                            const yesterday = toDateKey(new Date(today.getTime() - 24 * 60 * 60 * 1000));
-                            const isFuture = dateStr > yesterday;
-                            if (isFuture) onGo("Calendar");
-                          }}
-                          style={{
-                            borderColor: dayTasks.length > 0 ? dayTasks[0].color : dayEvents.length > 0 ? '#4b8bdc' : undefined,
-                            background: isToday ? 'rgba(98, 90, 246, 0.1)' : dayTasks.length > 0 ? `${dayTasks[0].color}08` : dayEvents.length > 0 ? 'rgba(75, 139, 220, 0.08)' : undefined
-                          }}
-                        >
-                          <div className="day-number">{day}</div>
-                          <div className="calendar-day-indicators">
-                            {dayTasks.length > 0 && <span className="indicator-dot" style={{background: dayTasks[0].color}} title={`${dayTasks.length} task${dayTasks.length !== 1 ? 's' : ''}`} />}
-                            {dayEvents.length > 0 && <span className="indicator-dot" style={{background: '#4b8bdc'}} title={`${dayEvents.length} event${dayEvents.length !== 1 ? 's' : ''}`} />}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              );
+              const upcomingDays = [];
+              for (let i = 0; i < 5; i++) {
+                const date = new Date(today);
+                date.setDate(date.getDate() + i);
+                upcomingDays.push(date);
+              }
+              return upcomingDays.map(date => {
+                const dateStr = toDateKey(date);
+                const dayTasks = tasks.filter(t => t.due === dateStr && !t.done && !t.canceled);
+                const dayEvents = events.filter(e => e.start.startsWith(dateStr));
+                const isToday = dateStr === toDateKey(today);
+                const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+                const dateDisplay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                return (
+                  <button key={dateStr} className={`upcoming-day-item ${isToday ? 'today' : ''} ${dayTasks.length > 0 ? 'has-tasks' : ''} ${dayEvents.length > 0 ? 'has-events' : ''}`} onClick={() => onGo("Calendar")}>
+                    <div className="day-info">
+                      <div className="day-name">{dayName}</div>
+                      <div className="day-date">{dateDisplay}</div>
+                    </div>
+                    <div className="day-indicators">
+                      {dayTasks.length > 0 && <span className="task-badge" style={{background: dayTasks[0].color}}>{dayTasks.length}</span>}
+                      {dayEvents.length > 0 && <span className="event-badge">📅</span>}
+                    </div>
+                  </button>
+                );
+              });
             })()}
           </div>
         </section>
