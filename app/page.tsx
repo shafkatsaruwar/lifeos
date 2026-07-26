@@ -2728,25 +2728,67 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
           Your personal operating system for priorities, focus, and growth
         </p>
 
+        <div style={{ marginBottom: '32px' }}>
+          <div style={{
+            fontSize: '12px',
+            opacity: 0.6,
+            marginBottom: '12px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px'
+          }}>New here?</div>
+          <button
+            onClick={handleGoogleSignIn}
+            disabled={isLoading}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              background: '#625af6',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              opacity: isLoading ? 0.6 : 1,
+              transition: 'all 0.2s',
+              marginBottom: '16px'
+            }}
+            onMouseEnter={(e) => !isLoading && (e.currentTarget.style.background = '#7c6fff')}
+            onMouseLeave={(e) => !isLoading && (e.currentTarget.style.background = '#625af6')}
+          >
+            {isLoading ? 'Creating account...' : 'Create Account with Google'}
+          </button>
+        </div>
+
+        <div style={{ marginBottom: '24px', opacity: 0.5 }}>
+          <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+        </div>
+
+        <div style={{
+          fontSize: '12px',
+          opacity: 0.6,
+          marginBottom: '12px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px'
+        }}>Returning user?</div>
         <button
           onClick={handleGoogleSignIn}
           disabled={isLoading}
           style={{
             width: '100%',
             padding: '12px 16px',
-            background: '#625af6',
-            color: '#fff',
-            border: 'none',
+            background: 'transparent',
+            color: '#625af6',
+            border: '1px solid #625af6',
             borderRadius: '8px',
             fontSize: '14px',
             fontWeight: '500',
             cursor: isLoading ? 'not-allowed' : 'pointer',
             opacity: isLoading ? 0.6 : 1,
-            transition: 'all 0.2s',
-            marginBottom: '12px'
+            transition: 'all 0.2s'
           }}
-          onMouseEnter={(e) => !isLoading && (e.currentTarget.style.background = '#7c6fff')}
-          onMouseLeave={(e) => !isLoading && (e.currentTarget.style.background = '#625af6')}
+          onMouseEnter={(e) => !isLoading && (e.currentTarget.style.background = 'rgba(98, 90, 246, 0.1)')}
+          onMouseLeave={(e) => !isLoading && (e.currentTarget.style.background = 'transparent')}
         >
           {isLoading ? 'Signing in...' : 'Sign in with Google'}
         </button>
