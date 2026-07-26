@@ -1660,7 +1660,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             const classRecord = classes.find(c => c.id === space);
             return classRecord ? { name: classRecord.code, color: classRecord.color } : null;
           }
-          const project = projectItems.find(p => p.name === space);
+          const project = projects.find(p => p.name === space);
           return project ? { name: project.name, color: project.color } : null;
         }).filter(Boolean);
         return (
