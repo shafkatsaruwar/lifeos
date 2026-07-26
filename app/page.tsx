@@ -1614,23 +1614,28 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
                       if (day === null) return <div key={`empty-${index}`} className="calendar-day empty" />;
                       const dateStr = toDateKey(new Date(year, month, day));
                       const dayTasks = tasks.filter(t => t.due === dateStr && !t.done && !t.canceled);
+                      const dayEvents = events.filter(e => e.start.startsWith(dateStr));
                       const isToday = dateStr === toDateKey(today);
+                      const hasData = dayTasks.length > 0 || dayEvents.length > 0;
                       return (
                         <button
                           key={day}
-                          className={`calendar-day ${isToday ? 'today' : ''} ${dayTasks.length > 0 ? 'has-tasks' : ''}`}
+                          className={`calendar-day ${isToday ? 'today' : ''} ${dayTasks.length > 0 ? 'has-tasks' : ''} ${dayEvents.length > 0 ? 'has-events' : ''}`}
                           onClick={() => {
                             const yesterday = toDateKey(new Date(today.getTime() - 24 * 60 * 60 * 1000));
                             const isFuture = dateStr > yesterday;
                             if (isFuture) onGo("Calendar");
                           }}
                           style={{
-                            borderColor: dayTasks.length > 0 ? dayTasks[0].color : undefined,
-                            background: isToday ? 'rgba(98, 90, 246, 0.1)' : dayTasks.length > 0 ? `${dayTasks[0].color}08` : undefined
+                            borderColor: dayTasks.length > 0 ? dayTasks[0].color : dayEvents.length > 0 ? '#4b8bdc' : undefined,
+                            background: isToday ? 'rgba(98, 90, 246, 0.1)' : dayTasks.length > 0 ? `${dayTasks[0].color}08` : dayEvents.length > 0 ? 'rgba(75, 139, 220, 0.08)' : undefined
                           }}
                         >
                           <div className="day-number">{day}</div>
-                          {dayTasks.length > 0 && <div className="task-indicator"><span>{dayTasks.length}</span></div>}
+                          <div className="calendar-day-indicators">
+                            {dayTasks.length > 0 && <span className="indicator-dot" style={{background: dayTasks[0].color}} title={`${dayTasks.length} task${dayTasks.length !== 1 ? 's' : ''}`} />}
+                            {dayEvents.length > 0 && <span className="indicator-dot" style={{background: '#4b8bdc'}} title={`${dayEvents.length} event${dayEvents.length !== 1 ? 's' : ''}`} />}
+                          </div>
                         </button>
                       );
                     })}
