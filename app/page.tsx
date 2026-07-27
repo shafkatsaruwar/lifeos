@@ -45,7 +45,7 @@ import {
 } from "@/app/components/OSDashboards";
 import { StudyAbroadDashboard } from "@/app/components/StudyAbroadDashboard";
 import { UniversityModal, ProgramModal, DocumentModal, ApplicationModal, ScholarshipModal, StudyAbroadCollectionView } from "@/app/components/StudyAbroadModals";
-import { StudyAbroadTimeline } from "@/app/components/StudyAbroadTimeline";
+import StudyAbroadTimeline from "@/app/components/StudyAbroadTimeline";
 import { emptyStudyAbroadHub } from "@/lib/studyAbroadTypes";
 import { generateObservations } from "@/lib/studyAbroadHelpers";
 import type { StudyAbroadHub } from "@/lib/studyAbroadTypes";
