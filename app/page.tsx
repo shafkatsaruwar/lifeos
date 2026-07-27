@@ -561,9 +561,9 @@ export default function LifeOS() {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       const typing = Boolean(target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName || ""));
-      // Fn is exposed by some browsers. Cmd/Ctrl + Shift is the reliable fallback
-      // because many desktop browsers do not report the physical Fn key to web apps.
-      const lifeOSShortcut = e.getModifierState("Fn") || ((e.metaKey || e.ctrlKey) && e.shiftKey);
+      // Fn is exposed by some browsers. Shift+Alt is the reliable fallback
+      // because it doesn't conflict with common system shortcuts like Shift+Cmd
+      const lifeOSShortcut = e.getModifierState("Fn") || (e.altKey && e.shiftKey);
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette(true); }
       if (e.key === "Escape") {
         setPalette(false);
@@ -1605,10 +1605,10 @@ export default function LifeOS() {
           <div className="breadcrumb"><span>LifeOS</span><span>/</span><strong>{view}</strong></div>
           <div className="top-actions">
             <IconButton label="Toggle theme" onClick={() => setDark(v => !v)}>{dark ? <Sun size={18} /> : <Moon size={18} />}</IconButton>
-            <button className="break-button ambient-top-button" onClick={() => settingsState.ambientActivity ? setAmbientWrapupOpen(true) : setAmbientStartOpen(true)}><TimerReset size={16} /> {settingsState.ambientActivity ? "Doing something" : "I’m doing something"} <kbd>Fn W</kbd></button>
-            <button className="break-button" onClick={() => setBreakOpen(true)}><Coffee size={16} /> I need a break <kbd>Fn R</kbd></button>
-            <button className="break-button" onClick={() => setAiTaskComposer(true)} title="Turn a brain dump into a task"><Sparkles size={16} /> AI task <kbd>Fn A</kbd></button>
-            <button className="capture-button" onClick={() => setCapture(true)}><Plus size={16} /> Quick capture <kbd>Fn B</kbd></button>
+            <button className="break-button ambient-top-button" onClick={() => settingsState.ambientActivity ? setAmbientWrapupOpen(true) : setAmbientStartOpen(true)}><TimerReset size={16} /> {settingsState.ambientActivity ? "Doing something" : "I’m doing something"} <kbd>⇧⌥W</kbd></button>
+            <button className="break-button" onClick={() => setBreakOpen(true)}><Coffee size={16} /> I need a break <kbd>⇧⌥R</kbd></button>
+            <button className="break-button" onClick={() => setAiTaskComposer(true)} title="Turn a brain dump into a task"><Sparkles size={16} /> AI task <kbd>⇧⌥A</kbd></button>
+            <button className="capture-button" onClick={() => setCapture(true)}><Plus size={16} /> Quick capture <kbd>⇧⌥B</kbd></button>
           </div>
         </header>
         <AnimatePresence mode="wait">
