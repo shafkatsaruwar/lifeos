@@ -45,7 +45,6 @@ import {
 } from "@/app/components/OSDashboards";
 import { StudyAbroadDashboard } from "@/app/components/StudyAbroadDashboard";
 import { UniversityModal, ProgramModal, DocumentModal, ApplicationModal, ScholarshipModal, StudyAbroadCollectionView } from "@/app/components/StudyAbroadModals";
-import StudyAbroadTimeline from "@/app/components/StudyAbroadTimeline";
 import ProjectKanban from "@/app/components/ProjectKanban";
 import { emptyStudyAbroadHub } from "@/lib/studyAbroadTypes";
 import { generateObservations } from "@/lib/studyAbroadHelpers";
@@ -55,7 +54,7 @@ import type { ParsedTask } from "@/lib/useNLTaskCreation";
 import { useTaskBreakdown } from "@/lib/useTaskBreakdown";
 import {
   Aperture, Archive, ArrowRight, Brain, CalendarDays, Check, CheckCircle2,
-  ChevronDown, Circle, Clock3, Command, FileText, Flame, Focus, FolderKanban,
+  ChevronDown, ChevronRight, Circle, Clock3, Command, FileText, Flame, Focus, FolderKanban,
   Home, Inbox, LayoutGrid, Library, Link2, ListTodo, Menu, Moon, MoreHorizontal,
   Mail, Music2, Plus, Search, Settings, Sparkles, Sun, TimerReset, UserRound, X, Zap,
   Ban, Pencil, Trash2, Bell, Download, Palette, Shield, SlidersHorizontal, Coffee, Maximize, Mic,
@@ -68,16 +67,16 @@ type EnergyLevel = "Low" | "Medium" | "High";
 type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
 type AcademicItemType = "Assignment" | "Project" | "Exam" | "Quiz" | "Lab" | "Reading" | "Discussion";
 type TaskProperty = { id: string; name: string; value: string };
-type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; status?: TaskStatus; notes?: string; handoffNote?: string; nextAction?: string; followUpDate?: string; recurringDays?: number; completedAt?: string; customProperties?: TaskProperty[]; checklist?: string[]; checklistProgress?: boolean[]; focusRemainingSeconds?: number; focusSessionStarted?: boolean; focusSessionRunning?: boolean; focusHalfwayPrompted?: boolean; classId?: string; academicType?: AcademicItemType; gradeWeight?: number; pointsEarned?: number; pointsPossible?: number; submission?: string; calendarEventId?: string; done?: boolean; canceled?: boolean };
+type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; status?: TaskStatus; notes?: string; handoffNote?: string; nextAction?: string; followUpDate?: string; recurringDays?: number; completedAt?: string; customProperties?: TaskProperty[]; checklist?: string[]; checklistProgress?: boolean[]; focusRemainingSeconds?: number; focusSessionStarted?: boolean; focusSessionRunning?: boolean; focusHalfwayPrompted?: boolean; classId?: string; academicType?: AcademicItemType; gradeWeight?: number; pointsEarned?: number; pointsPossible?: number; submission?: string; calendarEventId?: string; done?: boolean; canceled?: boolean; parentTaskId?: number };
 type FocusSessionUpdate = { remainingSeconds: number; hasStarted: boolean; isRunning: boolean; halfwayPrompted: boolean };
 type ProjectKind = "maintenance" | "finishable";
 type SpaceKind = "class" | "project" | "maintenance";
 type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban" | "BriefcaseBusiness" | "Camera" | "Code2" | "HeartPulse" | "Utensils" | "BookOpen";
-type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string; classId?: string; projectName?: string; storagePath?: string; storage?: "cloud" | "local" };
-type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind };
+type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string; classId?: string; projectName?: string; storagePath?: string; storage?: "cloud" | "local"; parentResourceId?: string };
+type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind; parentProject?: string };
 type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook"; color: string; notes?: string };
 type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterEnd?: string; archived?: boolean };
-type Note = { id: string; title: string; body: string; classId?: string; projectName?: string; template?: "blank" | "lined" | "dotted" | "cornell" | "meeting"; updatedAt: string };
+type Note = { id: string; title: string; body: string; classId?: string; projectName?: string; template?: "blank" | "lined" | "dotted" | "cornell" | "meeting"; updatedAt: string; parentNoteId?: string };
 type AmbientActivity = { title: string; startedAt: string; note?: string; spaceName?: string; spaceColor?: string };
 type AmbientDraft = { title: string; spaceName?: string; sourceLabel?: string } | null;
 type WeeklyPlanItem = { id: string; text: string };
@@ -434,9 +433,7 @@ export default function LifeOS() {
   const [studyAbroadHydrated, setStudyAbroadHydrated] = useState(false);
   const [studyAbroadModal, setStudyAbroadModal] = useState<"university" | "program" | "document" | "application" | "scholarship" | null>(null);
   const [studyAbroadCollection, setStudyAbroadCollection] = useState<"universities" | "programs" | "applications" | "scholarships" | "documents" | null>(null);
-  const [showStudyAbroadTimeline, setShowStudyAbroadTimeline] = useState(false);
   const [selectedUniversity, setSelectedUniversity] = useState<string | null>(null);
-  const [kanbanProjectName, setKanbanProjectName] = useState<string | null>(null);
   const [hubCollection, setHubCollection] = useState<HubCollectionTarget | null>(null);
   const [schoolProfileOpen, setSchoolProfileOpen] = useState(false);
   const [schoolClassAction, setSchoolClassAction] = useState<"coursework" | "lecture" | null>(null);
@@ -454,6 +451,7 @@ export default function LifeOS() {
   const [actionProjectName, setActionProjectName] = useState<string | null>(null);
   const [actionClassId, setActionClassId] = useState<string | null>(null);
   const [selectedProjectName, setSelectedProjectName] = useState<string | null>(null);
+  const [kanbanProjectName, setKanbanProjectName] = useState<string | null>(null);
   const [fullscreenProject, setFullscreenProject] = useState<string | null>(null);
   const [editingProjectName, setEditingProjectName] = useState<string | null>(null);
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
@@ -464,6 +462,16 @@ export default function LifeOS() {
   const [ambientDraft, setAmbientDraft] = useState<AmbientDraft>(null);
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyPlan>({});
   const [weeklyPlanHydrated, setWeeklyPlanHydrated] = useState(false);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+
+  const toggleNodeExpansion = useCallback((nodeId: string) => {
+    setExpandedNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
+      return next;
+    });
+  }, []);
 
   const chooseNowTask = useCallback((taskId: number | null) => {
     if (taskId !== null) setActiveTaskId(taskId);
@@ -553,9 +561,9 @@ export default function LifeOS() {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       const typing = Boolean(target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName || ""));
-      // Fn is exposed by some browsers. Cmd/Ctrl + Shift is the reliable fallback
-      // because many desktop browsers do not report the physical Fn key to web apps.
-      const lifeOSShortcut = e.getModifierState("Fn") || ((e.metaKey || e.ctrlKey) && e.shiftKey);
+      // Fn is exposed by some browsers. Shift+Alt is the reliable fallback
+      // because it doesn't conflict with common system shortcuts like Shift+Cmd
+      const lifeOSShortcut = e.getModifierState("Fn") || (e.altKey && e.shiftKey);
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette(true); }
       if (e.key === "Escape") {
         setPalette(false);
@@ -1597,19 +1605,19 @@ export default function LifeOS() {
           <div className="breadcrumb"><span>LifeOS</span><span>/</span><strong>{view}</strong></div>
           <div className="top-actions">
             <IconButton label="Toggle theme" onClick={() => setDark(v => !v)}>{dark ? <Sun size={18} /> : <Moon size={18} />}</IconButton>
-            <button className="break-button ambient-top-button" onClick={() => settingsState.ambientActivity ? setAmbientWrapupOpen(true) : setAmbientStartOpen(true)}><TimerReset size={16} /> {settingsState.ambientActivity ? "Doing something" : "I’m doing something"} <kbd>Fn W</kbd></button>
-            <button className="break-button" onClick={() => setBreakOpen(true)}><Coffee size={16} /> I need a break <kbd>Fn R</kbd></button>
-            <button className="break-button" onClick={() => setAiTaskComposer(true)} title="Turn a brain dump into a task"><Sparkles size={16} /> AI task <kbd>Fn A</kbd></button>
-            <button className="capture-button" onClick={() => setCapture(true)}><Plus size={16} /> Quick capture <kbd>Fn B</kbd></button>
+            <button className="break-button ambient-top-button" onClick={() => settingsState.ambientActivity ? setAmbientWrapupOpen(true) : setAmbientStartOpen(true)}><TimerReset size={16} /> {settingsState.ambientActivity ? "Doing something" : "I’m doing something"} <kbd>⇧⌥W</kbd></button>
+            <button className="break-button" onClick={() => setBreakOpen(true)}><Coffee size={16} /> I need a break <kbd>⇧⌥R</kbd></button>
+            <button className="break-button" onClick={() => setAiTaskComposer(true)} title="Turn a brain dump into a task"><Sparkles size={16} /> AI task <kbd>⇧⌥A</kbd></button>
+            <button className="capture-button" onClick={() => setCapture(true)}><Plus size={16} /> Quick capture <kbd>⇧⌥B</kbd></button>
           </div>
         </header>
         <AnimatePresence mode="wait">
           <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Study Abroad" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
             {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarEvents} life={lifeHub} workspaceName={workspaceName} onComplete={complete} onOpenTask={setTaskPageId} onOpenProject={(name) => { setSpacesFilter("Projects"); setSelectedClassId(null); setSelectedProjectName(name); setView("Spaces"); }} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => { setSpacesFilter("Projects"); setSelectedClassId(null); setSelectedProjectName(null); setView("Spaces"); }} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} onOpenCollection={(key: LifeHubKey, startAdd) => setHubCollection({ scope: "life", key, startAdd })} onToggleHabit={(id) => { const today = toDateKey(new Date()); setLifeHub(current => ({ ...current, habits: current.habits.map(habit => { if (habit.id !== id) return habit; const dates = habit.completedDates ?? []; return { ...habit, completedDates: dates.includes(today) ? dates.filter(date => date !== today) : [...dates, today] }; }) })); }} />}
             {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} onComplete={complete} onOpenTask={setTaskPageId} onOpenClass={(id) => { setSelectedProjectName(null); setSelectedClassId(id); setView("Spaces"); }} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={openFocus} enableStudyAbroad={settingsState.enableStudyAbroad} onToggleStudyAbroad={(enabled) => updateSettings({ enableStudyAbroad: enabled })} />}
-            {view === "Study Abroad" && settingsState.enableStudyAbroad && <StudyAbroadDashboard hub={studyAbroadHub} onOpenUniversities={() => setStudyAbroadCollection("universities")} onOpenPrograms={() => setStudyAbroadCollection("programs")} onOpenApplications={() => setStudyAbroadCollection("applications")} onOpenScholarships={() => setStudyAbroadCollection("scholarships")} onOpenDocuments={() => setStudyAbroadCollection("documents")} onOpenTimeline={() => setShowStudyAbroadTimeline(true)} personalContextMessage={undefined} />}
+            {view === "Study Abroad" && settingsState.enableStudyAbroad && <StudyAbroadDashboard hub={studyAbroadHub} onOpenUniversities={() => setStudyAbroadCollection("universities")} onOpenPrograms={() => setStudyAbroadCollection("programs")} onOpenApplications={() => setStudyAbroadCollection("applications")} onOpenScholarships={() => setStudyAbroadCollection("scholarships")} onOpenDocuments={() => setStudyAbroadCollection("documents")} onOpenTimeline={() => go("Study Abroad")} personalContextMessage={undefined} />}
             {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarEvents} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onSetEnergy={(currentEnergy) => setSettingsState(current => ({ ...current, currentEnergy }))} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={setTaskPageId} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} />}
-            {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={(name) => { const context = settingsState.spaceContext?.[`project:${name}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`project:${name}`]: { ...current.spaceContext?.[`project:${name}`], updatedAt: new Date().toISOString() } } })); setSelectedClassId(null); setSelectedProjectName(name); }} onOpenClass={(id) => { const context = settingsState.spaceContext?.[`class:${id}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`class:${id}`]: { ...current.spaceContext?.[`class:${id}`], updatedAt: new Date().toISOString() } } })); setSelectedProjectName(null); setSelectedClassId(id); }} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={(id) => { const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); setTaskPageId(id); }} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
+            {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={(name) => { const context = settingsState.spaceContext?.[`project:${name}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`project:${name}`]: { ...current.spaceContext?.[`project:${name}`], updatedAt: new Date().toISOString() } } })); setSelectedClassId(null); setSelectedProjectName(name); }} onOpenClass={(id) => { const context = settingsState.spaceContext?.[`class:${id}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`class:${id}`]: { ...current.spaceContext?.[`class:${id}`], updatedAt: new Date().toISOString() } } })); setSelectedProjectName(null); setSelectedClassId(id); }} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={(id) => { const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); setTaskPageId(id); }} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} onOpenKanban={setKanbanProjectName} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
             {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={setTaskPageId} />}
             {(view === "Today" || view === "Calendar") && <CalendarView events={[...calendarEvents, ...tasksToCalendarEvents(tasks)]} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => id.startsWith("task-") ? setTaskPageId(Number(id.slice(5))) : setEditingCalendarEventId(id)} onPlanTask={setEditingTaskId} />}
             {view === "Notes" && <NotesView notes={notes} classes={classes} projects={projectItems} selectedNoteId={selectedNoteId} onSelect={setSelectedNoteId} onCreate={() => createNote()} onUpdate={updateNote} onDelete={deleteNote} onImport={importNotes} />}
@@ -1659,8 +1667,7 @@ export default function LifeOS() {
         {studyAbroadModal === "application" && <ApplicationModal close={() => setStudyAbroadModal(null)} save={(application) => { setStudyAbroadHub(current => ({ ...current, applications: [...current.applications, application] })); setStudyAbroadModal(null); }} hub={studyAbroadHub} />}
         {studyAbroadModal === "scholarship" && <ScholarshipModal close={() => setStudyAbroadModal(null)} save={(scholarship) => { setStudyAbroadHub(current => ({ ...current, scholarships: [...current.scholarships, scholarship] })); setStudyAbroadModal(null); }} />}
         {studyAbroadModal === "document" && <DocumentModal close={() => setStudyAbroadModal(null)} save={(document) => { setStudyAbroadHub(current => ({ ...current, documents: [...current.documents, document] })); setStudyAbroadModal(null); }} />}
-        {showStudyAbroadTimeline && <motion.div className="modal-layer" onMouseDown={() => setShowStudyAbroadTimeline(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><StudyAbroadTimeline studyAbroadHub={studyAbroadHub} onClose={() => setShowStudyAbroadTimeline(false)} /></motion.div>}
-        {kanbanProjectName && projectItems.find(p => p.name === kanbanProjectName) && <ProjectKanban project={projectItems.find(p => p.name === kanbanProjectName)!} projectName={kanbanProjectName} tasks={tasks} onClose={() => setKanbanProjectName(null)} onUpdateTask={updateTask} />}
+        {kanbanProjectName && projectItems.find(p => p.name === kanbanProjectName) && <ProjectKanban key={`kanban-${kanbanProjectName}`} project={projectItems.find(p => p.name === kanbanProjectName)!} projectName={kanbanProjectName as string} tasks={tasks} onClose={() => setKanbanProjectName(null)} onUpdateTask={updateTaskDetails} />}
         {notice && <motion.div key="notice-toast" className="toast" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}><CheckCircle2 size={15} /> {notice}</motion.div>}
       </AnimatePresence>
       <button className="mobile-ambient-fab" aria-label="I’m doing something" onClick={() => settingsState.ambientActivity ? setAmbientWrapupOpen(true) : setAmbientStartOpen(true)}><TimerReset size={21} /></button>
@@ -2086,7 +2093,7 @@ function Projects({ projects, tasks, onNew, onAction, onOpen }: { projects: Proj
   })}</div></>;
 }
 
-function SpacesView({ projects, classes, tasks, notes, resources, selectedProjectName, selectedClassId, onBack, onNew, onActionProject, onActionClass, onOpenProject, onOpenClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource, linkTask, initialFilter = "All", onFilterChange }: { projects: Project[]; classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedProjectName: string | null; selectedClassId: string | null; onBack: () => void; onNew: () => void; onActionProject: (name: string) => void; onActionClass: (id: string) => void; onOpenProject: (name: string) => void; onOpenClass: (id: string) => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string, projectName?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void>; linkTask: (id: number, project: Project) => void; initialFilter?: "All" | "Classes" | "Projects" | "Maintenance" | "Archived"; onFilterChange?: (filter: "All" | "Classes" | "Projects" | "Maintenance" | "Archived") => void }) {
+function SpacesView({ projects, classes, tasks, notes, resources, selectedProjectName, selectedClassId, onBack, onNew, onActionProject, onActionClass, onOpenProject, onOpenClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource, linkTask, onOpenKanban, initialFilter = "All", onFilterChange }: { projects: Project[]; classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedProjectName: string | null; selectedClassId: string | null; onBack: () => void; onNew: () => void; onActionProject: (name: string) => void; onActionClass: (id: string) => void; onOpenProject: (name: string) => void; onOpenClass: (id: string) => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string, projectName?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void>; linkTask: (id: number, project: Project) => void; onOpenKanban: (name: string) => void; initialFilter?: "All" | "Classes" | "Projects" | "Maintenance" | "Archived"; onFilterChange?: (filter: "All" | "Classes" | "Projects" | "Maintenance" | "Archived") => void }) {
   const [filter, setFilter] = useState<"All" | "Classes" | "Projects" | "Maintenance" | "Archived">(initialFilter);
   const [semester, setSemester] = useState("All semesters");
   const [sortBy, setSortBy] = useState<"due" | "priority" | "open" | "name">("due");
@@ -2110,7 +2117,7 @@ function SpacesView({ projects, classes, tasks, notes, resources, selectedProjec
       <div className="space-detail-hero">
         <div className="space-hero-icon"><selectedProject.icon size={25} /></div>
         <div><p className="eyebrow">{selectedProject.kind === "maintenance" ? "Maintenance · ongoing" : "Project · finishable"}</p><h1>{selectedProject.name}</h1><p>{selectedProject.desc}</p></div>
-        <div className="class-hero-actions"><button onClick={() => onNewNote(undefined, selectedProject.name)}><NotebookPen size={15} /> New note</button><button className="primary" onClick={() => onActionProject(selectedProject.name)}><SlidersHorizontal size={15} /> Space settings</button></div>
+        <div className="class-hero-actions"><button onClick={() => onNewNote(undefined, selectedProject.name)}><NotebookPen size={15} /> New note</button><button onClick={() => onOpenKanban(selectedProject.name)}><LayoutGrid size={15} /> Kanban</button><button className="primary" onClick={() => onActionProject(selectedProject.name)}><SlidersHorizontal size={15} /> Space settings</button></div>
       </div>
       <div className="class-meta-strip">
         <div><span>Next due</span><strong>{nextDue ? formatDueDate(nextDue.due) : "Nothing due"}</strong></div>
@@ -2119,6 +2126,23 @@ function SpacesView({ projects, classes, tasks, notes, resources, selectedProjec
         <div><span>Open work</span><strong>{activeTasks.length}</strong></div>
       </div>
       <div className="class-content-grid">
+        {(() => {
+          const childProjects = projects.filter(p => p.parentProject === selectedProject.name);
+          return childProjects.length > 0 ? (
+            <section className="card class-coursework">
+              <div className="class-section-title"><div><h2>Sub-projects</h2><p>Projects nested within this space.</p></div></div>
+              <div className="coursework-list">
+                {childProjects.map(proj => (
+                  <button key={proj.name} onClick={() => onOpenProject(proj.name)}>
+                    <span className="coursework-type" style={{ color: proj.color, background: `${proj.color}14` }}>Sub-project</span>
+                    <span className="coursework-name"><strong>{proj.name}</strong><small>{proj.desc}</small></span>
+                    <ArrowRight size={14} />
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null;
+        })()}
         <section className="card class-coursework">
           <div className="class-section-title"><div><h2>Tasks</h2><p>Everything actively moving inside this space.</p></div></div>
           {activeTasks.length ? <div className="coursework-list">{activeTasks.map(task => <button key={task.id} onClick={() => onOpenTask(task.id)}><span className="coursework-type" style={{ color: selectedProject.color, background: `${selectedProject.color}14` }}>Task</span><span className="coursework-name"><strong>{task.title}</strong><small>{formatDueDate(task.due)} · {task.focusMinutes}m · {task.energy}</small></span><em className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</em><ArrowRight size={14} /></button>)}</div> : <div className="class-empty"><CheckCircle2 size={22} /><strong>No active tasks.</strong><span>Link an existing task below when this space needs attention.</span></div>}
@@ -2140,9 +2164,12 @@ function SpacesView({ projects, classes, tasks, notes, resources, selectedProjec
     if (archived) return false;
     return semester === "All semesters" || item.term === semester;
   });
+  const rootProjects = projects.filter(p => !p.parentProject);
+  const getChildProjects = (parentName: string) => projects.filter(p => p.parentProject === parentName);
+
   const spaces = [
-    ...classesForView.map(item => ({ id: `class:${item.id}`, kind: "class" as SpaceKind, title: item.code, description: item.name, meta: item.term || "Current term", color: item.color, icon: GraduationCap, open: tasks.filter(task => task.classId === item.id && !task.done && !task.canceled).length, nextDue: [...tasks.filter(task => task.classId === item.id && !task.done && !task.canceled)].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0], classId: item.id, projectName: null as string | null, archived: isClassArchived(item) })),
-    ...projects.map(item => ({ id: `project:${item.name}`, kind: (item.kind === "maintenance" ? "maintenance" : "project") as SpaceKind, title: item.name, description: item.desc, meta: item.kind === "maintenance" ? "Ongoing system" : "Finishable project", color: item.color, icon: item.icon, open: tasks.filter(task => task.project === item.name && !task.done && !task.canceled).length, nextDue: [...tasks.filter(task => task.project === item.name && !task.done && !task.canceled)].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0], classId: null as string | null, projectName: item.name, archived: false })),
+    ...classesForView.map(item => ({ id: `class:${item.id}`, kind: "class" as SpaceKind, title: item.code, description: item.name, meta: item.term || "Current term", color: item.color, icon: GraduationCap, open: tasks.filter(task => task.classId === item.id && !task.done && !task.canceled).length, nextDue: [...tasks.filter(task => task.classId === item.id && !task.done && !task.canceled)].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0], classId: item.id, projectName: null as string | null, archived: isClassArchived(item), childCount: 0 })),
+    ...rootProjects.map(item => ({ id: `project:${item.name}`, kind: (item.kind === "maintenance" ? "maintenance" : "project") as SpaceKind, title: item.name, description: item.desc, meta: item.kind === "maintenance" ? "Ongoing system" : "Finishable project", color: item.color, icon: item.icon, open: tasks.filter(task => task.project === item.name && !task.done && !task.canceled).length, nextDue: [...tasks.filter(task => task.project === item.name && !task.done && !task.canceled)].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0], classId: null as string | null, projectName: item.name, archived: false, childCount: getChildProjects(item.name).length })),
   ];
   const visibleSpaces = spaces.filter(space => filter === "All" || (filter === "Classes" && space.kind === "class") || (filter === "Projects" && space.kind === "project") || (filter === "Maintenance" && space.kind === "maintenance") || (filter === "Archived" && space.kind === "class" && space.archived));
   const highestPriorityRank = (space: typeof spaces[number]) => {
@@ -2166,7 +2193,7 @@ function SpacesView({ projects, classes, tasks, notes, resources, selectedProjec
     </div>
     {sortedSpaces.length ? <div className="spaces-grid">{sortedSpaces.map((space, index) => <motion.article role="button" tabIndex={0} className={`space-card ${space.kind}`} key={space.id} style={{ "--space-color": space.color } as React.CSSProperties} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .035 }} onClick={() => space.classId ? onOpenClass(space.classId) : onOpenProject(space.projectName!)} onKeyDown={event => { if (event.key === "Enter") space.classId ? onOpenClass(space.classId) : onOpenProject(space.projectName!); }}>
       <div className="space-card-top"><span className="space-card-icon"><space.icon size={21} /></span><button aria-label={`Actions for ${space.title}`} onClick={event => { event.stopPropagation(); if (space.classId) onActionClass(space.classId); else onActionProject(space.projectName!); }}><MoreHorizontal size={18} /></button></div>
-      <span className="space-type">{space.archived ? "Archived class" : space.kind === "class" ? "Class" : space.kind === "maintenance" ? "Maintenance" : "Project"}</span><h2>{space.title}</h2><p>{space.description}</p>
+      <span className="space-type">{space.archived ? "Archived class" : space.kind === "class" ? "Class" : space.kind === "maintenance" ? "Maintenance" : "Project"}{(space as any).childCount > 0 && ` · ${(space as any).childCount} sub-project${(space as any).childCount !== 1 ? 's' : ''}`}</span><h2>{space.title}</h2><p>{space.description}</p>
       <div className="space-card-footer"><span>{space.open} open</span><strong>{space.nextDue ? `Next: ${formatDueDate(space.nextDue.due)}` : "Nothing due"}</strong></div><div className="space-card-line"><i /></div>
     </motion.article>)}</div> : <div className="classes-empty"><div><LayoutGrid size={28} /></div><h2>No {filter.toLowerCase()} yet.</h2><p>Create the space your brain is looking for.</p><button className="primary" onClick={onNew}><Plus size={15} /> New space</button></div>}
   </>;
@@ -2213,7 +2240,49 @@ function SpaceModal({ initialKind, close, addProject, addClass }: { initialKind:
 
 function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask }: { tasks: Task[]; classes: ClassRecord[]; onComplete: (id: number) => void; onNew: () => void; onTaskMenu: (id: number) => void; onOpenTask: (id: number) => void }) {
   const [layout, setLayout] = useState<"List" | "Board" | "Calendar">("List");
-  return <><div className="page-title"><div><p className="eyebrow">Make it happen</p><h1>Tasks</h1><p>A clear list of what needs your attention.</p></div><button className="primary" onClick={onNew}><Plus size={16} /> New task</button></div><div className="view-tabs"><button className={layout === "List" ? "selected" : ""} onClick={() => setLayout("List")}><ListTodo size={15} /> List</button><button className={layout === "Board" ? "selected" : ""} onClick={() => setLayout("Board")}><LayoutGrid size={15} /> Board</button><button className={layout === "Calendar" ? "selected" : ""} onClick={() => setLayout("Calendar")}><CalendarDays size={15} /> Calendar</button></div><section className={`card task-table layout-${layout.toLowerCase()}`}><div className="table-view-label">{layout} view</div><div className="table-head"><span>Task</span><span>Space</span><span>Due</span><span>Priority</span><span>Focus</span></div>{tasks.map(t => <div className={`table-row ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""}`} key={t.id}><button className="round-check" disabled={t.canceled} onClick={() => onComplete(t.id)}>{t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}</button><button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button><span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span><span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span><span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span><span>{t.focusMinutes}m · {t.energy}</span><button aria-label={`Actions for ${t.title}`} onClick={() => onTaskMenu(t.id)}><MoreHorizontal size={17} /></button></div>)}</section></>;
+  const [expandedParents, setExpandedParents] = useState<Set<number>>(new Set());
+
+  const toggleParentExpansion = (parentId: number) => {
+    setExpandedParents(prev => {
+      const next = new Set(prev);
+      if (next.has(parentId)) next.delete(parentId);
+      else next.add(parentId);
+      return next;
+    });
+  };
+
+  const rootTasks = tasks.filter(t => !t.parentTaskId);
+  const getChildren = (parentId: number) => tasks.filter(t => t.parentTaskId === parentId);
+
+  const renderTaskRow = (t: Task, level: number = 0): React.ReactNode => {
+    const children = getChildren(t.id);
+    const hasChildren = children.length > 0;
+    const isExpanded = expandedParents.has(t.id);
+    const indent = level * 24;
+
+    return (
+      <>
+        <div className={`table-row ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""}`} style={{ paddingLeft: `${indent}px` }} key={t.id}>
+          <button className="round-check" disabled={t.canceled} onClick={() => onComplete(t.id)}>{t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}</button>
+          {hasChildren && (
+            <button className="expand-button" onClick={() => toggleParentExpansion(t.id)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '0 4px' }}>
+              {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+          )}
+          {!hasChildren && <div style={{ width: '22px' }} />}
+          <button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button>
+          <span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span>
+          <span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span>
+          <span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span>
+          <span>{t.focusMinutes}m · {t.energy}</span>
+          <button aria-label={`Actions for ${t.title}`} onClick={() => onTaskMenu(t.id)}><MoreHorizontal size={17} /></button>
+        </div>
+        {hasChildren && isExpanded && children.map(child => renderTaskRow(child, level + 1))}
+      </>
+    );
+  };
+
+  return <><div className="page-title"><div><p className="eyebrow">Make it happen</p><h1>Tasks</h1><p>A clear list of what needs your attention.</p></div><button className="primary" onClick={onNew}><Plus size={16} /> New task</button></div><div className="view-tabs"><button className={layout === "List" ? "selected" : ""} onClick={() => setLayout("List")}><ListTodo size={15} /> List</button><button className={layout === "Board" ? "selected" : ""} onClick={() => setLayout("Board")}><LayoutGrid size={15} /> Board</button><button className={layout === "Calendar" ? "selected" : ""} onClick={() => setLayout("Calendar")}><CalendarDays size={15} /> Calendar</button></div><section className={`card task-table layout-${layout.toLowerCase()}`}><div className="table-view-label">{layout} view</div><div className="table-head"><span>Task</span><span>Space</span><span>Due</span><span>Priority</span><span>Focus</span></div>{rootTasks.map(t => renderTaskRow(t))}</section></>;
 }
 
 function ClassesView({ classes, tasks, notes, resources, selectedClassId, onSelectClass, onNewClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource }: { classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedClassId: string | null; onSelectClass: (id: string | null) => void; onNewClass: () => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void> }) {
@@ -2317,10 +2386,19 @@ function ClassResourcesCard({ classRecord, resources, onUpload, onDelete, onRepl
 function NotesView({ notes, classes, projects, selectedNoteId, onSelect, onCreate, onUpdate, onDelete, onImport }: { notes: Note[]; classes: ClassRecord[]; projects: Project[]; selectedNoteId: string | null; onSelect: (id: string | null) => void; onCreate: () => void; onUpdate: (id: string, updates: Partial<Note>) => void; onDelete: (id: string) => void; onImport: (notes: Note[]) => void }) {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title" | "space">("newest");
+  const [expandedNoteIds, setExpandedNoteIds] = useState<Set<string>>(new Set());
   const editorRef = useRef<HTMLDivElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const toggleNoteExpand = (noteId: string) => {
+    const newExpanded = new Set(expandedNoteIds);
+    if (newExpanded.has(noteId)) newExpanded.delete(noteId);
+    else newExpanded.add(noteId);
+    setExpandedNoteIds(newExpanded);
+  };
   const filtered = notes.filter(note => `${note.title} ${note.body}`.toLowerCase().includes(search.toLowerCase()));
-  const visible = [...filtered].sort((a, b) => {
+  const getNoteChildren = (parentId: string) => notes.filter(n => n.parentNoteId === parentId).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  const hasNoteChildren = (noteId: string) => notes.some(n => n.parentNoteId === noteId);
+  const visible = [...filtered].filter(n => !n.parentNoteId).sort((a, b) => {
     switch (sortBy) {
       case "newest": return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       case "oldest": return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
@@ -2332,6 +2410,28 @@ function NotesView({ notes, classes, projects, selectedNoteId, onSelect, onCreat
       default: return 0;
     }
   });
+  const renderNoteItem = (note: Note, level: number = 0): React.ReactNode => {
+    const linkedClass = classes.find(item => item.id === note.classId);
+    const linkedProject = projects.find(item => item.name === note.projectName);
+    const children = getNoteChildren(note.id);
+    const expanded = expandedNoteIds.has(note.id);
+    return (
+      <div key={note.id}>
+        <button className={selected?.id === note.id ? "active" : ""} onClick={() => onSelect(note.id)} style={{ marginLeft: `${level * 20}px` }}>
+          {children.length > 0 && (
+            <span onClick={(e) => { e.stopPropagation(); toggleNoteExpand(note.id); }} style={{ marginRight: '4px', display: 'inline-flex', cursor: 'pointer' }}>
+              {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </span>
+          )}
+          {children.length === 0 && <span style={{ marginRight: '4px', display: 'inline-flex', width: '14px' }} />}
+          <strong>{note.title || "Untitled note"}</strong>
+          <span>{linkedClass?.code ?? linkedProject?.name ?? "Personal note"} · {new Date(note.updatedAt).toLocaleDateString()}</span>
+          <p>{textOnly(note.body).slice(0, 90) || "Empty note"}</p>
+        </button>
+        {expanded && children.map(child => renderNoteItem(child, level + 1))}
+      </div>
+    );
+  };
   const selected = notes.find(note => note.id === selectedNoteId) ?? notes[0];
   const selectedSpaceValue = selected?.classId ? `class:${selected.classId}` : selected?.projectName ? `project:${selected.projectName}` : "";
   const changeSpace = (value: string) => {
@@ -2406,7 +2506,7 @@ function NotesView({ notes, classes, projects, selectedNoteId, onSelect, onCreat
     popup.document.close();
   };
   return <section className="notes-view">
-    <div className="notes-sidebar-panel"><div className="notes-panel-head"><div><p className="eyebrow">Write it down</p><h1>Notes</h1></div><button onClick={onCreate} aria-label="New note"><Plus size={17} /></button></div><div className="notes-transfer"><button onClick={exportNotes}><Download size={13} /> Export</button><button onClick={() => importRef.current?.click()}><Upload size={13} /> Import</button><input ref={importRef} type="file" accept="application/json,.json" onChange={event => { importFile(event.target.files?.[0]); event.currentTarget.value = ""; }} /></div><label className="notes-search"><Search size={14} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Find notes…" /></label><div className="notes-sort"><select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title" | "space")}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="title">A–Z</option><option value="space">By space</option></select></div><div className="notes-list">{visible.map(note => { const linkedClass = classes.find(item => item.id === note.classId); const linkedProject = projects.find(item => item.name === note.projectName); return <button key={note.id} className={selected?.id === note.id ? "active" : ""} onClick={() => onSelect(note.id)}><strong>{note.title || "Untitled note"}</strong><span>{linkedClass?.code ?? linkedProject?.name ?? "Personal note"} · {new Date(note.updatedAt).toLocaleDateString()}</span><p>{textOnly(note.body).slice(0, 90) || "Empty note"}</p></button>; })}{!visible.length && <div className="notes-list-empty">No notes here yet.</div>}</div></div>
+    <div className="notes-sidebar-panel"><div className="notes-panel-head"><div><p className="eyebrow">Write it down</p><h1>Notes</h1></div><button onClick={onCreate} aria-label="New note"><Plus size={17} /></button></div><div className="notes-transfer"><button onClick={exportNotes}><Download size={13} /> Export</button><button onClick={() => importRef.current?.click()}><Upload size={13} /> Import</button><input ref={importRef} type="file" accept="application/json,.json" onChange={event => { importFile(event.target.files?.[0]); event.currentTarget.value = ""; }} /></div><label className="notes-search"><Search size={14} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Find notes…" /></label><div className="notes-sort"><select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title" | "space")}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="title">A–Z</option><option value="space">By space</option></select></div><div className="notes-list">{visible.map(note => renderNoteItem(note))}{!visible.length && <div className="notes-list-empty">No notes here yet.</div>}</div></div>
     {selected ? <article className={`note-editor note-template-${selected.template ?? "blank"}`}><div className="note-editor-top"><select aria-label="Linked space" value={selectedSpaceValue} onChange={event => changeSpace(event.target.value)}><option value="">Personal note</option>{classes.length > 0 && <optgroup label="Classes">{classes.map(item => <option key={item.id} value={`class:${item.id}`}>{item.code} — {item.name}</option>)}</optgroup>}{projects.length > 0 && <optgroup label="Projects & maintenance">{projects.map(item => <option key={item.name} value={`project:${item.name}`}>{item.name}</option>)}</optgroup>}</select><select className="note-template-picker" aria-label="Page template" value={selected.template ?? "blank"} onChange={event => applyTemplate(event.target.value as NonNullable<Note["template"]>)}><option value="blank">Blank page</option><option value="lined">Lined notes</option><option value="dotted">Dotted notes</option><option value="cornell">Cornell notes</option><option value="meeting">Meeting notes</option></select><span>Saved {new Date(selected.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span><button className="note-pdf-button" onClick={exportNotePdf}><Download size={14} /> PDF</button><button onClick={() => onDelete(selected.id)}><Trash2 size={14} /> Delete</button></div><input className="note-title-input" value={selected.title} onChange={event => onUpdate(selected.id, { title: event.target.value })} placeholder="Untitled note" /><div className="note-format-bar" role="toolbar" aria-label="Text formatting"><button aria-label="Bold" onMouseDown={event => event.preventDefault()} onClick={() => command("bold")}><Bold size={15} /></button><button aria-label="Italic" onMouseDown={event => event.preventDefault()} onClick={() => command("italic")}><Italic size={15} /></button><button aria-label="Heading" onMouseDown={event => event.preventDefault()} onClick={() => command("formatBlock", "h2")}><Heading1 size={15} /></button><button aria-label="Bullet list" onMouseDown={event => event.preventDefault()} onClick={() => command("insertUnorderedList")}><List size={15} /></button><label title="Text color"><Palette size={14} /><input aria-label="Text color" type="color" defaultValue="#625af6" onChange={event => command("foreColor", event.target.value)} /></label><label title="Highlight color"><Highlighter size={14} /><input aria-label="Highlight color" type="color" defaultValue="#fff09d" onChange={event => command("hiliteColor", event.target.value)} /></label></div><div ref={editorRef} className="note-body-input rich-note-body" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" data-placeholder="Start writing. Lecture notes, ideas, study guides, random thoughts — all fair game." onInput={event => onUpdate(selected.id, { body: event.currentTarget.innerHTML })} /></article> : <div className="note-editor-empty"><NotebookPen size={28} /><h2>Take a note without making a task.</h2><p>Wild concept, right? Notes can just be notes.</p><button className="primary" onClick={onCreate}><Plus size={15} /> New note</button></div>}
   </section>;
 }
@@ -2941,6 +3041,46 @@ function BrainView({ items, onCapture, onArchive }: { items: string[]; onCapture
 function ResourcesView({ resources, classes, onUpload, onDelete, onReplace, onDownload }: { resources: Resource[]; classes: ClassRecord[]; onUpload: (file: File) => void | Promise<void>; onDelete: (id: string) => void; onReplace: (id: string, file: File) => void; onDownload: (resource: Resource) => void | Promise<void> }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [expandedResourceIds, setExpandedResourceIds] = useState<Set<string>>(new Set());
+  const toggleResourceExpand = (resourceId: string) => {
+    const newExpanded = new Set(expandedResourceIds);
+    if (newExpanded.has(resourceId)) newExpanded.delete(resourceId);
+    else newExpanded.add(resourceId);
+    setExpandedResourceIds(newExpanded);
+  };
+  const getResourceChildren = (parentId: string) => resources.filter(r => r.parentResourceId === parentId).sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  const hasResourceChildren = (resourceId: string) => resources.some(r => r.parentResourceId === resourceId);
+  const visibleResources = resources.filter(r => !r.parentResourceId).sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  const renderResourceItem = (resource: Resource, level: number = 0): React.ReactNode => {
+    const children = getResourceChildren(resource.id);
+    const expanded = expandedResourceIds.has(resource.id);
+    return (
+      <div key={resource.id}>
+        <div className="brain-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between', marginLeft: `${level * 20}px` }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {children.length > 0 && (
+                <button onClick={() => toggleResourceExpand(resource.id)} style={{ padding: '4px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}>
+                  {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
+              )}
+              {children.length === 0 && <div style={{ width: '24px' }} />}
+              <div>
+                <strong>{resource.name}</strong>
+                <p>{classes.find(item => item.id === resource.classId)?.code ?? "Unfiled"} · {resource.type} · {formatResourceSize(resource.size)} · {new Date(resource.uploadedAt).toLocaleDateString()}</p>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => onDownload(resource)} title="Download" style={{ padding: '6px 12px', fontSize: '12px', background: '#625af6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Download</button>
+            <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.onchange = async (e: any) => { if (e.target.files[0]) { try { await onReplace(resource.id, e.target.files[0]); } catch {} } }; input.click(); }} title="Replace" disabled={selectedId === resource.id} style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(200, 200, 200, 0.2)', border: '1px solid rgba(200, 200, 200, 0.4)', borderRadius: '4px', cursor: 'pointer' }}>Replace</button>
+            <button onClick={() => onDelete(resource.id)} title="Delete" style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(255, 107, 107, 0.2)', color: '#ff6b6b', border: '1px solid rgba(255, 107, 107, 0.3)', borderRadius: '4px', cursor: 'pointer' }}>Delete</button>
+          </div>
+        </div>
+        {expanded && children.map(child => renderResourceItem(child, level + 1))}
+      </div>
+    );
+  };
 
   const handleUpload = () => {
     const input = document.createElement('input');
@@ -2992,19 +3132,7 @@ function ResourcesView({ resources, classes, onUpload, onDelete, onReplace, onDo
     <div className="brain-layout">
       <section className="card brain-list">
         {resources.length ? (
-          resources.map(resource => (
-            <div className="brain-row" key={resource.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between' }}>
-              <div style={{ flex: 1 }}>
-                <strong>{resource.name}</strong>
-                <p>{classes.find(item => item.id === resource.classId)?.code ?? "Unfiled"} · {resource.type} · {formatResourceSize(resource.size)} · {new Date(resource.uploadedAt).toLocaleDateString()}</p>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => onDownload(resource)} title="Download" style={{ padding: '6px 12px', fontSize: '12px', background: '#625af6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Download</button>
-                <button onClick={() => handleReplace(resource.id)} title="Replace" disabled={selectedId === resource.id} style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(200, 200, 200, 0.2)', border: '1px solid rgba(200, 200, 200, 0.4)', borderRadius: '4px', cursor: 'pointer' }}>Replace</button>
-                <button onClick={() => onDelete(resource.id)} title="Delete" style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(255, 107, 107, 0.2)', color: '#ff6b6b', border: '1px solid rgba(255, 107, 107, 0.3)', borderRadius: '4px', cursor: 'pointer' }}>Delete</button>
-              </div>
-            </div>
-          ))
+          visibleResources.map(resource => renderResourceItem(resource))
         ) : (
           <div className="priority-empty">
             <strong>No resources yet.</strong>

@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Calendar, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
-import type { Task, Project } from '@/lib/validation';
+import type { Task } from '@/lib/types';
 
 const toDateKey = (date: Date) => date.toISOString().split('T')[0];
 
@@ -20,7 +20,7 @@ interface Props {
   projectName: string;
   tasks: Task[];
   onClose: () => void;
-  onUpdateTask: any;
+  onUpdateTask: (taskId: number, updates: Partial<Task>) => void;
 }
 
 export default function ProjectKanban({
@@ -33,21 +33,17 @@ export default function ProjectKanban({
   const projectTasks = tasks.filter(t => t.project === projectName && !t.canceled);
   const today = toDateKey(new Date());
 
-  // Calculate progress
   const completedCount = projectTasks.filter(t => t.done).length;
   const progressPercent = projectTasks.length > 0 ? Math.round((completedCount / projectTasks.length) * 100) : 0;
 
-  // Find project due date (earliest due task or latest task due date)
   const projectDue = projectTasks
     .filter(t => t.due)
     .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())
     [0]?.due;
 
-  // Organize tasks into columns
   const columns: KanbanColumn[] = useMemo(() => {
     const overdue: Task[] = [];
     const todo: Task[] = [];
-    const inProgress: Task[] = [];
     const done: Task[] = [];
 
     projectTasks.forEach((task) => {
@@ -102,13 +98,11 @@ export default function ProjectKanban({
     const task = projectTasks.find(t => t.id === draggedTask);
     if (!task) return;
 
-    // Update task based on target column
     if (targetColId === 'done') {
       onUpdateTask(draggedTask, { done: true, completedAt: new Date().toISOString() });
     } else if (targetColId === 'todo') {
       onUpdateTask(draggedTask, { done: false });
     } else if (targetColId === 'overdue') {
-      // Can't drag to overdue, it's automatic based on due date
       return;
     }
 
