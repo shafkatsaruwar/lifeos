@@ -552,3 +552,175 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
     grid-template-columns: 1fr;
   }
 }
+
+/* Study Abroad Timeline */
+.study-abroad-timeline {
+  width: min(720px, calc(100vw - 30px));
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 25px 90px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 80px);
+  overflow: hidden;
+}
+
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.timeline-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.timeline-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.18s;
+}
+
+.timeline-close:hover {
+  color: var(--ink);
+}
+
+.timeline-content {
+  overflow-y: auto;
+  flex: 1;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.timeline-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ink);
+  margin: 0 0 10px 0;
+}
+
+.upcoming-section .section-title {
+  color: #cf625a;
+}
+
+.timeline-events {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timeline-event {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--canvas) 40%, transparent);
+  border-left: 3px solid var(--line);
+  transition: background 0.18s, border-color 0.18s;
+}
+
+.timeline-event:hover {
+  background: color-mix(in srgb, var(--canvas) 70%, transparent);
+}
+
+.upcoming-event {
+  background: color-mix(in srgb, #cf625a 4%, var(--panel));
+  border-left-color: #cf625a;
+}
+
+.upcoming-event:hover {
+  background: color-mix(in srgb, #cf625a 8%, var(--panel));
+}
+
+.past-event {
+  opacity: 0.6;
+}
+
+.event-marker {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.event-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.event-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.event-header strong {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.days-until {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.event-description {
+  font-size: 10px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.event-date {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.timeline-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.timeline-empty p {
+  font-size: 11px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline-event {
+    transition: none;
+  }
+}
