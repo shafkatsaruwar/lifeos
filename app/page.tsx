@@ -1046,13 +1046,32 @@ export default function LifeOS() {
     return () => stopListeningToFirebaseChanges('resources');
   }, [cloudUserId, resourcesHydrated]);
 
+  const getTaskHierarchyProgress = (taskId: number, allTasks: Task[]): number => {
+    const task = allTasks.find(t => t.id === taskId);
+    if (!task) return 0;
+    const children = allTasks.filter(t => t.parentTaskId === taskId);
+    if (children.length === 0) return task.done ? 100 : 0;
+    const childProgress = children.reduce((sum, child) => sum + getTaskHierarchyProgress(child.id, allTasks), 0);
+    return childProgress / children.length;
+  };
+
   const complete = (id: number) => {
     const completedTask = tasks.find(task => task.id === id);
     const isCompleting = Boolean(completedTask && !completedTask.done);
     setTasks(items => {
       const target = items.find(task => task.id === id);
       if (!target) return items;
-      const next: Task[] = items.map(t => t.id === id ? { ...t, done: !t.done, canceled: false, status: (!t.done ? "Done" : "Not started") as TaskStatus, completedAt: !t.done ? new Date().toISOString() : undefined } : t);
+      const getDescendants = (taskId: number): number[] => {
+        const children = items.filter(t => t.parentTaskId === taskId);
+        return [taskId, ...children.flatMap(child => getDescendants(child.id))];
+      };
+      const descendantIds = getDescendants(id);
+      const next: Task[] = items.map(t => {
+        if (descendantIds.includes(t.id)) {
+          return { ...t, done: !target.done, canceled: false, status: (!target.done ? "Done" : "Not started") as TaskStatus, completedAt: !target.done ? new Date().toISOString() : undefined };
+        }
+        return t;
+      });
       if (!target.done && target.recurringDays) {
         const nextDue = new Date();
         nextDue.setDate(nextDue.getDate() + target.recurringDays);
