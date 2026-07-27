@@ -2386,10 +2386,19 @@ function ClassResourcesCard({ classRecord, resources, onUpload, onDelete, onRepl
 function NotesView({ notes, classes, projects, selectedNoteId, onSelect, onCreate, onUpdate, onDelete, onImport }: { notes: Note[]; classes: ClassRecord[]; projects: Project[]; selectedNoteId: string | null; onSelect: (id: string | null) => void; onCreate: () => void; onUpdate: (id: string, updates: Partial<Note>) => void; onDelete: (id: string) => void; onImport: (notes: Note[]) => void }) {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title" | "space">("newest");
+  const [expandedNoteIds, setExpandedNoteIds] = useState<Set<string>>(new Set());
   const editorRef = useRef<HTMLDivElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const toggleNoteExpand = (noteId: string) => {
+    const newExpanded = new Set(expandedNoteIds);
+    if (newExpanded.has(noteId)) newExpanded.delete(noteId);
+    else newExpanded.add(noteId);
+    setExpandedNoteIds(newExpanded);
+  };
   const filtered = notes.filter(note => `${note.title} ${note.body}`.toLowerCase().includes(search.toLowerCase()));
-  const visible = [...filtered].sort((a, b) => {
+  const getNoteChildren = (parentId: string) => notes.filter(n => n.parentNoteId === parentId).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  const hasNoteChildren = (noteId: string) => notes.some(n => n.parentNoteId === noteId);
+  const visible = [...filtered].filter(n => !n.parentNoteId).sort((a, b) => {
     switch (sortBy) {
       case "newest": return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       case "oldest": return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
@@ -2401,6 +2410,28 @@ function NotesView({ notes, classes, projects, selectedNoteId, onSelect, onCreat
       default: return 0;
     }
   });
+  const renderNoteItem = (note: Note, level: number = 0): React.ReactNode => {
+    const linkedClass = classes.find(item => item.id === note.classId);
+    const linkedProject = projects.find(item => item.name === note.projectName);
+    const children = getNoteChildren(note.id);
+    const expanded = expandedNoteIds.has(note.id);
+    return (
+      <div key={note.id}>
+        <button className={selected?.id === note.id ? "active" : ""} onClick={() => onSelect(note.id)} style={{ marginLeft: `${level * 20}px` }}>
+          {children.length > 0 && (
+            <span onClick={(e) => { e.stopPropagation(); toggleNoteExpand(note.id); }} style={{ marginRight: '4px', display: 'inline-flex', cursor: 'pointer' }}>
+              {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </span>
+          )}
+          {children.length === 0 && <span style={{ marginRight: '4px', display: 'inline-flex', width: '14px' }} />}
+          <strong>{note.title || "Untitled note"}</strong>
+          <span>{linkedClass?.code ?? linkedProject?.name ?? "Personal note"} · {new Date(note.updatedAt).toLocaleDateString()}</span>
+          <p>{textOnly(note.body).slice(0, 90) || "Empty note"}</p>
+        </button>
+        {expanded && children.map(child => renderNoteItem(child, level + 1))}
+      </div>
+    );
+  };
   const selected = notes.find(note => note.id === selectedNoteId) ?? notes[0];
   const selectedSpaceValue = selected?.classId ? `class:${selected.classId}` : selected?.projectName ? `project:${selected.projectName}` : "";
   const changeSpace = (value: string) => {
@@ -2475,7 +2506,7 @@ function NotesView({ notes, classes, projects, selectedNoteId, onSelect, onCreat
     popup.document.close();
   };
   return <section className="notes-view">
-    <div className="notes-sidebar-panel"><div className="notes-panel-head"><div><p className="eyebrow">Write it down</p><h1>Notes</h1></div><button onClick={onCreate} aria-label="New note"><Plus size={17} /></button></div><div className="notes-transfer"><button onClick={exportNotes}><Download size={13} /> Export</button><button onClick={() => importRef.current?.click()}><Upload size={13} /> Import</button><input ref={importRef} type="file" accept="application/json,.json" onChange={event => { importFile(event.target.files?.[0]); event.currentTarget.value = ""; }} /></div><label className="notes-search"><Search size={14} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Find notes…" /></label><div className="notes-sort"><select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title" | "space")}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="title">A–Z</option><option value="space">By space</option></select></div><div className="notes-list">{visible.map(note => { const linkedClass = classes.find(item => item.id === note.classId); const linkedProject = projects.find(item => item.name === note.projectName); return <button key={note.id} className={selected?.id === note.id ? "active" : ""} onClick={() => onSelect(note.id)}><strong>{note.title || "Untitled note"}</strong><span>{linkedClass?.code ?? linkedProject?.name ?? "Personal note"} · {new Date(note.updatedAt).toLocaleDateString()}</span><p>{textOnly(note.body).slice(0, 90) || "Empty note"}</p></button>; })}{!visible.length && <div className="notes-list-empty">No notes here yet.</div>}</div></div>
+    <div className="notes-sidebar-panel"><div className="notes-panel-head"><div><p className="eyebrow">Write it down</p><h1>Notes</h1></div><button onClick={onCreate} aria-label="New note"><Plus size={17} /></button></div><div className="notes-transfer"><button onClick={exportNotes}><Download size={13} /> Export</button><button onClick={() => importRef.current?.click()}><Upload size={13} /> Import</button><input ref={importRef} type="file" accept="application/json,.json" onChange={event => { importFile(event.target.files?.[0]); event.currentTarget.value = ""; }} /></div><label className="notes-search"><Search size={14} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Find notes…" /></label><div className="notes-sort"><select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title" | "space")}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="title">A–Z</option><option value="space">By space</option></select></div><div className="notes-list">{visible.map(note => renderNoteItem(note))}{!visible.length && <div className="notes-list-empty">No notes here yet.</div>}</div></div>
     {selected ? <article className={`note-editor note-template-${selected.template ?? "blank"}`}><div className="note-editor-top"><select aria-label="Linked space" value={selectedSpaceValue} onChange={event => changeSpace(event.target.value)}><option value="">Personal note</option>{classes.length > 0 && <optgroup label="Classes">{classes.map(item => <option key={item.id} value={`class:${item.id}`}>{item.code} — {item.name}</option>)}</optgroup>}{projects.length > 0 && <optgroup label="Projects & maintenance">{projects.map(item => <option key={item.name} value={`project:${item.name}`}>{item.name}</option>)}</optgroup>}</select><select className="note-template-picker" aria-label="Page template" value={selected.template ?? "blank"} onChange={event => applyTemplate(event.target.value as NonNullable<Note["template"]>)}><option value="blank">Blank page</option><option value="lined">Lined notes</option><option value="dotted">Dotted notes</option><option value="cornell">Cornell notes</option><option value="meeting">Meeting notes</option></select><span>Saved {new Date(selected.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span><button className="note-pdf-button" onClick={exportNotePdf}><Download size={14} /> PDF</button><button onClick={() => onDelete(selected.id)}><Trash2 size={14} /> Delete</button></div><input className="note-title-input" value={selected.title} onChange={event => onUpdate(selected.id, { title: event.target.value })} placeholder="Untitled note" /><div className="note-format-bar" role="toolbar" aria-label="Text formatting"><button aria-label="Bold" onMouseDown={event => event.preventDefault()} onClick={() => command("bold")}><Bold size={15} /></button><button aria-label="Italic" onMouseDown={event => event.preventDefault()} onClick={() => command("italic")}><Italic size={15} /></button><button aria-label="Heading" onMouseDown={event => event.preventDefault()} onClick={() => command("formatBlock", "h2")}><Heading1 size={15} /></button><button aria-label="Bullet list" onMouseDown={event => event.preventDefault()} onClick={() => command("insertUnorderedList")}><List size={15} /></button><label title="Text color"><Palette size={14} /><input aria-label="Text color" type="color" defaultValue="#625af6" onChange={event => command("foreColor", event.target.value)} /></label><label title="Highlight color"><Highlighter size={14} /><input aria-label="Highlight color" type="color" defaultValue="#fff09d" onChange={event => command("hiliteColor", event.target.value)} /></label></div><div ref={editorRef} className="note-body-input rich-note-body" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" data-placeholder="Start writing. Lecture notes, ideas, study guides, random thoughts — all fair game." onInput={event => onUpdate(selected.id, { body: event.currentTarget.innerHTML })} /></article> : <div className="note-editor-empty"><NotebookPen size={28} /><h2>Take a note without making a task.</h2><p>Wild concept, right? Notes can just be notes.</p><button className="primary" onClick={onCreate}><Plus size={15} /> New note</button></div>}
   </section>;
 }
@@ -3010,6 +3041,46 @@ function BrainView({ items, onCapture, onArchive }: { items: string[]; onCapture
 function ResourcesView({ resources, classes, onUpload, onDelete, onReplace, onDownload }: { resources: Resource[]; classes: ClassRecord[]; onUpload: (file: File) => void | Promise<void>; onDelete: (id: string) => void; onReplace: (id: string, file: File) => void; onDownload: (resource: Resource) => void | Promise<void> }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [expandedResourceIds, setExpandedResourceIds] = useState<Set<string>>(new Set());
+  const toggleResourceExpand = (resourceId: string) => {
+    const newExpanded = new Set(expandedResourceIds);
+    if (newExpanded.has(resourceId)) newExpanded.delete(resourceId);
+    else newExpanded.add(resourceId);
+    setExpandedResourceIds(newExpanded);
+  };
+  const getResourceChildren = (parentId: string) => resources.filter(r => r.parentResourceId === parentId).sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  const hasResourceChildren = (resourceId: string) => resources.some(r => r.parentResourceId === resourceId);
+  const visibleResources = resources.filter(r => !r.parentResourceId).sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  const renderResourceItem = (resource: Resource, level: number = 0): React.ReactNode => {
+    const children = getResourceChildren(resource.id);
+    const expanded = expandedResourceIds.has(resource.id);
+    return (
+      <div key={resource.id}>
+        <div className="brain-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between', marginLeft: `${level * 20}px` }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {children.length > 0 && (
+                <button onClick={() => toggleResourceExpand(resource.id)} style={{ padding: '4px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}>
+                  {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
+              )}
+              {children.length === 0 && <div style={{ width: '24px' }} />}
+              <div>
+                <strong>{resource.name}</strong>
+                <p>{classes.find(item => item.id === resource.classId)?.code ?? "Unfiled"} · {resource.type} · {formatResourceSize(resource.size)} · {new Date(resource.uploadedAt).toLocaleDateString()}</p>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => onDownload(resource)} title="Download" style={{ padding: '6px 12px', fontSize: '12px', background: '#625af6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Download</button>
+            <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.onchange = async (e: any) => { if (e.target.files[0]) { try { await onReplace(resource.id, e.target.files[0]); } catch {} } }; input.click(); }} title="Replace" disabled={selectedId === resource.id} style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(200, 200, 200, 0.2)', border: '1px solid rgba(200, 200, 200, 0.4)', borderRadius: '4px', cursor: 'pointer' }}>Replace</button>
+            <button onClick={() => onDelete(resource.id)} title="Delete" style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(255, 107, 107, 0.2)', color: '#ff6b6b', border: '1px solid rgba(255, 107, 107, 0.3)', borderRadius: '4px', cursor: 'pointer' }}>Delete</button>
+          </div>
+        </div>
+        {expanded && children.map(child => renderResourceItem(child, level + 1))}
+      </div>
+    );
+  };
 
   const handleUpload = () => {
     const input = document.createElement('input');
@@ -3061,19 +3132,7 @@ function ResourcesView({ resources, classes, onUpload, onDelete, onReplace, onDo
     <div className="brain-layout">
       <section className="card brain-list">
         {resources.length ? (
-          resources.map(resource => (
-            <div className="brain-row" key={resource.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between' }}>
-              <div style={{ flex: 1 }}>
-                <strong>{resource.name}</strong>
-                <p>{classes.find(item => item.id === resource.classId)?.code ?? "Unfiled"} · {resource.type} · {formatResourceSize(resource.size)} · {new Date(resource.uploadedAt).toLocaleDateString()}</p>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => onDownload(resource)} title="Download" style={{ padding: '6px 12px', fontSize: '12px', background: '#625af6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Download</button>
-                <button onClick={() => handleReplace(resource.id)} title="Replace" disabled={selectedId === resource.id} style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(200, 200, 200, 0.2)', border: '1px solid rgba(200, 200, 200, 0.4)', borderRadius: '4px', cursor: 'pointer' }}>Replace</button>
-                <button onClick={() => onDelete(resource.id)} title="Delete" style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(255, 107, 107, 0.2)', color: '#ff6b6b', border: '1px solid rgba(255, 107, 107, 0.3)', borderRadius: '4px', cursor: 'pointer' }}>Delete</button>
-              </div>
-            </div>
-          ))
+          visibleResources.map(resource => renderResourceItem(resource))
         ) : (
           <div className="priority-empty">
             <strong>No resources yet.</strong>
