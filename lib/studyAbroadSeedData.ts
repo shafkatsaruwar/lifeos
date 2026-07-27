@@ -48,21 +48,7 @@ export const seedPrograms: Program[] = [
   },
 ];
 
-export const seedDocuments: StudyDocument[] = [
-  {
-    id: "doc-umass-diploma",
-    name: "UMass Boston Diploma",
-    category: "Diploma",
-    status: "blocked",
-    issuedBy: "University of Massachusetts Boston",
-    blockingReason: "Diploma has not been released because of an outstanding university balance.",
-    amountNeededToResolve: 1200,
-    currency: "USD",
-    notes: "This may prevent applications from being considered complete.",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+export const seedDocuments: StudyDocument[] = [];
 
 export const seedApplications: Application[] = [
   {
@@ -73,7 +59,6 @@ export const seedApplications: Application[] = [
     status: "rejected",
     applicantNumber: "7382",
     lastUpdated: new Date().toISOString(),
-    linkedDocumentIds: ["doc-umass-diploma"],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
