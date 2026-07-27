@@ -134,7 +134,7 @@ export function StudyAbroadDashboard({
       <div className="os-hero">
         <div>
           <p className="eyebrow">Study Abroad</p>
-          <h1>Master&rsquo;s Application Tracker</h1>
+          <h1>Study Abroad Tracker</h1>
           <p>{hub.programs.length} program(s) researched · {hub.applications.length} application(s)</p>
         </div>
         <button className="os-profile-button" onClick={onOpenTimeline}>
