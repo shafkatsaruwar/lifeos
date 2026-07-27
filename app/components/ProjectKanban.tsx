@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Calendar, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
+import { ChevronLeft, Calendar, AlertCircle, CheckCircle2, Clock, Plus } from 'lucide-react';
 import type { Task } from '@/lib/types';
 
 const toDateKey = (date: Date) => date.toISOString().split('T')[0];
@@ -21,6 +21,7 @@ interface Props {
   tasks: Task[];
   onClose: () => void;
   onUpdateTask: (taskId: number, updates: Partial<Task>) => void;
+  onNewTask: () => void;
 }
 
 export default function ProjectKanban({
@@ -29,6 +30,7 @@ export default function ProjectKanban({
   tasks,
   onClose,
   onUpdateTask,
+  onNewTask,
 }: Props) {
   const projectTasks = tasks.filter(t => t.project === projectName && !t.canceled);
   const today = toDateKey(new Date());
@@ -183,6 +185,9 @@ export default function ProjectKanban({
             </div>
           </div>
         </div>
+        <button onClick={onNewTask} className="kanban-new-task">
+          <Plus size={16} /> New task
+        </button>
       </div>
 
       <div className="kanban-board">
