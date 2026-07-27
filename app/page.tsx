@@ -109,6 +109,22 @@ const getViewFromStorage = (): View => {
   return "Now";
 };
 
+const getSelectedProjectFromStorage = (): string | null => {
+  try {
+    return localStorage?.getItem("lifeos-selected-project") || null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const getSelectedClassFromStorage = (): string | null => {
+  try {
+    return localStorage?.getItem("lifeos-selected-class") || null;
+  } catch (e) {
+    return null;
+  }
+};
+
 const viewFromLocation = (): View => getViewFromStorage();
 type SettingsState = {
   accent: string;
@@ -413,7 +429,7 @@ export default function LifeOS() {
   const [classesHydrated, setClassesHydrated] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [notesHydrated, setNotesHydrated] = useState(false);
-  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(() => getSelectedClassFromStorage());
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [spacesFilter, setSpacesFilter] = useState<"All" | "Classes" | "Projects" | "Maintenance" | "Archived">("All");
   const [spaceComposer, setSpaceComposer] = useState<SpaceKind | null>(null);
@@ -452,7 +468,7 @@ export default function LifeOS() {
   const [taskPageId, setTaskPageId] = useState<number | null>(null);
   const [actionProjectName, setActionProjectName] = useState<string | null>(null);
   const [actionClassId, setActionClassId] = useState<string | null>(null);
-  const [selectedProjectName, setSelectedProjectName] = useState<string | null>(null);
+  const [selectedProjectName, setSelectedProjectName] = useState<string | null>(() => getSelectedProjectFromStorage());
   const [kanbanProjectName, setKanbanProjectName] = useState<string | null>(null);
   const [fullscreenProject, setFullscreenProject] = useState<string | null>(null);
   const [editingProjectName, setEditingProjectName] = useState<string | null>(null);
@@ -541,6 +557,28 @@ export default function LifeOS() {
     window.addEventListener("popstate", restoreView);
     return () => window.removeEventListener("popstate", restoreView);
   }, [view]);
+  useEffect(() => {
+    try {
+      if (selectedProjectName) {
+        localStorage.setItem("lifeos-selected-project", selectedProjectName);
+      } else {
+        localStorage.removeItem("lifeos-selected-project");
+      }
+    } catch (e) {
+      // localStorage might not be available
+    }
+  }, [selectedProjectName]);
+  useEffect(() => {
+    try {
+      if (selectedClassId) {
+        localStorage.setItem("lifeos-selected-class", selectedClassId);
+      } else {
+        localStorage.removeItem("lifeos-selected-class");
+      }
+    } catch (e) {
+      // localStorage might not be available
+    }
+  }, [selectedClassId]);
   useEffect(() => {
     const importICloudEvents = (event: Event) => {
       const incoming = (event as CustomEvent<CalendarEvent[]>).detail;
@@ -1330,7 +1368,7 @@ export default function LifeOS() {
     setCalendarImporter(false);
     flash(`${events.length} iCal event${events.length === 1 ? "" : "s"} imported`);
   };
-  const updateTask = (id: number, updates: Pick<Task, "title" | "focusMinutes" | "energy" | "project" | "classId" | "academicType" | "color" | "due" | "startTime" | "parentTaskId">) => {
+  const updateTask = (id: number, updates: Partial<Pick<Task, "title" | "focusMinutes" | "energy" | "project" | "classId" | "academicType" | "color" | "due" | "startTime" | "parentTaskId">>) => {
     setTasks(items => items.map(task => task.id === id ? { ...task, ...updates } : task));
     setEditingTaskId(null);
     flash("Priority updated");
@@ -1640,7 +1678,7 @@ export default function LifeOS() {
             {view === "Study Abroad" && settingsState.enableStudyAbroad && <StudyAbroadDashboard hub={studyAbroadHub} onOpenUniversities={() => setStudyAbroadCollection("universities")} onOpenPrograms={() => setStudyAbroadCollection("programs")} onOpenApplications={() => setStudyAbroadCollection("applications")} onOpenScholarships={() => setStudyAbroadCollection("scholarships")} onOpenDocuments={() => setStudyAbroadCollection("documents")} onOpenTimeline={() => go("Study Abroad")} personalContextMessage={undefined} />}
             {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarEvents} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onSetEnergy={(currentEnergy) => setSettingsState(current => ({ ...current, currentEnergy }))} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={setTaskPageId} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={(name) => { const context = settingsState.spaceContext?.[`project:${name}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`project:${name}`]: { ...current.spaceContext?.[`project:${name}`], updatedAt: new Date().toISOString() } } })); setSelectedClassId(null); setSelectedProjectName(name); }} onOpenClass={(id) => { const context = settingsState.spaceContext?.[`class:${id}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`class:${id}`]: { ...current.spaceContext?.[`class:${id}`], updatedAt: new Date().toISOString() } } })); setSelectedProjectName(null); setSelectedClassId(id); }} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={(id) => { const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); setTaskPageId(id); }} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} onOpenKanban={setKanbanProjectName} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
-            {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={setTaskPageId} onNewSubTask={(parentTaskId) => { setParentTaskIdForCreation(parentTaskId); setComposer("task"); }} onReparent={(taskId, newParentId) => updateTask(taskId, { parentTaskId: newParentId })} />}
+            {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={setTaskPageId} onNewSubTask={(parentTaskId) => { setParentTaskIdForCreation(parentTaskId); setComposer("task"); }} onReparent={(taskId, newParentId) => updateTask(taskId, newParentId ? { parentTaskId: newParentId } : { parentTaskId: undefined })} />}
             {(view === "Today" || view === "Calendar") && <CalendarView events={[...calendarEvents, ...tasksToCalendarEvents(tasks)]} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => id.startsWith("task-") ? setTaskPageId(Number(id.slice(5))) : setEditingCalendarEventId(id)} onPlanTask={setEditingTaskId} />}
             {view === "Notes" && <NotesView notes={notes} classes={classes} projects={projectItems} selectedNoteId={selectedNoteId} onSelect={setSelectedNoteId} onCreate={() => { createNote(undefined, undefined, parentNoteIdForCreation ?? undefined); setParentNoteIdForCreation(null); }} onUpdate={updateNote} onDelete={deleteNote} onImport={importNotes} onNewSubNote={(parentNoteId) => { setParentNoteIdForCreation(parentNoteId); setView("Notes"); }} />}
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
