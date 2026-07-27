@@ -2104,7 +2104,7 @@ function SpacesView({ projects, classes, tasks, notes, resources, selectedProjec
       <div className="space-detail-hero">
         <div className="space-hero-icon"><selectedProject.icon size={25} /></div>
         <div><p className="eyebrow">{selectedProject.kind === "maintenance" ? "Maintenance · ongoing" : "Project · finishable"}</p><h1>{selectedProject.name}</h1><p>{selectedProject.desc}</p></div>
-        <div className="class-hero-actions"><button onClick={() => onNewNote(undefined, selectedProject.name)}><NotebookPen size={15} /> New note</button><button className="primary" onClick={() => onActionProject(selectedProject.name)}><SlidersHorizontal size={15} /> Space settings</button></div>
+        <div className="class-hero-actions"><button onClick={() => onNewNote(undefined, selectedProject.name)}><NotebookPen size={15} /> New note</button><button onClick={() => setKanbanProjectName(selectedProject.name)}><LayoutGrid size={15} /> Kanban</button><button className="primary" onClick={() => onActionProject(selectedProject.name)}><SlidersHorizontal size={15} /> Space settings</button></div>
       </div>
       <div className="class-meta-strip">
         <div><span>Next due</span><strong>{nextDue ? formatDueDate(nextDue.due) : "Nothing due"}</strong></div>
