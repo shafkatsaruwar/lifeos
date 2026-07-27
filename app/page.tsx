@@ -1763,9 +1763,52 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     setHandoff("");
     onChoose(task.id);
   };
+  const getGreetingTime = (date: Date) => {
+    const hour = date.getHours();
+    if (hour < 12) return "Good Morning";
+    if (hour < 17) return "Good Afternoon";
+    if (hour < 21) return "Good Evening";
+    return "Good Night";
+  };
+  const formatClock = (date: Date) => {
+    return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true });
+  };
+  const getClockAngles = (date: Date) => {
+    const seconds = date.getSeconds();
+    const minutes = date.getMinutes();
+    const hours = date.getHours() % 12;
+    return {
+      second: (seconds / 60) * 360,
+      minute: (minutes / 60) * 360 + (seconds / 60) * 6,
+      hour: (hours / 12) * 360 + (minutes / 60) * 30,
+    };
+  };
+  const clockAngles = getClockAngles(new Date(now));
+
   return <div className="now-view">
     <div className="page-title">
-      <div><p className="eyebrow">One thing, on purpose</p><h1>Now</h1><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
+      <div className="now-greeting-section">
+        <div className="greeting-content">
+          <h1>{getGreetingTime(new Date(now))}</h1>
+          <div className="greeting-clock-digital">{formatClock(new Date(now))}</div>
+        </div>
+        <div className="greeting-clock-analog">
+          <svg viewBox="0 0 120 120" width="80" height="80">
+            <circle cx="60" cy="60" r="55" fill="var(--panel)" stroke="var(--line)" strokeWidth="2"/>
+            <circle cx="60" cy="60" r="4" fill="var(--ink)"/>
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(i => {
+              const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
+              const x = 60 + 48 * Math.cos(angle);
+              const y = 60 + 48 * Math.sin(angle);
+              return <circle key={i} cx={x} cy={y} r="1.5" fill="var(--ink)"/>;
+            })}
+            <line x1="60" y1="60" x2="60" y2="20" stroke="var(--ink)" strokeWidth="2" style={{ transform: `rotate(${clockAngles.hour}deg)`, transformOrigin: "60px 60px", transition: "transform 0.5s ease-out" }} />
+            <line x1="60" y1="60" x2="60" y2="12" stroke="var(--ink)" strokeWidth="1.5" style={{ transform: `rotate(${clockAngles.minute}deg)`, transformOrigin: "60px 60px", transition: "transform 0.5s ease-out" }} />
+            <line x1="60" y1="60" x2="60" y2="8" stroke="var(--accent)" strokeWidth="1" style={{ transform: `rotate(${clockAngles.second}deg)`, transformOrigin: "60px 60px", transition: "transform 0.1s linear" }} />
+          </svg>
+        </div>
+      </div>
+      <div><p className="eyebrow">One thing, on purpose</p><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
       <div className="now-header-actions"><button onClick={onCapture}><Inbox size={16} /> Capture thought</button><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
     </div>
     <section className="energy-checkin"><div><span className="section-icon orange"><Zap size={14} /></span><div><strong>Plan for the energy you actually have.</strong><p>LifeOS will move better-fit tasks to the top — no guilt, no fake productivity.</p></div></div><div className="energy-options">{(["Low", "Medium", "High"] as EnergyLevel[]).map(energy => <button key={energy} className={currentEnergy === energy ? "selected" : ""} onClick={() => onSetEnergy(energy)}>{energy}</button>)}<button className="review-button" onClick={onDailyReset}>Reset today</button><button className="review-button" onClick={onWeeklyReview}>Weekly review</button></div></section>
