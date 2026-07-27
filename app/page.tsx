@@ -58,7 +58,7 @@ import {
   Mail, Music2, Plus, Search, Settings, Sparkles, Sun, TimerReset, UserRound, X, Zap,
   Ban, Pencil, Trash2, Bell, Download, Palette, Shield, SlidersHorizontal, Coffee, Maximize, Mic,
   GraduationCap, NotebookPen, BookOpen, ExternalLink, Upload, RefreshCw, Bold, Italic, List, Heading1, Highlighter,
-  BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils,
+  BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, Globe,
 } from "lucide-react";
 
 type View = "Life" | "School" | "Study Abroad" | "Now" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
@@ -1494,7 +1494,7 @@ export default function LifeOS() {
     const navItems = [...baseNav];
     if (settingsState.enableStudyAbroad) {
       const schoolIndex = navItems.findIndex(n => n.name === "School");
-      navItems.splice(schoolIndex + 1, 0, { name: "Study Abroad" as View, icon: GraduationCap });
+      navItems.splice(schoolIndex + 1, 0, { name: "Study Abroad" as View, icon: Globe });
     }
     return navItems;
   }, [settingsState.enableStudyAbroad]);
