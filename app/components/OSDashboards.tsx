@@ -145,10 +145,11 @@ export function LifeDashboard({ tasks, projects, notes, events, life, workspaceN
   </div>;
 }
 
-export function SchoolDashboard({ tasks, classes, notes, school, onComplete, onOpenTask, onOpenClass, onOpenNote, onNewCourse, onNewAcademic, onNewLecture, onOpenCollection, onOpenProfile, onFocus }: {
+export function SchoolDashboard({ tasks, classes, notes, school, onComplete, onOpenTask, onOpenClass, onOpenNote, onNewCourse, onNewAcademic, onNewLecture, onOpenCollection, onOpenProfile, onFocus, enableStudyAbroad, onToggleStudyAbroad }: {
   tasks: DashboardTask[]; classes: DashboardClass[]; notes: DashboardNote[]; school: SchoolHubState;
   onComplete: (id: number) => void; onOpenTask: (id: number) => void; onOpenClass: (id: string) => void; onOpenNote: (id: string) => void;
   onNewCourse: () => void; onNewAcademic: () => void; onNewLecture: () => void; onOpenCollection: (key: SchoolHubKey, startAdd?: boolean) => void; onOpenProfile: () => void; onFocus: (id: number) => void;
+  enableStudyAbroad?: boolean; onToggleStudyAbroad?: (enabled: boolean) => void;
 }) {
   const { today, end } = weekWindow();
   const courses = classes.filter(item => !item.archived);
@@ -157,7 +158,7 @@ export function SchoolDashboard({ tasks, classes, notes, school, onComplete, onO
   const lectureNotes = notes.filter(note => note.classId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5);
   const courseFor = (id?: string) => courses.find(course => course.id === id);
   return <div className="os-dashboard school-dashboard">
-    <div className="os-hero"><div><p className="eyebrow">Current term</p><h1>SchoolOS</h1><p>{courses.length} course{courses.length === 1 ? "" : "s"} · {academic.length} item{academic.length === 1 ? "" : "s"} due this week</p></div><button className="os-profile-button" onClick={onOpenProfile}><UserRound size={18} /><span>{school.profile.major || "Academic profile"}</span></button></div>
+    <div className="os-hero"><div><p className="eyebrow">Current term</p><h1>SchoolOS</h1><p>{courses.length} course{courses.length === 1 ? "" : "s"} · {academic.length} item{academic.length === 1 ? "" : "s"} due this week</p></div><div style={{ display: "flex", gap: "8px" }}>{onToggleStudyAbroad && <button className="os-profile-button" onClick={() => onToggleStudyAbroad(!enableStudyAbroad)} style={{ background: enableStudyAbroad ? "rgba(98, 90, 246, 0.1)" : "", color: enableStudyAbroad ? "#625af6" : "inherit" }} title={enableStudyAbroad ? "Disable Study Abroad" : "Enable Study Abroad"}><GraduationCap size={18} /><span>{enableStudyAbroad ? "Study Abroad" : "Add Study Abroad"}</span></button>}<button className="os-profile-button" onClick={onOpenProfile}><UserRound size={18} /><span>{school.profile.major || "Academic profile"}</span></button></div></div>
     <div className="os-quick-row"><QuickAction icon={BookOpen} label="New course" onClick={onNewCourse} /><QuickAction icon={ListTodo} label="School task" onClick={onNewAcademic} /><QuickAction icon={FileText} label="Assignment" onClick={onNewAcademic} /><QuickAction icon={NotebookPen} label="Lecture note" onClick={onNewLecture} /><QuickAction icon={Database} label="New topic" onClick={() => onOpenCollection("topics", true)} /></div>
     <div className="os-school-layout"><div className="os-school-main">
       <Section icon={BookOpen} title="Courses right now" action="New course" onAction={onNewCourse}>{courses.length ? <div className="os-course-strip">{courses.map(course => <button key={course.id} onClick={() => onOpenClass(course.id)} style={{ borderTopColor: course.color }}><span style={{ background: course.color }}><BookOpen size={16} /></span><strong>{course.code}</strong><p>{course.name}</p><small>{academic.filter(task => task.classId === course.id).length} due this week</small></button>)}</div> : <Empty>Add your current courses to start the academic dashboard.</Empty>}</Section>
