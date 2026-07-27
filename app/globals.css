@@ -932,3 +932,21 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
   letter-spacing: 0.1em;
   font-weight: 700;
 }
+
+.project-kanban-container.embedded {
+  height: auto;
+  background: transparent;
+  overflow: visible;
+}
+
+.project-kanban-container.embedded .kanban-board {
+  flex: none;
+  height: 400px;
+  overflow-y: auto;
+  padding: 16px 0;
+}
+
+.project-kanban-grid {
+  display: flex;
+  flex-direction: column;
+}

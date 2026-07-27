@@ -21,7 +21,8 @@ interface Props {
   tasks: Task[];
   onClose: () => void;
   onUpdateTask: (taskId: number, updates: Partial<Task>) => void;
-  onNewTask: () => void;
+  onNewTask?: () => void;
+  isEmbedded?: boolean;
 }
 
 export default function ProjectKanban({
@@ -31,6 +32,7 @@ export default function ProjectKanban({
   onClose,
   onUpdateTask,
   onNewTask,
+  isEmbedded,
 }: Props) {
   const projectTasks = tasks.filter(t => t.project === projectName && !t.canceled);
   const today = toDateKey(new Date());
@@ -150,45 +152,44 @@ export default function ProjectKanban({
   };
 
   return (
-    <div className="project-kanban-container">
-      <div className="kanban-header">
-        <button onClick={onClose} className="kanban-back">
-          <ChevronLeft size={18} />
-        </button>
-        <div className="kanban-title-section">
-          <h1>{projectName}</h1>
-          <div className="kanban-stats">
-            <div className="kanban-stat">
-              <span className="stat-label">Progress</span>
-              <span className="stat-value">{progressPercent}%</span>
-              <div className="progress-bar">
-                <div
-                  className="progress-fill"
-                  style={{
-                    width: `${progressPercent}%`,
-                    backgroundColor: project.color || '#625af6',
-                  }}
-                />
-              </div>
-            </div>
-            {projectDue && (
+    <div className={`project-kanban-container${isEmbedded ? ' embedded' : ''}`}>
+      {!isEmbedded && (
+        <div className="kanban-header">
+          <button onClick={onClose} className="kanban-back">
+            <ChevronLeft size={18} />
+          </button>
+          <div className="kanban-title-section">
+            <h1>{projectName}</h1>
+            <div className="kanban-stats">
               <div className="kanban-stat">
-                <span className="stat-label">Due</span>
-                <span className="stat-value">{formatDate(projectDue)}</span>
+                <span className="stat-label">Progress</span>
+                <span className="stat-value">{progressPercent}%</span>
+                <div className="progress-bar">
+                  <div
+                    className="progress-fill"
+                    style={{
+                      width: `${progressPercent}%`,
+                      backgroundColor: project.color || '#625af6',
+                    }}
+                  />
+                </div>
               </div>
-            )}
-            <div className="kanban-stat">
-              <span className="stat-label">Tasks</span>
-              <span className="stat-value">
-                {completedCount}/{projectTasks.length}
-              </span>
+              {projectDue && (
+                <div className="kanban-stat">
+                  <span className="stat-label">Due</span>
+                  <span className="stat-value">{formatDate(projectDue)}</span>
+                </div>
+              )}
+              <div className="kanban-stat">
+                <span className="stat-label">Tasks</span>
+                <span className="stat-value">
+                  {completedCount}/{projectTasks.length}
+                </span>
+              </div>
             </div>
           </div>
         </div>
-        <button onClick={onNewTask} className="kanban-new-task">
-          <Plus size={16} /> New task
-        </button>
-      </div>
+      )}
 
       <div className="kanban-board">
         {columns.map((column) => (
