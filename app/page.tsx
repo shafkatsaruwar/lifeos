@@ -2197,7 +2197,7 @@ function Projects({ projects, tasks, onNew, onAction, onOpen }: { projects: Proj
   })}</div></>;
 }
 
-function SpacesView({ projects, classes, tasks, notes, resources, selectedProjectName, selectedClassId, onBack, onNew, onActionProject, onActionClass, onOpenProject, onOpenClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource, linkTask, onOpenKanban, onUpdateTask, onNewProjectTask, initialFilter = "All", onFilterChange }: { projects: Project[]; classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedProjectName: string | null; selectedClassId: string | null; onBack: () => void; onNew: () => void; onActionProject: (name: string) => void; onActionClass: (id: string) => void; onOpenProject: (name: string) => void; onOpenClass: (id: string) => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string, projectName?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void>; linkTask: (id: number, project: Project) => void; onOpenKanban: (name: string) => void; onUpdateTask: (taskId: number, updates: Partial<Task>) => void; onNewProjectTask?: () => void; initialFilter?: "All" | "Classes" | "Projects" | "Maintenance" | "Archived"; onFilterChange?: (filter: "All" | "Classes" | "Projects" | "Maintenance" | "Archived") => void }) {
+function SpacesView({ projects, classes, tasks, notes, resources, selectedProjectName, selectedClassId, onBack, onNew, onActionProject, onActionClass, onOpenProject, onOpenClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource, linkTask, onOpenKanban, onUpdateTask, onNewProjectTask, initialFilter = "All", onFilterChange }: { projects: Project[]; classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedProjectName: string | null; selectedClassId: string | null; onBack: () => void; onNew: () => void; onActionProject: (name: string) => void; onActionClass: (id: string) => void; onOpenProject: (name: string) => void; onOpenClass: (id: string) => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string, projectName?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void>; linkTask: (id: number, project: Project) => void; onOpenKanban: (name: string) => void; onUpdateTask: (taskId: number, updates: Partial<Task>) => void; onNewProjectTask?: (projectName: string) => void; initialFilter?: "All" | "Classes" | "Projects" | "Maintenance" | "Archived"; onFilterChange?: (filter: "All" | "Classes" | "Projects" | "Maintenance" | "Archived") => void }) {
   const [filter, setFilter] = useState<"All" | "Classes" | "Projects" | "Maintenance" | "Archived">(initialFilter);
   const [semester, setSemester] = useState("All semesters");
   const [sortBy, setSortBy] = useState<"due" | "priority" | "open" | "name">("due");
@@ -2406,7 +2406,7 @@ function ClassesView({ classes, tasks, notes, resources, selectedClassId, onSele
   })}</div> : <div className="classes-empty"><div><GraduationCap size={28} /></div><h2>Create your first class.</h2><p>Try BIO 101, CHEM 202, or whatever is actually on your schedule.</p><button className="primary" onClick={onNewClass}><Plus size={15} /> Create a class</button></div>}</>;
 }
 
-function ProjectDetailView({ project, tasks, onBack, onUpdateTask, onNewTask }: { project: Project; tasks: Task[]; onBack: () => void; onUpdateTask: (taskId: number, updates: Partial<Task>) => void; onNewTask: (projectName: string) => void }) {
+function ProjectDetailView({ project, tasks, onBack, onUpdateTask, onNewTask }: { project: Project; tasks: Task[]; onBack: () => void; onUpdateTask: (taskId: number, updates: Partial<Task>) => void; onNewTask?: (projectName: string) => void }) {
   const projectTasks = tasks.filter(t => t.project === project.name && !t.canceled);
   const activeTasks = projectTasks.filter(t => !t.done);
   const completedTasks = projectTasks.filter(t => t.done);
@@ -2420,7 +2420,7 @@ function ProjectDetailView({ project, tasks, onBack, onUpdateTask, onNewTask }: 
     <div className="class-detail-hero" style={{ "--class-color": project.color } as React.CSSProperties}>
       <div className="class-hero-icon"><project.icon size={25} /></div>
       <div><p className="eyebrow">{project.kind === "maintenance" ? "Maintenance system" : "Finishable project"}</p><h1>{project.name}</h1><p>{project.desc}</p></div>
-      <div className="class-hero-actions"><button className="primary" onClick={() => onNewTask(project.name)}><Plus size={15} /> New task</button></div>
+      <div className="class-hero-actions"><button className="primary" onClick={() => onNewTask?.(project.name)}><Plus size={15} /> New task</button></div>
     </div>
     <div className="class-meta-strip">
       <div><span>Next due</span><strong>{nextDueTask ? formatDueDate(nextDueTask.due) : "Nothing due"}</strong></div>
@@ -2430,8 +2430,8 @@ function ProjectDetailView({ project, tasks, onBack, onUpdateTask, onNewTask }: 
     </div>
     <div className="class-content-grid">
       <section className="card class-coursework project-kanban-grid">
-        <div className="class-section-title"><div><h2>Tasks</h2><p>Organize your work across columns.</p></div><button onClick={() => onNewTask(project.name)}><Plus size={14} /> Add</button></div>
-        <ProjectKanban project={project} projectName={project.name} tasks={tasks} onClose={() => {}} onUpdateTask={onUpdateTask} onNewTask={() => onNewTask(project.name)} isEmbedded={true} />
+        <div className="class-section-title"><div><h2>Tasks</h2><p>Organize your work across columns.</p></div><button onClick={() => onNewTask?.(project.name)}><Plus size={14} /> Add</button></div>
+        <ProjectKanban project={project} projectName={project.name} tasks={tasks} onClose={() => {}} onUpdateTask={onUpdateTask} onNewTask={onNewTask ? () => onNewTask(project.name) : undefined} isEmbedded={true} />
       </section>
     </div>
   </section>;
