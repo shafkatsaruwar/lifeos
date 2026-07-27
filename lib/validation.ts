@@ -118,6 +118,157 @@ export const validateResources = (data: unknown) => {
   return z.array(ResourceSchema).safeParse(data);
 };
 
+// Study Abroad Schemas
+export const UniversitySchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, 'University name required'),
+  country: z.enum(['Germany', 'Netherlands', 'Sweden', 'Finland', 'United Kingdom', 'Other']),
+  city: z.string().optional(),
+  websiteUrl: z.string().url().optional(),
+  applicationPortalUrl: z.string().url().optional(),
+  universityType: z.enum(['public', 'private', 'unknown']).optional(),
+  notes: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const ProgramSchema = z.object({
+  id: z.string(),
+  universityId: z.string(),
+  name: z.string().min(1, 'Program name required'),
+  degreeType: z.enum(['MSc', 'MA', 'MEng', 'Other']).optional(),
+  field: z.enum(['Digital Health', 'Health Informatics', 'Artificial Intelligence', 'Computer Science', 'Cybersecurity', 'Information Systems', 'Data Science', 'Other']).optional(),
+  teachingLanguage: z.string().optional(),
+  intake: z.string().optional(),
+  durationMonths: z.number().optional(),
+  tuitionAmount: z.number().optional(),
+  tuitionCurrency: z.string().optional(),
+  tuitionFrequency: z.enum(['total', 'annual', 'semester', 'monthly']).optional(),
+  tuitionNotes: z.string().optional(),
+  estimatedMonthlyLivingCostMin: z.number().optional(),
+  estimatedMonthlyLivingCostMax: z.number().optional(),
+  livingCostCurrency: z.string().optional(),
+  applicationDeadline: z.string().optional(),
+  scholarshipDeadline: z.string().optional(),
+  applicationStatus: z.enum(['researching', 'considering', 'preparing', 'blocked', 'ready_to_submit', 'submitted', 'awaiting_response', 'interview', 'offer', 'rejected', 'withdrawn', 'deferred']),
+  confidence: z.enum(['unverified', 'partially_verified', 'verified']),
+  eligibilityNotes: z.string().optional(),
+  sourceUrls: z.array(z.string().url()).optional(),
+  notes: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const ScholarshipSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, 'Scholarship name required'),
+  provider: z.string().optional(),
+  country: z.enum(['Germany', 'Netherlands', 'Sweden', 'Finland', 'United Kingdom', 'Other']).optional(),
+  coverageType: z.enum(['full_tuition', 'partial_tuition', 'tuition_and_stipend', 'stipend_only', 'other']),
+  tuitionCoveragePercent: z.number().optional(),
+  stipendAmount: z.number().optional(),
+  stipendCurrency: z.string().optional(),
+  stipendFrequency: z.enum(['monthly', 'annual', 'one_time']).optional(),
+  deadline: z.string().optional(),
+  eligibilityRequirements: z.array(z.string()).optional(),
+  requiredDocumentIds: z.array(z.string()).optional(),
+  linkedProgramIds: z.array(z.string()).optional(),
+  status: z.enum(['researching', 'eligible', 'possibly_eligible', 'not_eligible', 'preparing', 'submitted', 'awarded', 'rejected', 'expired']),
+  confidence: z.enum(['unverified', 'partially_verified', 'verified']),
+  sourceUrls: z.array(z.string().url()).optional(),
+  notes: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const StudyDocumentSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, 'Document name required'),
+  category: z.enum(['Diploma', 'Transcript', 'Passport', 'Resume', 'Statement of Purpose', 'Recommendation Letter', 'English Test', 'Financial Document', 'Application Decision', 'Other']),
+  status: z.enum(['available', 'requested', 'pending', 'blocked', 'expired', 'not_available']),
+  issuedBy: z.string().optional(),
+  issueDate: z.string().optional(),
+  expirationDate: z.string().optional(),
+  blockingReason: z.string().optional(),
+  amountNeededToResolve: z.number().optional(),
+  currency: z.string().optional(),
+  fileReference: z.string().optional(),
+  notes: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const ApplicationSchema = z.object({
+  id: z.string(),
+  universityId: z.string(),
+  programId: z.string(),
+  intake: z.string().optional(),
+  status: z.enum(['researching', 'considering', 'preparing', 'blocked', 'ready_to_submit', 'submitted', 'awaiting_response', 'interview', 'offer', 'rejected', 'withdrawn', 'deferred']),
+  applicationDeadline: z.string().optional(),
+  scholarshipDeadline: z.string().optional(),
+  dateStarted: z.string().optional(),
+  dateSubmitted: z.string().optional(),
+  lastUpdated: z.string(),
+  applicationPortalLink: z.string().url().optional(),
+  applicantNumber: z.string().optional(),
+  contactPerson: z.string().optional(),
+  contactEmail: z.string().email().optional(),
+  followUpDate: z.string().optional(),
+  linkedDocumentIds: z.array(z.string()).optional(),
+  linkedScholarshipIds: z.array(z.string()).optional(),
+  blockingReasons: z.array(z.string()).optional(),
+  notes: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const DecisionRecordSchema = z.object({
+  id: z.string(),
+  applicationId: z.string(),
+  outcome: z.enum(['offer', 'conditional_offer', 'rejected', 'waitlisted']),
+  decisionDate: z.string().optional(),
+  officialReason: z.string().optional(),
+  personalInterpretation: z.string().optional(),
+  appealAvailable: z.boolean().optional(),
+  appealDeadline: z.string().optional(),
+  decisionDocumentId: z.string().optional(),
+  notes: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const StudyAbroadHubSchema = z.object({
+  universities: z.array(UniversitySchema),
+  programs: z.array(ProgramSchema),
+  scholarships: z.array(ScholarshipSchema),
+  applications: z.array(ApplicationSchema),
+  documents: z.array(StudyDocumentSchema),
+  decisions: z.array(DecisionRecordSchema),
+  observations: z.array(z.object({
+    id: z.string(),
+    module: z.literal('study_abroad'),
+    type: z.enum(['deadline', 'application_status', 'document_blocker', 'scholarship', 'follow_up', 'decision', 'financial_requirement', 'stale_record']),
+    fact: z.string(),
+    timestamp: z.string(),
+    metadata: z.record(z.unknown()),
+  })),
+  preferences: z.object({
+    tuitionAffordability: z.number(),
+    scholarshipAvailability: z.number(),
+    monthlyLivingCost: z.number(),
+    digitalHealthFit: z.number(),
+    aiFit: z.number(),
+    careerOutcome: z.number(),
+    englishTaught: z.number(),
+    immigrationPath: z.number(),
+    documentFeasibility: z.number(),
+  }),
+});
+
+export const validateStudyAbroad = (data: unknown) => {
+  return StudyAbroadHubSchema.safeParse(data);
+};
+
 // Type exports
 export type Task = z.infer<typeof TaskSchema>;
 export type Project = z.infer<typeof ProjectSchema>;
