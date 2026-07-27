@@ -492,3 +492,200 @@ export function DocumentModal({
     </div>
   );
 }
+
+export function StudyAbroadCollectionView({
+  type,
+  items,
+  close,
+  onAdd,
+  onEdit,
+  onDelete,
+  hub,
+}: {
+  type: "universities" | "programs" | "applications" | "scholarships" | "documents";
+  items: any[];
+  close: () => void;
+  onAdd: () => void;
+  onEdit: (item: any) => void;
+  onDelete: (id: string) => void;
+  hub: any;
+}) {
+  const getIcon = () => {
+    switch (type) {
+      case "universities": return "🏫";
+      case "programs": return "📚";
+      case "applications": return "📝";
+      case "scholarships": return "🎓";
+      case "documents": return "📄";
+    }
+  };
+
+  const getTitle = () => {
+    switch (type) {
+      case "universities": return "Universities";
+      case "programs": return "Programs";
+      case "applications": return "Applications";
+      case "scholarships": return "Scholarships";
+      case "documents": return "Documents";
+    }
+  };
+
+  const renderItem = (item: any) => {
+    switch (type) {
+      case "universities":
+        return (
+          <div className="collection-item">
+            <div className="item-header">
+              <strong>{item.name}</strong>
+              <span className="item-meta">{item.country}</span>
+            </div>
+            {item.city && <p className="item-detail">{item.city}</p>}
+            {item.notes && <p className="item-detail">{item.notes}</p>}
+          </div>
+        );
+      case "programs":
+        const uni = hub.universities.find((u: any) => u.id === item.universityId);
+        return (
+          <div className="collection-item">
+            <div className="item-header">
+              <strong>{item.name}</strong>
+              <span className="item-meta">{item.degreeType || "Unknown"}</span>
+            </div>
+            <p className="item-detail">{uni?.name}</p>
+            {item.field && <p className="item-detail">{item.field}</p>}
+            <p className="item-detail" style={{ color: "#666" }}>{item.applicationStatus}</p>
+          </div>
+        );
+      case "applications":
+        const prog = hub.programs.find((p: any) => p.id === item.programId);
+        const appUni = hub.universities.find((u: any) => u.id === item.universityId);
+        return (
+          <div className="collection-item">
+            <div className="item-header">
+              <strong>{appUni?.name} - {prog?.name}</strong>
+              <span className="item-meta">{item.status}</span>
+            </div>
+            {item.applicantNumber && <p className="item-detail">Applicant #: {item.applicantNumber}</p>}
+            {item.dateSubmitted && <p className="item-detail">Submitted: {new Date(item.dateSubmitted).toLocaleDateString()}</p>}
+          </div>
+        );
+      case "scholarships":
+        return (
+          <div className="collection-item">
+            <div className="item-header">
+              <strong>{item.name}</strong>
+              <span className="item-meta">{item.status}</span>
+            </div>
+            {item.provider && <p className="item-detail">{item.provider}</p>}
+            {item.stipendAmount && <p className="item-detail">{item.stipendCurrency || "EUR"} {item.stipendAmount}</p>}
+          </div>
+        );
+      case "documents":
+        return (
+          <div className="collection-item">
+            <div className="item-header">
+              <strong>{item.name}</strong>
+              <span className={`item-meta status-${item.status}`}>{item.status}</span>
+            </div>
+            <p className="item-detail">{item.category}</p>
+            {item.blockingReason && <p className="item-detail" style={{ color: "#ef4444" }}>{item.blockingReason}</p>}
+            {item.amountNeededToResolve && <p className="item-detail" style={{ color: "#ef4444" }}>{item.currency || "EUR"} {item.amountNeededToResolve} needed</p>}
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: "rgba(0,0,0,0.5)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1000,
+    }}>
+      <div style={{
+        background: "var(--bg)",
+        borderRadius: "12px",
+        width: "90%",
+        maxWidth: "700px",
+        maxHeight: "80vh",
+        display: "flex",
+        flexDirection: "column",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+      }}>
+        <div style={{ padding: "20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>{getIcon()} {getTitle()}</h2>
+            <p style={{ margin: "4px 0 0", fontSize: "13px", color: "var(--text-secondary)" }}>{items.length} item{items.length === 1 ? "" : "s"}</p>
+          </div>
+          <button onClick={close} style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", padding: "4px" }}>
+            ✕
+          </button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+          {items.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {items.map((item) => (
+                <div key={item.id} style={{ display: "flex", gap: "8px", alignItems: "stretch" }}>
+                  <div style={{ flex: 1, cursor: "pointer", padding: "12px", background: "var(--card-bg)", borderRadius: "8px", border: "1px solid var(--border)" }} onClick={() => onEdit(item)}>
+                    {renderItem(item)}
+                  </div>
+                  <button onClick={() => {
+                    if (confirm(`Delete ${item.name}?`)) {
+                      onDelete(item.id);
+                    }
+                  }} style={{
+                    background: "rgba(239, 68, 68, 0.1)",
+                    color: "#ef4444",
+                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                    borderRadius: "6px",
+                    padding: "8px 12px",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                    whiteSpace: "nowrap",
+                  }}>
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-secondary)" }}>
+              <p style={{ fontSize: "14px", margin: 0 }}>No {getTitle().toLowerCase()} yet</p>
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: "16px", borderTop: "1px solid var(--border)", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+          <button onClick={close} style={{
+            padding: "8px 16px",
+            background: "var(--card-bg)",
+            border: "1px solid var(--border)",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "13px",
+          }}>
+            Close
+          </button>
+          <button onClick={onAdd} style={{
+            padding: "8px 16px",
+            background: "#625af6",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "13px",
+          }}>
+            + Add {getTitle().slice(0, -1)}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
