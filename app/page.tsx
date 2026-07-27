@@ -95,8 +95,12 @@ const getViewFromStorage = (): View => {
   // Check localStorage for persisted view
   try {
     const savedView = localStorage?.getItem("lifeos-current-view");
-    if (savedView && Object.values(routedViews).includes(savedView as View)) {
-      return savedView as View;
+    if (savedView) {
+      // Valid View values
+      const validViews: View[] = ["Now", "Life", "School", "Study Abroad", "Calendar", "Spaces", "Library", "Settings", "Tasks", "Focus", "Dashboard", "Today"];
+      if (validViews.includes(savedView as View)) {
+        return savedView as View;
+      }
     }
   } catch (e) {
     // localStorage might not be available
