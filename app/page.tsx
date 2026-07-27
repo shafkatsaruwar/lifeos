@@ -87,13 +87,24 @@ const routedViews: Record<string, View> = {
   library: "Library", notes: "Library", resources: "Library", brain: "Library", knowledge: "Library",
   settings: "Settings", tasks: "Tasks",
 };
-const viewFromLocation = (): View => {
+const getViewFromStorage = (): View => {
   if (typeof window === "undefined") return "Now";
+  // Check URL first for backward compatibility
   const urlView = new URLSearchParams(window.location.search).get("view")?.toLowerCase();
   if (urlView) return routedViews[urlView] ?? "Now";
-  const savedView = typeof localStorage !== "undefined" ? localStorage.getItem("lifeos-current-view") : null;
-  return (savedView as View) ?? "Now";
+  // Check localStorage for persisted view
+  try {
+    const savedView = localStorage?.getItem("lifeos-current-view");
+    if (savedView && Object.values(routedViews).includes(savedView as View)) {
+      return savedView as View;
+    }
+  } catch (e) {
+    // localStorage might not be available
+  }
+  return "Now";
 };
+
+const viewFromLocation = (): View => getViewFromStorage();
 type SettingsState = {
   accent: string;
   dailyDigest: boolean;
@@ -491,6 +502,15 @@ export default function LifeOS() {
   }, []);
   useEffect(() => {
     if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem("lifeos-current-view", view);
+    } catch (e) {
+      logger.warn('Failed to save view to localStorage:', e);
+    }
+  }, [view]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     const writeCurrentView = () => {
       const url = new URL(window.location.href);
       const routeValue = view === "Dashboard" ? "now" : view === "Calendar" ? "today" : view.toLowerCase();
@@ -502,11 +522,6 @@ export default function LifeOS() {
     writeCurrentView();
     window.addEventListener("popstate", restoreView);
     return () => window.removeEventListener("popstate", restoreView);
-  }, [view]);
-  useEffect(() => {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem("lifeos-current-view", view);
-    }
   }, [view]);
   useEffect(() => {
     const importICloudEvents = (event: Event) => {
