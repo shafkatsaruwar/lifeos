@@ -6,7 +6,36 @@ import type {
   University,
   Program,
   StudyDocument,
+  Application,
+  Scholarship,
 } from "@/lib/studyAbroadTypes";
+
+const COUNTRIES = [
+  "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan",
+  "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi",
+  "Cambodia", "Cameroon", "Canada", "Cape Verde", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic",
+  "Denmark", "Djibouti", "Dominica", "Dominican Republic",
+  "East Timor", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia",
+  "Fiji", "Finland", "France",
+  "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana",
+  "Haiti", "Honduras", "Hungary",
+  "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Ivory Coast",
+  "Jamaica", "Japan", "Jordan",
+  "Kazakhstan", "Kenya", "Kiribati", "Kosovo", "Kuwait", "Kyrgyzstan",
+  "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg",
+  "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar",
+  "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway",
+  "Oman",
+  "Pakistan", "Palau", "Palestine", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal",
+  "Qatar",
+  "Romania", "Russia", "Rwanda",
+  "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria",
+  "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu",
+  "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan",
+  "Vanuatu", "Vatican City", "Venezuela", "Vietnam",
+  "Yemen",
+  "Zambia", "Zimbabwe", "Other"
+].sort();
 
 export function UniversityModal({
   university,
@@ -66,12 +95,9 @@ export function UniversityModal({
         <label>
           Country
           <select value={country} onChange={(e) => setCountry(e.target.value as any)}>
-            <option>Germany</option>
-            <option>Netherlands</option>
-            <option>Sweden</option>
-            <option>Finland</option>
-            <option>United Kingdom</option>
-            <option>Other</option>
+            {COUNTRIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
           </select>
         </label>
         <label>
@@ -640,6 +666,260 @@ export function StudyAbroadCollectionView({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+export function ApplicationModal({
+  application,
+  close,
+  save,
+  hub,
+}: {
+  application?: Application;
+  close: () => void;
+  save: (application: Application) => void;
+  hub: any;
+}) {
+  const [universityId, setUniversityId] = useState(application?.universityId ?? "");
+  const [programId, setProgramId] = useState(application?.programId ?? "");
+  const [intake, setIntake] = useState(application?.intake ?? "");
+  const [status, setStatus] = useState(application?.status ?? "researching");
+  const [applicantNumber, setApplicantNumber] = useState(application?.applicantNumber ?? "");
+  const [dateSubmitted, setDateSubmitted] = useState(application?.dateSubmitted ?? "");
+  const [notes, setNotes] = useState(application?.notes ?? "");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!universityId || !programId) return;
+
+    const now = new Date().toISOString();
+    const newApplication: Application = {
+      id: application?.id ?? `app-${Date.now()}`,
+      universityId: universityId as any,
+      programId: programId as any,
+      intake: intake.trim() || undefined,
+      status: status as any,
+      applicantNumber: applicantNumber.trim() || undefined,
+      dateSubmitted: dateSubmitted || undefined,
+      notes: notes.trim() || undefined,
+      lastUpdated: now,
+      createdAt: application?.createdAt ?? now,
+      updatedAt: now,
+    };
+
+    save(newApplication);
+    close();
+  };
+
+  return (
+    <div className="modal-layer hub-modal-layer" onMouseDown={close}>
+      <form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+        <header>
+          <div>
+            <h2>{application ? "Edit Application" : "Add Application"}</h2>
+            <p>Track your application progress and status.</p>
+          </div>
+          <button type="button" onClick={close}>
+            <X size={18} />
+          </button>
+        </header>
+
+        <label>
+          University
+          <select value={universityId} onChange={(e) => setUniversityId(e.target.value)} required>
+            <option value="">Select a university</option>
+            {hub.universities.map((u: any) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          Program
+          <select value={programId} onChange={(e) => setProgramId(e.target.value)} required>
+            <option value="">Select a program</option>
+            {hub.programs.filter((p: any) => !universityId || p.universityId === universityId).map((p: any) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          Intake
+          <input value={intake} onChange={(e) => setIntake(e.target.value)} placeholder="e.g., Winter Semester 2026/27" />
+        </label>
+
+        <label>
+          Status
+          <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
+            <option value="researching">Researching</option>
+            <option value="considering">Considering</option>
+            <option value="preparing">Preparing</option>
+            <option value="blocked">Blocked</option>
+            <option value="ready_to_submit">Ready to submit</option>
+            <option value="submitted">Submitted</option>
+            <option value="awaiting_response">Awaiting response</option>
+            <option value="interview">Interview</option>
+            <option value="offer">Offer</option>
+            <option value="rejected">Rejected</option>
+            <option value="withdrawn">Withdrawn</option>
+            <option value="deferred">Deferred</option>
+          </select>
+        </label>
+
+        <label>
+          Applicant Number
+          <input value={applicantNumber} onChange={(e) => setApplicantNumber(e.target.value)} placeholder="e.g., 7382" />
+        </label>
+
+        <label>
+          Date Submitted
+          <input type="date" value={dateSubmitted} onChange={(e) => setDateSubmitted(e.target.value)} />
+        </label>
+
+        <label>
+          Notes
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional details about this application..." style={{ minHeight: "80px" }} />
+        </label>
+
+        <div>
+          <button type="button" onClick={close}>
+            Cancel
+          </button>
+          <button className="primary" disabled={!universityId || !programId}>
+            Save Application
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+export function ScholarshipModal({
+  scholarship,
+  close,
+  save,
+}: {
+  scholarship?: Scholarship;
+  close: () => void;
+  save: (scholarship: Scholarship) => void;
+}) {
+  const [name, setName] = useState(scholarship?.name ?? "");
+  const [provider, setProvider] = useState(scholarship?.provider ?? "");
+  const [status, setStatus] = useState(scholarship?.status ?? "researching");
+  const [stipendAmount, setStipendAmount] = useState(scholarship?.stipendAmount?.toString() ?? "");
+  const [stipendCurrency, setStipendCurrency] = useState(scholarship?.stipendCurrency ?? "EUR");
+  const [coverage, setCoverage] = useState(scholarship?.coverage ?? "partial");
+  const [deadline, setDeadline] = useState(scholarship?.deadline ?? "");
+  const [eligibility, setEligibility] = useState(scholarship?.eligibilityNotes ?? "");
+  const [notes, setNotes] = useState(scholarship?.notes ?? "");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+
+    const now = new Date().toISOString();
+    const newScholarship: Scholarship = {
+      id: scholarship?.id ?? `sch-${Date.now()}`,
+      name: name.trim(),
+      provider: provider.trim() || undefined,
+      status: status as any,
+      stipendAmount: stipendAmount ? parseFloat(stipendAmount) : undefined,
+      stipendCurrency: stipendCurrency.trim() || undefined,
+      coverage: coverage as any,
+      deadline: deadline || undefined,
+      eligibilityNotes: eligibility.trim() || undefined,
+      notes: notes.trim() || undefined,
+      createdAt: scholarship?.createdAt ?? now,
+      updatedAt: now,
+    };
+
+    save(newScholarship);
+    close();
+  };
+
+  return (
+    <div className="modal-layer hub-modal-layer" onMouseDown={close}>
+      <form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+        <header>
+          <div>
+            <h2>{scholarship ? "Edit Scholarship" : "Add Scholarship"}</h2>
+            <p>Track scholarship opportunities and applications.</p>
+          </div>
+          <button type="button" onClick={close}>
+            <X size={18} />
+          </button>
+        </header>
+
+        <label>
+          Scholarship Name
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., DAAD Scholarship" required />
+        </label>
+
+        <label>
+          Provider
+          <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="e.g., German Academic Exchange Service" />
+        </label>
+
+        <label>
+          Status
+          <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
+            <option value="researching">Researching</option>
+            <option value="eligible">Eligible</option>
+            <option value="possibly_eligible">Possibly eligible</option>
+            <option value="not_eligible">Not eligible</option>
+            <option value="submitted">Submitted</option>
+            <option value="awarded">Awarded</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </label>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <label>
+            Stipend Amount
+            <input type="number" value={stipendAmount} onChange={(e) => setStipendAmount(e.target.value)} placeholder="e.g., 934" />
+          </label>
+          <label>
+            Currency
+            <input value={stipendCurrency} onChange={(e) => setStipendCurrency(e.target.value)} placeholder="EUR" />
+          </label>
+        </div>
+
+        <label>
+          Coverage
+          <select value={coverage} onChange={(e) => setCoverage(e.target.value as any)}>
+            <option value="full">Full</option>
+            <option value="partial">Partial</option>
+            <option value="tuition_only">Tuition only</option>
+            <option value="living_stipend">Living stipend</option>
+          </select>
+        </label>
+
+        <label>
+          Application Deadline
+          <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+        </label>
+
+        <label>
+          Eligibility Requirements
+          <textarea value={eligibility} onChange={(e) => setEligibility(e.target.value)} placeholder="Requirements you've checked..." style={{ minHeight: "60px" }} />
+        </label>
+
+        <label>
+          Notes
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional information..." style={{ minHeight: "60px" }} />
+        </label>
+
+        <div>
+          <button type="button" onClick={close}>
+            Cancel
+          </button>
+          <button className="primary" disabled={!name.trim()}>
+            Save Scholarship
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
