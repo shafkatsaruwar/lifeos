@@ -46,6 +46,7 @@ import {
 import { StudyAbroadDashboard } from "@/app/components/StudyAbroadDashboard";
 import { UniversityModal, ProgramModal, DocumentModal, ApplicationModal, ScholarshipModal, StudyAbroadCollectionView } from "@/app/components/StudyAbroadModals";
 import StudyAbroadTimeline from "@/app/components/StudyAbroadTimeline";
+import ProjectKanban from "@/app/components/ProjectKanban";
 import { emptyStudyAbroadHub } from "@/lib/studyAbroadTypes";
 import { generateObservations } from "@/lib/studyAbroadHelpers";
 import type { StudyAbroadHub } from "@/lib/studyAbroadTypes";
@@ -435,6 +436,7 @@ export default function LifeOS() {
   const [studyAbroadCollection, setStudyAbroadCollection] = useState<"universities" | "programs" | "applications" | "scholarships" | "documents" | null>(null);
   const [showStudyAbroadTimeline, setShowStudyAbroadTimeline] = useState(false);
   const [selectedUniversity, setSelectedUniversity] = useState<string | null>(null);
+  const [kanbanProjectName, setKanbanProjectName] = useState<string | null>(null);
   const [hubCollection, setHubCollection] = useState<HubCollectionTarget | null>(null);
   const [schoolProfileOpen, setSchoolProfileOpen] = useState(false);
   const [schoolClassAction, setSchoolClassAction] = useState<"coursework" | "lecture" | null>(null);
@@ -1658,6 +1660,7 @@ export default function LifeOS() {
         {studyAbroadModal === "scholarship" && <ScholarshipModal close={() => setStudyAbroadModal(null)} save={(scholarship) => { setStudyAbroadHub(current => ({ ...current, scholarships: [...current.scholarships, scholarship] })); setStudyAbroadModal(null); }} />}
         {studyAbroadModal === "document" && <DocumentModal close={() => setStudyAbroadModal(null)} save={(document) => { setStudyAbroadHub(current => ({ ...current, documents: [...current.documents, document] })); setStudyAbroadModal(null); }} />}
         {showStudyAbroadTimeline && <motion.div className="modal-layer" onMouseDown={() => setShowStudyAbroadTimeline(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><StudyAbroadTimeline studyAbroadHub={studyAbroadHub} onClose={() => setShowStudyAbroadTimeline(false)} /></motion.div>}
+        {kanbanProjectName && projectItems.find(p => p.name === kanbanProjectName) && <ProjectKanban project={projectItems.find(p => p.name === kanbanProjectName)!} projectName={kanbanProjectName} tasks={tasks} onClose={() => setKanbanProjectName(null)} onUpdateTask={updateTask} />}
         {notice && <motion.div key="notice-toast" className="toast" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}><CheckCircle2 size={15} /> {notice}</motion.div>}
       </AnimatePresence>
       <button className="mobile-ambient-fab" aria-label="I’m doing something" onClick={() => settingsState.ambientActivity ? setAmbientWrapupOpen(true) : setAmbientStartOpen(true)}><TimerReset size={21} /></button>
