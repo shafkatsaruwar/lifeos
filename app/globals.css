@@ -413,14 +413,14 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 
 .study-progress-list {
   display: grid;
-  gap: 12px;
+  gap: 6px;
 }
 
 .study-progress-list > div {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
+  padding: 5px 0;
   border-bottom: 1px solid var(--line);
 }
 
@@ -429,12 +429,12 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 }
 
 .study-progress-list span {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
 .study-progress-list strong {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--ink);
 }

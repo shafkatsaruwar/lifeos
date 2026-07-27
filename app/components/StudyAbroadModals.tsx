@@ -88,42 +88,62 @@ export function UniversityModal({
             <X size={18} />
           </button>
         </header>
-        <label>
-          University Name
-          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Technical University of Munich" required />
-        </label>
-        <label>
-          Country
-          <select value={country} onChange={(e) => setCountry(e.target.value as any)}>
-            {COUNTRIES.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          City
-          <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Optional" />
-        </label>
-        <label>
-          Website URL
-          <input type="url" value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} placeholder="https://" />
-        </label>
-        <label>
-          Application Portal URL
-          <input type="url" value={applicationPortalUrl} onChange={(e) => setApplicationPortalUrl(e.target.value)} placeholder="https://" />
-        </label>
-        <label>
-          Type
-          <select value={universityType} onChange={(e) => setUniversityType(e.target.value as any)}>
-            <option value="public">Public</option>
-            <option value="private">Private</option>
-            <option value="unknown">Unknown</option>
-          </select>
-        </label>
-        <label>
-          Notes
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any additional information..." style={{ minHeight: "80px" }} />
-        </label>
+
+        <div className="study-form-section">
+          <h3>University Details</h3>
+          <div className="study-form-grid">
+            <label>
+              University Name
+              <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Technical University of Munich" required />
+            </label>
+            <label>
+              Type
+              <select value={universityType} onChange={(e) => setUniversityType(e.target.value as any)}>
+                <option value="public">Public</option>
+                <option value="private">Private</option>
+                <option value="unknown">Unknown</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div className="study-form-section">
+          <h3>Location</h3>
+          <div className="study-form-grid">
+            <label>
+              Country
+              <select value={country} onChange={(e) => setCountry(e.target.value as any)}>
+                {COUNTRIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              City
+              <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g., Deggendorf" />
+            </label>
+          </div>
+        </div>
+
+        <div className="study-form-section">
+          <h3>Contact & Resources</h3>
+          <label>
+            Website URL
+            <input type="url" value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} placeholder="https://" />
+          </label>
+          <label>
+            Application Portal URL
+            <input type="url" value={applicationPortalUrl} onChange={(e) => setApplicationPortalUrl(e.target.value)} placeholder="https://" />
+          </label>
+        </div>
+
+        <div className="study-form-section">
+          <h3>Additional Notes</h3>
+          <label>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any additional information about this university..." style={{ minHeight: "80px" }} />
+          </label>
+        </div>
+
         <div>
           <button type="button" onClick={close}>
             Cancel
@@ -432,47 +452,70 @@ export function DocumentModal({
           </button>
         </header>
 
-        <label>
-          Document Name
-          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., UMass Boston Diploma" required />
-        </label>
+        <div className="study-form-section">
+          <h3>Document Details</h3>
+          <div className="study-form-grid">
+            <label>
+              Document Name
+              <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Bachelor's Diploma" required />
+            </label>
+            <label>
+              Category
+              <select value={category} onChange={(e) => setCategory(e.target.value as any)}>
+                <option>Diploma</option>
+                <option>Transcript</option>
+                <option>Passport</option>
+                <option>Resume</option>
+                <option>Statement of Purpose</option>
+                <option>Recommendation Letter</option>
+                <option>English Test</option>
+                <option>Financial Document</option>
+                <option>Application Decision</option>
+                <option>Other</option>
+              </select>
+            </label>
+          </div>
+        </div>
 
-        <label>
-          Category
-          <select value={category} onChange={(e) => setCategory(e.target.value as any)}>
-            <option>Diploma</option>
-            <option>Transcript</option>
-            <option>Passport</option>
-            <option>Resume</option>
-            <option>Statement of Purpose</option>
-            <option>Recommendation Letter</option>
-            <option>English Test</option>
-            <option>Financial Document</option>
-            <option>Application Decision</option>
-            <option>Other</option>
-          </select>
-        </label>
-
-        <label>
-          Status
-          <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
-            <option value="available">Available</option>
-            <option value="requested">Requested</option>
-            <option value="pending">Pending</option>
-            <option value="blocked">Blocked</option>
-            <option value="expired">Expired</option>
-            <option value="not_available">Not available</option>
-          </select>
-        </label>
+        <div className="study-form-section">
+          <h3>Status & Dates</h3>
+          <div className="study-form-grid">
+            <label>
+              Status
+              <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
+                <option value="available">Available</option>
+                <option value="requested">Requested</option>
+                <option value="pending">Pending</option>
+                <option value="blocked">Blocked</option>
+                <option value="expired">Expired</option>
+                <option value="not_available">Not available</option>
+              </select>
+            </label>
+            <label>
+              Issued By
+              <input value={issuedBy} onChange={(e) => setIssuedBy(e.target.value)} placeholder="e.g., University of Massachusetts" />
+            </label>
+          </div>
+          <div className="study-form-grid">
+            <label>
+              Issue Date
+              <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+            </label>
+            <label>
+              Expiration Date
+              <input type="date" value={expirationDate} onChange={(e) => setExpirationDate(e.target.value)} />
+            </label>
+          </div>
+        </div>
 
         {status === "blocked" && (
-          <>
+          <div className="study-form-section">
+            <h3>Blocking Issue</h3>
             <label>
               Blocking Reason
               <textarea value={blockingReason} onChange={(e) => setBlockingReason(e.target.value)} placeholder="Why is this blocked?" style={{ minHeight: "60px" }} />
             </label>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            <div className="study-form-grid">
               <label>
                 Amount Needed to Resolve
                 <input type="number" value={amountNeeded} onChange={(e) => setAmountNeeded(e.target.value)} step="10" placeholder="e.g., 1200" />
@@ -482,40 +525,26 @@ export function DocumentModal({
                 <input value={currency} onChange={(e) => setCurrency(e.target.value)} placeholder="USD" />
               </label>
             </div>
-          </>
+          </div>
         )}
 
-        <label>
-          Issued By
-          <input value={issuedBy} onChange={(e) => setIssuedBy(e.target.value)} placeholder="e.g., University of Massachusetts Boston" />
-        </label>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+        <div className="study-form-section">
+          <h3>File & Notes</h3>
           <label>
-            Issue Date
-            <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+            Upload File
+            <input type="file" onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                setNotes(prev => prev + (prev ? '\n' : '') + `Uploaded: ${file.name} (${(file.size / 1024).toFixed(1)}KB)`);
+              }
+            }} accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png" />
+            <small>Supports PDF, DOC, DOCX, TXT, JPG, PNG</small>
           </label>
           <label>
-            Expiration Date
-            <input type="date" value={expirationDate} onChange={(e) => setExpirationDate(e.target.value)} />
+            Additional Notes
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any additional information about this document..." style={{ minHeight: "60px" }} />
           </label>
         </div>
-
-        <label>
-          Upload File
-          <input type="file" onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              setNotes(prev => prev + (prev ? '\n' : '') + `Uploaded: ${file.name} (${(file.size / 1024).toFixed(1)}KB)`);
-            }
-          }} accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png" />
-          <small>Supports PDF, DOC, DOCX, TXT, JPG, PNG</small>
-        </label>
-
-        <label>
-          Notes
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional information..." style={{ minHeight: "60px" }} />
-        </label>
 
         <div>
           <button type="button" onClick={close}>
@@ -718,70 +747,84 @@ export function ApplicationModal({
         <header>
           <div>
             <h2>{application ? "Edit Application" : "Add Application"}</h2>
-            <p>Track your application progress and status.</p>
+            <p>Track your application progress and submission status.</p>
           </div>
           <button type="button" onClick={close}>
             <X size={18} />
           </button>
         </header>
 
-        <label>
-          University
-          <select value={universityId} onChange={(e) => setUniversityId(e.target.value)} required>
-            <option value="">Select a university</option>
-            {hub.universities.map((u: any) => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
-        </label>
+        <div className="study-form-section">
+          <h3>Program Selection</h3>
+          <div className="study-form-grid">
+            <label>
+              University
+              <select value={universityId} onChange={(e) => setUniversityId(e.target.value)} required>
+                <option value="">Select a university</option>
+                {hub.universities.map((u: any) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Program
+              <select value={programId} onChange={(e) => setProgramId(e.target.value)} required>
+                <option value="">Select a program</option>
+                {hub.programs.filter((p: any) => !universityId || p.universityId === universityId).map((p: any) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
 
-        <label>
-          Program
-          <select value={programId} onChange={(e) => setProgramId(e.target.value)} required>
-            <option value="">Select a program</option>
-            {hub.programs.filter((p: any) => !universityId || p.universityId === universityId).map((p: any) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </label>
+        <div className="study-form-section">
+          <h3>Application Details</h3>
+          <div className="study-form-grid">
+            <label>
+              Intake
+              <input value={intake} onChange={(e) => setIntake(e.target.value)} placeholder="e.g., Winter Semester 2026/27" />
+            </label>
+            <label>
+              Applicant Number
+              <input value={applicantNumber} onChange={(e) => setApplicantNumber(e.target.value)} placeholder="e.g., 7382" />
+            </label>
+          </div>
+        </div>
 
-        <label>
-          Intake
-          <input value={intake} onChange={(e) => setIntake(e.target.value)} placeholder="e.g., Winter Semester 2026/27" />
-        </label>
+        <div className="study-form-section">
+          <h3>Status & Dates</h3>
+          <div className="study-form-grid">
+            <label>
+              Status
+              <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
+                <option value="researching">Researching</option>
+                <option value="considering">Considering</option>
+                <option value="preparing">Preparing</option>
+                <option value="blocked">Blocked</option>
+                <option value="ready_to_submit">Ready to submit</option>
+                <option value="submitted">Submitted</option>
+                <option value="awaiting_response">Awaiting response</option>
+                <option value="interview">Interview</option>
+                <option value="offer">Offer</option>
+                <option value="rejected">Rejected</option>
+                <option value="withdrawn">Withdrawn</option>
+                <option value="deferred">Deferred</option>
+              </select>
+            </label>
+            <label>
+              Date Submitted
+              <input type="date" value={dateSubmitted} onChange={(e) => setDateSubmitted(e.target.value)} />
+            </label>
+          </div>
+        </div>
 
-        <label>
-          Status
-          <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
-            <option value="researching">Researching</option>
-            <option value="considering">Considering</option>
-            <option value="preparing">Preparing</option>
-            <option value="blocked">Blocked</option>
-            <option value="ready_to_submit">Ready to submit</option>
-            <option value="submitted">Submitted</option>
-            <option value="awaiting_response">Awaiting response</option>
-            <option value="interview">Interview</option>
-            <option value="offer">Offer</option>
-            <option value="rejected">Rejected</option>
-            <option value="withdrawn">Withdrawn</option>
-            <option value="deferred">Deferred</option>
-          </select>
-        </label>
-
-        <label>
-          Applicant Number
-          <input value={applicantNumber} onChange={(e) => setApplicantNumber(e.target.value)} placeholder="e.g., 7382" />
-        </label>
-
-        <label>
-          Date Submitted
-          <input type="date" value={dateSubmitted} onChange={(e) => setDateSubmitted(e.target.value)} />
-        </label>
-
-        <label>
-          Notes
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional details about this application..." style={{ minHeight: "80px" }} />
-        </label>
+        <div className="study-form-section">
+          <h3>Notes</h3>
+          <label>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional details about this application..." style={{ minHeight: "60px" }} />
+          </label>
+        </div>
 
         <div>
           <button type="button" onClick={close}>
@@ -851,102 +894,115 @@ export function ScholarshipModal({
         <header>
           <div>
             <h2>{scholarship ? "Edit Scholarship" : "Add Scholarship"}</h2>
-            <p>Track scholarship opportunities and applications.</p>
+            <p>Track scholarship opportunities and funding status.</p>
           </div>
           <button type="button" onClick={close}>
             <X size={18} />
           </button>
         </header>
 
-        <label>
-          Scholarship Name
-          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., DAAD Scholarship" required />
-        </label>
-
-        <label>
-          Provider
-          <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="e.g., German Academic Exchange Service" />
-        </label>
-
-        <label>
-          Country
-          <select value={country} onChange={(e) => setCountry(e.target.value as any)}>
-            {COUNTRIES.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          Status
-          <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
-            <option value="researching">Researching</option>
-            <option value="eligible">Eligible</option>
-            <option value="possibly_eligible">Possibly eligible</option>
-            <option value="not_eligible">Not eligible</option>
-            <option value="submitted">Submitted</option>
-            <option value="awarded">Awarded</option>
-            <option value="rejected">Rejected</option>
-          </select>
-        </label>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-          <label>
-            Stipend Amount
-            <input type="number" value={stipendAmount} onChange={(e) => setStipendAmount(e.target.value)} placeholder="e.g., 934" />
-          </label>
-          <label>
-            Currency
-            <input value={stipendCurrency} onChange={(e) => setStipendCurrency(e.target.value)} placeholder="EUR" />
-          </label>
+        <div className="study-form-section">
+          <h3>Scholarship Details</h3>
+          <div className="study-form-grid">
+            <label>
+              Scholarship Name
+              <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., DAAD Scholarship" required />
+            </label>
+            <label>
+              Provider
+              <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="e.g., German Academic Exchange Service" />
+            </label>
+          </div>
+          <div className="study-form-grid">
+            <label>
+              Country
+              <select value={country} onChange={(e) => setCountry(e.target.value as any)}>
+                {COUNTRIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Status
+              <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
+                <option value="researching">Researching</option>
+                <option value="eligible">Eligible</option>
+                <option value="possibly_eligible">Possibly eligible</option>
+                <option value="not_eligible">Not eligible</option>
+                <option value="submitted">Submitted</option>
+                <option value="awarded">Awarded</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </label>
+          </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-          <label>
-            Stipend Frequency
-            <select value={stipendFrequency} onChange={(e) => setStipendFrequency(e.target.value as any)}>
-              <option value="monthly">Monthly</option>
-              <option value="quarterly">Quarterly</option>
-              <option value="semi-annual">Semi-annual</option>
-              <option value="annual">Annual</option>
-              <option value="one-time">One-time</option>
-            </select>
-          </label>
-          <label>
-            Tuition Coverage (%)
-            <input type="number" value={tuitionCoveragePercent} onChange={(e) => setTuitionCoveragePercent(e.target.value)} min="0" max="100" placeholder="e.g., 50" />
-          </label>
+        <div className="study-form-section">
+          <h3>Funding Details</h3>
+          <div className="study-form-grid">
+            <label>
+              Coverage Type
+              <select value={coverageType} onChange={(e) => setCoverageType(e.target.value as any)}>
+                <option value="full_tuition">Full tuition</option>
+                <option value="partial_tuition">Partial tuition</option>
+                <option value="tuition_and_stipend">Tuition and stipend</option>
+                <option value="stipend_only">Stipend only</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label>
+              Tuition Coverage (%)
+              <input type="number" value={tuitionCoveragePercent} onChange={(e) => setTuitionCoveragePercent(e.target.value)} min="0" max="100" placeholder="e.g., 50" />
+            </label>
+          </div>
+          <div className="study-form-grid">
+            <label>
+              Stipend Amount
+              <input type="number" value={stipendAmount} onChange={(e) => setStipendAmount(e.target.value)} placeholder="e.g., 934" />
+            </label>
+            <label>
+              Stipend Frequency
+              <select value={stipendFrequency} onChange={(e) => setStipendFrequency(e.target.value as any)}>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="semi-annual">Semi-annual</option>
+                <option value="annual">Annual</option>
+                <option value="one-time">One-time</option>
+              </select>
+            </label>
+          </div>
+          <div className="study-form-grid">
+            <label>
+              Currency
+              <input value={stipendCurrency} onChange={(e) => setStipendCurrency(e.target.value)} placeholder="EUR" />
+            </label>
+          </div>
         </div>
 
-        <label>
-          Coverage Type
-          <select value={coverageType} onChange={(e) => setCoverageType(e.target.value as any)}>
-            <option value="full_tuition">Full tuition</option>
-            <option value="partial_tuition">Partial tuition</option>
-            <option value="tuition_and_stipend">Tuition and stipend</option>
-            <option value="stipend_only">Stipend only</option>
-            <option value="other">Other</option>
-          </select>
-        </label>
+        <div className="study-form-section">
+          <h3>Application & Verification</h3>
+          <label>
+            Application Deadline
+            <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+          </label>
+          <div className="study-form-grid">
+            <label>
+              Confidence
+              <select value={confidence} onChange={(e) => setConfidence(e.target.value as any)}>
+                <option value="unverified">Unverified</option>
+                <option value="partially_verified">Partially verified</option>
+                <option value="verified">Verified</option>
+              </select>
+            </label>
+          </div>
+        </div>
 
-        <label>
-          Application Deadline
-          <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-        </label>
-
-        <label>
-          Eligibility Requirements
-          <textarea value={eligibility} onChange={(e) => setEligibility(e.target.value)} placeholder="Requirements you've checked..." style={{ minHeight: "60px" }} />
-        </label>
-
-        <label>
-          Confidence
-          <select value={confidence} onChange={(e) => setConfidence(e.target.value as any)}>
-            <option value="unverified">Unverified</option>
-            <option value="partially_verified">Partially verified</option>
-            <option value="verified">Verified</option>
-          </select>
-        </label>
+        <div className="study-form-section">
+          <h3>Eligibility</h3>
+          <label>
+            <textarea value={eligibility} onChange={(e) => setEligibility(e.target.value)} placeholder="List requirements you've checked... (separate by commas)" style={{ minHeight: "60px" }} />
+          </label>
+        </div>
 
         <div>
           <button type="button" onClick={close}>
