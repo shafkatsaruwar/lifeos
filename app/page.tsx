@@ -2126,6 +2126,23 @@ function SpacesView({ projects, classes, tasks, notes, resources, selectedProjec
         <div><span>Open work</span><strong>{activeTasks.length}</strong></div>
       </div>
       <div className="class-content-grid">
+        {(() => {
+          const childProjects = projects.filter(p => p.parentProject === selectedProject.name);
+          return childProjects.length > 0 ? (
+            <section className="card class-coursework">
+              <div className="class-section-title"><div><h2>Sub-projects</h2><p>Projects nested within this space.</p></div></div>
+              <div className="coursework-list">
+                {childProjects.map(proj => (
+                  <button key={proj.name} onClick={() => onOpenProject(proj.name)}>
+                    <span className="coursework-type" style={{ color: proj.color, background: `${proj.color}14` }}>Sub-project</span>
+                    <span className="coursework-name"><strong>{proj.name}</strong><small>{proj.desc}</small></span>
+                    <ArrowRight size={14} />
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null;
+        })()}
         <section className="card class-coursework">
           <div className="class-section-title"><div><h2>Tasks</h2><p>Everything actively moving inside this space.</p></div></div>
           {activeTasks.length ? <div className="coursework-list">{activeTasks.map(task => <button key={task.id} onClick={() => onOpenTask(task.id)}><span className="coursework-type" style={{ color: selectedProject.color, background: `${selectedProject.color}14` }}>Task</span><span className="coursework-name"><strong>{task.title}</strong><small>{formatDueDate(task.due)} · {task.focusMinutes}m · {task.energy}</small></span><em className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</em><ArrowRight size={14} /></button>)}</div> : <div className="class-empty"><CheckCircle2 size={22} /><strong>No active tasks.</strong><span>Link an existing task below when this space needs attention.</span></div>}
@@ -2147,9 +2164,12 @@ function SpacesView({ projects, classes, tasks, notes, resources, selectedProjec
     if (archived) return false;
     return semester === "All semesters" || item.term === semester;
   });
+  const rootProjects = projects.filter(p => !p.parentProject);
+  const getChildProjects = (parentName: string) => projects.filter(p => p.parentProject === parentName);
+
   const spaces = [
-    ...classesForView.map(item => ({ id: `class:${item.id}`, kind: "class" as SpaceKind, title: item.code, description: item.name, meta: item.term || "Current term", color: item.color, icon: GraduationCap, open: tasks.filter(task => task.classId === item.id && !task.done && !task.canceled).length, nextDue: [...tasks.filter(task => task.classId === item.id && !task.done && !task.canceled)].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0], classId: item.id, projectName: null as string | null, archived: isClassArchived(item) })),
-    ...projects.map(item => ({ id: `project:${item.name}`, kind: (item.kind === "maintenance" ? "maintenance" : "project") as SpaceKind, title: item.name, description: item.desc, meta: item.kind === "maintenance" ? "Ongoing system" : "Finishable project", color: item.color, icon: item.icon, open: tasks.filter(task => task.project === item.name && !task.done && !task.canceled).length, nextDue: [...tasks.filter(task => task.project === item.name && !task.done && !task.canceled)].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0], classId: null as string | null, projectName: item.name, archived: false })),
+    ...classesForView.map(item => ({ id: `class:${item.id}`, kind: "class" as SpaceKind, title: item.code, description: item.name, meta: item.term || "Current term", color: item.color, icon: GraduationCap, open: tasks.filter(task => task.classId === item.id && !task.done && !task.canceled).length, nextDue: [...tasks.filter(task => task.classId === item.id && !task.done && !task.canceled)].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0], classId: item.id, projectName: null as string | null, archived: isClassArchived(item), childCount: 0 })),
+    ...rootProjects.map(item => ({ id: `project:${item.name}`, kind: (item.kind === "maintenance" ? "maintenance" : "project") as SpaceKind, title: item.name, description: item.desc, meta: item.kind === "maintenance" ? "Ongoing system" : "Finishable project", color: item.color, icon: item.icon, open: tasks.filter(task => task.project === item.name && !task.done && !task.canceled).length, nextDue: [...tasks.filter(task => task.project === item.name && !task.done && !task.canceled)].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0], classId: null as string | null, projectName: item.name, archived: false, childCount: getChildProjects(item.name).length })),
   ];
   const visibleSpaces = spaces.filter(space => filter === "All" || (filter === "Classes" && space.kind === "class") || (filter === "Projects" && space.kind === "project") || (filter === "Maintenance" && space.kind === "maintenance") || (filter === "Archived" && space.kind === "class" && space.archived));
   const highestPriorityRank = (space: typeof spaces[number]) => {
@@ -2173,7 +2193,7 @@ function SpacesView({ projects, classes, tasks, notes, resources, selectedProjec
     </div>
     {sortedSpaces.length ? <div className="spaces-grid">{sortedSpaces.map((space, index) => <motion.article role="button" tabIndex={0} className={`space-card ${space.kind}`} key={space.id} style={{ "--space-color": space.color } as React.CSSProperties} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .035 }} onClick={() => space.classId ? onOpenClass(space.classId) : onOpenProject(space.projectName!)} onKeyDown={event => { if (event.key === "Enter") space.classId ? onOpenClass(space.classId) : onOpenProject(space.projectName!); }}>
       <div className="space-card-top"><span className="space-card-icon"><space.icon size={21} /></span><button aria-label={`Actions for ${space.title}`} onClick={event => { event.stopPropagation(); if (space.classId) onActionClass(space.classId); else onActionProject(space.projectName!); }}><MoreHorizontal size={18} /></button></div>
-      <span className="space-type">{space.archived ? "Archived class" : space.kind === "class" ? "Class" : space.kind === "maintenance" ? "Maintenance" : "Project"}</span><h2>{space.title}</h2><p>{space.description}</p>
+      <span className="space-type">{space.archived ? "Archived class" : space.kind === "class" ? "Class" : space.kind === "maintenance" ? "Maintenance" : "Project"}{(space as any).childCount > 0 && ` · ${(space as any).childCount} sub-project${(space as any).childCount !== 1 ? 's' : ''}`}</span><h2>{space.title}</h2><p>{space.description}</p>
       <div className="space-card-footer"><span>{space.open} open</span><strong>{space.nextDue ? `Next: ${formatDueDate(space.nextDue.due)}` : "Nothing due"}</strong></div><div className="space-card-line"><i /></div>
     </motion.article>)}</div> : <div className="classes-empty"><div><LayoutGrid size={28} /></div><h2>No {filter.toLowerCase()} yet.</h2><p>Create the space your brain is looking for.</p><button className="primary" onClick={onNew}><Plus size={15} /> New space</button></div>}
   </>;
