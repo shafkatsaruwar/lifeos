@@ -2126,6 +2126,29 @@ function SpacesView({ projects, classes, tasks, notes, resources, selectedProjec
         <div><span>Open work</span><strong>{activeTasks.length}</strong></div>
       </div>
       <ProjectKanban project={selectedProject} projectName={selectedProject.name} tasks={tasks} onClose={() => {}} onUpdateTask={onUpdateTask} />
+      <div className="class-content-grid">
+        {(() => {
+          const childProjects = projects.filter(p => p.parentProject === selectedProject.name);
+          return childProjects.length > 0 ? (
+            <section className="card class-coursework">
+              <div className="class-section-title"><div><h2>Sub-projects</h2><p>Projects nested within this space.</p></div></div>
+              <div className="coursework-list">
+                {childProjects.map(proj => (
+                  <button key={proj.name} onClick={() => onOpenProject(proj.name)}>
+                    <span className="coursework-type" style={{ color: proj.color, background: `${proj.color}14` }}>Sub-project</span>
+                    <span className="coursework-name"><strong>{proj.name}</strong><small>{proj.desc}</small></span>
+                    <ArrowRight size={14} />
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null;
+        })()}
+        <section className="card class-notes-card">
+          <div className="class-section-title"><div><h2>Notes</h2><p>Context, decisions, research, and loose thinking.</p></div><button onClick={() => onNewNote(undefined, selectedProject.name)}><Plus size={14} /></button></div>
+          {projectNotes.length ? <div className="class-note-list">{projectNotes.map(note => <button key={note.id} onClick={() => onOpenNote(note.id)}><NotebookPen size={15} /><span><strong>{note.title || "Untitled note"}</strong><small>{new Date(note.updatedAt).toLocaleDateString()}</small></span><ArrowRight size={13} /></button>)}</div> : <div className="class-empty compact"><NotebookPen size={21} /><strong>No notes yet.</strong><button onClick={() => onNewNote(undefined, selectedProject.name)}>Start a space note</button></div>}
+        </section>
+      </div>
       {availableTasks.length > 0 && <section className="card space-link-panel"><div className="class-section-title"><div><h2>Link existing tasks</h2><p>Move loose work into {selectedProject.name}.</p></div></div><div className="space-link-list">{availableTasks.slice(0, 8).map(task => <button key={task.id} onClick={() => linkTask(task.id, selectedProject)}><span><strong>{task.title}</strong><small>{task.project} · {formatDueDate(task.due)}</small></span><Plus size={15} /></button>)}</div></section>}
     </section>;
   }
