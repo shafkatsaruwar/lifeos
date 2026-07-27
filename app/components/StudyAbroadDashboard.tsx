@@ -16,7 +16,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import type { StudyAbroadHub } from "@/lib/studyAbroadTypes";
-import { upcomingDeadlines, countApplicationsByStatus, getUniversityById, getProgramById } from "@/lib/studyAbroadHelpers";
+import { upcomingDeadlines, countApplicationsByStatus, getUniversityById } from "@/lib/studyAbroadHelpers";
 
 function Section({
   icon: Icon,
@@ -89,7 +89,6 @@ export function StudyAbroadDashboard({
   onOpenScholarships,
   onOpenDocuments,
   onOpenTimeline,
-  onOpenInsights,
   personalContextMessage,
 }: {
   hub: StudyAbroadHub;
@@ -99,7 +98,6 @@ export function StudyAbroadDashboard({
   onOpenScholarships: () => void;
   onOpenDocuments: () => void;
   onOpenTimeline: () => void;
-  onOpenInsights: () => void;
   personalContextMessage?: string;
 }) {
   const submitted = countApplicationsByStatus(hub, "submitted");
@@ -136,7 +134,7 @@ export function StudyAbroadDashboard({
       <div className="os-hero">
         <div>
           <p className="eyebrow">Study Abroad</p>
-          <h1>Master's Application Tracker</h1>
+          <h1>Master&rsquo;s Application Tracker</h1>
           <p>{hub.programs.length} program(s) researched · {hub.applications.length} application(s)</p>
         </div>
         <button className="os-profile-button" onClick={onOpenTimeline}>
