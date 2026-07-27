@@ -517,7 +517,7 @@ export default function LifeOS() {
     if (typeof window === "undefined") return;
     const writeCurrentView = () => {
       const url = new URL(window.location.href);
-      const routeValue = view === "Dashboard" ? "now" : view === "Calendar" ? "today" : view.toLowerCase();
+      const routeValue = view === "Dashboard" ? "now" : view === "Calendar" ? "today" : view.toLowerCase().replace(/\s+/g, "-");
       if (url.searchParams.get("view") === routeValue) return;
       url.searchParams.set("view", routeValue);
       window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
