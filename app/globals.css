@@ -874,3 +874,61 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
   background: #111114;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
+
+.now-greeting-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 40px 48px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--canvas)), color-mix(in srgb, var(--accent) 6%, transparent));
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 32px;
+}
+
+.greeting-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.greeting-text {
+  font-family: var(--font-display), serif;
+  font-size: 48px;
+  font-weight: 400;
+  margin: 0;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.greeting-name {
+  font-size: 16px;
+  color: var(--muted);
+  margin: 0;
+  font-weight: 500;
+}
+
+.greeting-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.clock-display {
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-size: 56px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.clock-label {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}

@@ -1763,7 +1763,31 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     setHandoff("");
     onChoose(task.id);
   };
+
+  const getGreeting = () => {
+    const hour = new Date(now).getHours();
+    if (hour < 12) return "Good Morning";
+    if (hour < 17) return "Good Afternoon";
+    if (hour < 21) return "Good Evening";
+    return "Good Night";
+  };
+
+  const formatClock = () => {
+    const date = new Date(now);
+    return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true });
+  };
+
   return <div className="now-view">
+    <div className="now-greeting-section">
+      <div className="greeting-content">
+        <p className="greeting-text">{getGreeting()}</p>
+        <p className="greeting-name">{workspaceName}</p>
+      </div>
+      <div className="greeting-clock">
+        <div className="clock-display">{formatClock()}</div>
+        <p className="clock-label">Current time</p>
+      </div>
+    </div>
     <div className="page-title">
       <div><p className="eyebrow">One thing, on purpose</p><h1>Now</h1><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
       <div className="now-header-actions"><button onClick={onCapture}><Inbox size={16} /> Capture thought</button><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
