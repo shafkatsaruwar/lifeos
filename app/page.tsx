@@ -45,6 +45,7 @@ import {
 } from "@/app/components/OSDashboards";
 import { StudyAbroadDashboard } from "@/app/components/StudyAbroadDashboard";
 import { UniversityModal, ProgramModal, DocumentModal, ApplicationModal, ScholarshipModal, StudyAbroadCollectionView } from "@/app/components/StudyAbroadModals";
+import ProjectKanban from "@/app/components/ProjectKanban";
 import { emptyStudyAbroadHub } from "@/lib/studyAbroadTypes";
 import { generateObservations } from "@/lib/studyAbroadHelpers";
 import type { StudyAbroadHub } from "@/lib/studyAbroadTypes";
@@ -53,7 +54,7 @@ import type { ParsedTask } from "@/lib/useNLTaskCreation";
 import { useTaskBreakdown } from "@/lib/useTaskBreakdown";
 import {
   Aperture, Archive, ArrowRight, Brain, CalendarDays, Check, CheckCircle2,
-  ChevronDown, Circle, Clock3, Command, FileText, Flame, Focus, FolderKanban,
+  ChevronDown, ChevronRight, Circle, Clock3, Command, FileText, Flame, Focus, FolderKanban,
   Home, Inbox, LayoutGrid, Library, Link2, ListTodo, Menu, Moon, MoreHorizontal,
   Mail, Music2, Plus, Search, Settings, Sparkles, Sun, TimerReset, UserRound, X, Zap,
   Ban, Pencil, Trash2, Bell, Download, Palette, Shield, SlidersHorizontal, Coffee, Maximize, Mic,
@@ -66,16 +67,16 @@ type EnergyLevel = "Low" | "Medium" | "High";
 type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
 type AcademicItemType = "Assignment" | "Project" | "Exam" | "Quiz" | "Lab" | "Reading" | "Discussion";
 type TaskProperty = { id: string; name: string; value: string };
-type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; status?: TaskStatus; notes?: string; handoffNote?: string; nextAction?: string; followUpDate?: string; recurringDays?: number; completedAt?: string; customProperties?: TaskProperty[]; checklist?: string[]; checklistProgress?: boolean[]; focusRemainingSeconds?: number; focusSessionStarted?: boolean; focusSessionRunning?: boolean; focusHalfwayPrompted?: boolean; classId?: string; academicType?: AcademicItemType; gradeWeight?: number; pointsEarned?: number; pointsPossible?: number; submission?: string; calendarEventId?: string; done?: boolean; canceled?: boolean };
+type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; status?: TaskStatus; notes?: string; handoffNote?: string; nextAction?: string; followUpDate?: string; recurringDays?: number; completedAt?: string; customProperties?: TaskProperty[]; checklist?: string[]; checklistProgress?: boolean[]; focusRemainingSeconds?: number; focusSessionStarted?: boolean; focusSessionRunning?: boolean; focusHalfwayPrompted?: boolean; classId?: string; academicType?: AcademicItemType; gradeWeight?: number; pointsEarned?: number; pointsPossible?: number; submission?: string; calendarEventId?: string; done?: boolean; canceled?: boolean; parentTaskId?: number };
 type FocusSessionUpdate = { remainingSeconds: number; hasStarted: boolean; isRunning: boolean; halfwayPrompted: boolean };
 type ProjectKind = "maintenance" | "finishable";
 type SpaceKind = "class" | "project" | "maintenance";
 type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban" | "BriefcaseBusiness" | "Camera" | "Code2" | "HeartPulse" | "Utensils" | "BookOpen";
-type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string; classId?: string; projectName?: string; storagePath?: string; storage?: "cloud" | "local" };
-type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind };
+type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string; classId?: string; projectName?: string; storagePath?: string; storage?: "cloud" | "local"; parentResourceId?: string };
+type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind; parentProject?: string };
 type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook"; color: string; notes?: string };
 type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterEnd?: string; archived?: boolean };
-type Note = { id: string; title: string; body: string; classId?: string; projectName?: string; template?: "blank" | "lined" | "dotted" | "cornell" | "meeting"; updatedAt: string };
+type Note = { id: string; title: string; body: string; classId?: string; projectName?: string; template?: "blank" | "lined" | "dotted" | "cornell" | "meeting"; updatedAt: string; parentNoteId?: string };
 type AmbientActivity = { title: string; startedAt: string; note?: string; spaceName?: string; spaceColor?: string };
 type AmbientDraft = { title: string; spaceName?: string; sourceLabel?: string } | null;
 type WeeklyPlanItem = { id: string; text: string };
@@ -461,6 +462,16 @@ export default function LifeOS() {
   const [ambientDraft, setAmbientDraft] = useState<AmbientDraft>(null);
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyPlan>({});
   const [weeklyPlanHydrated, setWeeklyPlanHydrated] = useState(false);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+
+  const toggleNodeExpansion = useCallback((nodeId: string) => {
+    setExpandedNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
+      return next;
+    });
+  }, []);
 
   const chooseNowTask = useCallback((taskId: number | null) => {
     if (taskId !== null) setActiveTaskId(taskId);
@@ -1656,6 +1667,7 @@ export default function LifeOS() {
         {studyAbroadModal === "application" && <ApplicationModal close={() => setStudyAbroadModal(null)} save={(application) => { setStudyAbroadHub(current => ({ ...current, applications: [...current.applications, application] })); setStudyAbroadModal(null); }} hub={studyAbroadHub} />}
         {studyAbroadModal === "scholarship" && <ScholarshipModal close={() => setStudyAbroadModal(null)} save={(scholarship) => { setStudyAbroadHub(current => ({ ...current, scholarships: [...current.scholarships, scholarship] })); setStudyAbroadModal(null); }} />}
         {studyAbroadModal === "document" && <DocumentModal close={() => setStudyAbroadModal(null)} save={(document) => { setStudyAbroadHub(current => ({ ...current, documents: [...current.documents, document] })); setStudyAbroadModal(null); }} />}
+        {kanbanProjectName && projectItems.find(p => p.name === kanbanProjectName) && <ProjectKanban key={`kanban-${kanbanProjectName}`} project={projectItems.find(p => p.name === kanbanProjectName)!} projectName={kanbanProjectName as string} tasks={tasks} onClose={() => setKanbanProjectName(null)} onUpdateTask={updateTaskDetails} />}
         {notice && <motion.div key="notice-toast" className="toast" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}><CheckCircle2 size={15} /> {notice}</motion.div>}
       </AnimatePresence>
       <button className="mobile-ambient-fab" aria-label="I’m doing something" onClick={() => settingsState.ambientActivity ? setAmbientWrapupOpen(true) : setAmbientStartOpen(true)}><TimerReset size={21} /></button>
@@ -2208,7 +2220,49 @@ function SpaceModal({ initialKind, close, addProject, addClass }: { initialKind:
 
 function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask }: { tasks: Task[]; classes: ClassRecord[]; onComplete: (id: number) => void; onNew: () => void; onTaskMenu: (id: number) => void; onOpenTask: (id: number) => void }) {
   const [layout, setLayout] = useState<"List" | "Board" | "Calendar">("List");
-  return <><div className="page-title"><div><p className="eyebrow">Make it happen</p><h1>Tasks</h1><p>A clear list of what needs your attention.</p></div><button className="primary" onClick={onNew}><Plus size={16} /> New task</button></div><div className="view-tabs"><button className={layout === "List" ? "selected" : ""} onClick={() => setLayout("List")}><ListTodo size={15} /> List</button><button className={layout === "Board" ? "selected" : ""} onClick={() => setLayout("Board")}><LayoutGrid size={15} /> Board</button><button className={layout === "Calendar" ? "selected" : ""} onClick={() => setLayout("Calendar")}><CalendarDays size={15} /> Calendar</button></div><section className={`card task-table layout-${layout.toLowerCase()}`}><div className="table-view-label">{layout} view</div><div className="table-head"><span>Task</span><span>Space</span><span>Due</span><span>Priority</span><span>Focus</span></div>{tasks.map(t => <div className={`table-row ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""}`} key={t.id}><button className="round-check" disabled={t.canceled} onClick={() => onComplete(t.id)}>{t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}</button><button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button><span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span><span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span><span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span><span>{t.focusMinutes}m · {t.energy}</span><button aria-label={`Actions for ${t.title}`} onClick={() => onTaskMenu(t.id)}><MoreHorizontal size={17} /></button></div>)}</section></>;
+  const [expandedParents, setExpandedParents] = useState<Set<number>>(new Set());
+
+  const toggleParentExpansion = (parentId: number) => {
+    setExpandedParents(prev => {
+      const next = new Set(prev);
+      if (next.has(parentId)) next.delete(parentId);
+      else next.add(parentId);
+      return next;
+    });
+  };
+
+  const rootTasks = tasks.filter(t => !t.parentTaskId);
+  const getChildren = (parentId: number) => tasks.filter(t => t.parentTaskId === parentId);
+
+  const renderTaskRow = (t: Task, level: number = 0): React.ReactNode => {
+    const children = getChildren(t.id);
+    const hasChildren = children.length > 0;
+    const isExpanded = expandedParents.has(t.id);
+    const indent = level * 24;
+
+    return (
+      <>
+        <div className={`table-row ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""}`} style={{ paddingLeft: `${indent}px` }} key={t.id}>
+          <button className="round-check" disabled={t.canceled} onClick={() => onComplete(t.id)}>{t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}</button>
+          {hasChildren && (
+            <button className="expand-button" onClick={() => toggleParentExpansion(t.id)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '0 4px' }}>
+              {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+          )}
+          {!hasChildren && <div style={{ width: '22px' }} />}
+          <button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button>
+          <span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span>
+          <span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span>
+          <span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span>
+          <span>{t.focusMinutes}m · {t.energy}</span>
+          <button aria-label={`Actions for ${t.title}`} onClick={() => onTaskMenu(t.id)}><MoreHorizontal size={17} /></button>
+        </div>
+        {hasChildren && isExpanded && children.map(child => renderTaskRow(child, level + 1))}
+      </>
+    );
+  };
+
+  return <><div className="page-title"><div><p className="eyebrow">Make it happen</p><h1>Tasks</h1><p>A clear list of what needs your attention.</p></div><button className="primary" onClick={onNew}><Plus size={16} /> New task</button></div><div className="view-tabs"><button className={layout === "List" ? "selected" : ""} onClick={() => setLayout("List")}><ListTodo size={15} /> List</button><button className={layout === "Board" ? "selected" : ""} onClick={() => setLayout("Board")}><LayoutGrid size={15} /> Board</button><button className={layout === "Calendar" ? "selected" : ""} onClick={() => setLayout("Calendar")}><CalendarDays size={15} /> Calendar</button></div><section className={`card task-table layout-${layout.toLowerCase()}`}><div className="table-view-label">{layout} view</div><div className="table-head"><span>Task</span><span>Space</span><span>Due</span><span>Priority</span><span>Focus</span></div>{rootTasks.map(t => renderTaskRow(t))}</section></>;
 }
 
 function ClassesView({ classes, tasks, notes, resources, selectedClassId, onSelectClass, onNewClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource }: { classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedClassId: string | null; onSelectClass: (id: string | null) => void; onNewClass: () => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void> }) {
