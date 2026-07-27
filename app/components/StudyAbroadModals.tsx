@@ -807,13 +807,16 @@ export function ScholarshipModal({
 }) {
   const [name, setName] = useState(scholarship?.name ?? "");
   const [provider, setProvider] = useState(scholarship?.provider ?? "");
+  const [country, setCountry] = useState(scholarship?.country ?? "Germany");
   const [status, setStatus] = useState(scholarship?.status ?? "researching");
   const [stipendAmount, setStipendAmount] = useState(scholarship?.stipendAmount?.toString() ?? "");
   const [stipendCurrency, setStipendCurrency] = useState(scholarship?.stipendCurrency ?? "EUR");
-  const [coverage, setCoverage] = useState(scholarship?.coverage ?? "partial");
+  const [stipendFrequency, setStipendFrequency] = useState(scholarship?.stipendFrequency ?? "monthly");
+  const [coverageType, setCoverageType] = useState(scholarship?.coverageType ?? "partial_tuition");
+  const [tuitionCoveragePercent, setTuitionCoveragePercent] = useState(scholarship?.tuitionCoveragePercent?.toString() ?? "");
   const [deadline, setDeadline] = useState(scholarship?.deadline ?? "");
-  const [eligibility, setEligibility] = useState(scholarship?.eligibilityNotes ?? "");
-  const [notes, setNotes] = useState(scholarship?.notes ?? "");
+  const [eligibility, setEligibility] = useState(scholarship?.eligibilityRequirements?.join(", ") ?? "");
+  const [confidence, setConfidence] = useState(scholarship?.confidence ?? "unverified");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -824,13 +827,16 @@ export function ScholarshipModal({
       id: scholarship?.id ?? `sch-${Date.now()}`,
       name: name.trim(),
       provider: provider.trim() || undefined,
+      country: country as any,
       status: status as any,
       stipendAmount: stipendAmount ? parseFloat(stipendAmount) : undefined,
       stipendCurrency: stipendCurrency.trim() || undefined,
-      coverage: coverage as any,
+      stipendFrequency: stipendFrequency || undefined,
+      tuitionCoveragePercent: tuitionCoveragePercent ? parseInt(tuitionCoveragePercent) : undefined,
+      coverageType: coverageType as any,
       deadline: deadline || undefined,
-      eligibilityNotes: eligibility.trim() || undefined,
-      notes: notes.trim() || undefined,
+      eligibilityRequirements: eligibility.trim() ? eligibility.split(",").map(e => e.trim()) : undefined,
+      confidence: confidence as any,
       createdAt: scholarship?.createdAt ?? now,
       updatedAt: now,
     };
@@ -863,6 +869,15 @@ export function ScholarshipModal({
         </label>
 
         <label>
+          Country
+          <select value={country} onChange={(e) => setCountry(e.target.value as any)}>
+            {COUNTRIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </label>
+
+        <label>
           Status
           <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
             <option value="researching">Researching</option>
@@ -886,13 +901,31 @@ export function ScholarshipModal({
           </label>
         </div>
 
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <label>
+            Stipend Frequency
+            <select value={stipendFrequency} onChange={(e) => setStipendFrequency(e.target.value as any)}>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="semi-annual">Semi-annual</option>
+              <option value="annual">Annual</option>
+              <option value="one-time">One-time</option>
+            </select>
+          </label>
+          <label>
+            Tuition Coverage (%)
+            <input type="number" value={tuitionCoveragePercent} onChange={(e) => setTuitionCoveragePercent(e.target.value)} min="0" max="100" placeholder="e.g., 50" />
+          </label>
+        </div>
+
         <label>
-          Coverage
-          <select value={coverage} onChange={(e) => setCoverage(e.target.value as any)}>
-            <option value="full">Full</option>
-            <option value="partial">Partial</option>
-            <option value="tuition_only">Tuition only</option>
-            <option value="living_stipend">Living stipend</option>
+          Coverage Type
+          <select value={coverageType} onChange={(e) => setCoverageType(e.target.value as any)}>
+            <option value="full_tuition">Full tuition</option>
+            <option value="partial_tuition">Partial tuition</option>
+            <option value="tuition_and_stipend">Tuition and stipend</option>
+            <option value="stipend_only">Stipend only</option>
+            <option value="other">Other</option>
           </select>
         </label>
 
@@ -907,8 +940,12 @@ export function ScholarshipModal({
         </label>
 
         <label>
-          Notes
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional information..." style={{ minHeight: "60px" }} />
+          Confidence
+          <select value={confidence} onChange={(e) => setConfidence(e.target.value as any)}>
+            <option value="unverified">Unverified</option>
+            <option value="partially_verified">Partially verified</option>
+            <option value="verified">Verified</option>
+          </select>
         </label>
 
         <div>
