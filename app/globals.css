@@ -414,13 +414,14 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .study-progress-list {
   display: grid;
   gap: 6px;
+  padding: 12px;
 }
 
 .study-progress-list > div {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 5px 0;
+  padding: 14px 24px;
   border-bottom: 1px solid var(--line);
 }
 
