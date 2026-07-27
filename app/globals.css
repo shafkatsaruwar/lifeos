@@ -551,3 +551,16 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
     grid-template-columns: 1fr;
   }
 }
+
+.table-row.drag-over {
+  background: color-mix(in srgb, var(--accent) 12%, var(--canvas));
+  border-left: 3px solid var(--accent);
+}
+
+.table-row[draggable="true"] {
+  cursor: grab;
+}
+
+.table-row[draggable="true"]:active {
+  cursor: grabbing;
+}

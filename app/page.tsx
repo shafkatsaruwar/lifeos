@@ -1311,7 +1311,7 @@ export default function LifeOS() {
     setCalendarImporter(false);
     flash(`${events.length} iCal event${events.length === 1 ? "" : "s"} imported`);
   };
-  const updateTask = (id: number, updates: Pick<Task, "title" | "focusMinutes" | "energy" | "project" | "classId" | "academicType" | "color" | "due" | "startTime">) => {
+  const updateTask = (id: number, updates: Pick<Task, "title" | "focusMinutes" | "energy" | "project" | "classId" | "academicType" | "color" | "due" | "startTime" | "parentTaskId">) => {
     setTasks(items => items.map(task => task.id === id ? { ...task, ...updates } : task));
     setEditingTaskId(null);
     flash("Priority updated");
@@ -1621,7 +1621,7 @@ export default function LifeOS() {
             {view === "Study Abroad" && settingsState.enableStudyAbroad && <StudyAbroadDashboard hub={studyAbroadHub} onOpenUniversities={() => setStudyAbroadCollection("universities")} onOpenPrograms={() => setStudyAbroadCollection("programs")} onOpenApplications={() => setStudyAbroadCollection("applications")} onOpenScholarships={() => setStudyAbroadCollection("scholarships")} onOpenDocuments={() => setStudyAbroadCollection("documents")} onOpenTimeline={() => go("Study Abroad")} personalContextMessage={undefined} />}
             {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarEvents} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onSetEnergy={(currentEnergy) => setSettingsState(current => ({ ...current, currentEnergy }))} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={setTaskPageId} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={(name) => { const context = settingsState.spaceContext?.[`project:${name}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`project:${name}`]: { ...current.spaceContext?.[`project:${name}`], updatedAt: new Date().toISOString() } } })); setSelectedClassId(null); setSelectedProjectName(name); }} onOpenClass={(id) => { const context = settingsState.spaceContext?.[`class:${id}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`class:${id}`]: { ...current.spaceContext?.[`class:${id}`], updatedAt: new Date().toISOString() } } })); setSelectedProjectName(null); setSelectedClassId(id); }} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={(id) => { const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); setTaskPageId(id); }} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} onOpenKanban={setKanbanProjectName} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
-            {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={setTaskPageId} onNewSubTask={(parentTaskId) => { setParentTaskIdForCreation(parentTaskId); setComposer("task"); }} />}
+            {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={setTaskPageId} onNewSubTask={(parentTaskId) => { setParentTaskIdForCreation(parentTaskId); setComposer("task"); }} onReparent={(taskId, newParentId) => updateTask(taskId, { parentTaskId: newParentId })} />}
             {(view === "Today" || view === "Calendar") && <CalendarView events={[...calendarEvents, ...tasksToCalendarEvents(tasks)]} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => id.startsWith("task-") ? setTaskPageId(Number(id.slice(5))) : setEditingCalendarEventId(id)} onPlanTask={setEditingTaskId} />}
             {view === "Notes" && <NotesView notes={notes} classes={classes} projects={projectItems} selectedNoteId={selectedNoteId} onSelect={setSelectedNoteId} onCreate={() => { createNote(undefined, undefined, parentNoteIdForCreation ?? undefined); setParentNoteIdForCreation(null); }} onUpdate={updateNote} onDelete={deleteNote} onImport={importNotes} onNewSubNote={(parentNoteId) => { setParentNoteIdForCreation(parentNoteId); setView("Notes"); }} />}
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
@@ -2241,9 +2241,11 @@ function SpaceModal({ initialKind, close, addProject, addClass }: { initialKind:
   </motion.form></motion.div>;
 }
 
-function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onNewSubTask }: { tasks: Task[]; classes: ClassRecord[]; onComplete: (id: number) => void; onNew: () => void; onTaskMenu: (id: number) => void; onOpenTask: (id: number) => void; onNewSubTask?: (parentTaskId: number) => void }) {
+function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onNewSubTask, onReparent }: { tasks: Task[]; classes: ClassRecord[]; onComplete: (id: number) => void; onNew: () => void; onTaskMenu: (id: number) => void; onOpenTask: (id: number) => void; onNewSubTask?: (parentTaskId: number) => void; onReparent?: (taskId: number, newParentId: number | null) => void }) {
   const [layout, setLayout] = useState<"List" | "Board" | "Calendar">("List");
   const [expandedParents, setExpandedParents] = useState<Set<number>>(new Set());
+  const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<number | null>(null);
 
   const toggleParentExpansion = (parentId: number) => {
     setExpandedParents(prev => {
@@ -2262,10 +2264,28 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onNe
     const hasChildren = children.length > 0;
     const isExpanded = expandedParents.has(t.id);
     const indent = level * 24;
+    const isDraggedOver = dropTargetId === t.id;
 
     return (
       <>
-        <div className={`table-row ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""}`} style={{ paddingLeft: `${indent}px` }} key={t.id}>
+        <div
+          className={`table-row ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""} ${isDraggedOver ? "drag-over" : ""}`}
+          style={{ paddingLeft: `${indent}px` }}
+          key={t.id}
+          draggable={!t.done && !t.canceled}
+          onDragStart={() => setDraggedTaskId(t.id)}
+          onDragEnd={() => { setDraggedTaskId(null); setDropTargetId(null); }}
+          onDragOver={(e) => { e.preventDefault(); if (draggedTaskId && draggedTaskId !== t.id) setDropTargetId(t.id); }}
+          onDragLeave={() => setDropTargetId(null)}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (draggedTaskId && draggedTaskId !== t.id && onReparent) {
+              onReparent(draggedTaskId, t.id);
+              setDraggedTaskId(null);
+              setDropTargetId(null);
+            }
+          }}
+        >
           <button className="round-check" disabled={t.canceled} onClick={() => onComplete(t.id)}>{t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}</button>
           {hasChildren && (
             <button className="expand-button" onClick={() => toggleParentExpansion(t.id)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '0 4px' }}>
