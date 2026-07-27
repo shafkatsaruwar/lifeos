@@ -74,9 +74,9 @@ function StatCard({
 }) {
   return (
     <div className="study-stat-card" style={color ? { "--accent-color": color } as any : {}}>
-      <Icon size={16} />
+      <Icon size={16} style={color ? { color } : {}} />
       <span>{label}</span>
-      <strong>{value}</strong>
+      <strong style={color ? { color } : {}}>{value}</strong>
     </div>
   );
 }
@@ -178,17 +178,17 @@ export function StudyAbroadDashboard({
           )}
 
           <div className="study-stat-grid">
-            <StatCard label="Programs researched" value={hub.programs.length} icon={BookOpen} />
-            <StatCard label="Applications in progress" value={hub.applications.filter((a) => ["preparing", "ready_to_submit", "blocked"].includes(a.status)).length} icon={Clock3} />
-            <StatCard label="Submitted" value={submitted} icon={FileText} />
+            <StatCard label="Programs researched" value={hub.programs.length} icon={BookOpen} color="#7c3aed" />
+            <StatCard label="Applications in progress" value={hub.applications.filter((a) => ["preparing", "ready_to_submit", "blocked"].includes(a.status)).length} icon={Clock3} color="#f59e0b" />
+            <StatCard label="Submitted" value={submitted} icon={FileText} color="#3b82f6" />
             <StatCard label="Offers received" value={offers} icon={CheckCircle2} color="#10b981" />
             <StatCard label="Rejections" value={rejected} icon={AlertCircle} color="#ef4444" />
-            <StatCard label="Upcoming deadlines" value={deadlines.length} icon={Calendar} />
-            <StatCard label="Scholarships tracked" value={hub.scholarships.length} icon={Award} />
-            <StatCard label="Blocked by documents" value={hub.applications.filter((a) => a.status === "blocked").length} icon={AlertCircle} />
-            {totalTuitionExposure > 0 && <StatCard label="Est. tuition exposure" value={`€${Math.round(totalTuitionExposure / 1000)}k`} icon={DollarSign} />}
+            <StatCard label="Upcoming deadlines" value={deadlines.length} icon={Calendar} color="#8b5cf6" />
+            <StatCard label="Scholarships tracked" value={hub.scholarships.length} icon={Award} color="#ec4899" />
+            <StatCard label="Blocked by documents" value={hub.applications.filter((a) => a.status === "blocked").length} icon={AlertCircle} color="#f97316" />
+            {totalTuitionExposure > 0 && <StatCard label="Est. tuition exposure" value={`€${Math.round(totalTuitionExposure / 1000)}k`} icon={DollarSign} color="#06b6d4" />}
             {livingCostRange.max > 0 && (
-              <StatCard label="Monthly living cost" value={`€${livingCostRange.min}-${livingCostRange.max}`} icon={DollarSign} />
+              <StatCard label="Monthly living cost" value={`€${livingCostRange.min}-${livingCostRange.max}`} icon={DollarSign} color="#14b8a6" />
             )}
           </div>
 
