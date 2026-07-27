@@ -564,3 +564,284 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .table-row[draggable="true"]:active {
   cursor: grabbing;
 }
+
+.project-kanban-container {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  overflow: hidden;
+}
+
+.kanban-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  flex-shrink: 0;
+}
+
+.kanban-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--ink);
+  transition: background 0.2s;
+}
+
+.kanban-back:hover {
+  background: var(--canvas);
+}
+
+.kanban-title-section {
+  flex: 1;
+}
+
+.kanban-title-section h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--ink);
+}
+
+.kanban-stats {
+  display: flex;
+  gap: 32px;
+}
+
+.kanban-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.progress-bar {
+  width: 160px;
+  height: 4px;
+  background: var(--canvas);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  padding: 24px;
+  overflow: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.kanban-column {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-top: 3px solid;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.column-title-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.column-title-section h2 {
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--ink);
+}
+
+.column-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--canvas);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.column-tasks {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kanban-card {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  cursor: grab;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.kanban-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.kanban-card:active {
+  cursor: grabbing;
+}
+
+.kanban-card.urgency-critical {
+  border-left: 3px solid #ef4444;
+}
+
+.kanban-card.urgency-soon {
+  border-left: 3px solid #f59e0b;
+}
+
+.kanban-card.urgency-normal {
+  border-left: 3px solid transparent;
+}
+
+.card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-priority-bar {
+  height: 2px;
+  border-radius: 1px;
+  margin: -12px -12px 6px;
+}
+
+.card-content h3 {
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.card-due {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.days-label {
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.days-label.critical {
+  background: #ef444415;
+  color: #ef4444;
+}
+
+.days-label.soon {
+  background: #f59e0b15;
+  color: #f59e0b;
+}
+
+.days-label.normal {
+  background: var(--canvas);
+  color: var(--muted);
+}
+
+.card-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.priority-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.priority-badge.high {
+  background: #ef444415;
+  color: #ef4444;
+}
+
+.priority-badge.medium {
+  background: #f59e0b15;
+  color: #f59e0b;
+}
+
+.priority-badge.low {
+  background: #3b82f615;
+  color: #3b82f6;
+}
+
+.energy-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 9px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
