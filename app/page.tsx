@@ -89,7 +89,10 @@ const routedViews: Record<string, View> = {
 };
 const viewFromLocation = (): View => {
   if (typeof window === "undefined") return "Now";
-  return routedViews[new URLSearchParams(window.location.search).get("view")?.toLowerCase() ?? ""] ?? "Now";
+  const urlView = new URLSearchParams(window.location.search).get("view")?.toLowerCase();
+  if (urlView) return routedViews[urlView] ?? "Now";
+  const savedView = typeof localStorage !== "undefined" ? localStorage.getItem("lifeos-current-view") : null;
+  return (savedView as View) ?? "Now";
 };
 type SettingsState = {
   accent: string;
@@ -499,6 +502,11 @@ export default function LifeOS() {
     writeCurrentView();
     window.addEventListener("popstate", restoreView);
     return () => window.removeEventListener("popstate", restoreView);
+  }, [view]);
+  useEffect(() => {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("lifeos-current-view", view);
+    }
   }, [view]);
   useEffect(() => {
     const importICloudEvents = (event: Event) => {
