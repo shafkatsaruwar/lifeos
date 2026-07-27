@@ -476,6 +476,17 @@ export function DocumentModal({
         </div>
 
         <label>
+          Upload File
+          <input type="file" onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              setNotes(prev => prev + (prev ? '\n' : '') + `Uploaded: ${file.name} (${(file.size / 1024).toFixed(1)}KB)`);
+            }
+          }} accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png" />
+          <small>Supports PDF, DOC, DOCX, TXT, JPG, PNG</small>
+        </label>
+
+        <label>
           Notes
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional information..." style={{ minHeight: "60px" }} />
         </label>
