@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { X } from "lucide-react";
 import type {
   University,
@@ -77,8 +78,8 @@ export function UniversityModal({
   };
 
   return (
-    <div className="modal-layer hub-modal-layer" onMouseDown={close}>
-      <form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+    <motion.div className="modal-layer hub-modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+      <motion.form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit} initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ duration: 0.25, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}>
         <header>
           <div>
             <h2>{university ? "Edit University" : "Add University"}</h2>
@@ -152,8 +153,8 @@ export function UniversityModal({
             Save University
           </button>
         </div>
-      </form>
-    </div>
+      </motion.form>
+    </motion.div>
   );
 }
 
@@ -226,8 +227,8 @@ export function ProgramModal({
   };
 
   return (
-    <div className="modal-layer hub-modal-layer" onMouseDown={close}>
-      <form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+    <motion.div className="modal-layer hub-modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+      <motion.form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit} initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ duration: 0.25, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}>
         <header>
           <div>
             <h2>{program ? "Edit Program" : "Add Program"}</h2>
@@ -389,8 +390,8 @@ export function ProgramModal({
             Save Program
           </button>
         </div>
-      </form>
-    </div>
+      </motion.form>
+    </motion.div>
   );
 }
 
@@ -440,8 +441,8 @@ export function DocumentModal({
   };
 
   return (
-    <div className="modal-layer hub-modal-layer" onMouseDown={close}>
-      <form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+    <motion.div className="modal-layer hub-modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+      <motion.form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit} initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ duration: 0.25, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}>
         <header>
           <div>
             <h2>{document ? "Edit Document" : "Add Document"}</h2>
@@ -554,8 +555,8 @@ export function DocumentModal({
             Save Document
           </button>
         </div>
-      </form>
-    </div>
+      </motion.form>
+    </motion.div>
   );
 }
 
@@ -643,8 +644,8 @@ export function StudyAbroadCollectionView({
   };
 
   return (
-    <div className="modal-layer hub-modal-layer" onMouseDown={close}>
-      <div className="hub-collection-modal" onMouseDown={(e) => e.stopPropagation()}>
+    <motion.div className="modal-layer hub-modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+      <motion.div className="hub-collection-modal" onMouseDown={(e) => e.stopPropagation()} initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ duration: 0.25, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}>
         <header>
           <div>
             <h2>{getIcon()} {getTitle()}</h2>
@@ -694,8 +695,8 @@ export function StudyAbroadCollectionView({
             + Add {getTitle().slice(0, -1)}
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -742,8 +743,8 @@ export function ApplicationModal({
   };
 
   return (
-    <div className="modal-layer hub-modal-layer" onMouseDown={close}>
-      <form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+    <motion.div className="modal-layer hub-modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+      <motion.form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit} initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ duration: 0.25, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}>
         <header>
           <div>
             <h2>{application ? "Edit Application" : "Add Application"}</h2>
@@ -834,8 +835,8 @@ export function ApplicationModal({
             Save Application
           </button>
         </div>
-      </form>
-    </div>
+      </motion.form>
+    </motion.div>
   );
 }
 
@@ -889,8 +890,8 @@ export function ScholarshipModal({
   };
 
   return (
-    <div className="modal-layer hub-modal-layer" onMouseDown={close}>
-      <form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+    <motion.div className="modal-layer hub-modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+      <motion.form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit} initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ duration: 0.25, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}>
         <header>
           <div>
             <h2>{scholarship ? "Edit Scholarship" : "Add Scholarship"}</h2>
@@ -1012,7 +1013,7 @@ export function ScholarshipModal({
             Save Scholarship
           </button>
         </div>
-      </form>
-    </div>
+      </motion.form>
+    </motion.div>
   );
 }

@@ -2040,21 +2040,7 @@ function TaskQueueModal({ tasks, taskQueue, setTaskQueue, close, classes, onChoo
                 key={task.id}
                 type="button"
                 onClick={() => addToQueue(task.id)}
-                style={{
-                  padding: '12px',
-                  border: '1px solid var(--line)',
-                  borderRadius: '8px',
-                  background: 'var(--canvas)',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr auto',
-                  gap: '12px',
-                  alignItems: 'center',
-                  transition: 'all .15s',
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLButtonElement).style.background = 'color-mix(in srgb, var(--accent) 10%, var(--canvas))'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--line)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--canvas)'; }}
+                className="queue-available-task"
               >
                 <div>
                   <strong style={{ display: 'block', fontSize: '11px' }}>{task.title}</strong>

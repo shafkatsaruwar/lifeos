@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { --canvas:#f6f7f9; --panel:#fff; --ink:#202124; --muted:#777b84; --line:#e8e9ed; --accent:#625af6; --font-sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; --font-display:Iowan Old Style,Baskerville,"Times New Roman",serif; color-scheme:light; }
+:root { --canvas:#f6f7f9; --panel:#fff; --ink:#202124; --muted:#777b84; --line:#e8e9ed; --accent:#625af6; --font-sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; --font-display:Iowan Old Style,Baskerville,"Times New Roman",serif; --ease-out:cubic-bezier(0.23,1,0.32,1); --ease-in-out:cubic-bezier(0.77,0,0.175,1); --ease:cubic-bezier(0.25,0.46,0.45,0.94); --ease-drawer:cubic-bezier(0.32,0.72,0,1); --duration-instant:50ms; --duration-fast:100ms; --duration-normal:200ms; --duration-medium:250ms; --duration-slow:300ms; color-scheme:light; }
 .dark { --canvas:#111214; --panel:#191a1d; --ink:#f1f1f2; --muted:#92959e; --line:#292b30; --accent:#8b83ff; color-scheme:dark; }
 * { box-sizing:border-box; }
 body { margin:0; background:var(--canvas); color:var(--ink); font-family:var(--font-sans),sans-serif; -webkit-font-smoothing:antialiased; }
@@ -252,7 +252,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
   display: flex;
   flex-direction: column;
   gap: 8px;
-  transition: all 0.18s;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
 }
 
 .study-stat-card:hover {
@@ -314,7 +314,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
   padding: 12px;
   border-radius: 8px;
   background: color-mix(in srgb, var(--ink) 2%, var(--canvas));
-  transition: all 0.18s;
+  transition: background-color 0.18s ease;
 }
 
 .study-deadline-item:hover {
@@ -403,7 +403,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
   color: var(--muted);
   display: grid;
   place-items: center;
-  transition: all 0.18s;
+  transition: border-color 0.18s ease, color 0.18s ease;
 }
 
 .study-blocked-item button:hover {
@@ -747,7 +747,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
   border-radius: 10px;
   padding: 14px;
   cursor: grab;
-  transition: all 0.2s;
+  transition: border-color 0.2s ease;
   user-select: none;
 }
 
@@ -882,7 +882,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s ease;
   letter-spacing: 0.02em;
 }
 
@@ -983,4 +983,89 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .project-kanban-grid {
   display: flex;
   flex-direction: column;
+}
+
+.queue-available-task {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  transition: border-color var(--duration-fast) var(--ease), background-color var(--duration-fast) var(--ease);
+}
+
+.queue-available-task:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--canvas));
+}
+
+/* Accessibility: Reduce motion for users with motion sensitivity */
+@media (prefers-reduced-motion: reduce) {
+  /* Disable transforms but keep opacity/color feedback */
+  .check:active:not(:disabled) {
+    transform: none;
+    opacity: 0.85;
+  }
+
+  .sidebar {
+    transition: none;
+  }
+
+  .sidebar-open {
+    transform: translateX(0);
+  }
+
+  /* Modal and overlay animations: keep opacity, remove scale */
+  .modal-layer,
+  .create-modal,
+  .review-modal,
+  .hub-modal-layer {
+    transition: opacity var(--duration-normal) var(--ease);
+  }
+
+  /* Button press feedback: use opacity instead of scale */
+  button:active:not(:disabled),
+  .button:active:not(:disabled) {
+    transform: none;
+    opacity: 0.85;
+  }
+
+  /* Hover animations on cards: keep color changes, remove transform */
+  .study-stat-card:hover,
+  .study-deadline-item:hover,
+  .kanban-card:hover {
+    transform: none;
+  }
+
+  /* Focus states: keep border/outline, no animation */
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    animation: none;
+    transition: none;
+  }
+
+  /* Spinner and animated loaders */
+  .loading-spinner {
+    animation: none;
+    border-top-color: var(--accent);
+  }
+
+  .copilot-thinking i {
+    animation: none;
+    opacity: 1;
+  }
+
+  /* Sidebar mobile: disable smooth transition */
+  @media (max-width: 900px) {
+    .sidebar {
+      transform: translateX(-100%);
+      transition: none;
+    }
+  }
 }
