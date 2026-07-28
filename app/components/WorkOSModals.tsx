@@ -253,3 +253,143 @@ export function WorkOSGoalsModal({ items, close, add, remove }: Omit<WorkOSColle
     </Modal>
   );
 }
+
+export function WorkOSInterviewsModal({ items, close, add, remove }: Omit<WorkOSCollectionModalProps, "type" | "update"> & { type?: "interviews" }) {
+  const [adding, setAdding] = useState(false);
+  const [query, setQuery] = useState("");
+  const [company, setCompany] = useState("");
+  const [position, setPosition] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [type, setType] = useState<InterviewType>("phone");
+  const [outcome, setOutcome] = useState<InterviewOutcome>("pending");
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!company.trim() || !date) return;
+    const newInterview: Interview = {
+      id: `int-${Date.now()}`,
+      applicationId: "",
+      date,
+      time: time || undefined,
+      type,
+      outcome,
+    };
+    add(newInterview);
+    setCompany("");
+    setPosition("");
+    setDate("");
+    setTime("");
+    setType("phone");
+    setOutcome("pending");
+    setAdding(false);
+  };
+
+  const filtered = items.filter(i => `${i.date}`.includes(query.toLowerCase()));
+  const types: InterviewType[] = ["phone", "video", "in-person", "async"];
+  const outcomes: InterviewOutcome[] = ["pending", "positive", "negative", "advance", "reject"];
+
+  return (
+    <Modal title="Interviews" subtitle="Track interview pipeline and outcomes." close={close}>
+      <div className="hub-modal-toolbar">
+        <label><Search size={15} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search by date..." /></label>
+        <button className="primary" onClick={() => setAdding(!adding)}><Plus size={15} /> Add</button>
+      </div>
+
+      {adding && (
+        <form className="hub-add-form" onSubmit={handleAdd}>
+          <label>Company<input autoFocus value={company} onChange={e => setCompany(e.target.value)} placeholder="Acme Corp" /></label>
+          <label>Position<input value={position} onChange={e => setPosition(e.target.value)} placeholder="Senior Engineer" /></label>
+          <label>Date<input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
+          <label>Time<input type="time" value={time} onChange={e => setTime(e.target.value)} /></label>
+          <label>Format<select value={type} onChange={e => setType(e.target.value as InterviewType)}>
+            {types.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+          </select></label>
+          <label>Outcome<select value={outcome} onChange={e => setOutcome(e.target.value as InterviewOutcome)}>
+            {outcomes.map(o => <option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)}</option>)}
+          </select></label>
+          <div><button type="button" onClick={() => setAdding(false)}>Cancel</button><button className="primary" disabled={!company.trim() || !date}>Save</button></div>
+        </form>
+      )}
+
+      <div className="hub-record-list">
+        {filtered.length ? filtered.map(interview => (
+          <article key={interview.id}>
+            <button className="hub-record-main">
+              <span style={{ color: "#4b8bdc" }}>📅</span>
+              <span>
+                <strong>{interview.date}</strong>
+                <small>{interview.type} · {interview.outcome}</small>
+              </span>
+            </button>
+            <button className="hub-record-delete" onClick={() => remove(interview.id)}><Trash2 size={15} /></button>
+          </article>
+        )) : <div className="os-empty"><Trash2 size={19} /><p>No interviews scheduled yet.</p></div>}
+      </div>
+    </Modal>
+  );
+}
+
+export function WorkOSRecruitersModal({ items, close, add, remove }: Omit<WorkOSCollectionModalProps, "type" | "update"> & { type?: "recruiters" }) {
+  const [adding, setAdding] = useState(false);
+  const [query, setQuery] = useState("");
+  const [name, setName] = useState("");
+  const [company, setCompany] = useState("");
+  const [email, setEmail] = useState("");
+  const [linkedin, setLinkedin] = useState("");
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    const newRecruiter: Recruiter = {
+      id: `rec-${Date.now()}`,
+      name: name.trim(),
+      company: company.trim() || undefined,
+      email: email.trim() || undefined,
+      linkedin: linkedin.trim() || undefined,
+      contacted: false,
+    };
+    add(newRecruiter);
+    setName("");
+    setCompany("");
+    setEmail("");
+    setLinkedin("");
+    setAdding(false);
+  };
+
+  const filtered = items.filter(i => `${i.name} ${i.company || ""}`.toLowerCase().includes(query.toLowerCase()));
+
+  return (
+    <Modal title="Recruiters" subtitle="Track recruiting contacts and opportunities." close={close}>
+      <div className="hub-modal-toolbar">
+        <label><Search size={15} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search recruiters..." /></label>
+        <button className="primary" onClick={() => setAdding(!adding)}><Plus size={15} /> Add</button>
+      </div>
+
+      {adding && (
+        <form className="hub-add-form" onSubmit={handleAdd}>
+          <label>Name<input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="John Smith" /></label>
+          <label>Company<input value={company} onChange={e => setCompany(e.target.value)} placeholder="TechRecruit Inc" /></label>
+          <label>Email<input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="john@techrecruit.com" /></label>
+          <label>LinkedIn<input value={linkedin} onChange={e => setLinkedin(e.target.value)} placeholder="linkedin.com/in/..." /></label>
+          <div><button type="button" onClick={() => setAdding(false)}>Cancel</button><button className="primary" disabled={!name.trim()}>Save</button></div>
+        </form>
+      )}
+
+      <div className="hub-record-list">
+        {filtered.length ? filtered.map(recruiter => (
+          <article key={recruiter.id}>
+            <button className="hub-record-main">
+              <span style={{ color: "#cf625a" }}>👤</span>
+              <span>
+                <strong>{recruiter.name}</strong>
+                <small>{recruiter.company || "Freelance"}</small>
+              </span>
+            </button>
+            <button className="hub-record-delete" onClick={() => remove(recruiter.id)}><Trash2 size={15} /></button>
+          </article>
+        )) : <div className="os-empty"><Trash2 size={19} /><p>No recruiters yet. Build your network.</p></div>}
+      </div>
+    </Modal>
+  );
+}
