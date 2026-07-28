@@ -4,12 +4,16 @@ This directory contains prioritized, self-contained implementation plans for imp
 
 ## Overview
 
-**Total plans**: 7  
-**High severity**: 2 (performance, accessibility)  
-**Medium severity**: 2 (tokens, interaction feedback)  
+**Total plans**: 9  
+**High severity**: 3 (performance, accessibility, Study Abroad animations)  
+**Medium severity**: 3 (tokens, interaction feedback, button interruptibility)  
 **Low severity**: 3 (polish, missed opportunities)  
 
 **Recommended execution**: Sequential (some plans build on earlier work)
+
+**New in this session:**
+- **Plan 008** — Study Abroad module modal animations (HIGH priority, user-facing feature)
+- **Plan 009** — TaskQueueModal button hover interruptibility (MEDIUM priority, feel improvement)
 
 ## Plans at a Glance
 
@@ -22,6 +26,8 @@ This directory contains prioritized, self-contained implementation plans for imp
 | 005 | Add staggered form field entrance animations | LOW | TODO | Missed opportunities | None |
 | 006 | Add backdrop blur entrance animation to modals | LOW | TODO | Missed opportunities | 003 (optional; can use inline values) |
 | 007 | Add focus state animations to form fields | LOW | TODO | Missed opportunities | 003 (optional; can use inline values) |
+| 008 | Add animations to Study Abroad module modals | HIGH | TODO | Physicality & interaction | None (Framer Motion ready to use) |
+| 009 | Refactor TaskQueueModal button hover to CSS | MEDIUM | TODO | Interruptibility & performance | None (standalone) |
 
 ## Execution Order & Rationale
 
@@ -73,15 +79,17 @@ For maximum impact with minimum complexity, execute in this order:
 1. **001** — Replace transition:all (~30 min) — fixes performance immediately
 2. **003** — Define tokens (~20 min) — sets up system for consistency
 3. **002** — Add prefers-reduced-motion (~25 min) — ensures accessibility
-4. **004** — Active press feedback (~10 min) — adds interaction polish
-5. **005** — Staggered reveals (~30 min) — improves form UX
-6. **006** — Backdrop blur (~15 min) — modal polish
-7. **007** — Focus animations (~20 min) — final polish
+4. **008** — Study Abroad modal animations (~45 min) — high-visibility feature area
+5. **009** — TaskQueueModal button hover refactor (~15 min) — improves interruptibility
+6. **004** — Active press feedback (~10 min) — adds interaction polish
+7. **005** — Staggered reveals (~30 min) — improves form UX
+8. **006** — Backdrop blur (~15 min) — modal polish
+9. **007** — Focus animations (~20 min) — final polish
 
-**Total estimated time: ~2.5 hours**
+**Total estimated time: ~3.5 hours (including new plans 008 & 009)**
 
 Alternative (fast path, HIGH severity only):
-- 001, 003, 002 (~75 minutes) — covers performance + accessibility
+- 001, 003, 002, 008 (~120 minutes) — covers performance, accessibility, + Study Abroad feature animations
 
 ## Plan Dependencies & Cross-References
 
