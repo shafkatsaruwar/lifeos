@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Calendar, AlertCircle, CheckCircle2, Clock, Plus } from 'lucide-react';
+import { ChevronLeft, Calendar, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 import type { Task } from '@/lib/types';
 
 const toDateKey = (date: Date) => date.toISOString().split('T')[0];
@@ -31,7 +31,6 @@ export default function ProjectKanban({
   tasks,
   onClose,
   onUpdateTask,
-  onNewTask,
   isEmbedded,
 }: Props) {
   const projectTasks = tasks.filter(t => t.project === projectName && !t.canceled);
@@ -91,7 +90,7 @@ export default function ProjectKanban({
 
   const [draggedTask, setDraggedTask] = useState<number | null>(null);
 
-  const handleDragStart = (taskId: number, currentColId: string) => {
+  const handleDragStart = (taskId: number) => {
     setDraggedTask(taskId);
   };
 
@@ -221,7 +220,7 @@ export default function ProjectKanban({
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 20 }}
                       draggable
-                      onDragStart={() => handleDragStart(task.id, column.id)}
+                      onDragStart={() => handleDragStart(task.id)}
                       className={`kanban-card urgency-${urgency}`}
                       onClick={() => {
                         if (column.id !== 'done') {

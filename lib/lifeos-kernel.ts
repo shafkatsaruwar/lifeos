@@ -360,6 +360,7 @@ export function generateMockObservations(): Observation[] {
 // REASONING ENGINE
 // ============================================
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function buildContext(observations: Observation[], _memory: PersonalMemory): PersonalContext {
   const today = new Date();
 
