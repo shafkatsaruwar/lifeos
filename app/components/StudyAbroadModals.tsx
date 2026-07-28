@@ -55,6 +55,20 @@ export function UniversityModal({
   const [universityType, setUniversityType] = useState(university?.universityType ?? "public");
   const [notes, setNotes] = useState(university?.notes ?? "");
 
+  const containerVariants = {
+    hidden: { opacity: 0, scale: 0.92 },
+    visible: {
+      opacity: 1,
+      scale: 1,
+      transition: { staggerChildren: 0.05, duration: 0.25, delay: 0.08 },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -78,8 +92,8 @@ export function UniversityModal({
   };
 
   return (
-    <motion.div className="modal-layer hub-modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-      <motion.form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit} initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ duration: 0.25, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}>
+    <motion.div className="modal-layer hub-modal-layer" onMouseDown={close} initial={{ opacity: 0, "--modal-blur": "0px" } as any} animate={{ opacity: 1, "--modal-blur": "2px" } as any} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+      <motion.form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit} variants={containerVariants} initial="hidden" animate="visible" exit={{ opacity: 0, scale: 0.92 }} transition={{ exit: { duration: 0.25, ease: [0.16, 1, 0.3, 1] } }}>
         <header>
           <div>
             <h2>{university ? "Edit University" : "Add University"}</h2>
@@ -90,7 +104,7 @@ export function UniversityModal({
           </button>
         </header>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>University Details</h3>
           <div className="study-form-grid">
             <label>
@@ -106,9 +120,9 @@ export function UniversityModal({
               </select>
             </label>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Location</h3>
           <div className="study-form-grid">
             <label>
@@ -124,9 +138,9 @@ export function UniversityModal({
               <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g., Deggendorf" />
             </label>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Contact & Resources</h3>
           <label>
             Website URL
@@ -136,14 +150,14 @@ export function UniversityModal({
             Application Portal URL
             <input type="url" value={applicationPortalUrl} onChange={(e) => setApplicationPortalUrl(e.target.value)} placeholder="https://" />
           </label>
-        </div>
+        </motion.div>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Additional Notes</h3>
           <label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any additional information about this university..." style={{ minHeight: "80px" }} />
           </label>
-        </div>
+        </motion.div>
 
         <div>
           <button type="button" onClick={close}>
@@ -190,6 +204,20 @@ export function ProgramModal({
   const [sourceUrl, setSourceUrl] = useState(program?.sourceUrls?.[0] ?? "");
   const [notes, setNotes] = useState(program?.notes ?? "");
 
+  const containerVariants = {
+    hidden: { opacity: 0, scale: 0.92 },
+    visible: {
+      opacity: 1,
+      scale: 1,
+      transition: { staggerChildren: 0.05, duration: 0.25, delay: 0.08 },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !university) return;
@@ -227,8 +255,8 @@ export function ProgramModal({
   };
 
   return (
-    <motion.div className="modal-layer hub-modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-      <motion.form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit} initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ duration: 0.25, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}>
+    <motion.div className="modal-layer hub-modal-layer" onMouseDown={close} initial={{ opacity: 0, "--modal-blur": "0px" } as any} animate={{ opacity: 1, "--modal-blur": "2px" } as any} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+      <motion.form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit} variants={containerVariants} initial="hidden" animate="visible" exit={{ opacity: 0, scale: 0.92 }} transition={{ exit: { duration: 0.25, ease: [0.16, 1, 0.3, 1] } }}>
         <header>
           <div>
             <h2>{program ? "Edit Program" : "Add Program"}</h2>
@@ -239,7 +267,7 @@ export function ProgramModal({
           </button>
         </header>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Basic Info</h3>
           <div className="study-form-grid">
             <label>
@@ -281,9 +309,9 @@ export function ProgramModal({
               <input type="number" value={durationMonths} onChange={(e) => setDurationMonths(parseInt(e.target.value))} min="1" max="120" />
             </label>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Tuition</h3>
           <div className="study-form-grid">
             <label>
@@ -308,9 +336,9 @@ export function ProgramModal({
             Tuition Notes
             <textarea value={tuitionNotes} onChange={(e) => setTuitionNotes(e.target.value)} placeholder="e.g., Includes fees, may be waived for scholarship holders" style={{ minHeight: "60px" }} />
           </label>
-        </div>
+        </motion.div>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Living Costs (Monthly Estimate)</h3>
           <div className="study-form-grid">
             <label>
@@ -326,9 +354,9 @@ export function ProgramModal({
               <input value={livingCostCurrency} onChange={(e) => setLivingCostCurrency(e.target.value)} placeholder="EUR" />
             </label>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Deadlines & Status</h3>
           <div className="study-form-grid">
             <label>
@@ -365,22 +393,22 @@ export function ProgramModal({
               </select>
             </label>
           </div>
-        </div>
+        </motion.div>
 
-        <label>
+        <motion.label variants={itemVariants}>
           Eligibility Notes
           <textarea value={eligibilityNotes} onChange={(e) => setEligibilityNotes(e.target.value)} placeholder="Requirements you've checked" style={{ minHeight: "60px" }} />
-        </label>
+        </motion.label>
 
-        <label>
+        <motion.label variants={itemVariants}>
           Source URL
           <input type="url" value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="https://" />
-        </label>
+        </motion.label>
 
-        <label>
+        <motion.label variants={itemVariants}>
           Notes
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional information..." style={{ minHeight: "60px" }} />
-        </label>
+        </motion.label>
 
         <div>
           <button type="button" onClick={close}>
@@ -719,6 +747,20 @@ export function ApplicationModal({
   const [dateSubmitted, setDateSubmitted] = useState(application?.dateSubmitted ?? "");
   const [notes, setNotes] = useState(application?.notes ?? "");
 
+  const containerVariants = {
+    hidden: { opacity: 0, scale: 0.92 },
+    visible: {
+      opacity: 1,
+      scale: 1,
+      transition: { staggerChildren: 0.05, duration: 0.25, delay: 0.08 },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!universityId || !programId) return;
@@ -743,8 +785,8 @@ export function ApplicationModal({
   };
 
   return (
-    <motion.div className="modal-layer hub-modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-      <motion.form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit} initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ duration: 0.25, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}>
+    <motion.div className="modal-layer hub-modal-layer" onMouseDown={close} initial={{ opacity: 0, "--modal-blur": "0px" } as any} animate={{ opacity: 1, "--modal-blur": "2px" } as any} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+      <motion.form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit} variants={containerVariants} initial="hidden" animate="visible" exit={{ opacity: 0, scale: 0.92 }} transition={{ exit: { duration: 0.25, ease: [0.16, 1, 0.3, 1] } }}>
         <header>
           <div>
             <h2>{application ? "Edit Application" : "Add Application"}</h2>
@@ -755,7 +797,7 @@ export function ApplicationModal({
           </button>
         </header>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Program Selection</h3>
           <div className="study-form-grid">
             <label>
@@ -777,9 +819,9 @@ export function ApplicationModal({
               </select>
             </label>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Application Details</h3>
           <div className="study-form-grid">
             <label>
@@ -791,9 +833,9 @@ export function ApplicationModal({
               <input value={applicantNumber} onChange={(e) => setApplicantNumber(e.target.value)} placeholder="e.g., 7382" />
             </label>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Status & Dates</h3>
           <div className="study-form-grid">
             <label>
@@ -818,14 +860,14 @@ export function ApplicationModal({
               <input type="date" value={dateSubmitted} onChange={(e) => setDateSubmitted(e.target.value)} />
             </label>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Notes</h3>
           <label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional details about this application..." style={{ minHeight: "60px" }} />
           </label>
-        </div>
+        </motion.div>
 
         <div>
           <button type="button" onClick={close}>
@@ -862,6 +904,20 @@ export function ScholarshipModal({
   const [eligibility, setEligibility] = useState(scholarship?.eligibilityRequirements?.join(", ") ?? "");
   const [confidence, setConfidence] = useState(scholarship?.confidence ?? "unverified");
 
+  const containerVariants = {
+    hidden: { opacity: 0, scale: 0.92 },
+    visible: {
+      opacity: 1,
+      scale: 1,
+      transition: { staggerChildren: 0.05, duration: 0.25, delay: 0.08 },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -890,8 +946,8 @@ export function ScholarshipModal({
   };
 
   return (
-    <motion.div className="modal-layer hub-modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-      <motion.form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit} initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ duration: 0.25, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}>
+    <motion.div className="modal-layer hub-modal-layer" onMouseDown={close} initial={{ opacity: 0, "--modal-blur": "0px" } as any} animate={{ opacity: 1, "--modal-blur": "2px" } as any} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+      <motion.form className="hub-profile-modal" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit} variants={containerVariants} initial="hidden" animate="visible" exit={{ opacity: 0, scale: 0.92 }} transition={{ exit: { duration: 0.25, ease: [0.16, 1, 0.3, 1] } }}>
         <header>
           <div>
             <h2>{scholarship ? "Edit Scholarship" : "Add Scholarship"}</h2>
@@ -902,7 +958,7 @@ export function ScholarshipModal({
           </button>
         </header>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Scholarship Details</h3>
           <div className="study-form-grid">
             <label>
@@ -936,9 +992,9 @@ export function ScholarshipModal({
               </select>
             </label>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Funding Details</h3>
           <div className="study-form-grid">
             <label>
@@ -978,9 +1034,9 @@ export function ScholarshipModal({
               <input value={stipendCurrency} onChange={(e) => setStipendCurrency(e.target.value)} placeholder="EUR" />
             </label>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Application & Verification</h3>
           <label>
             Application Deadline
@@ -996,14 +1052,14 @@ export function ScholarshipModal({
               </select>
             </label>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="study-form-section">
+        <motion.div className="study-form-section" variants={itemVariants}>
           <h3>Eligibility</h3>
           <label>
             <textarea value={eligibility} onChange={(e) => setEligibility(e.target.value)} placeholder="List requirements you've checked... (separate by commas)" style={{ minHeight: "60px" }} />
           </label>
-        </div>
+        </motion.div>
 
         <div>
           <button type="button" onClick={close}>
