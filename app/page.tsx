@@ -38,6 +38,7 @@ import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
 import { getFileStorage } from "@/lib/fileStorage";
 import { NLTaskCreationModal } from "@/app/components/NLTaskCreationModal";
+import { TodoList } from "@/app/components/TodoList";
 import {
   HubCollectionModal, LifeDashboard, SchoolClassPickerModal, SchoolDashboard, SchoolProfileModal,
   emptyLifeHub, emptySchoolHub,
@@ -1875,6 +1876,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
         </section>
       </div>
       <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} />
+      <TodoList />
     </div>
     <section className="card week-brainstorm">
       <div className="card-head">
