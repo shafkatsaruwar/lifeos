@@ -38,11 +38,10 @@ import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
 import { getFileStorage } from "@/lib/fileStorage";
 import { NLTaskCreationModal } from "@/app/components/NLTaskCreationModal";
-import { TodoList } from "@/app/components/TodoList";
 import {
-  HubCollectionModal, LifeDashboard, SchoolClassPickerModal, SchoolDashboard, SchoolProfileModal,
-  emptyLifeHub, emptySchoolHub,
-  type HubCollectionTarget, type LifeHubKey, type LifeHubState, type SchoolHubKey, type SchoolHubState,
+  HubCollectionModal, LifeDashboard, SchoolClassPickerModal, SchoolDashboard, SchoolProfileModal, WorkDashboard,
+  emptyLifeHub, emptySchoolHub, emptyWorkHub,
+  type HubCollectionTarget, type LifeHubKey, type LifeHubState, type SchoolHubKey, type SchoolHubState, type WorkHubKey, type WorkHubState,
 } from "@/app/components/OSDashboards";
 import { StudyAbroadDashboard } from "@/app/components/StudyAbroadDashboard";
 import { UniversityModal, ProgramModal, DocumentModal, ApplicationModal, ScholarshipModal, StudyAbroadCollectionView } from "@/app/components/StudyAbroadModals";
@@ -63,7 +62,7 @@ import {
   BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, Globe,
 } from "lucide-react";
 
-type View = "Life" | "School" | "Study Abroad" | "Now" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
+type View = "Life" | "School" | "Work" | "Study Abroad" | "Now" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
 type EnergyLevel = "Low" | "Medium" | "High";
 type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
 type AcademicItemType = "Assignment" | "Project" | "Exam" | "Quiz" | "Lab" | "Reading" | "Discussion";
@@ -74,7 +73,7 @@ type ProjectKind = "maintenance" | "finishable";
 type SpaceKind = "class" | "project" | "maintenance";
 type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban" | "BriefcaseBusiness" | "Camera" | "Code2" | "HeartPulse" | "Utensils" | "BookOpen";
 type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string; classId?: string; projectName?: string; storagePath?: string; storage?: "cloud" | "local"; parentResourceId?: string };
-type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind; parentProject?: string };
+type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind; parentProject?: string; scope: "life" | "school" | "work" };
 type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook"; color: string; notes?: string };
 type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterEnd?: string; archived?: boolean };
 type Note = { id: string; title: string; body: string; classId?: string; projectName?: string; template?: "blank" | "lined" | "dotted" | "cornell" | "meeting"; updatedAt: string; parentNoteId?: string };
@@ -147,13 +146,16 @@ type SettingsState = {
   momentumLog?: { id: string; at: string; type: "done" | "focus" | "capture"; title: string }[];
   preferredName?: string;
   enableStudyAbroad?: boolean;
+  enableLifeOS?: boolean;
+  enableSchoolOS?: boolean;
+  enableWorkOS?: boolean;
 };
 
 const projectIcons: Record<ProjectIcon, typeof Home> = { Zap, Aperture, Sparkles, FileText, UserRound, FolderKanban, BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, BookOpen };
 
 const baseNav: { name: View; icon: typeof Home }[] = [
   { name: "Now", icon: TimerReset }, { name: "Life", icon: Home }, { name: "Tasks", icon: CheckCircle2 },
-  { name: "Calendar", icon: CalendarDays }, { name: "School", icon: GraduationCap },
+  { name: "Calendar", icon: CalendarDays }, { name: "School", icon: GraduationCap }, { name: "Work", icon: BriefcaseBusiness },
   { name: "Library", icon: Library },
 ];
 
@@ -182,13 +184,16 @@ const initialSettings: SettingsState = {
   currentEnergy: "Medium",
   momentumLog: [],
   enableStudyAbroad: false,
+  enableLifeOS: true,
+  enableSchoolOS: true,
+  enableWorkOS: true,
 };
 
 // New users start with three empty project templates to explore the product
 const initialProjects: Project[] = [
-  { name: "Project 1", desc: "A focused project with a finish line.", progress: 0, color: "#625af6", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable" },
-  { name: "Project 2", desc: "A focused project with a finish line.", progress: 0, color: "#4b8bdc", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable" },
-  { name: "Project 3", desc: "A focused project with a finish line.", progress: 0, color: "#47a47b", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable" },
+  { name: "Project 1", desc: "A focused project with a finish line.", progress: 0, color: "#625af6", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable", scope: "life" },
+  { name: "Project 2", desc: "A focused project with a finish line.", progress: 0, color: "#4b8bdc", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable", scope: "life" },
+  { name: "Project 3", desc: "A focused project with a finish line.", progress: 0, color: "#47a47b", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable", scope: "life" },
 ];
 
 const starterTaskSignature = initialTasks.map(task => `${task.id}:${task.title}`).join("|");
@@ -206,6 +211,7 @@ const recoverSpacesFromTasks = (items: Task[]): Project[] => {
       icon: projectIcons.FolderKanban,
       tasks: 0,
       kind: "finishable",
+      scope: "life",
     });
   }
   return [...spaces.values()];
@@ -447,6 +453,8 @@ export default function LifeOS() {
   const [lifeHubHydrated, setLifeHubHydrated] = useState(false);
   const [schoolHub, setSchoolHub] = useState<SchoolHubState>(emptySchoolHub);
   const [schoolHubHydrated, setSchoolHubHydrated] = useState(false);
+  const [workHub, setWorkHub] = useState<WorkHubState>(emptyWorkHub);
+  const [workHubHydrated, setWorkHubHydrated] = useState(false);
   const [studyAbroadHub, setStudyAbroadHub] = useState<StudyAbroadHub>(emptyStudyAbroadHub);
   const [studyAbroadHydrated, setStudyAbroadHydrated] = useState(false);
   const [studyAbroadModal, setStudyAbroadModal] = useState<"university" | "program" | "document" | "application" | "scholarship" | null>(null);
@@ -455,6 +463,7 @@ export default function LifeOS() {
   const [hubCollection, setHubCollection] = useState<HubCollectionTarget | null>(null);
   const [schoolProfileOpen, setSchoolProfileOpen] = useState(false);
   const [schoolClassAction, setSchoolClassAction] = useState<"coursework" | "lecture" | null>(null);
+  const [creationScope, setCreationScope] = useState<"life" | "school" | "work">("life");
   const [composer, setComposer] = useState<"task" | "project" | null>(null);
   const [parentTaskIdForCreation, setParentTaskIdForCreation] = useState<number | null>(null);
   const [parentNoteIdForCreation, setParentNoteIdForCreation] = useState<string | null>(null);
@@ -802,6 +811,7 @@ export default function LifeOS() {
               icon: projectIcons[iconName],
               tasks: project.tasks ?? 0,
               kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+              scope: project.scope ?? "life",
             };
           }));
         }
@@ -987,6 +997,25 @@ export default function LifeOS() {
   }, [cloudUserId, schoolHub, schoolHubHydrated]);
 
   useEffect(() => {
+    if (!cloudUserId) return;
+    setWorkHubHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('work');
+        if (data && typeof data === "object") setWorkHub({ ...emptyWorkHub, ...data });
+      } catch (error) {
+        console.error('Failed to load WorkOS collections from Firebase:', error);
+      } finally {
+        setWorkHubHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !workHubHydrated) return;
+    syncDataToFirebase('work', workHub);
+  }, [cloudUserId, workHub, workHubHydrated]);
+
+  useEffect(() => {
     if (!cloudUserId || !settingsHydrated || !settingsState.enableStudyAbroad) {
       setStudyAbroadHydrated(true);
       return;
@@ -1039,6 +1068,7 @@ export default function LifeOS() {
             icon: projectIcons[iconName],
             tasks: project.tasks ?? 0,
             kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+            scope: project.scope ?? "life",
           };
         }));
       }
@@ -1217,7 +1247,7 @@ export default function LifeOS() {
   };
   const addProject = (name: string, kind: ProjectKind = "finishable", _taskProject?: string, icon: ProjectIcon = "FolderKanban", description?: string, color = "#625af6") => {
     const iconComponent = projectIcons[icon];
-    setProjectItems(items => [...items, { name, desc: description?.trim() || (kind === "maintenance" ? "An ongoing system to keep healthy." : "A focused project with a finish line."), progress: kind === "maintenance" ? 100 : 0, color, icon: iconComponent, iconName: icon, tasks: 0, kind }]);
+    setProjectItems(items => [...items, { name, desc: description?.trim() || (kind === "maintenance" ? "An ongoing system to keep healthy." : "A focused project with a finish line."), progress: kind === "maintenance" ? 100 : 0, color, icon: iconComponent, iconName: icon, tasks: 0, kind, scope: creationScope }]);
     setComposer(null);
     setSpaceComposer(null);
     setSelectedClassId(null);
@@ -1452,6 +1482,7 @@ export default function LifeOS() {
             icon: projectIcons[iconName],
             tasks: project.tasks ?? 0,
             kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+            scope: project.scope ?? "life",
           };
         }));
       }
@@ -1526,6 +1557,7 @@ export default function LifeOS() {
                 icon: projectIcons[iconName],
                 tasks: project.tasks ?? 0,
                 kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+                scope: project.scope ?? "life",
               };
             }));
             await syncDataToFirebase('projects', data.projects);
@@ -1592,13 +1624,20 @@ export default function LifeOS() {
   const activeTasks = useMemo(() => tasks.filter(task => !task.done && !task.canceled), [tasks]);
   const floatingFocusTask = useMemo(() => activeTasks.find(task => Boolean(task.focusSessionStarted) && getTaskFocusSeconds(task) > 0), [activeTasks]);
   const nav = useMemo(() => {
-    const navItems = [...baseNav];
+    const navItems = [...baseNav].filter(item => {
+      if (item.name === "Life") return settingsState.enableLifeOS !== false;
+      if (item.name === "School") return settingsState.enableSchoolOS !== false;
+      if (item.name === "Work") return settingsState.enableWorkOS !== false;
+      return true;
+    });
     if (settingsState.enableStudyAbroad) {
       const schoolIndex = navItems.findIndex(n => n.name === "School");
-      navItems.splice(schoolIndex + 1, 0, { name: "Study Abroad" as View, icon: Globe });
+      if (schoolIndex !== -1) {
+        navItems.splice(schoolIndex + 1, 0, { name: "Study Abroad" as View, icon: Globe });
+      }
     }
     return navItems;
-  }, [settingsState.enableStudyAbroad]);
+  }, [settingsState.enableLifeOS, settingsState.enableSchoolOS, settingsState.enableWorkOS, settingsState.enableStudyAbroad]);
   const filtered = useMemo(() => [...nav.map(n => n.name), ...projectItems.map(p => p.name), ...classes.map(item => item.code), ...notes.map(note => note.title), ...activeTasks.map(t => t.title)]
     .filter(x => x.toLowerCase().includes(query.toLowerCase())), [activeTasks, classes, nav, notes, projectItems, query]);
 
@@ -1674,9 +1713,10 @@ export default function LifeOS() {
           </div>
         </header>
         <AnimatePresence mode="wait">
-          <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Study Abroad" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
-            {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarEvents} life={lifeHub} workspaceName={workspaceName} onComplete={complete} onOpenTask={setTaskPageId} onOpenProject={(name) => { setSpacesFilter("Projects"); setSelectedClassId(null); setSelectedProjectName(name); setView("Spaces"); }} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => { setSpacesFilter("Projects"); setSelectedClassId(null); setSelectedProjectName(null); setView("Spaces"); }} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} onOpenCollection={(key: LifeHubKey, startAdd) => setHubCollection({ scope: "life", key, startAdd })} onToggleHabit={(id) => { const today = toDateKey(new Date()); setLifeHub(current => ({ ...current, habits: current.habits.map(habit => { if (habit.id !== id) return habit; const dates = habit.completedDates ?? []; return { ...habit, completedDates: dates.includes(today) ? dates.filter(date => date !== today) : [...dates, today] }; }) })); }} />}
+          <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Work" || view === "Study Abroad" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
+            {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems.filter(p => p.scope === "life")} notes={notes} events={calendarEvents} life={lifeHub} workspaceName={workspaceName} onComplete={complete} onOpenTask={setTaskPageId} onOpenProject={(name) => { setSpacesFilter("Projects"); setSelectedClassId(null); setSelectedProjectName(name); setView("Spaces"); }} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => { setSpacesFilter("Projects"); setSelectedClassId(null); setSelectedProjectName(null); setView("Spaces"); }} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => { setCreationScope("life"); setComposer("project"); }} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} onOpenCollection={(key: LifeHubKey, startAdd) => setHubCollection({ scope: "life", key, startAdd })} onToggleHabit={(id) => { const today = toDateKey(new Date()); setLifeHub(current => ({ ...current, habits: current.habits.map(habit => { if (habit.id !== id) return habit; const dates = habit.completedDates ?? []; return { ...habit, completedDates: dates.includes(today) ? dates.filter(date => date !== today) : [...dates, today] }; }) })); }} />}
             {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} onComplete={complete} onOpenTask={setTaskPageId} onOpenClass={(id) => { setSelectedProjectName(null); setSelectedClassId(id); setView("Spaces"); }} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={openFocus} enableStudyAbroad={settingsState.enableStudyAbroad} onToggleStudyAbroad={(enabled) => updateSettings({ enableStudyAbroad: enabled })} />}
+            {view === "Work" && <WorkDashboard tasks={tasks} projects={projectItems.filter(p => p.scope === "work")} work={workHub} onComplete={complete} onOpenTask={setTaskPageId} onOpenProject={(name) => { setSpacesFilter("Projects"); setSelectedClassId(null); setSelectedProjectName(name); setView("Spaces"); }} onNewTask={() => setComposer("task")} onNewProject={() => { setCreationScope("work"); setComposer("project"); }} onOpenCollection={(key: WorkHubKey, startAdd) => setHubCollection({ scope: "work", key, startAdd })} onOpenNow={() => go("Now")} />}
             {view === "Study Abroad" && settingsState.enableStudyAbroad && <StudyAbroadDashboard hub={studyAbroadHub} onOpenUniversities={() => setStudyAbroadCollection("universities")} onOpenPrograms={() => setStudyAbroadCollection("programs")} onOpenApplications={() => setStudyAbroadCollection("applications")} onOpenScholarships={() => setStudyAbroadCollection("scholarships")} onOpenDocuments={() => setStudyAbroadCollection("documents")} onOpenTimeline={() => go("Study Abroad")} personalContextMessage={undefined} />}
             {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarEvents} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onSetEnergy={(currentEnergy) => setSettingsState(current => ({ ...current, currentEnergy }))} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={setTaskPageId} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={(name) => { const context = settingsState.spaceContext?.[`project:${name}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`project:${name}`]: { ...current.spaceContext?.[`project:${name}`], updatedAt: new Date().toISOString() } } })); setSelectedClassId(null); setSelectedProjectName(name); }} onOpenClass={(id) => { const context = settingsState.spaceContext?.[`class:${id}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`class:${id}`]: { ...current.spaceContext?.[`class:${id}`], updatedAt: new Date().toISOString() } } })); setSelectedProjectName(null); setSelectedClassId(id); }} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={(id) => { const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); setTaskPageId(id); }} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} onOpenKanban={setKanbanProjectName} onUpdateTask={updateTaskDetails} onNewProjectTask={(projectName) => { setProjectComposerName(projectName); setComposer("task"); }} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
@@ -1740,20 +1780,7 @@ export default function LifeOS() {
 function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onSetEnergy, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onSetEnergy: (energy: EnergyLevel) => void; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void }) {
   const [handoff, setHandoff] = useState("");
   const [now, setNow] = useState(() => Date.now());
-  const [taskQueue, setTaskQueue] = useState<number[]>([]);
-  const [queueModalOpen, setQueueModalOpen] = useState(false);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
-
-  const handleCompleteWithQueue = (taskId: number) => {
-    onComplete(taskId);
-    if (taskQueue.length > 0 && taskQueue[0] === taskId) {
-      const newQueue = taskQueue.slice(1);
-      setTaskQueue(newQueue);
-      if (newQueue.length > 0) {
-        onChoose(newQueue[0]);
-      }
-    }
-  };
   const today = toDateKey(new Date());
   const allActive = tasks.filter(task => !task.done && !task.canceled);
   const active = allActive.filter(task => getTaskStatus(task) !== "Waiting" || !task.followUpDate || task.followUpDate <= today);
@@ -1777,61 +1804,16 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     setHandoff("");
     onChoose(task.id);
   };
-  const getGreetingTime = (date: Date) => {
-    const hour = date.getHours();
-    if (hour < 12) return "Good Morning";
-    if (hour < 17) return "Good Afternoon";
-    if (hour < 21) return "Good Evening";
-    return "Good Night";
-  };
-  const formatClock = (date: Date) => {
-    return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true });
-  };
-  const getClockAngles = (date: Date) => {
-    const seconds = date.getSeconds();
-    const minutes = date.getMinutes();
-    const hours = date.getHours() % 12;
-    return {
-      second: (seconds / 60) * 360,
-      minute: (minutes / 60) * 360 + (seconds / 60) * 6,
-      hour: (hours / 12) * 360 + (minutes / 60) * 30,
-    };
-  };
-  const clockAngles = getClockAngles(new Date(now));
-
   return <div className="now-view">
     <div className="page-title">
-      <div className="now-left-section">
-        <div><p className="eyebrow">One thing, on purpose</p><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
-        <div className="greeting-content">
-          <h1>{getGreetingTime(new Date(now))}</h1>
-          <div className="greeting-clock-digital">{formatClock(new Date(now))}</div>
-        </div>
-      </div>
-      <div className="now-right-section">
-        <div className="greeting-clock-analog">
-          <svg viewBox="0 0 120 120" width="80" height="80">
-            <circle cx="60" cy="60" r="55" fill="var(--panel)" stroke="var(--line)" strokeWidth="2"/>
-            <circle cx="60" cy="60" r="4" fill="var(--ink)"/>
-            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(i => {
-              const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
-              const x = 60 + 48 * Math.cos(angle);
-              const y = 60 + 48 * Math.sin(angle);
-              return <circle key={i} cx={x} cy={y} r="1.5" fill="var(--ink)"/>;
-            })}
-            <line x1="60" y1="60" x2="60" y2="20" stroke="var(--ink)" strokeWidth="2" style={{ transform: `rotate(${clockAngles.hour}deg)`, transformOrigin: "60px 60px", transition: "transform 0.5s ease-out" }} />
-            <line x1="60" y1="60" x2="60" y2="12" stroke="var(--ink)" strokeWidth="1.5" style={{ transform: `rotate(${clockAngles.minute}deg)`, transformOrigin: "60px 60px", transition: "transform 0.5s ease-out" }} />
-            <line x1="60" y1="60" x2="60" y2="8" stroke="var(--accent)" strokeWidth="1" style={{ transform: `rotate(${clockAngles.second}deg)`, transformOrigin: "60px 60px", transition: "transform 0.1s linear" }} />
-          </svg>
-        </div>
-        <div className="now-header-actions"><button onClick={onCapture}><Inbox size={16} /> Capture thought</button><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
-      </div>
+      <div><p className="eyebrow">One thing, on purpose</p><h1>Now</h1><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
+      <div className="now-header-actions"><button onClick={onCapture}><Inbox size={16} /> Capture thought</button><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
     </div>
     <section className="energy-checkin"><div><span className="section-icon orange"><Zap size={14} /></span><div><strong>Plan for the energy you actually have.</strong><p>LifeOS will move better-fit tasks to the top — no guilt, no fake productivity.</p></div></div><div className="energy-options">{(["Low", "Medium", "High"] as EnergyLevel[]).map(energy => <button key={energy} className={currentEnergy === energy ? "selected" : ""} onClick={() => onSetEnergy(energy)}>{energy}</button>)}<button className="review-button" onClick={onDailyReset}>Reset today</button><button className="review-button" onClick={onWeeklyReview}>Weekly review</button></div></section>
     {ambientActivity ? <section className="ambient-active-strip"><div><span className="section-icon orange"><TimerReset size={14} /></span><div><p>YOU’RE ALREADY DOING IT</p><strong>{ambientActivity.title}</strong><small>{formatAmbientDuration(now - new Date(ambientActivity.startedAt).getTime())} so far · no planning required</small></div></div><button onClick={onWrapAmbient}>Finish & sort later <ArrowRight size={15} /></button></section> : <button className="ambient-start-card" onClick={onStartAmbient}><span className="section-icon orange"><TimerReset size={16} /></span><div><strong>Already doing something?</strong><p>Start first. Name it later. LifeOS will help you sort it when you’re done.</p></div><ArrowRight size={17} /></button>}
     <div className="now-layout">
       <section className="card now-current-card">
-        <div className="card-head"><div><span className="section-icon violet"><Focus size={14} /></span><h2>Current task</h2></div><div style={{ display: 'flex', gap: '8px' }}>{current && <button className="text-button" onClick={() => setQueueModalOpen(true)}>Open Queue</button>}{current && <button className="text-button" onClick={() => onChoose(null)}>Clear</button>}</div></div>
+        <div className="card-head"><div><span className="section-icon violet"><Focus size={14} /></span><h2>Current task</h2></div>{current && <button className="text-button" onClick={() => onChoose(null)}>Clear</button>}</div>
         {current ? <div className="now-current-content">
           <span className="task-dot" style={{ background: current.color }} />
           <p className="eyebrow">{activeSpace || "Unsorted"} · {current.focusMinutes} min · {current.energy} energy</p>
@@ -1876,8 +1858,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           </div>
         </section>
       </div>
-      <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={handleCompleteWithQueue} onPlan={() => onGo("Today")} />
-      <TodoList />
+      <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} />
     </div>
     <section className="card week-brainstorm">
       <div className="card-head">
@@ -1945,130 +1926,9 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     <section className="card now-recommendations"><div className="card-head"><div><span className="section-icon orange"><Sparkles size={14} /></span><h2>Good next choices</h2></div><span className="count">Pick one — nothing starts automatically</span></div>
       {recommendations.length ? <div className="now-choice-list">{recommendations.map(task => <button key={task.id} className="now-choice" onClick={() => switchTo(task)}><i style={{ background: task.color }} /><div><strong>{task.title}</strong><p>{task.classId ? classes.find(item => item.id === task.classId)?.code : task.project} · {formatDueDate(task.due)} · {task.focusMinutes}m · {task.energy} energy</p></div><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><ArrowRight size={16} /></button>)}</div> : <div className="priority-empty"><strong>You’re clear.</strong><p>Add a task or capture a thought when something new arrives.</p></div>}
     </section>
-    {resurfacing.length > 0 && <section className="card resurface-card"><div className="card-head"><div><span className="section-icon blue"><RefreshCw size={14} /></span><h2>Worth resurfacing</h2></div><span className="count">Old doesn’t mean failed</span></div><div className="resurface-list">{resurfacing.map(task => <div key={task.id}><i style={{ background: task.color }} /><div><strong>{task.title}</strong><p>{getTaskStatus(task) === "Waiting" ? `Follow up ${formatDueDate(task.followUpDate ?? task.due)}` : `Due ${formatDueDate(task.due)}`}</p></div><button onClick={() => switchTo(task)}>Make current</button><button className="resurface-done" aria-label={`Mark ${task.title} done`} onClick={() => handleCompleteWithQueue(task.id)}><Check size={15} /></button></div>)}</div></section>}
+    {resurfacing.length > 0 && <section className="card resurface-card"><div className="card-head"><div><span className="section-icon blue"><RefreshCw size={14} /></span><h2>Worth resurfacing</h2></div><span className="count">Old doesn’t mean failed</span></div><div className="resurface-list">{resurfacing.map(task => <div key={task.id}><i style={{ background: task.color }} /><div><strong>{task.title}</strong><p>{getTaskStatus(task) === "Waiting" ? `Follow up ${formatDueDate(task.followUpDate ?? task.due)}` : `Due ${formatDueDate(task.due)}`}</p></div><button onClick={() => switchTo(task)}>Make current</button><button className="resurface-done" aria-label={`Mark ${task.title} done`} onClick={() => onComplete(task.id)}><Check size={15} /></button></div>)}</div></section>}
     <div className="now-bottom-grid"><DashboardGmailCard user={user} onSettings={() => onGo("Settings")} /><section className="card now-space-card"><div className="card-head"><div><span className="section-icon blue"><Sparkles size={14} /></span><h2>Momentum</h2></div><span className="count">Last 7 days</span></div><div className="agenda-list">{(momentumLog ?? []).slice(0, 4).map(entry => <div key={entry.id} className="agenda-item compact"><i /><div><strong>{entry.title}</strong><p>{entry.type === "done" ? "Completed" : "Focus started"} · {new Date(entry.at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p></div></div>)}{!(momentumLog?.length) && <div className="priority-empty"><strong>Momentum starts small.</strong><p>Focus or finish one thing and it will show here.</p></div>}</div></section></div>
-    <AnimatePresence>{queueModalOpen && <TaskQueueModal key="task-queue-modal" tasks={allActive} taskQueue={taskQueue} setTaskQueue={setTaskQueue} close={() => setQueueModalOpen(false)} classes={classes} onChoose={onChoose} />}</AnimatePresence>
   </div>;
-}
-
-function TaskQueueModal({ tasks, taskQueue, setTaskQueue, close, classes, onChoose }: { tasks: Task[]; taskQueue: number[]; setTaskQueue: (queue: number[]) => void; close: () => void; classes: ClassRecord[]; onChoose: (id: number) => void }) {
-  const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
-  const queuedTasks = taskQueue.map(id => tasks.find(t => t.id === id)).filter(Boolean) as Task[];
-  const availableTasks = tasks.filter(t => !taskQueue.includes(t.id)).sort((a, b) => (b.priority === "High" ? 1 : 0) - (a.priority === "High" ? 1 : 0));
-
-  const addToQueue = (taskId: number) => {
-    if (!taskQueue.includes(taskId)) {
-      setTaskQueue([...taskQueue, taskId]);
-    }
-  };
-
-  const removeFromQueue = (taskId: number) => {
-    setTaskQueue(taskQueue.filter(id => id !== taskId));
-  };
-
-  const moveTask = (fromIndex: number, toIndex: number) => {
-    if (toIndex < 0 || toIndex >= queuedTasks.length) return;
-    const newQueue = [...taskQueue];
-    const [movedId] = newQueue.splice(fromIndex, 1);
-    newQueue.splice(toIndex, 0, movedId);
-    setTaskQueue(newQueue);
-  };
-
-  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-    <motion.div className="create-modal" style={{ maxWidth: '600px', maxHeight: '80vh', overflow: 'auto' }} onMouseDown={(e) => e.stopPropagation()} initial={{ scale: 0.98, y: 8 }} animate={{ scale: 1, y: 0 }}>
-      <div className="capture-head">
-        <div className="brain-dot"><ListTodo size={16} /></div>
-        <div>
-          <strong>Task Queue</strong>
-          <span>Drag to reorder your tasks. Auto-advance to the next task when you finish.</span>
-        </div>
-        <button type="button" onClick={close} aria-label="Close"><X size={18} /></button>
-      </div>
-
-      {queuedTasks.length > 0 && (
-        <div style={{ marginBottom: '24px' }}>
-          <p style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700, marginBottom: '12px' }}>Queued tasks ({queuedTasks.length})</p>
-          <div style={{ border: '1px solid var(--line)', borderRadius: '10px', overflow: 'hidden' }}>
-            {queuedTasks.map((task, idx) => (
-              <div
-                key={task.id}
-                draggable
-                onDragStart={() => setDraggedTaskId(task.id)}
-                onDragEnd={() => setDraggedTaskId(null)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => {
-                  if (draggedTaskId) {
-                    const draggedIdx = queuedTasks.findIndex(t => t.id === draggedTaskId);
-                    moveTask(draggedIdx, idx);
-                  }
-                }}
-                style={{
-                  padding: '12px',
-                  borderTop: idx > 0 ? '1px solid var(--line)' : 'none',
-                  background: draggedTaskId === task.id ? 'var(--canvas)' : 'transparent',
-                  cursor: 'grab',
-                  display: 'flex',
-                  gap: '10px',
-                  alignItems: 'center',
-                  opacity: draggedTaskId === task.id ? 0.5 : 1,
-                }}
-              >
-                <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--muted)', minWidth: '20px' }}>{idx + 1}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <strong style={{ display: 'block', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</strong>
-                  <p style={{ fontSize: '9px', color: 'var(--muted)', margin: '4px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {classes.find(c => c.id === task.classId)?.code || task.project || 'Unsorted'} · {task.priority}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeFromQueue(task.id)}
-                  style={{ border: 'none', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', padding: '4px' }}
-                  aria-label={`Remove ${task.title} from queue`}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {availableTasks.length > 0 && (
-        <div>
-          <p style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700, marginBottom: '12px' }}>Available tasks ({availableTasks.length})</p>
-          <div style={{ display: 'grid', gap: '8px', maxHeight: '300px', overflow: 'auto' }}>
-            {availableTasks.map(task => (
-              <button
-                key={task.id}
-                type="button"
-                onClick={() => addToQueue(task.id)}
-                className="queue-available-task"
-              >
-                <div>
-                  <strong style={{ display: 'block', fontSize: '11px' }}>{task.title}</strong>
-                  <p style={{ fontSize: '9px', color: 'var(--muted)', margin: '4px 0 0' }}>
-                    {classes.find(c => c.id === task.classId)?.code || task.project || 'Unsorted'} · {formatDueDate(task.due)} · {task.priority}
-                  </p>
-                </div>
-                <Plus size={16} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {availableTasks.length === 0 && queuedTasks.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--muted)' }}>
-          <p style={{ fontSize: '11px' }}>No active tasks available</p>
-        </div>
-      )}
-
-      <div style={{ marginTop: '20px', borderTop: '1px solid var(--line)', paddingTop: '16px' }}>
-        <button type="button" onClick={() => { if (taskQueue.length > 0) onChoose(taskQueue[0]); close(); }} style={{ width: '100%', height: '36px', border: '1px solid var(--line)', background: 'var(--canvas)', borderRadius: '8px', cursor: 'pointer' }}>Done</button>
-      </div>
-    </motion.div>
-  </motion.div>;
 }
 
 function DailyResetModal({ tasks, close, choose, complete }: { tasks: Task[]; close: () => void; choose: (id: number | null) => void; complete: (id: number) => void }) {
@@ -2335,7 +2195,7 @@ function Projects({ projects, tasks, onNew, onAction, onOpen }: { projects: Proj
   })}</div></>;
 }
 
-function SpacesView({ projects, classes, tasks, notes, resources, selectedProjectName, selectedClassId, onBack, onNew, onActionProject, onActionClass, onOpenProject, onOpenClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource, linkTask, onOpenKanban, onUpdateTask, onNewProjectTask, initialFilter = "All", onFilterChange }: { projects: Project[]; classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedProjectName: string | null; selectedClassId: string | null; onBack: () => void; onNew: () => void; onActionProject: (name: string) => void; onActionClass: (id: string) => void; onOpenProject: (name: string) => void; onOpenClass: (id: string) => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string, projectName?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void>; linkTask: (id: number, project: Project) => void; onOpenKanban: (name: string) => void; onUpdateTask: (taskId: number, updates: Partial<Task>) => void; onNewProjectTask?: (projectName: string) => void; initialFilter?: "All" | "Classes" | "Projects" | "Maintenance" | "Archived"; onFilterChange?: (filter: "All" | "Classes" | "Projects" | "Maintenance" | "Archived") => void }) {
+function SpacesView({ projects, classes, tasks, notes, resources, selectedProjectName, selectedClassId, onBack, onNew, onActionProject, onActionClass, onOpenProject, onOpenClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource, linkTask, onOpenKanban, onUpdateTask, onNewProjectTask, initialFilter = "All", onFilterChange }: { projects: Project[]; classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedProjectName: string | null; selectedClassId: string | null; onBack: () => void; onNew: () => void; onActionProject: (name: string) => void; onActionClass: (id: string) => void; onOpenProject: (name: string) => void; onOpenClass: (id: string) => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string, projectName?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void>; linkTask: (id: number, project: Project) => void; onOpenKanban: (name: string) => void; onUpdateTask: (taskId: number, updates: Partial<Task>) => void; onNewProjectTask: (projectName: string) => void; initialFilter?: "All" | "Classes" | "Projects" | "Maintenance" | "Archived"; onFilterChange?: (filter: "All" | "Classes" | "Projects" | "Maintenance" | "Archived") => void }) {
   const [filter, setFilter] = useState<"All" | "Classes" | "Projects" | "Maintenance" | "Archived">(initialFilter);
   const [semester, setSemester] = useState("All semesters");
   const [sortBy, setSortBy] = useState<"due" | "priority" | "open" | "name">("due");
@@ -2347,7 +2207,7 @@ function SpacesView({ projects, classes, tasks, notes, resources, selectedProjec
   }
 
   if (selectedProject) {
-    return <ProjectDetailView project={selectedProject} tasks={tasks} notes={notes} onBack={onBack} onUpdateTask={onUpdateTask} onNewTask={onNewProjectTask} onNewNote={onNewNote} onOpenNote={onOpenNote} onActionProject={onActionProject} />;
+    return <ProjectDetailView project={selectedProject} tasks={tasks} onBack={onBack} onUpdateTask={onUpdateTask} onNewTask={onNewProjectTask} />;
   }
 
   const semesterOptions = [...new Set(classes.map(item => item.term.trim()).filter(Boolean))].sort((a, b) => b.localeCompare(a));
@@ -2478,11 +2338,11 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onNe
         >
           <button className="round-check" disabled={t.canceled} onClick={() => onComplete(t.id)}>{t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}</button>
           {hasChildren && (
-            <button className="expand-button" onClick={() => toggleParentExpansion(t.id)}>
+            <button className="expand-button" onClick={() => toggleParentExpansion(t.id)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '0 4px' }}>
               {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </button>
           )}
-          {!hasChildren && <div className="expand-button" />}
+          {!hasChildren && <div style={{ width: '22px' }} />}
           <button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button>
           <span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span>
           <span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span>
@@ -2544,7 +2404,7 @@ function ClassesView({ classes, tasks, notes, resources, selectedClassId, onSele
   })}</div> : <div className="classes-empty"><div><GraduationCap size={28} /></div><h2>Create your first class.</h2><p>Try BIO 101, CHEM 202, or whatever is actually on your schedule.</p><button className="primary" onClick={onNewClass}><Plus size={15} /> Create a class</button></div>}</>;
 }
 
-function ProjectDetailView({ project, tasks, notes, onBack, onUpdateTask, onNewTask, onNewNote, onOpenNote, onActionProject }: { project: Project; tasks: Task[]; notes: Note[]; onBack: () => void; onUpdateTask: (taskId: number, updates: Partial<Task>) => void; onNewTask?: (projectName: string) => void; onNewNote?: (projectName?: string) => void; onOpenNote?: (id: string) => void; onActionProject?: (name: string) => void }) {
+function ProjectDetailView({ project, tasks, onBack, onUpdateTask, onNewTask }: { project: Project; tasks: Task[]; onBack: () => void; onUpdateTask: (taskId: number, updates: Partial<Task>) => void; onNewTask: (projectName: string) => void }) {
   const projectTasks = tasks.filter(t => t.project === project.name && !t.canceled);
   const activeTasks = projectTasks.filter(t => !t.done);
   const completedTasks = projectTasks.filter(t => t.done);
@@ -2552,14 +2412,13 @@ function ProjectDetailView({ project, tasks, notes, onBack, onUpdateTask, onNewT
   const progress = projectTasks.length > 0 ? Math.round((completedTasks.length / projectTasks.length) * 100) : 0;
   const nextDueTask = [...activeTasks].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0];
   const topPriority = [...activeTasks].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority])[0]?.priority || "Clear";
-  const projectNotes = notes.filter(note => note.projectName === project.name);
 
   return <section className="class-detail-view">
     <button className="class-back" onClick={onBack}><ArrowRight size={14} /> All spaces</button>
     <div className="class-detail-hero" style={{ "--class-color": project.color } as React.CSSProperties}>
       <div className="class-hero-icon"><project.icon size={25} /></div>
       <div><p className="eyebrow">{project.kind === "maintenance" ? "Maintenance system" : "Finishable project"}</p><h1>{project.name}</h1><p>{project.desc}</p></div>
-      <div className="class-hero-actions"><button onClick={() => onActionProject?.(project.name)}><MoreHorizontal size={15} /> Settings</button><button onClick={() => onNewNote?.(project.name)}><NotebookPen size={15} /> New note</button><button className="primary" onClick={() => onNewTask?.(project.name)}><Plus size={15} /> New task</button></div>
+      <div className="class-hero-actions"><button className="primary" onClick={() => onNewTask(project.name)}><Plus size={15} /> New task</button></div>
     </div>
     <div className="class-meta-strip">
       <div><span>Next due</span><strong>{nextDueTask ? formatDueDate(nextDueTask.due) : "Nothing due"}</strong></div>
@@ -2569,12 +2428,8 @@ function ProjectDetailView({ project, tasks, notes, onBack, onUpdateTask, onNewT
     </div>
     <div className="class-content-grid">
       <section className="card class-coursework project-kanban-grid">
-        <div className="class-section-title"><div><h2>Tasks</h2><p>Organize your work across columns.</p></div><button onClick={() => onNewTask?.(project.name)}><Plus size={14} /> Add</button></div>
-        <ProjectKanban project={project} projectName={project.name} tasks={tasks} onClose={() => {}} onUpdateTask={onUpdateTask} onNewTask={onNewTask ? () => onNewTask(project.name) : undefined} isEmbedded={true} />
-      </section>
-      <section className="card class-notes-card">
-        <div className="class-section-title"><div><h2>Project notes</h2><p>Context, decisions, and reference material.</p></div><button onClick={() => onNewNote?.(project.name)}><Plus size={14} /></button></div>
-        {projectNotes.length ? <div className="class-note-list">{projectNotes.map(note => <button key={note.id} onClick={() => onOpenNote?.(note.id)}><NotebookPen size={15} /><span><strong>{note.title || "Untitled note"}</strong><small>{new Date(note.updatedAt).toLocaleDateString()}</small></span><ArrowRight size={13} /></button>)}</div> : <div className="class-empty compact"><NotebookPen size={21} /><strong>No notes yet.</strong><button onClick={() => onNewNote?.(project.name)}>Start a project note</button></div>}
+        <div className="class-section-title"><div><h2>Tasks</h2><p>Organize your work across columns.</p></div><button onClick={() => onNewTask(project.name)}><Plus size={14} /> Add</button></div>
+        <ProjectKanban project={project} projectName={project.name} tasks={tasks} onClose={() => {}} onUpdateTask={onUpdateTask} onNewTask={() => onNewTask(project.name)} isEmbedded={true} />
       </section>
     </div>
   </section>;
@@ -3280,7 +3135,7 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
     const permission = await Notification.requestPermission();
     flash(permission === "granted" ? "Browser notifications enabled" : "Notifications not enabled");
   };
-  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Appearance</h2></div></div><div className="settings-body"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{["#625af6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b", "#cf625a"].map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><ToggleRow title="Compact mode" desc="Tighten spacing when you want more on screen." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions for lower sensory load." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body shortcut-list"><div><kbd>/</kbd><span>Find anything</span></div><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>B</kbd><span>Quick capture</span></div><div><kbd>F</kbd><span>Start focus</span></div><div><kbd>N</kbd><span>New task</span></div><div><kbd>J / K</kbd><span>Switch focus task</span></div></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
+  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Appearance</h2></div></div><div className="settings-body"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{["#625af6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b", "#cf625a"].map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><ToggleRow title="Compact mode" desc="Tighten spacing when you want more on screen." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions for lower sensory load." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Home size={14} /></span><h2>Environments</h2></div></div><div className="settings-body"><ToggleRow title="LifeOS" desc="Personal projects, habits, and life planning." checked={settings.enableLifeOS ?? true} onChange={(enableLifeOS) => update({ enableLifeOS })} /><ToggleRow title="SchoolOS" desc="Courses, assignments, academic goals." checked={settings.enableSchoolOS ?? true} onChange={(enableSchoolOS) => update({ enableSchoolOS })} /><ToggleRow title="WorkOS" desc="Work projects, clients, and portfolio." checked={settings.enableWorkOS ?? true} onChange={(enableWorkOS) => update({ enableWorkOS })} /></div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body shortcut-list"><div><kbd>/</kbd><span>Find anything</span></div><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>B</kbd><span>Quick capture</span></div><div><kbd>F</kbd><span>Start focus</span></div><div><kbd>N</kbd><span>New task</span></div><div><kbd>J / K</kbd><span>Switch focus task</span></div></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
 }
 
 function BrainView({ items, onCapture, onArchive }: { items: string[]; onCapture: () => void; onArchive: (index: number) => void }) {
