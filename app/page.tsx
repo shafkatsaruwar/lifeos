@@ -1787,6 +1787,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
 
   return <div className="now-view">
     <div className="page-title">
+      <div><p className="eyebrow">One thing, on purpose</p><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
       <div className="now-greeting-section">
         <div className="greeting-content">
           <h1>{getGreetingTime(new Date(now))}</h1>
@@ -1808,7 +1809,6 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           </svg>
         </div>
       </div>
-      <div><p className="eyebrow">One thing, on purpose</p><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
       <div className="now-header-actions"><button onClick={onCapture}><Inbox size={16} /> Capture thought</button><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
     </div>
     <section className="energy-checkin"><div><span className="section-icon orange"><Zap size={14} /></span><div><strong>Plan for the energy you actually have.</strong><p>LifeOS will move better-fit tasks to the top — no guilt, no fake productivity.</p></div></div><div className="energy-options">{(["Low", "Medium", "High"] as EnergyLevel[]).map(energy => <button key={energy} className={currentEnergy === energy ? "selected" : ""} onClick={() => onSetEnergy(energy)}>{energy}</button>)}<button className="review-button" onClick={onDailyReset}>Reset today</button><button className="review-button" onClick={onWeeklyReview}>Weekly review</button></div></section>
@@ -2340,11 +2340,11 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onNe
         >
           <button className="round-check" disabled={t.canceled} onClick={() => onComplete(t.id)}>{t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}</button>
           {hasChildren && (
-            <button className="expand-button" onClick={() => toggleParentExpansion(t.id)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '0 4px' }}>
+            <button className="expand-button" onClick={() => toggleParentExpansion(t.id)}>
               {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </button>
           )}
-          {!hasChildren && <div style={{ width: '22px' }} />}
+          {!hasChildren && <div className="expand-button" />}
           <button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button>
           <span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span>
           <span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span>
