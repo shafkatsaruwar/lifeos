@@ -1944,11 +1944,11 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     </section>
     {resurfacing.length > 0 && <section className="card resurface-card"><div className="card-head"><div><span className="section-icon blue"><RefreshCw size={14} /></span><h2>Worth resurfacing</h2></div><span className="count">Old doesn’t mean failed</span></div><div className="resurface-list">{resurfacing.map(task => <div key={task.id}><i style={{ background: task.color }} /><div><strong>{task.title}</strong><p>{getTaskStatus(task) === "Waiting" ? `Follow up ${formatDueDate(task.followUpDate ?? task.due)}` : `Due ${formatDueDate(task.due)}`}</p></div><button onClick={() => switchTo(task)}>Make current</button><button className="resurface-done" aria-label={`Mark ${task.title} done`} onClick={() => onComplete(task.id)}><Check size={15} /></button></div>)}</div></section>}
     <div className="now-bottom-grid"><DashboardGmailCard user={user} onSettings={() => onGo("Settings")} /><section className="card now-space-card"><div className="card-head"><div><span className="section-icon blue"><Sparkles size={14} /></span><h2>Momentum</h2></div><span className="count">Last 7 days</span></div><div className="agenda-list">{(momentumLog ?? []).slice(0, 4).map(entry => <div key={entry.id} className="agenda-item compact"><i /><div><strong>{entry.title}</strong><p>{entry.type === "done" ? "Completed" : "Focus started"} · {new Date(entry.at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p></div></div>)}{!(momentumLog?.length) && <div className="priority-empty"><strong>Momentum starts small.</strong><p>Focus or finish one thing and it will show here.</p></div>}</div></section></div>
-    <AnimatePresence>{queueModalOpen && <TaskQueueModal key="task-queue-modal" tasks={allActive} taskQueue={taskQueue} setTaskQueue={setTaskQueue} close={() => setQueueModalOpen(false)} classes={classes} />}</AnimatePresence>
+    <AnimatePresence>{queueModalOpen && <TaskQueueModal key="task-queue-modal" tasks={allActive} taskQueue={taskQueue} setTaskQueue={setTaskQueue} close={() => setQueueModalOpen(false)} classes={classes} onChoose={onChoose} />}</AnimatePresence>
   </div>;
 }
 
-function TaskQueueModal({ tasks, taskQueue, setTaskQueue, close, classes }: { tasks: Task[]; taskQueue: number[]; setTaskQueue: (queue: number[]) => void; close: () => void; classes: ClassRecord[] }) {
+function TaskQueueModal({ tasks, taskQueue, setTaskQueue, close, classes, onChoose }: { tasks: Task[]; taskQueue: number[]; setTaskQueue: (queue: number[]) => void; close: () => void; classes: ClassRecord[]; onChoose: (id: number) => void }) {
   const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
   const queuedTasks = taskQueue.map(id => tasks.find(t => t.id === id)).filter(Boolean) as Task[];
   const availableTasks = tasks.filter(t => !taskQueue.includes(t.id)).sort((a, b) => (b.priority === "High" ? 1 : 0) - (a.priority === "High" ? 1 : 0));
@@ -2076,7 +2076,7 @@ function TaskQueueModal({ tasks, taskQueue, setTaskQueue, close, classes }: { ta
       )}
 
       <div style={{ marginTop: '20px', borderTop: '1px solid var(--line)', paddingTop: '16px' }}>
-        <button type="button" onClick={close} style={{ width: '100%', height: '36px', border: '1px solid var(--line)', background: 'var(--canvas)', borderRadius: '8px', cursor: 'pointer' }}>Done</button>
+        <button type="button" onClick={() => { if (taskQueue.length > 0) onChoose(taskQueue[0]); close(); }} style={{ width: '100%', height: '36px', border: '1px solid var(--line)', background: 'var(--canvas)', borderRadius: '8px', cursor: 'pointer' }}>Done</button>
       </div>
     </motion.div>
   </motion.div>;
