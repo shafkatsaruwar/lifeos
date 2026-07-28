@@ -186,7 +186,7 @@ const initialSettings: SettingsState = {
   enableStudyAbroad: false,
   enableLifeOS: true,
   enableSchoolOS: true,
-  enableWorkOS: true,
+  enableWorkOS: false,
 };
 
 // New users start with three empty project templates to explore the product
