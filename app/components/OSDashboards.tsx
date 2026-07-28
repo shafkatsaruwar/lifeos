@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import {
-  Activity, Archive, BookOpen, BriefcaseBusiness, CalendarDays, Check, CheckCircle2, ChevronRight,
+  Activity, Archive, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight,
   Clock3, Code2, Database, ExternalLink, FileText, FolderKanban, GraduationCap, Image,
   Library, Link2, ListTodo, Map, NotebookPen, Plus, Search,
   Target, Trash2, UserRound, Users, Utensils, X, Award, Briefcase,

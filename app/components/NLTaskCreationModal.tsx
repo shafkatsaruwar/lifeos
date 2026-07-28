@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Brain, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { X, Brain, AlertCircle } from 'lucide-react';
 import { useNLTaskCreation, ParsedTask, NLTaskResult } from '@/lib/useNLTaskCreation';
 import { formatDueDate } from '@/lib/helpers';
 

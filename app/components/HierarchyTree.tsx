@@ -35,7 +35,7 @@ function buildTree<T extends HierarchyItem>(
       children: buildTree(items, item.id),
       level: 0,
     }))
-    .map((node, _, roots) => addLevels(node, 0));
+    .map((node) => addLevels(node, 0));
 }
 
 function addLevels<T>(node: TreeNode<T>, level: number): TreeNode<T> {

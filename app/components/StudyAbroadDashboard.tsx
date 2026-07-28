@@ -16,7 +16,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import type { StudyAbroadHub } from "@/lib/studyAbroadTypes";
-import { upcomingDeadlines, countApplicationsByStatus, getUniversityById } from "@/lib/studyAbroadHelpers";
+import { upcomingDeadlines, countApplicationsByStatus } from "@/lib/studyAbroadHelpers";
 
 function Section({
   icon: Icon,

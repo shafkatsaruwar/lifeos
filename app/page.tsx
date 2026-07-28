@@ -35,7 +35,7 @@ import { syncDataToFirebase, loadDataFromFirebase, listenToFirebaseChanges, stop
 import { signInWithGoogle, signOut, onAuthStateChanged, getClientAuth } from "@/lib/firebase";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
-import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
+import { checkDoubleBooking, formatDueDate, toDateKey } from "@/lib/helpers";
 import { getFileStorage } from "@/lib/fileStorage";
 import { NLTaskCreationModal } from "@/app/components/NLTaskCreationModal";
 import {
@@ -52,7 +52,6 @@ import { UniversityModal, ProgramModal, DocumentModal, ApplicationModal, Scholar
 import { WorkOSApplicationsModal, WorkOSSkillsModal, WorkOSGoalsModal } from "@/app/components/WorkOSModals";
 import ProjectKanban from "@/app/components/ProjectKanban";
 import { emptyStudyAbroadHub } from "@/lib/studyAbroadTypes";
-import { generateObservations } from "@/lib/studyAbroadHelpers";
 import type { StudyAbroadHub } from "@/lib/studyAbroadTypes";
 import { createStudyAbroadSeedData } from "@/lib/studyAbroadSeedData";
 import type { ParsedTask } from "@/lib/useNLTaskCreation";
@@ -108,7 +107,7 @@ const getViewFromStorage = (): View => {
         return savedView as View;
       }
     }
-  } catch (e) {
+  } catch {
     // localStorage might not be available
   }
   return "Now";
@@ -117,7 +116,7 @@ const getViewFromStorage = (): View => {
 const getSelectedProjectFromStorage = (): string | null => {
   try {
     return localStorage?.getItem("lifeos-selected-project") || null;
-  } catch (e) {
+  } catch {
     return null;
   }
 };
@@ -125,7 +124,7 @@ const getSelectedProjectFromStorage = (): string | null => {
 const getSelectedClassFromStorage = (): string | null => {
   try {
     return localStorage?.getItem("lifeos-selected-class") || null;
-  } catch (e) {
+  } catch {
     return null;
   }
 };
@@ -303,14 +302,6 @@ const buildMonthEventSegments = (events: CalendarEvent[], days: Date[]): MonthEv
     occupied.set(segment.week, weekItems);
     return { ...segment, lane };
   });
-};
-const getGreeting = (date: Date, name = "there") => {
-  const hour = date.getHours();
-  if (hour < 5) return `Still up, ${name}?`;
-  if (hour < 12) return `Good morning, ${name}.`;
-  if (hour < 17) return `Good afternoon, ${name}.`;
-  if (hour < 22) return `Good evening, ${name}.`;
-  return `Good night, ${name}.`;
 };
 // Use centralized priority ranking from constants
 const priorityRank = PRIORITY_RANK;
@@ -497,16 +488,6 @@ export default function LifeOS() {
   const [ambientDraft, setAmbientDraft] = useState<AmbientDraft>(null);
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyPlan>({});
   const [weeklyPlanHydrated, setWeeklyPlanHydrated] = useState(false);
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
-
-  const toggleNodeExpansion = useCallback((nodeId: string) => {
-    setExpandedNodes(prev => {
-      const next = new Set(prev);
-      if (next.has(nodeId)) next.delete(nodeId);
-      else next.add(nodeId);
-      return next;
-    });
-  }, []);
 
   const chooseNowTask = useCallback((taskId: number | null) => {
     if (taskId !== null) setActiveTaskId(taskId);
@@ -581,7 +562,7 @@ export default function LifeOS() {
       } else {
         localStorage.removeItem("lifeos-selected-project");
       }
-    } catch (e) {
+    } catch {
       // localStorage might not be available
     }
   }, [selectedProjectName]);
@@ -592,7 +573,7 @@ export default function LifeOS() {
       } else {
         localStorage.removeItem("lifeos-selected-class");
       }
-    } catch (e) {
+    } catch {
       // localStorage might not be available
     }
   }, [selectedClassId]);
@@ -1122,14 +1103,6 @@ export default function LifeOS() {
     return () => stopListeningToFirebaseChanges('resources');
   }, [cloudUserId, resourcesHydrated]);
 
-  const getTaskHierarchyProgress = (taskId: number, allTasks: Task[]): number => {
-    const task = allTasks.find(t => t.id === taskId);
-    if (!task) return 0;
-    const children = allTasks.filter(t => t.parentTaskId === taskId);
-    if (children.length === 0) return task.done ? 100 : 0;
-    const childProgress = children.reduce((sum, child) => sum + getTaskHierarchyProgress(child.id, allTasks), 0);
-    return childProgress / children.length;
-  };
 
   const complete = (id: number) => {
     const completedTask = tasks.find(task => task.id === id);
@@ -1724,15 +1697,15 @@ export default function LifeOS() {
             {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} onComplete={complete} onOpenTask={setTaskPageId} onOpenClass={(id) => { setSelectedProjectName(null); setSelectedClassId(id); setView("Spaces"); }} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={openFocus} enableStudyAbroad={settingsState.enableStudyAbroad} onToggleStudyAbroad={(enabled) => updateSettings({ enableStudyAbroad: enabled })} />}
             {view === "Work" && <WorkDashboard tasks={tasks} projects={projectItems.filter(p => p.scope === "work")} work={workHub} onComplete={complete} onOpenTask={setTaskPageId} onOpenProject={(name) => { setSpacesFilter("Projects"); setSelectedClassId(null); setSelectedProjectName(name); setView("Spaces"); }} onNewTask={() => setComposer("task")} onNewProject={() => { setCreationScope("work"); setComposer("project"); }} onOpenCollection={(key: WorkHubKey, startAdd) => { if (key === "applications") setWorkOSModalOpen("applications"); else if (key === "skills") setWorkOSModalOpen("skills"); else if (key === "goals") setWorkOSModalOpen("goals"); }} onOpenNow={() => go("Now")} />}
             {view === "Study Abroad" && settingsState.enableStudyAbroad && <StudyAbroadDashboard hub={studyAbroadHub} onOpenUniversities={() => setStudyAbroadCollection("universities")} onOpenPrograms={() => setStudyAbroadCollection("programs")} onOpenApplications={() => setStudyAbroadCollection("applications")} onOpenScholarships={() => setStudyAbroadCollection("scholarships")} onOpenDocuments={() => setStudyAbroadCollection("documents")} onOpenTimeline={() => go("Study Abroad")} personalContextMessage={undefined} />}
-            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarEvents} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onSetEnergy={(currentEnergy) => setSettingsState(current => ({ ...current, currentEnergy }))} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={setTaskPageId} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} />}
-            {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={(name) => { const context = settingsState.spaceContext?.[`project:${name}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`project:${name}`]: { ...current.spaceContext?.[`project:${name}`], updatedAt: new Date().toISOString() } } })); setSelectedClassId(null); setSelectedProjectName(name); }} onOpenClass={(id) => { const context = settingsState.spaceContext?.[`class:${id}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`class:${id}`]: { ...current.spaceContext?.[`class:${id}`], updatedAt: new Date().toISOString() } } })); setSelectedProjectName(null); setSelectedClassId(id); }} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={(id) => { const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); setTaskPageId(id); }} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} onOpenKanban={setKanbanProjectName} onUpdateTask={updateTaskDetails} onNewProjectTask={(projectName) => { setProjectComposerName(projectName); setComposer("task"); }} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
+            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} classes={classes} events={calendarEvents} user={user} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onSetEnergy={(currentEnergy) => setSettingsState(current => ({ ...current, currentEnergy }))} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={setTaskPageId} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} />}
+            {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={(name) => { const context = settingsState.spaceContext?.[`project:${name}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`project:${name}`]: { ...current.spaceContext?.[`project:${name}`], updatedAt: new Date().toISOString() } } })); setSelectedClassId(null); setSelectedProjectName(name); }} onOpenClass={(id) => { const context = settingsState.spaceContext?.[`class:${id}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`class:${id}`]: { ...current.spaceContext?.[`class:${id}`], updatedAt: new Date().toISOString() } } })); setSelectedProjectName(null); setSelectedClassId(id); }} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={(id) => { const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); setTaskPageId(id); }} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} onUpdateTask={updateTaskDetails} onNewProjectTask={(projectName) => { setProjectComposerName(projectName); setComposer("task"); }} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
             {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={setTaskPageId} onNewSubTask={(parentTaskId) => { setParentTaskIdForCreation(parentTaskId); setComposer("task"); }} onReparent={(taskId, newParentId) => updateTask(taskId, newParentId ? { parentTaskId: newParentId } : { parentTaskId: undefined })} />}
             {(view === "Today" || view === "Calendar") && <CalendarView events={[...calendarEvents, ...tasksToCalendarEvents(tasks)]} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => id.startsWith("task-") ? setTaskPageId(Number(id.slice(5))) : setEditingCalendarEventId(id)} onPlanTask={setEditingTaskId} />}
             {view === "Notes" && <NotesView notes={notes} classes={classes} projects={projectItems} selectedNoteId={selectedNoteId} onSelect={setSelectedNoteId} onCreate={() => { createNote(undefined, undefined, parentNoteIdForCreation ?? undefined); setParentNoteIdForCreation(null); }} onUpdate={updateNote} onDelete={deleteNote} onImport={importNotes} onNewSubNote={(parentNoteId) => { setParentNoteIdForCreation(parentNoteId); setView("Notes"); }} />}
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} lifeHub={lifeHub} onUpdateLifeHub={(updates) => setLifeHub(current => ({ ...current, ...updates }))} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} />}
-            {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} onLogout={handleLogout} />}
+            {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} onLogout={handleLogout} />}
             {view === "Settings" && <CalendarConnections user={user} flash={flash} />}
             {!["Life", "School", "Study Abroad", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
@@ -1786,7 +1759,7 @@ export default function LifeOS() {
   );
 }
 
-function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onSetEnergy, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onSetEnergy: (energy: EnergyLevel) => void; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void }) {
+function NowView({ tasks, classes, events, user, nowTaskId, ambientActivity, currentEnergy, momentumLog, onSetEnergy, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan }: { tasks: Task[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onSetEnergy: (energy: EnergyLevel) => void; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void }) {
   const [handoff, setHandoff] = useState("");
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
@@ -1901,7 +1874,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
         };
         return (
           <div className="week-plan-grid">
-            {weekDays.map(({ date, dayOfWeek, label, dayNum }) => (
+            {weekDays.map(({ dayOfWeek, label, dayNum }) => (
               <div key={dayOfWeek} className="week-plan-day">
                 <div className="week-day-header">
                   <strong>{label}</strong>
@@ -2129,82 +2102,8 @@ function LibraryView({ notes, classes, projects, resources, selectedNoteId, onSe
   return <><div className="page-title"><div><p className="eyebrow">Keep & organize</p><h1>Library</h1><p>Your notes, files, and life collections.</p></div><div className="calendar-mode-tabs"><button className={tab === "notes" ? "selected" : ""} onClick={() => setTab("notes")}><NotebookPen size={14} /> Notes</button><button className={tab === "resources" ? "selected" : ""} onClick={() => setTab("resources")}><Archive size={14} /> Resources</button><button className={tab === "databases" ? "selected" : ""} onClick={() => setTab("databases")}><Brain size={14} /> Databases</button></div></div>{tab === "notes" ? <NotesView notes={notes} classes={classes} projects={projects} selectedNoteId={selectedNoteId} onSelect={onSelectNote} onCreate={onCreateNote} onUpdate={onUpdateNote} onDelete={onDeleteNote} onImport={onImportNotes} /> : tab === "resources" ? <ResourcesView resources={resources} classes={classes} onUpload={onUpload} onDelete={onDeleteResource} onReplace={onReplaceResource} onDownload={onDownload} /> : <LifeHubDatabasesView lifeHub={lifeHub} onUpdate={onUpdateLifeHub} />}</>;
 }
 
-function Dashboard({ tasks, projects, classes, brainCount, user, onComplete, onFocus, onOpenTask, onCapture, onGo, onNewTask, onTaskMenu, events, onOpenProject, weeklyPlan, setWeeklyPlan }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; brainCount: number; user?: any; onComplete: (id: number) => void; onFocus: (id?: number) => void; onOpenTask: (id: number) => void; onCapture: () => void; onGo: (view: View) => void; onNewTask: () => void; onTaskMenu: (id: number) => void; events: CalendarEvent[]; onOpenProject: (name: string) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void }) {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const tick = window.setInterval(() => setNow(new Date()), 60_000);
-    return () => window.clearInterval(tick);
-  }, []);
-  const activeTasks = tasks.filter(task => !task.done && !task.canceled);
-  const readyPriorities = activeTasks.slice(0, 3).length;
-  const nextTask = activeTasks.find(task => true);
-  const todayKey = toDateKey(now);
-  const todayEvents = events.filter(event => event.start.slice(0, 10) === todayKey).sort((a, b) => a.start.localeCompare(b.start));
-  const todayTasksDue = activeTasks.filter(task => task.due === toDateKey(new Date()) && !activeTasks.slice(0, 3).includes(task));
-  const taskSpaceLabel = (task: Task) => classes.find(item => item.id === task.classId)?.code ?? task.project;
-  const dashboardSpaces = [
-    ...classes.map(item => ({ key: `class-${item.id}`, name: item.code, detail: item.name, kind: "Class", color: item.color, progress: 100, icon: GraduationCap, projectName: null as string | null })),
-    ...projects.map(item => ({ key: `project-${item.name}`, name: item.name, detail: item.desc, kind: item.kind === "maintenance" ? "Maintenance" : "Project", color: item.color, progress: item.progress, icon: item.icon, projectName: item.name })),
-  ].slice(0, 3);
-  return <>
-    <section className="welcome">
-      <div><p className="eyebrow">{now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p><h1>{getGreeting(now, user?.displayName || "there")}</h1><p>Here’s what deserves your attention today.</p></div>
-      <div className="day-score"><span>Today</span>{readyPriorities === 0 && activeTasks.length === 0 ? <><strong>All Done</strong><small style={{ textTransform: "none" }}>for Today</small></> : <><strong>{readyPriorities}<span>/{activeTasks.length}</span></strong><small>priorities ready</small></>}</div>
-    </section>
-    <div className="dashboard-grid">
-      <section className="card priorities">
-        <div className="card-head"><div><span className="section-icon violet"><Zap size={14} /></span><h2>Today’s priorities</h2></div><button onClick={() => onGo("Tasks")}>Plan day <ArrowRight size={14} /></button></div>
-        <div className="task-list">{activeTasks.length ? activeTasks.slice(0, 3).map((task, i) => <div className={`task-row`} key={task.id}><button className="check" onClick={() => onComplete(task.id)}><span>{i + 1}</span></button><button className="task-open" onClick={() => onOpenTask(task.id)}><strong>{task.title}</strong><p><i style={{ background: task.color }} />{taskSpaceLabel(task)} <span>·</span> {formatDueDate(task.due)} <span>·</span> {task.focusMinutes} min <span>·</span> {task.energy} energy</p></button><button className="quick-focus" aria-label={`Focus on ${task.title}`} title="Focus on this task" onClick={() => onFocus(task.id)}><Focus size={15} /></button><button className="more" aria-label={`Actions for ${task.title}`} onClick={() => onTaskMenu(task.id)}><MoreHorizontal size={17} /></button></div>) : <div className="priority-empty"><strong>No priorities right now.</strong><p>Clean slate. Add one when your brain hands you the next thing.</p></div>}</div>
-        {todayTasksDue.length > 0 && <><div style={{ borderTop: "1px solid var(--line)", margin: "8px 0", paddingTop: "12px" }}><p style={{ fontSize: "9px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".08em", margin: "0 0 8px 0", fontWeight: 700, paddingLeft: "15px" }}>Today’s other tasks</p><div className="task-list" style={{ margin: 0 }}>{todayTasksDue.slice(0, 2).map(task => <div className={`task-row ${task.done ? "done" : ""} ${task.canceled ? "canceled" : ""}`} key={task.id} style={{ opacity: .7, fontSize: "13px" }}><button className="check" disabled={task.canceled} onClick={() => onComplete(task.id)}>{task.done ? <Check size={12} /> : task.canceled ? <X size={11} /> : <span style={{ fontSize: "10px" }}>•</span>}</button><button className="task-open" onClick={() => onOpenTask(task.id)}><strong>{task.title}</strong><p><i style={{ background: task.color }} />{taskSpaceLabel(task)} <span>·</span> {task.canceled ? "Canceled" : formatDueDate(task.due)} <span>·</span> {task.energy} energy</p></button><button className="more" aria-label={`Actions for ${task.title}`} onClick={() => onTaskMenu(task.id)}><MoreHorizontal size={15} /></button></div>)}</div>{todayTasksDue.length > 2 && <div style={{ padding: "4px 15px", fontSize: "9px", color: "var(--muted)" }}>+{todayTasksDue.length - 2} more</div>}</div></>}
-        <button className="add-row" onClick={onNewTask}><Plus size={15} /> Add priority</button>
-      </section>
-      <section className="focus-card">
-        <div className="focus-glow" />
-        <div className="card-head"><div><span className="section-icon dark-icon"><Focus size={14} /></span><h2>Next focus</h2></div><span className="ready"><i /> {nextTask ? "Ready" : "Clear"}</span></div>
-        <div className="focus-content"><p>{nextTask ? taskSpaceLabel(nextTask) : "You're all caught up"}</p><h3>{nextTask?.title ?? "What should we work on next?"}</h3><div className="focus-meta">{nextTask && <><span><Clock3 size={14} /> {nextTask.focusMinutes} min</span><span><Flame size={14} /> {nextTask.energy} energy</span></>}</div></div>
-        <button className="start-focus" onClick={() => nextTask ? onFocus(nextTask.id) : onNewTask()}><Focus size={16} /> {nextTask ? "Start focus session" : "Add priority"} <span>{nextTask ? "F" : "N"}</span></button>
-      </section>
-      <section className="card schedule">
-        <div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>Today’s schedule</h2></div><button onClick={() => onGo("Calendar")}>View calendar</button></div>
-        {todayEvents.length ? todayEvents.map((event, i) => {
-          const start = new Date(event.start);
-          const end = event.end ? new Date(event.end) : new Date(start.getTime() + 45 * 60_000);
-          const startTime = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
-          const endTime = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
-          return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong><span>{event.notes || (event.source === "LifeOS" ? "Focus block" : event.source)}</span></div></div>;
-        }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p></div>}
-      </section>
-      <DashboardGmailCard user={user} onSettings={() => onGo("Settings")} />
-      <section className="card projects-card">
-        <div className="card-head"><div><span className="section-icon orange"><LayoutGrid size={14} /></span><h2>Active spaces</h2></div><button onClick={() => onGo("Spaces")}>All spaces <ArrowRight size={14} /></button></div>
-        {dashboardSpaces.map(space => <div className="project-row" key={space.key} onClick={() => space.projectName ? onOpenProject(space.projectName) : onGo("Spaces")} style={{ cursor: "pointer" }}><div className="project-glyph" style={{ color: space.color, background: `${space.color}16` }}><space.icon size={17} /></div><div><strong>{space.name}</strong><small className="project-kind">{space.kind}</small><div className="progress"><i style={{ width: `${space.progress}%`, background: space.color }} /></div></div><span>{space.kind === "Maintenance" ? "∞" : space.kind === "Class" ? "↗" : `${space.progress}%`}</span></div>)}
-      </section>
-      <section className="card inbox-card">
-        <div className="card-head"><div><span className="section-icon green"><Brain size={14} /></span><h2>Brain inbox</h2></div><span className="count">{brainCount} uncategorized</span></div>
-        <button className="capture-zone" onClick={onCapture}><Plus size={18} /><div><strong>Capture what’s on your mind</strong><span>Idea, thought, link, anything…</span></div><kbd>Fn B</kbd></button>
-      </section>
-    </div>
-    <p className="quote">“The main thing is to keep the main thing the main thing.” <span>— Stephen Covey</span></p>
-  </>;
-}
 
-function Projects({ projects, tasks, onNew, onAction, onOpen }: { projects: Project[]; tasks: Task[]; onNew: () => void; onAction: (name: string) => void; onOpen: (name: string) => void }) {
-  const maintenance = projects.filter(project => project.kind === "maintenance").length;
-  const finishable = projects.length - maintenance;
-  return <><div className="page-title"><div><p className="eyebrow">Your worlds</p><h1>Projects</h1><p>Some things are gardens. Some things are missions. Label them correctly.</p></div><button className="primary" onClick={onNew}><Plus size={16} /> New project</button></div><div className="project-type-summary"><span><Sparkles size={14} /> {maintenance} maintenance systems</span><span><CheckCircle2 size={14} /> {finishable} finishable projects</span></div><div className="projects-grid">{projects.map((p, i) => {
-    const projectTasks = tasks.filter(task => task.project === p.name);
-    const activeTasks = projectTasks.filter(task => !task.done && !task.canceled);
-    const completedTasks = projectTasks.filter(task => task.done && !task.canceled).length;
-    const totalTasks = projectTasks.length;
-    const calculatedProgress = p.kind === "maintenance" ? 100 : totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-    const topTask = [...activeTasks].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority])[0];
-    const nextDue = [...activeTasks].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0];
-    const nextDueCountdown = nextDue ? getCountdownText(nextDue.due) : null;
-    return <motion.article role="button" tabIndex={0} className={`project-card ${p.kind}`} key={p.name} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * .04 }} onClick={() => onOpen(p.name)} onKeyDown={event => { if (event.key === "Enter") onOpen(p.name); }}><div className="project-top"><div className="big-glyph" style={{ color: p.color, background: `${p.color}16` }}><p.icon size={22} /></div><button aria-label={`Actions for ${p.name}`} onClick={(event) => { event.stopPropagation(); onAction(p.name); }}><MoreHorizontal size={18} /></button></div><div className="project-title-line"><h3>{p.name}</h3><span className={`project-kind ${p.kind}`}>{p.kind === "maintenance" ? "Maintenance" : "Finishable"}</span></div><p>{p.desc}</p><div className="project-intel"><div><span>Next due</span><strong style={{ color: nextDueCountdown ? getUrgencyColor(nextDueCountdown.urgency) : undefined }}>{nextDueCountdown ? nextDueCountdown.text : "Nothing due"}</strong></div><div><span>Priority</span><strong>{topTask?.priority ?? "Clear"}</strong></div></div><div className="project-task-preview">{activeTasks.slice(0, 2).map(task => <div key={task.id}><i style={{ background: task.color }} /><span>{task.title}</span><em className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</em></div>)}{!activeTasks.length && <div><i style={{ background: p.color }} /><span>No open tasks linked yet</span><em>Clear</em></div>}</div><div className="project-stats"><span>{activeTasks.length} open task{activeTasks.length !== 1 ? "s" : ""}</span><strong>{p.kind === "maintenance" ? "Ongoing" : `${calculatedProgress}%`}</strong></div><div className="progress large"><i style={{ width: `${p.kind === "maintenance" ? 100 : calculatedProgress}%`, background: p.color }} /></div></motion.article>;
-  })}</div></>;
-}
-
-function SpacesView({ projects, classes, tasks, notes, resources, selectedProjectName, selectedClassId, onBack, onNew, onActionProject, onActionClass, onOpenProject, onOpenClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource, linkTask, onOpenKanban, onUpdateTask, onNewProjectTask, initialFilter = "All", onFilterChange }: { projects: Project[]; classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedProjectName: string | null; selectedClassId: string | null; onBack: () => void; onNew: () => void; onActionProject: (name: string) => void; onActionClass: (id: string) => void; onOpenProject: (name: string) => void; onOpenClass: (id: string) => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string, projectName?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void>; linkTask: (id: number, project: Project) => void; onOpenKanban: (name: string) => void; onUpdateTask: (taskId: number, updates: Partial<Task>) => void; onNewProjectTask: (projectName: string) => void; initialFilter?: "All" | "Classes" | "Projects" | "Maintenance" | "Archived"; onFilterChange?: (filter: "All" | "Classes" | "Projects" | "Maintenance" | "Archived") => void }) {
+function SpacesView({ projects, classes, tasks, notes, resources, selectedProjectName, selectedClassId, onBack, onNew, onActionProject, onActionClass, onOpenProject, onOpenClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource, onUpdateTask, onNewProjectTask, initialFilter = "All", onFilterChange }: { projects: Project[]; classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedProjectName: string | null; selectedClassId: string | null; onBack: () => void; onNew: () => void; onActionProject: (name: string) => void; onActionClass: (id: string) => void; onOpenProject: (name: string) => void; onOpenClass: (id: string) => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string, projectName?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void>; onUpdateTask: (taskId: number, updates: Partial<Task>) => void; onNewProjectTask: (projectName: string) => void; initialFilter?: "All" | "Classes" | "Projects" | "Maintenance" | "Archived"; onFilterChange?: (filter: "All" | "Classes" | "Projects" | "Maintenance" | "Archived") => void }) {
   const [filter, setFilter] = useState<"All" | "Classes" | "Projects" | "Maintenance" | "Archived">(initialFilter);
   const [semester, setSemester] = useState("All semesters");
   const [sortBy, setSortBy] = useState<"due" | "priority" | "open" | "name">("due");
@@ -2253,7 +2152,7 @@ function SpacesView({ projects, classes, tasks, notes, resources, selectedProjec
       {(filter === "Classes" || filter === "Archived") && semesterOptions.length > 0 && <label className="semester-sort"><span>Semester</span><select value={semester} onChange={event => setSemester(event.target.value)}><option>All semesters</option>{semesterOptions.map(value => <option key={value}>{value}</option>)}</select></label>}
       <label className="semester-sort space-sort"><span>Sort by</span><select value={sortBy} onChange={event => setSortBy(event.target.value as "due" | "priority" | "open" | "name")} aria-label="Sort spaces"><option value="due">Due soon</option><option value="priority">Highest priority</option><option value="open">Most open work</option><option value="name">A–Z</option></select></label>
     </div>
-    {sortedSpaces.length ? <div className="spaces-grid">{sortedSpaces.map((space, index) => <motion.article role="button" tabIndex={0} className={`space-card ${space.kind}`} key={space.id} style={{ "--space-color": space.color } as React.CSSProperties} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .035 }} onClick={() => space.classId ? onOpenClass(space.classId) : onOpenProject(space.projectName!)} onKeyDown={event => { if (event.key === "Enter") space.classId ? onOpenClass(space.classId) : onOpenProject(space.projectName!); }}>
+    {sortedSpaces.length ? <div className="spaces-grid">{sortedSpaces.map((space, index) => <motion.article role="button" tabIndex={0} className={`space-card ${space.kind}`} key={space.id} style={{ "--space-color": space.color } as React.CSSProperties} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .035 }} onClick={() => space.classId ? onOpenClass(space.classId) : onOpenProject(space.projectName!)} onKeyDown={event => { if (event.key === "Enter") { if (space.classId) onOpenClass(space.classId); else onOpenProject(space.projectName!); } }}>
       <div className="space-card-top"><span className="space-card-icon"><space.icon size={21} /></span><button aria-label={`Actions for ${space.title}`} onClick={event => { event.stopPropagation(); if (space.classId) onActionClass(space.classId); else onActionProject(space.projectName!); }}><MoreHorizontal size={18} /></button></div>
       <span className="space-type">{space.archived ? "Archived class" : space.kind === "class" ? "Class" : space.kind === "maintenance" ? "Maintenance" : "Project"}{(space as any).childCount > 0 && ` · ${(space as any).childCount} sub-project${(space as any).childCount !== 1 ? 's' : ''}`}</span><h2>{space.title}</h2><p>{space.description}</p>
       <div className="space-card-footer"><span>{space.open} open</span><strong>{space.nextDue ? `Next: ${formatDueDate(space.nextDue.due)}` : "Nothing due"}</strong></div><div className="space-card-line"><i /></div>
@@ -2511,7 +2410,6 @@ function NotesView({ notes, classes, projects, selectedNoteId, onSelect, onCreat
   };
   const filtered = notes.filter(note => `${note.title} ${note.body}`.toLowerCase().includes(search.toLowerCase()));
   const getNoteChildren = (parentId: string) => notes.filter(n => n.parentNoteId === parentId).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  const hasNoteChildren = (noteId: string) => notes.some(n => n.parentNoteId === noteId);
   const visible = [...filtered].filter(n => !n.parentNoteId).sort((a, b) => {
     switch (sortBy) {
       case "newest": return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
@@ -3135,7 +3033,7 @@ function ICloudCalendarIntegration({ user, flash }: { user?: any; flash: (messag
   return <section className="card settings-card icloud-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>iCloud Calendar</h2></div>{connected && <button onClick={() => void sync()} disabled={busy}><RefreshCw size={14} /> {busy ? "Syncing…" : "Sync now"}</button>}</div><div className="settings-body">{loading ? <p className="settings-note">Checking iCloud Calendar…</p> : !configured ? <div className="integration-empty"><strong>One setup step left.</strong><p>Add <code>ICLOUD_CONNECTION_SECRET</code> in Vercel to turn on encrypted iCloud Calendar connections.</p></div> : !connected ? <form className="icloud-connect-form" onSubmit={connect}><p className="settings-note">Use an Apple app-specific password — never your normal Apple Account password. LifeOS encrypts it server-side.</p><label>Apple ID<input type="email" required autoComplete="username" value={appleId} onChange={event => setAppleId(event.target.value)} placeholder="you@icloud.com" /></label><label>App-specific password<input type="password" required autoComplete="new-password" value={appPassword} onChange={event => setAppPassword(event.target.value)} placeholder="xxxx-xxxx-xxxx-xxxx" /></label><button className="primary" disabled={busy}>{busy ? "Connecting…" : "Connect iCloud Calendar"}</button></form> : <><div className="icloud-status"><span><CheckCircle2 size={15} /> Connected securely</span><button onClick={() => void disconnect()} disabled={busy}>Disconnect</button></div><p className="settings-note">Choose the calendars LifeOS should import. Sync is read-only for now, so it won’t alter Apple Calendar.</p>{calendars.length ? <div className="icloud-calendar-list">{calendars.map(calendar => <label key={calendar.url}><input type="checkbox" checked={selected.includes(calendar.url)} onChange={event => void saveSelection(event.target.checked ? [...selected, calendar.url] : selected.filter(url => url !== calendar.url))} /><i style={{ background: calendar.color || "#8b7cff" }} /><span>{calendar.name}</span></label>)}</div> : <div className="integration-empty"><strong>Calendars need a refresh.</strong><p>Your connection is safe. Refreshing re-reads the available iCloud calendars.</p><button onClick={() => void refreshCalendars()} disabled={busy}>Refresh calendars</button></div>}</>}{error && <p className="gmail-error" role="alert">{error}</p>}</div></section>;
 }
 
-function SettingsView({ dark, setDark, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport, user, onLogout }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; onLogout?: () => void }) {
+function SettingsView({ dark, setDark, settings, update, tasks, projects, brainItems, flash, onSync, onReset, onExport, onImport, user, onLogout }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; onLogout?: () => void }) {
   const requestNotifications = async () => {
     if (!("Notification" in window)) {
       flash("Notifications are not supported here");
@@ -3154,7 +3052,6 @@ function BrainView({ items, onCapture, onArchive }: { items: string[]; onCapture
 }
 
 function ResourcesView({ resources, classes, onUpload, onDelete, onReplace, onDownload }: { resources: Resource[]; classes: ClassRecord[]; onUpload: (file: File) => void | Promise<void>; onDelete: (id: string) => void; onReplace: (id: string, file: File) => void; onDownload: (resource: Resource) => void | Promise<void> }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [expandedResourceIds, setExpandedResourceIds] = useState<Set<string>>(new Set());
   const toggleResourceExpand = (resourceId: string) => {
@@ -3164,7 +3061,6 @@ function ResourcesView({ resources, classes, onUpload, onDelete, onReplace, onDo
     setExpandedResourceIds(newExpanded);
   };
   const getResourceChildren = (parentId: string) => resources.filter(r => r.parentResourceId === parentId).sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-  const hasResourceChildren = (resourceId: string) => resources.some(r => r.parentResourceId === resourceId);
   const visibleResources = resources.filter(r => !r.parentResourceId).sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
   const renderResourceItem = (resource: Resource, level: number = 0): React.ReactNode => {
     const children = getResourceChildren(resource.id);
@@ -3188,7 +3084,7 @@ function ResourcesView({ resources, classes, onUpload, onDelete, onReplace, onDo
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button onClick={() => onDownload(resource)} title="Download" style={{ padding: '6px 12px', fontSize: '12px', background: '#625af6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Download</button>
-            <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.onchange = async (e: any) => { if (e.target.files[0]) { try { await onReplace(resource.id, e.target.files[0]); } catch {} } }; input.click(); }} title="Replace" disabled={selectedId === resource.id} style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(200, 200, 200, 0.2)', border: '1px solid rgba(200, 200, 200, 0.4)', borderRadius: '4px', cursor: 'pointer' }}>Replace</button>
+            <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.onchange = async (e: any) => { if (e.target.files[0]) { try { await onReplace(resource.id, e.target.files[0]); } catch {} } }; input.click(); }} title="Replace" style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(200, 200, 200, 0.2)', border: '1px solid rgba(200, 200, 200, 0.4)', borderRadius: '4px', cursor: 'pointer' }}>Replace</button>
             <button onClick={() => onDelete(resource.id)} title="Delete" style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(255, 107, 107, 0.2)', color: '#ff6b6b', border: '1px solid rgba(255, 107, 107, 0.3)', borderRadius: '4px', cursor: 'pointer' }}>Delete</button>
           </div>
         </div>
@@ -3209,24 +3105,6 @@ function ResourcesView({ resources, classes, onUpload, onDelete, onReplace, onDo
           // uploadResource owns the error message; this keeps the button usable.
         } finally {
           setIsUploading(false);
-        }
-      }
-    };
-    input.click();
-  };
-
-  const handleReplace = (id: string) => {
-    setSelectedId(id);
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.onchange = async (e: any) => {
-      if (e.target.files[0]) {
-        try {
-          await onReplace(id, e.target.files[0]);
-        } catch {
-          // replaceResource owns the error message; this clears the busy state.
-        } finally {
-          setSelectedId(null);
         }
       }
     };

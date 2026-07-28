@@ -18,7 +18,7 @@ export function buildTree<T extends { id: string | number; parentId?: string | n
       children: buildTree(items, item.id),
       level: 0,
     }))
-    .map((node, _, roots) => addLevels(node, 0));
+    .map((node) => addLevels(node, 0));
 }
 
 // Add level info to tree nodes recursively
