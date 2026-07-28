@@ -1975,7 +1975,7 @@ function TaskQueueModal({ tasks, taskQueue, setTaskQueue, close, classes }: { ta
         <div className="brain-dot"><ListTodo size={16} /></div>
         <div>
           <strong>Task Queue</strong>
-          <span>Drag to reorder your tasks. They'll auto-advance when you finish.</span>
+          <span>Drag to reorder your tasks. Auto-advance to the next task when you finish.</span>
         </div>
         <button type="button" onClick={close} aria-label="Close"><X size={18} /></button>
       </div>
