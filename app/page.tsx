@@ -1747,9 +1747,10 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   const handleCompleteWithQueue = (taskId: number) => {
     onComplete(taskId);
     if (taskQueue.length > 0 && taskQueue[0] === taskId) {
-      taskQueue.shift();
-      if (taskQueue.length > 0) {
-        onChoose(taskQueue[0]);
+      const newQueue = taskQueue.slice(1);
+      setTaskQueue(newQueue);
+      if (newQueue.length > 0) {
+        onChoose(newQueue[0]);
       }
     }
   };
