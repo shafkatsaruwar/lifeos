@@ -1739,7 +1739,19 @@ export default function LifeOS() {
 function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onSetEnergy, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onSetEnergy: (energy: EnergyLevel) => void; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void }) {
   const [handoff, setHandoff] = useState("");
   const [now, setNow] = useState(() => Date.now());
+  const [taskQueue, setTaskQueue] = useState<number[]>([]);
+  const [queueModalOpen, setQueueModalOpen] = useState(false);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
+
+  const handleCompleteWithQueue = (taskId: number) => {
+    onComplete(taskId);
+    if (taskQueue.length > 0 && taskQueue[0] === taskId) {
+      taskQueue.shift();
+      if (taskQueue.length > 0) {
+        onChoose(taskQueue[0]);
+      }
+    }
+  };
   const today = toDateKey(new Date());
   const allActive = tasks.filter(task => !task.done && !task.canceled);
   const active = allActive.filter(task => getTaskStatus(task) !== "Waiting" || !task.followUpDate || task.followUpDate <= today);
@@ -1815,7 +1827,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     {ambientActivity ? <section className="ambient-active-strip"><div><span className="section-icon orange"><TimerReset size={14} /></span><div><p>YOU’RE ALREADY DOING IT</p><strong>{ambientActivity.title}</strong><small>{formatAmbientDuration(now - new Date(ambientActivity.startedAt).getTime())} so far · no planning required</small></div></div><button onClick={onWrapAmbient}>Finish & sort later <ArrowRight size={15} /></button></section> : <button className="ambient-start-card" onClick={onStartAmbient}><span className="section-icon orange"><TimerReset size={16} /></span><div><strong>Already doing something?</strong><p>Start first. Name it later. LifeOS will help you sort it when you’re done.</p></div><ArrowRight size={17} /></button>}
     <div className="now-layout">
       <section className="card now-current-card">
-        <div className="card-head"><div><span className="section-icon violet"><Focus size={14} /></span><h2>Current task</h2></div>{current && <button className="text-button" onClick={() => onChoose(null)}>Clear</button>}</div>
+        <div className="card-head"><div><span className="section-icon violet"><Focus size={14} /></span><h2>Current task</h2></div><div style={{ display: 'flex', gap: '8px' }}>{current && <button className="text-button" onClick={() => setQueueModalOpen(true)}>Open Queue</button>}{current && <button className="text-button" onClick={() => onChoose(null)}>Clear</button>}</div></div>
         {current ? <div className="now-current-content">
           <span className="task-dot" style={{ background: current.color }} />
           <p className="eyebrow">{activeSpace || "Unsorted"} · {current.focusMinutes} min · {current.energy} energy</p>
@@ -1930,7 +1942,142 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     </section>
     {resurfacing.length > 0 && <section className="card resurface-card"><div className="card-head"><div><span className="section-icon blue"><RefreshCw size={14} /></span><h2>Worth resurfacing</h2></div><span className="count">Old doesn’t mean failed</span></div><div className="resurface-list">{resurfacing.map(task => <div key={task.id}><i style={{ background: task.color }} /><div><strong>{task.title}</strong><p>{getTaskStatus(task) === "Waiting" ? `Follow up ${formatDueDate(task.followUpDate ?? task.due)}` : `Due ${formatDueDate(task.due)}`}</p></div><button onClick={() => switchTo(task)}>Make current</button><button className="resurface-done" aria-label={`Mark ${task.title} done`} onClick={() => onComplete(task.id)}><Check size={15} /></button></div>)}</div></section>}
     <div className="now-bottom-grid"><DashboardGmailCard user={user} onSettings={() => onGo("Settings")} /><section className="card now-space-card"><div className="card-head"><div><span className="section-icon blue"><Sparkles size={14} /></span><h2>Momentum</h2></div><span className="count">Last 7 days</span></div><div className="agenda-list">{(momentumLog ?? []).slice(0, 4).map(entry => <div key={entry.id} className="agenda-item compact"><i /><div><strong>{entry.title}</strong><p>{entry.type === "done" ? "Completed" : "Focus started"} · {new Date(entry.at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p></div></div>)}{!(momentumLog?.length) && <div className="priority-empty"><strong>Momentum starts small.</strong><p>Focus or finish one thing and it will show here.</p></div>}</div></section></div>
+    <AnimatePresence>{queueModalOpen && <TaskQueueModal key="task-queue-modal" tasks={allActive} taskQueue={taskQueue} setTaskQueue={setTaskQueue} close={() => setQueueModalOpen(false)} classes={classes} />}</AnimatePresence>
   </div>;
+}
+
+function TaskQueueModal({ tasks, taskQueue, setTaskQueue, close, classes }: { tasks: Task[]; taskQueue: number[]; setTaskQueue: (queue: number[]) => void; close: () => void; classes: ClassRecord[] }) {
+  const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
+  const queuedTasks = taskQueue.map(id => tasks.find(t => t.id === id)).filter(Boolean) as Task[];
+  const availableTasks = tasks.filter(t => !taskQueue.includes(t.id)).sort((a, b) => (b.priority === "High" ? 1 : 0) - (a.priority === "High" ? 1 : 0));
+
+  const addToQueue = (taskId: number) => {
+    if (!taskQueue.includes(taskId)) {
+      setTaskQueue([...taskQueue, taskId]);
+    }
+  };
+
+  const removeFromQueue = (taskId: number) => {
+    setTaskQueue(taskQueue.filter(id => id !== taskId));
+  };
+
+  const moveTask = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= queuedTasks.length) return;
+    const newQueue = [...taskQueue];
+    const [movedId] = newQueue.splice(fromIndex, 1);
+    newQueue.splice(toIndex, 0, movedId);
+    setTaskQueue(newQueue);
+  };
+
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+    <motion.div className="create-modal" style={{ maxWidth: '600px', maxHeight: '80vh', overflow: 'auto' }} onMouseDown={(e) => e.stopPropagation()} initial={{ scale: 0.98, y: 8 }} animate={{ scale: 1, y: 0 }}>
+      <div className="capture-head">
+        <div className="brain-dot"><ListTodo size={16} /></div>
+        <div>
+          <strong>Task Queue</strong>
+          <span>Drag to reorder your tasks. They'll auto-advance when you finish.</span>
+        </div>
+        <button type="button" onClick={close} aria-label="Close"><X size={18} /></button>
+      </div>
+
+      {queuedTasks.length > 0 && (
+        <div style={{ marginBottom: '24px' }}>
+          <p style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700, marginBottom: '12px' }}>Queued tasks ({queuedTasks.length})</p>
+          <div style={{ border: '1px solid var(--line)', borderRadius: '10px', overflow: 'hidden' }}>
+            {queuedTasks.map((task, idx) => (
+              <div
+                key={task.id}
+                draggable
+                onDragStart={() => setDraggedTaskId(task.id)}
+                onDragEnd={() => setDraggedTaskId(null)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => {
+                  if (draggedTaskId) {
+                    const draggedIdx = queuedTasks.findIndex(t => t.id === draggedTaskId);
+                    moveTask(draggedIdx, idx);
+                  }
+                }}
+                style={{
+                  padding: '12px',
+                  borderTop: idx > 0 ? '1px solid var(--line)' : 'none',
+                  background: draggedTaskId === task.id ? 'var(--canvas)' : 'transparent',
+                  cursor: 'grab',
+                  display: 'flex',
+                  gap: '10px',
+                  alignItems: 'center',
+                  opacity: draggedTaskId === task.id ? 0.5 : 1,
+                }}
+              >
+                <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--muted)', minWidth: '20px' }}>{idx + 1}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <strong style={{ display: 'block', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</strong>
+                  <p style={{ fontSize: '9px', color: 'var(--muted)', margin: '4px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {classes.find(c => c.id === task.classId)?.code || task.project || 'Unsorted'} · {task.priority}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeFromQueue(task.id)}
+                  style={{ border: 'none', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', padding: '4px' }}
+                  aria-label={`Remove ${task.title} from queue`}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {availableTasks.length > 0 && (
+        <div>
+          <p style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700, marginBottom: '12px' }}>Available tasks ({availableTasks.length})</p>
+          <div style={{ display: 'grid', gap: '8px', maxHeight: '300px', overflow: 'auto' }}>
+            {availableTasks.map(task => (
+              <button
+                key={task.id}
+                type="button"
+                onClick={() => addToQueue(task.id)}
+                style={{
+                  padding: '12px',
+                  border: '1px solid var(--line)',
+                  borderRadius: '8px',
+                  background: 'var(--canvas)',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
+                  gap: '12px',
+                  alignItems: 'center',
+                  transition: 'all .15s',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLButtonElement).style.background = 'color-mix(in srgb, var(--accent) 10%, var(--canvas))'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--line)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--canvas)'; }}
+              >
+                <div>
+                  <strong style={{ display: 'block', fontSize: '11px' }}>{task.title}</strong>
+                  <p style={{ fontSize: '9px', color: 'var(--muted)', margin: '4px 0 0' }}>
+                    {classes.find(c => c.id === task.classId)?.code || task.project || 'Unsorted'} · {formatDueDate(task.due)} · {task.priority}
+                  </p>
+                </div>
+                <Plus size={16} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {availableTasks.length === 0 && queuedTasks.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--muted)' }}>
+          <p style={{ fontSize: '11px' }}>No active tasks available</p>
+        </div>
+      )}
+
+      <div style={{ marginTop: '20px', borderTop: '1px solid var(--line)', paddingTop: '16px' }}>
+        <button type="button" onClick={close} style={{ width: '100%', height: '36px', border: '1px solid var(--line)', background: 'var(--canvas)', borderRadius: '8px', cursor: 'pointer' }}>Done</button>
+      </div>
+    </motion.div>
+  </motion.div>;
 }
 
 function DailyResetModal({ tasks, close, choose, complete }: { tasks: Task[]; close: () => void; choose: (id: number | null) => void; complete: (id: number) => void }) {
