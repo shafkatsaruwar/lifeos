@@ -43,6 +43,10 @@ import {
   emptyLifeHub, emptySchoolHub, emptyWorkHub,
   type HubCollectionTarget, type LifeHubKey, type LifeHubState, type SchoolHubKey, type SchoolHubState, type WorkHubKey, type WorkHubState,
 } from "@/app/components/OSDashboards";
+import type {
+  JobApplication, Interview, Recruiter, NetworkConnection, JobOffer,
+  Certification, Skill, CareerGoal, PortfolioProject, Opportunity,
+} from "@/lib/workosTypes";
 import { StudyAbroadDashboard } from "@/app/components/StudyAbroadDashboard";
 import { UniversityModal, ProgramModal, DocumentModal, ApplicationModal, ScholarshipModal, StudyAbroadCollectionView } from "@/app/components/StudyAbroadModals";
 import ProjectKanban from "@/app/components/ProjectKanban";
