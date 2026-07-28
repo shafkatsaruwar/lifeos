@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Trash2, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+
+const STORAGE_KEY = "lifeos-todos";
 
 export type TodoItem = {
   id: string;
@@ -14,6 +16,27 @@ export type TodoItem = {
 export function TodoList() {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [input, setInput] = useState("");
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        setTodos(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.error("Failed to load todos from localStorage", e);
+    }
+  }, []);
+
+  // Save to localStorage whenever todos change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+    } catch (e) {
+      console.error("Failed to save todos to localStorage", e);
+    }
+  }, [todos]);
 
   const addTodo = () => {
     if (!input.trim()) return;
