@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import {
-  Activity, Archive, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight,
-  Clock3, Database, ExternalLink, FileText, FolderKanban, GraduationCap, Image,
+  Activity, Archive, BookOpen, BriefcaseBusiness, CalendarDays, Check, CheckCircle2, ChevronRight,
+  Clock3, Code2, Database, ExternalLink, FileText, FolderKanban, GraduationCap, Image,
   Library, Link2, ListTodo, Map, NotebookPen, Plus, Search,
   Target, Trash2, UserRound, Users, Utensils, X,
 } from "lucide-react";
@@ -58,18 +58,27 @@ export type SchoolHubState = {
   goals: HubRecord[];
 };
 
+export type WorkHubState = {
+  portfolio: HubRecord[];
+  clients: HubRecord[];
+  skills: HubRecord[];
+  goals: HubRecord[];
+};
+
 export type LifeHubKey = keyof LifeHubState;
 export type SchoolHubKey = Exclude<keyof SchoolHubState, "profile">;
-export type HubCollectionTarget = { scope: "life"; key: LifeHubKey; startAdd?: boolean } | { scope: "school"; key: SchoolHubKey; startAdd?: boolean };
+export type WorkHubKey = keyof WorkHubState;
+export type HubCollectionTarget = { scope: "life"; key: LifeHubKey; startAdd?: boolean } | { scope: "school"; key: SchoolHubKey; startAdd?: boolean } | { scope: "work"; key: WorkHubKey; startAdd?: boolean };
 
 export const emptyLifeHub: LifeHubState = {
   habits: [], recipes: [], food: [], exercises: [], trainings: [], trips: [], media: [],
   tools: [], contacts: [], documents: [], vault: [], gallery: [], vision: [], archive: [],
 };
 export const emptySchoolHub: SchoolHubState = { profile: {}, topics: [], professors: [], goals: [] };
+export const emptyWorkHub: WorkHubState = { portfolio: [], clients: [], skills: [], goals: [] };
 
 type DashboardTask = { id: number; title: string; project: string; color: string; due?: string; priority: string; classId?: string; academicType?: string; gradeWeight?: number; done?: boolean; canceled?: boolean };
-type DashboardProject = { name: string; desc: string; progress: number; color: string; kind: "maintenance" | "finishable" };
+type DashboardProject = { name: string; desc: string; progress: number; color: string; kind: "maintenance" | "finishable"; tasks: number };
 type DashboardClass = { id: string; code: string; name: string; term: string; instructor: string; color: string; archived?: boolean };
 type DashboardNote = { id: string; title: string; body: string; classId?: string; updatedAt: string };
 type DashboardEvent = { id: string; title: string; start: string; color: string };
@@ -172,8 +181,32 @@ export function SchoolDashboard({ tasks, classes, notes, school, onComplete, onO
   </div>;
 }
 
-const collectionMeta: Record<LifeHubKey | SchoolHubKey, { title: string; subtitle: string; link?: boolean; visual?: boolean; category?: boolean }> = {
-  habits: { title: "Habits", subtitle: "Small actions worth repeating." }, recipes: { title: "Recipes", subtitle: "Meals you want to make again." }, food: { title: "Food storage", subtitle: "What is stocked and what is running low." }, exercises: { title: "Exercises", subtitle: "Your reusable movement library." }, trainings: { title: "Trainings", subtitle: "Workouts and practice sessions." }, trips: { title: "Trips", subtitle: "Places, plans, and travel ideas." }, media: { title: "Books & watchlist", subtitle: "What you are reading, watching, and listening to.", link: true, category: true }, tools: { title: "Useful tools", subtitle: "Links you want close by.", link: true }, contacts: { title: "Contacts", subtitle: "People and context worth remembering." }, documents: { title: "Documents", subtitle: "Important references and links.", link: true }, vault: { title: "Vault links", subtitle: "Secure portal links only. Keep passwords in a password manager.", link: true }, gallery: { title: "Gallery", subtitle: "Images and albums from your life.", visual: true }, vision: { title: "Vision board", subtitle: "A visual home for what you are building toward.", visual: true }, archive: { title: "Archive", subtitle: "Things you want to keep without seeing every day." }, topics: { title: "Topics", subtitle: "Concepts you are learning across courses." }, professors: { title: "Professors", subtitle: "Office hours and contact context." }, goals: { title: "Academic goals", subtitle: "Outcomes you are working toward." },
+export function WorkDashboard({ tasks, projects, work, onComplete, onOpenTask, onOpenProject, onNewTask, onNewProject, onOpenCollection, onOpenNow }: {
+  tasks: DashboardTask[]; projects: DashboardProject[]; work: WorkHubState;
+  onComplete: (id: number) => void; onOpenTask: (id: number) => void; onOpenProject: (name: string) => void;
+  onNewTask: () => void; onNewProject: () => void; onOpenCollection: (key: WorkHubKey, startAdd?: boolean) => void; onOpenNow: () => void;
+}) {
+  const now = new Date(), { today, end } = weekWindow();
+  const workTasks = tasks.filter(task => !task.classId && openTask(task) && (!task.due || (task.due >= today && task.due <= end))).sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
+  const workProjects = projects.filter(p => p.name).slice(0, 5);
+  const databaseLinks: { key: WorkHubKey; label: string; icon: typeof Database }[] = [
+    { key: "portfolio", label: "Portfolio", icon: FileText }, { key: "clients", label: "Clients", icon: Users },
+    { key: "skills", label: "Skills", icon: Code2 }, { key: "goals", label: "Goals", icon: Target },
+  ];
+  return <div className="os-dashboard work-dashboard">
+    <div className="os-hero"><div><p className="eyebrow">{now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p><h1>WorkOS</h1><p>Stay focused on what moves work forward. Progress over perfection.</p></div><button className="os-now-button" onClick={onOpenNow}><Target size={18} /> Open Now</button></div>
+    <div className="os-quick-row"><QuickAction icon={ListTodo} label="New task" onClick={onNewTask} /><QuickAction icon={FolderKanban} label="New project" onClick={onNewProject} /><QuickAction icon={Database} label="Portfolio item" onClick={() => onOpenCollection("portfolio", true)} /></div>
+    <div className="os-work-layout"><div className="os-work-main">
+      <Section icon={ListTodo} title="This week's work" action="Add" onAction={onNewTask}>{workTasks.length ? workTasks.slice(0, 8).map(task => <Row key={task.id} icon={ListTodo} color={workProjects.find(p => p.name === task.project)?.color} title={task.title} meta={`${task.project} · ${friendlyDate(task.due)} · ${task.priority}`} onClick={() => onOpenTask(task.id)} onComplete={() => onComplete(task.id)} />) : <Empty>No work tasks due this week. Plan your next steps.</Empty>}</Section>
+      <Section icon={FolderKanban} title="Active projects" action="New project" onAction={onNewProject}>{workProjects.length ? <div className="os-project-grid">{workProjects.map(project => <button key={project.name} onClick={() => onOpenProject(project.name)} style={{ borderLeftColor: project.color }}><span style={{ color: project.color }}><FolderKanban size={14} /></span><strong>{project.name}</strong><small>{project.tasks} task{project.tasks === 1 ? "" : "s"}</small></button>)}</div> : <Empty>Create a project to organize your work.</Empty>}</Section>
+    </div><aside>
+      <Section icon={Database} title="Work databases"><div className="os-database-grid single">{databaseLinks.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => onOpenCollection(key)}><Icon size={15} /><span>{label}</span><small>{work[key].length}</small></button>)}</div></Section>
+    </aside></div>
+  </div>;
+}
+
+const collectionMeta: Record<LifeHubKey | SchoolHubKey | WorkHubKey, { title: string; subtitle: string; link?: boolean; visual?: boolean; category?: boolean }> = {
+  habits: { title: "Habits", subtitle: "Small actions worth repeating." }, recipes: { title: "Recipes", subtitle: "Meals you want to make again." }, food: { title: "Food storage", subtitle: "What is stocked and what is running low." }, exercises: { title: "Exercises", subtitle: "Your reusable movement library." }, trainings: { title: "Trainings", subtitle: "Workouts and practice sessions." }, trips: { title: "Trips", subtitle: "Places, plans, and travel ideas." }, media: { title: "Books & watchlist", subtitle: "What you are reading, watching, and listening to.", link: true, category: true }, tools: { title: "Useful tools", subtitle: "Links you want close by.", link: true }, contacts: { title: "Contacts", subtitle: "People and context worth remembering." }, documents: { title: "Documents", subtitle: "Important references and links.", link: true }, vault: { title: "Vault links", subtitle: "Secure portal links only. Keep passwords in a password manager.", link: true }, gallery: { title: "Gallery", subtitle: "Images and albums from your life.", visual: true }, vision: { title: "Vision board", subtitle: "A visual home for what you are building toward.", visual: true }, archive: { title: "Archive", subtitle: "Things you want to keep without seeing every day." }, topics: { title: "Topics", subtitle: "Concepts you are learning across courses." }, professors: { title: "Professors", subtitle: "Office hours and contact context." }, goals: { title: "Academic goals", subtitle: "Outcomes you are working toward." }, portfolio: { title: "Portfolio", subtitle: "Projects and work you want to showcase." }, clients: { title: "Clients", subtitle: "People and organizations you work with." }, skills: { title: "Skills", subtitle: "Expertise and capabilities you are building." },
 };
 
 export function HubCollectionModal({ target, records, close, change }: { target: HubCollectionTarget; records: HubRecord[]; close: () => void; change: (records: HubRecord[]) => void }) {
