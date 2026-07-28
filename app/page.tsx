@@ -73,7 +73,7 @@ type ProjectKind = "maintenance" | "finishable";
 type SpaceKind = "class" | "project" | "maintenance";
 type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban" | "BriefcaseBusiness" | "Camera" | "Code2" | "HeartPulse" | "Utensils" | "BookOpen";
 type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string; classId?: string; projectName?: string; storagePath?: string; storage?: "cloud" | "local"; parentResourceId?: string };
-type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind; parentProject?: string };
+type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind; parentProject?: string; scope: "life" | "school" | "work" };
 type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook"; color: string; notes?: string };
 type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterEnd?: string; archived?: boolean };
 type Note = { id: string; title: string; body: string; classId?: string; projectName?: string; template?: "blank" | "lined" | "dotted" | "cornell" | "meeting"; updatedAt: string; parentNoteId?: string };
@@ -185,9 +185,9 @@ const initialSettings: SettingsState = {
 
 // New users start with three empty project templates to explore the product
 const initialProjects: Project[] = [
-  { name: "Project 1", desc: "A focused project with a finish line.", progress: 0, color: "#625af6", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable" },
-  { name: "Project 2", desc: "A focused project with a finish line.", progress: 0, color: "#4b8bdc", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable" },
-  { name: "Project 3", desc: "A focused project with a finish line.", progress: 0, color: "#47a47b", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable" },
+  { name: "Project 1", desc: "A focused project with a finish line.", progress: 0, color: "#625af6", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable", scope: "life" },
+  { name: "Project 2", desc: "A focused project with a finish line.", progress: 0, color: "#4b8bdc", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable", scope: "life" },
+  { name: "Project 3", desc: "A focused project with a finish line.", progress: 0, color: "#47a47b", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable", scope: "life" },
 ];
 
 const starterTaskSignature = initialTasks.map(task => `${task.id}:${task.title}`).join("|");
@@ -205,6 +205,7 @@ const recoverSpacesFromTasks = (items: Task[]): Project[] => {
       icon: projectIcons.FolderKanban,
       tasks: 0,
       kind: "finishable",
+      scope: "life",
     });
   }
   return [...spaces.values()];
@@ -801,6 +802,7 @@ export default function LifeOS() {
               icon: projectIcons[iconName],
               tasks: project.tasks ?? 0,
               kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+              scope: project.scope ?? "life",
             };
           }));
         }
@@ -1038,6 +1040,7 @@ export default function LifeOS() {
             icon: projectIcons[iconName],
             tasks: project.tasks ?? 0,
             kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+            scope: project.scope ?? "life",
           };
         }));
       }
@@ -1214,9 +1217,9 @@ export default function LifeOS() {
     setAiTaskComposer(false);
     flash(linkedClass ? `AI task linked to ${linkedClass.code}` : linkedProject ? `AI task linked to ${linkedProject.name}` : "AI task added to Inbox");
   };
-  const addProject = (name: string, kind: ProjectKind = "finishable", _taskProject?: string, icon: ProjectIcon = "FolderKanban", description?: string, color = "#625af6") => {
+  const addProject = (name: string, kind: ProjectKind = "finishable", _taskProject?: string, icon: ProjectIcon = "FolderKanban", description?: string, color = "#625af6", scope: "life" | "school" | "work" = "life") => {
     const iconComponent = projectIcons[icon];
-    setProjectItems(items => [...items, { name, desc: description?.trim() || (kind === "maintenance" ? "An ongoing system to keep healthy." : "A focused project with a finish line."), progress: kind === "maintenance" ? 100 : 0, color, icon: iconComponent, iconName: icon, tasks: 0, kind }]);
+    setProjectItems(items => [...items, { name, desc: description?.trim() || (kind === "maintenance" ? "An ongoing system to keep healthy." : "A focused project with a finish line."), progress: kind === "maintenance" ? 100 : 0, color, icon: iconComponent, iconName: icon, tasks: 0, kind, scope }]);
     setComposer(null);
     setSpaceComposer(null);
     setSelectedClassId(null);
@@ -1451,6 +1454,7 @@ export default function LifeOS() {
             icon: projectIcons[iconName],
             tasks: project.tasks ?? 0,
             kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+            scope: project.scope ?? "life",
           };
         }));
       }
@@ -1525,6 +1529,7 @@ export default function LifeOS() {
                 icon: projectIcons[iconName],
                 tasks: project.tasks ?? 0,
                 kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+                scope: project.scope ?? "life",
               };
             }));
             await syncDataToFirebase('projects', data.projects);
