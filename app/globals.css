@@ -900,6 +900,24 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
   margin-bottom: 32px;
 }
 
+.now-left-section {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex: 1;
+}
+
+.now-left-section > div:first-child {
+  flex: 1;
+}
+
+.now-right-section {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex: 0 0 auto;
+}
+
 .greeting-content {
   display: flex;
   align-items: center;

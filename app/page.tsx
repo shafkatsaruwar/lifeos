@@ -1799,12 +1799,14 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
 
   return <div className="now-view">
     <div className="page-title">
-      <div><p className="eyebrow">One thing, on purpose</p><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
-      <div className="now-greeting-section">
+      <div className="now-left-section">
+        <div><p className="eyebrow">One thing, on purpose</p><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
         <div className="greeting-content">
           <h1>{getGreetingTime(new Date(now))}</h1>
           <div className="greeting-clock-digital">{formatClock(new Date(now))}</div>
         </div>
+      </div>
+      <div className="now-right-section">
         <div className="greeting-clock-analog">
           <svg viewBox="0 0 120 120" width="80" height="80">
             <circle cx="60" cy="60" r="55" fill="var(--panel)" stroke="var(--line)" strokeWidth="2"/>
@@ -1820,8 +1822,8 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             <line x1="60" y1="60" x2="60" y2="8" stroke="var(--accent)" strokeWidth="1" style={{ transform: `rotate(${clockAngles.second}deg)`, transformOrigin: "60px 60px", transition: "transform 0.1s linear" }} />
           </svg>
         </div>
+        <div className="now-header-actions"><button onClick={onCapture}><Inbox size={16} /> Capture thought</button><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
       </div>
-      <div className="now-header-actions"><button onClick={onCapture}><Inbox size={16} /> Capture thought</button><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
     </div>
     <section className="energy-checkin"><div><span className="section-icon orange"><Zap size={14} /></span><div><strong>Plan for the energy you actually have.</strong><p>LifeOS will move better-fit tasks to the top — no guilt, no fake productivity.</p></div></div><div className="energy-options">{(["Low", "Medium", "High"] as EnergyLevel[]).map(energy => <button key={energy} className={currentEnergy === energy ? "selected" : ""} onClick={() => onSetEnergy(energy)}>{energy}</button>)}<button className="review-button" onClick={onDailyReset}>Reset today</button><button className="review-button" onClick={onWeeklyReview}>Weekly review</button></div></section>
     {ambientActivity ? <section className="ambient-active-strip"><div><span className="section-icon orange"><TimerReset size={14} /></span><div><p>YOU’RE ALREADY DOING IT</p><strong>{ambientActivity.title}</strong><small>{formatAmbientDuration(now - new Date(ambientActivity.startedAt).getTime())} so far · no planning required</small></div></div><button onClick={onWrapAmbient}>Finish & sort later <ArrowRight size={15} /></button></section> : <button className="ambient-start-card" onClick={onStartAmbient}><span className="section-icon orange"><TimerReset size={16} /></span><div><strong>Already doing something?</strong><p>Start first. Name it later. LifeOS will help you sort it when you’re done.</p></div><ArrowRight size={17} /></button>}
