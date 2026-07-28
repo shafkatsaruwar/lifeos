@@ -2209,7 +2209,7 @@ function SpacesView({ projects, classes, tasks, notes, resources, selectedProjec
   }
 
   if (selectedProject) {
-    return <ProjectDetailView project={selectedProject} tasks={tasks} onBack={onBack} onUpdateTask={onUpdateTask} onNewTask={onNewProjectTask} />;
+    return <ProjectDetailView project={selectedProject} tasks={tasks} notes={notes} onBack={onBack} onUpdateTask={onUpdateTask} onNewTask={onNewProjectTask} onNewNote={onNewNote} onOpenNote={onOpenNote} onActionProject={onActionProject} />;
   }
 
   const semesterOptions = [...new Set(classes.map(item => item.term.trim()).filter(Boolean))].sort((a, b) => b.localeCompare(a));
@@ -2406,7 +2406,7 @@ function ClassesView({ classes, tasks, notes, resources, selectedClassId, onSele
   })}</div> : <div className="classes-empty"><div><GraduationCap size={28} /></div><h2>Create your first class.</h2><p>Try BIO 101, CHEM 202, or whatever is actually on your schedule.</p><button className="primary" onClick={onNewClass}><Plus size={15} /> Create a class</button></div>}</>;
 }
 
-function ProjectDetailView({ project, tasks, onBack, onUpdateTask, onNewTask }: { project: Project; tasks: Task[]; onBack: () => void; onUpdateTask: (taskId: number, updates: Partial<Task>) => void; onNewTask?: (projectName: string) => void }) {
+function ProjectDetailView({ project, tasks, notes, onBack, onUpdateTask, onNewTask, onNewNote, onOpenNote, onActionProject }: { project: Project; tasks: Task[]; notes: Note[]; onBack: () => void; onUpdateTask: (taskId: number, updates: Partial<Task>) => void; onNewTask?: (projectName: string) => void; onNewNote?: (projectName?: string) => void; onOpenNote?: (id: string) => void; onActionProject?: (name: string) => void }) {
   const projectTasks = tasks.filter(t => t.project === project.name && !t.canceled);
   const activeTasks = projectTasks.filter(t => !t.done);
   const completedTasks = projectTasks.filter(t => t.done);
@@ -2414,13 +2414,14 @@ function ProjectDetailView({ project, tasks, onBack, onUpdateTask, onNewTask }: 
   const progress = projectTasks.length > 0 ? Math.round((completedTasks.length / projectTasks.length) * 100) : 0;
   const nextDueTask = [...activeTasks].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0];
   const topPriority = [...activeTasks].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority])[0]?.priority || "Clear";
+  const projectNotes = notes.filter(note => note.projectName === project.name);
 
   return <section className="class-detail-view">
     <button className="class-back" onClick={onBack}><ArrowRight size={14} /> All spaces</button>
     <div className="class-detail-hero" style={{ "--class-color": project.color } as React.CSSProperties}>
       <div className="class-hero-icon"><project.icon size={25} /></div>
       <div><p className="eyebrow">{project.kind === "maintenance" ? "Maintenance system" : "Finishable project"}</p><h1>{project.name}</h1><p>{project.desc}</p></div>
-      <div className="class-hero-actions"><button className="primary" onClick={() => onNewTask?.(project.name)}><Plus size={15} /> New task</button></div>
+      <div className="class-hero-actions"><button onClick={() => onActionProject?.(project.name)}><MoreHorizontal size={15} /> Settings</button><button onClick={() => onNewNote?.(project.name)}><NotebookPen size={15} /> New note</button><button className="primary" onClick={() => onNewTask?.(project.name)}><Plus size={15} /> New task</button></div>
     </div>
     <div className="class-meta-strip">
       <div><span>Next due</span><strong>{nextDueTask ? formatDueDate(nextDueTask.due) : "Nothing due"}</strong></div>
@@ -2432,6 +2433,10 @@ function ProjectDetailView({ project, tasks, onBack, onUpdateTask, onNewTask }: 
       <section className="card class-coursework project-kanban-grid">
         <div className="class-section-title"><div><h2>Tasks</h2><p>Organize your work across columns.</p></div><button onClick={() => onNewTask?.(project.name)}><Plus size={14} /> Add</button></div>
         <ProjectKanban project={project} projectName={project.name} tasks={tasks} onClose={() => {}} onUpdateTask={onUpdateTask} onNewTask={onNewTask ? () => onNewTask(project.name) : undefined} isEmbedded={true} />
+      </section>
+      <section className="card class-notes-card">
+        <div className="class-section-title"><div><h2>Project notes</h2><p>Context, decisions, and reference material.</p></div><button onClick={() => onNewNote?.(project.name)}><Plus size={14} /></button></div>
+        {projectNotes.length ? <div className="class-note-list">{projectNotes.map(note => <button key={note.id} onClick={() => onOpenNote?.(note.id)}><NotebookPen size={15} /><span><strong>{note.title || "Untitled note"}</strong><small>{new Date(note.updatedAt).toLocaleDateString()}</small></span><ArrowRight size={13} /></button>)}</div> : <div className="class-empty compact"><NotebookPen size={21} /><strong>No notes yet.</strong><button onClick={() => onNewNote?.(project.name)}>Start a project note</button></div>}
       </section>
     </div>
   </section>;
