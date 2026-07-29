@@ -5,13 +5,9 @@ import {
   Activity, Archive, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight,
   Clock3, Code2, Database, ExternalLink, FileText, FolderKanban, GraduationCap, Image,
   Library, Link2, ListTodo, Map, NotebookPen, Plus, Search,
-  Target, Trash2, UserRound, Users, Utensils, X, Award, Briefcase, BriefcaseBusiness,
+  Target, Trash2, UserRound, Users, Utensils, X,
 } from "lucide-react";
 import { getCountdownText, getUrgencyColor } from "@/lib/helpers";
-import type {
-  JobApplication, Interview, Recruiter, NetworkConnection, JobOffer,
-  Certification, Skill, CareerGoal, PortfolioProject, Opportunity,
-} from "@/lib/workosTypes";
 
 export type HubRecord = {
   id: string;
@@ -63,16 +59,10 @@ export type SchoolHubState = {
 };
 
 export type WorkHubState = {
-  applications: JobApplication[];
-  interviews: Interview[];
-  recruiters: Recruiter[];
-  connections: NetworkConnection[];
-  offers: JobOffer[];
-  certifications: Certification[];
-  skills: Skill[];
-  goals: CareerGoal[];
-  portfolio: PortfolioProject[];
-  opportunities: Opportunity[];
+  portfolio: HubRecord[];
+  clients: HubRecord[];
+  skills: HubRecord[];
+  goals: HubRecord[];
 };
 
 export type LifeHubKey = keyof LifeHubState;
@@ -85,18 +75,7 @@ export const emptyLifeHub: LifeHubState = {
   tools: [], contacts: [], documents: [], vault: [], gallery: [], vision: [], archive: [],
 };
 export const emptySchoolHub: SchoolHubState = { profile: {}, topics: [], professors: [], goals: [] };
-export const emptyWorkHub: WorkHubState = {
-  applications: [],
-  interviews: [],
-  recruiters: [],
-  connections: [],
-  offers: [],
-  certifications: [],
-  skills: [],
-  goals: [],
-  portfolio: [],
-  opportunities: [],
-};
+export const emptyWorkHub: WorkHubState = { portfolio: [], clients: [], skills: [], goals: [] };
 
 type DashboardTask = { id: number; title: string; project: string; color: string; due?: string; priority: string; classId?: string; academicType?: string; gradeWeight?: number; done?: boolean; canceled?: boolean };
 type DashboardProject = { name: string; desc: string; progress: number; color: string; kind: "maintenance" | "finishable"; tasks: number };
@@ -209,32 +188,25 @@ export function WorkDashboard({ tasks, projects, work, onComplete, onOpenTask, o
 }) {
   const now = new Date(), { today, end } = weekWindow();
   const workTasks = tasks.filter(task => !task.classId && openTask(task) && (!task.due || (task.due >= today && task.due <= end))).sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
-  const workProjects = projects.filter(p => p.name).slice(0, 4);
-  const upcomingInterviews = work.interviews.filter(i => i.date >= today && i.date <= end).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3);
-  const activeApplications = work.applications.filter(a => a.status === "interviewing" || a.status === "reviewing").slice(0, 4);
-  const featuredPortfolio = work.portfolio.filter(p => p.featured).slice(0, 3);
-  const activeCertifications = work.certifications.filter(c => c.status === "in-progress").slice(0, 2);
-
+  const workProjects = projects.filter(p => p.name).slice(0, 8);
+  const databaseLinks: { key: WorkHubKey; label: string; icon: typeof Database }[] = [
+    { key: "portfolio", label: "Portfolio", icon: FileText }, { key: "clients", label: "Clients", icon: Users },
+    { key: "skills", label: "Skills", icon: Code2 }, { key: "goals", label: "Goals", icon: Target },
+  ];
   return <div className="os-dashboard work-dashboard">
-    <div className="os-hero"><div><p className="eyebrow">{now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p><h1>WorkOS</h1><p>Keep your career moving forward. Progress over perfection.</p></div><button className="os-now-button" onClick={onOpenNow}><Target size={18} /> Open Now</button></div>
-    <div className="os-quick-row"><QuickAction icon={ListTodo} label="New task" onClick={onNewTask} /><QuickAction icon={BriefcaseBusiness} label="New application" onClick={() => onOpenCollection("applications", true)} /><QuickAction icon={Award} label="New skill" onClick={() => onOpenCollection("skills", true)} /><QuickAction icon={Target} label="New goal" onClick={() => onOpenCollection("goals", true)} /></div>
+    <div className="os-hero"><div><p className="eyebrow">{now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p><h1>WorkOS</h1><p>Stay focused on what moves work forward. Progress over perfection.</p></div><button className="os-now-button" onClick={onOpenNow}><Target size={18} /> Open Now</button></div>
+    <div className="os-quick-row"><QuickAction icon={ListTodo} label="New task" onClick={onNewTask} /><QuickAction icon={FolderKanban} label="New project" onClick={onNewProject} /><QuickAction icon={Database} label="Portfolio item" onClick={() => onOpenCollection("portfolio", true)} /></div>
     <div className="os-work-layout"><div className="os-work-main">
-      {upcomingInterviews.length > 0 && <Section icon={CalendarDays} title="Upcoming interviews">{upcomingInterviews.map(interview => {
-        const app = work.applications.find(a => a.id === interview.applicationId);
-        return <Row key={interview.id} icon={CalendarDays} color="#4b8bdc" title={app?.company ?? "Interview"} meta={`${app?.position} · ${friendlyDate(interview.date)} · ${interview.type}`} onClick={() => {}} />;
-      })}</Section>}
-      <Section icon={ListTodo} title="This week's work" action="Add" onAction={onNewTask}>{workTasks.length ? workTasks.slice(0, 6).map(task => <Row key={task.id} icon={ListTodo} color={workProjects.find(p => p.name === task.project)?.color} title={task.title} meta={`${task.project} · ${friendlyDate(task.due)} · ${task.priority}`} onClick={() => onOpenTask(task.id)} onComplete={() => onComplete(task.id)} />) : <Empty>No work tasks due this week. What should you focus on?</Empty>}</Section>
-      <Section icon={FolderKanban} title="Active projects" action="New" onAction={onNewProject}>{workProjects.length ? <div className="os-project-grid">{workProjects.map(project => <button key={project.name} onClick={() => onOpenProject(project.name)} style={{ borderLeftColor: project.color }}><span style={{ color: project.color }}><FolderKanban size={14} /></span><strong>{project.name}</strong><small>{project.tasks} task{project.tasks === 1 ? "" : "s"}</small></button>)}</div> : <Empty>Create a project to organize your work.</Empty>}</Section>
+      <Section icon={ListTodo} title="This week's work" action="Add" onAction={onNewTask}>{workTasks.length ? workTasks.slice(0, 8).map(task => <Row key={task.id} icon={ListTodo} color={workProjects.find(p => p.name === task.project)?.color} title={task.title} meta={`${task.project} · ${friendlyDate(task.due)} · ${task.priority}`} onClick={() => onOpenTask(task.id)} onComplete={() => onComplete(task.id)} />) : <Empty>No work tasks due this week. Plan your next steps.</Empty>}</Section>
+      <Section icon={FolderKanban} title="Active projects" action="New project" onAction={onNewProject}>{workProjects.length ? <div className="os-project-grid">{workProjects.map(project => <button key={project.name} onClick={() => onOpenProject(project.name)} style={{ borderLeftColor: project.color }}><span style={{ color: project.color }}><FolderKanban size={14} /></span><strong>{project.name}</strong><small>{project.tasks} task{project.tasks === 1 ? "" : "s"}</small></button>)}</div> : <Empty>Create a project to organize your work.</Empty>}</Section>
     </div><aside>
-      {activeApplications.length > 0 && <Section icon={Briefcase} title="Active applications"><div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>{activeApplications.map(app => <button key={app.id} onClick={() => {}} style={{ padding: "8px 12px", background: "rgba(75, 139, 220, 0.1)", border: "1px solid rgba(75, 139, 220, 0.3)", borderRadius: "6px", textAlign: "left", cursor: "pointer" }}><strong style={{ display: "block", fontSize: "13px" }}>{app.company}</strong><small style={{ color: "var(--muted)", fontSize: "11px" }}>{app.position}</small></button>)}</div></Section>}
-      {activeCertifications.length > 0 && <Section icon={Award} title="Certifications in progress"><div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>{activeCertifications.map(cert => <button key={cert.id} onClick={() => {}} style={{ padding: "8px 12px", background: "rgba(71, 164, 123, 0.1)", border: "1px solid rgba(71, 164, 123, 0.3)", borderRadius: "6px", textAlign: "left", cursor: "pointer" }}><strong style={{ display: "block", fontSize: "13px" }}>{cert.name}</strong>{cert.earnedDate && <small style={{ color: "var(--muted)", fontSize: "11px" }}>Due {friendlyDate(cert.earnedDate)}</small>}</button>)}</div></Section>}
-      <Section icon={Code2} title="Career snapshot"><div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "13px" }}><div style={{ display: "flex", justifyContent: "space-between" }}><span>Applications</span><strong>{work.applications.length}</strong></div><div style={{ display: "flex", justifyContent: "space-between" }}><span>Skills</span><strong>{work.skills.length}</strong></div><div style={{ display: "flex", justifyContent: "space-between" }}><span>Portfolio</span><strong>{work.portfolio.length}</strong></div></div></Section>
+      <Section icon={Database} title="Work databases"><div className="os-database-grid single">{databaseLinks.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => onOpenCollection(key)}><Icon size={15} /><span>{label}</span><small>{work[key].length}</small></button>)}</div></Section>
     </aside></div>
   </div>;
 }
 
 const collectionMeta: Record<LifeHubKey | SchoolHubKey | WorkHubKey, { title: string; subtitle: string; link?: boolean; visual?: boolean; category?: boolean }> = {
-  habits: { title: "Habits", subtitle: "Small actions worth repeating." }, recipes: { title: "Recipes", subtitle: "Meals you want to make again." }, food: { title: "Food storage", subtitle: "What is stocked and what is running low." }, exercises: { title: "Exercises", subtitle: "Your reusable movement library." }, trainings: { title: "Trainings", subtitle: "Workouts and practice sessions." }, trips: { title: "Trips", subtitle: "Places, plans, and travel ideas." }, media: { title: "Books & watchlist", subtitle: "What you are reading, watching, and listening to.", link: true, category: true }, tools: { title: "Useful tools", subtitle: "Links you want close by.", link: true }, contacts: { title: "Contacts", subtitle: "People and context worth remembering." }, documents: { title: "Documents", subtitle: "Important references and links.", link: true }, vault: { title: "Vault links", subtitle: "Secure portal links only. Keep passwords in a password manager.", link: true }, gallery: { title: "Gallery", subtitle: "Images and albums from your life.", visual: true }, vision: { title: "Vision board", subtitle: "A visual home for what you are building toward.", visual: true }, archive: { title: "Archive", subtitle: "Things you want to keep without seeing every day." }, topics: { title: "Topics", subtitle: "Concepts you are learning across courses." }, professors: { title: "Professors", subtitle: "Office hours and contact context." }, goals: { title: "Academic goals", subtitle: "Outcomes you are working toward." }, portfolio: { title: "Portfolio", subtitle: "Projects and work you want to showcase." }, applications: { title: "Applications", subtitle: "Companies and positions you have applied to." }, interviews: { title: "Interviews", subtitle: "Pipeline management and interview outcomes." }, recruiters: { title: "Recruiters", subtitle: "Recruiting contacts and opportunities." }, connections: { title: "Network", subtitle: "Professional relationships and mentors." }, offers: { title: "Offers", subtitle: "Job offers received and decisions." }, certifications: { title: "Certifications", subtitle: "Professional credentials and credentials in progress." }, skills: { title: "Skills", subtitle: "Expertise and capabilities you are building." }, opportunities: { title: "Opportunities", subtitle: "Companies, events, and hiring signals." },
+  habits: { title: "Habits", subtitle: "Small actions worth repeating." }, recipes: { title: "Recipes", subtitle: "Meals you want to make again." }, food: { title: "Food storage", subtitle: "What is stocked and what is running low." }, exercises: { title: "Exercises", subtitle: "Your reusable movement library." }, trainings: { title: "Trainings", subtitle: "Workouts and practice sessions." }, trips: { title: "Trips", subtitle: "Places, plans, and travel ideas." }, media: { title: "Books & watchlist", subtitle: "What you are reading, watching, and listening to.", link: true, category: true }, tools: { title: "Useful tools", subtitle: "Links you want close by.", link: true }, contacts: { title: "Contacts", subtitle: "People and context worth remembering." }, documents: { title: "Documents", subtitle: "Important references and links.", link: true }, vault: { title: "Vault links", subtitle: "Secure portal links only. Keep passwords in a password manager.", link: true }, gallery: { title: "Gallery", subtitle: "Images and albums from your life.", visual: true }, vision: { title: "Vision board", subtitle: "A visual home for what you are building toward.", visual: true }, archive: { title: "Archive", subtitle: "Things you want to keep without seeing every day." }, topics: { title: "Topics", subtitle: "Concepts you are learning across courses." }, professors: { title: "Professors", subtitle: "Office hours and contact context." }, goals: { title: "Academic goals", subtitle: "Outcomes you are working toward." }, portfolio: { title: "Portfolio", subtitle: "Projects and work you want to showcase." }, clients: { title: "Clients", subtitle: "People and organizations you work with." }, skills: { title: "Skills", subtitle: "Expertise and capabilities you are building." },
 };
 
 export function HubCollectionModal({ target, records, close, change }: { target: HubCollectionTarget; records: HubRecord[]; close: () => void; change: (records: HubRecord[]) => void }) {
