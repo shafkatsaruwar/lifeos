@@ -53,6 +53,7 @@ import ProjectKanban from "@/app/components/ProjectKanban";
 import { emptyStudyAbroadHub } from "@/lib/studyAbroadTypes";
 import type { StudyAbroadHub } from "@/lib/studyAbroadTypes";
 import { createStudyAbroadSeedData } from "@/lib/studyAbroadSeedData";
+import { createWorkOSDemoData, DEMO_MODE_ENABLED, DEMO_PROJECTS, DEMO_TASKS, DEMO_EVENTS } from "@/lib/workOSDemoData";
 import type { ParsedTask } from "@/lib/useNLTaskCreation";
 import { useTaskBreakdown } from "@/lib/useTaskBreakdown";
 import {
@@ -189,7 +190,7 @@ const initialSettings: SettingsState = {
   enableStudyAbroad: false,
   enableLifeOS: true,
   enableSchoolOS: true,
-  enableWorkOS: false,
+  enableWorkOS: DEMO_MODE_ENABLED,
 };
 
 // New users start with three empty project templates to explore the product
@@ -222,7 +223,9 @@ const recoverSpacesFromTasks = (items: Task[]): Project[] => {
 
 const initialBrainItems: string[] = [];
 
-const initialCalendarEvents: CalendarEvent[] = [];
+const initialCalendarEvents: CalendarEvent[] = DEMO_MODE_ENABLED ? DEMO_EVENTS : [];
+
+const initialDemoTasks = DEMO_MODE_ENABLED ? [...initialTasks, ...DEMO_TASKS] : initialTasks;
 
 const defaultFocusChecklist = ["Choose the next visible step", "Make one meaningful pass", "Leave a clear handoff note"];
 const focusChecklistTemplates = [
@@ -414,7 +417,7 @@ export default function LifeOS() {
   const [authLoading, setAuthLoading] = useState(true);
   const [cloudUserId, setCloudUserId] = useState<string | null>(null);
   const [view, setView] = useState<View>(() => viewFromLocation());
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tasks, setTasks] = useState<Task[]>(initialDemoTasks);
   const [tasksHydrated, setTasksHydrated] = useState(false);
   const [palette, setPalette] = useState(false);
   const [capture, setCapture] = useState(false);
@@ -987,9 +990,16 @@ export default function LifeOS() {
     (async () => {
       try {
         const data = await loadDataFromFirebase('work');
-        if (data && typeof data === "object") setWorkHub({ ...emptyWorkHub, ...data });
+        if (data && typeof data === "object") {
+          setWorkHub({ ...emptyWorkHub, ...data });
+        } else if (DEMO_MODE_ENABLED) {
+          setWorkHub(createWorkOSDemoData());
+        }
       } catch (error) {
         console.error('Failed to load WorkOS collections from Firebase:', error);
+        if (DEMO_MODE_ENABLED) {
+          setWorkHub(createWorkOSDemoData());
+        }
       } finally {
         setWorkHubHydrated(true);
       }
