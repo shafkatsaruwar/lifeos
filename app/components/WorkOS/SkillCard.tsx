@@ -3,7 +3,7 @@
  * Display skill with proficiency, projects, and next steps
  */
 
-import { BookOpen, TrendingUp } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import type { SkillCardProps } from "./types";
 
 export function SkillCard({

@@ -4,7 +4,7 @@
  */
 
 import { ChevronRight, Plus } from "lucide-react";
-import type { InterviewPipelineProps, ApplicationStage } from "./types";
+import type { InterviewPipelineProps } from "./types";
 
 export function InterviewPipeline({
   applications,

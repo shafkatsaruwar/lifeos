@@ -3,9 +3,9 @@
  * Display urgent items: interviews, deadlines, follow-ups
  */
 
-import { AlertCircle, Calendar } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import type { UrgentAlertProps } from "./types";
-import { getUrgencyColor, getTimeUntil } from "@/lib/workosHelpers";
+import { getUrgencyColor } from "@/lib/workosHelpers";
 
 export function UrgentAlert({
   type,

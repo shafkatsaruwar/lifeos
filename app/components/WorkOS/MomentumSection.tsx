@@ -4,7 +4,7 @@
  */
 
 import { ProjectCard } from "./ProjectCard";
-import type { ProjectCardProps, MomentumSectionProps } from "./types";
+import type { MomentumSectionProps } from "./types";
 
 export function MomentumSection({
   projects,
