@@ -31,7 +31,7 @@ export function AssistantPanel({
       <div className="panel-section">
         <h3 className="panel-title">
           <Clock size={14} />
-          Today's Timeline
+          Today&apos;s Timeline
         </h3>
         {nextEvents.length > 0 ? (
           <div className="timeline-list">

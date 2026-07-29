@@ -12,7 +12,7 @@ import { WorkMode } from './WorkMode';
 import { SchoolMode } from './SchoolMode';
 import { LifeMode } from './LifeMode';
 import { StudyAbroadMode, type University } from './StudyAbroadMode';
-import { StatusSection, type StatusAlert } from './StatusSection';
+import type { StatusAlert } from './StatusSection';
 
 export interface OperatingModeViewProps {
   context: OperatingContext;

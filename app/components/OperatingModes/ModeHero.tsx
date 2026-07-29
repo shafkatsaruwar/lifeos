@@ -9,10 +9,10 @@ import type { OperatingContext, FocusSession } from '@/lib/contextArchitecture';
 import type { AmbientActivity } from '@/app/page';
 
 export function ModeHero({
-  context,
+  context: _context,
   greeting,
   focusSession,
-  ambientActivity,
+  ambientActivity: _ambientActivity,
   nextEvent,
   onStartFocus,
 }: {

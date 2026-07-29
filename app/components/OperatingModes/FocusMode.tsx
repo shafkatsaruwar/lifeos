@@ -6,7 +6,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Pause, Play, X, Clock, AlertCircle } from 'lucide-react';
+import { Pause, Play, X, AlertCircle } from 'lucide-react';
 import type { FocusSession } from '@/lib/contextArchitecture';
 
 export function FocusMode({

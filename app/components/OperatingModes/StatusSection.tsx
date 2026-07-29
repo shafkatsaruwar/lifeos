@@ -54,7 +54,7 @@ export function StatusSection({
     };
 
     const config = levelConfig[level];
-    const Icon = config.icon;
+    // const Icon = config.icon; // Icon defined but not rendered in this version
 
     return (
       <motion.div
