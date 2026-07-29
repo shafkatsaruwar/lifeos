@@ -14,3 +14,10 @@ export { WorkMode } from './WorkMode';
 export { SchoolMode } from './SchoolMode';
 export { LifeMode } from './LifeMode';
 export { StudyAbroadMode, type University } from './StudyAbroadMode';
+export { FocusMode } from './FocusMode';
+
+// Adapters for integrating with existing dashboards
+export { WorkModeAdapter, type WorkModeAdapterProps } from './WorkModeAdapter';
+export { SchoolModeAdapter, type SchoolModeAdapterProps } from './SchoolModeAdapter';
+export { LifeModeAdapter, type LifeModeAdapterProps } from './LifeModeAdapter';
+export { StudyAbroadModeAdapter, type StudyAbroadModeAdapterProps } from './StudyAbroadModeAdapter';
