@@ -249,7 +249,7 @@ export function QuickCaptureWidget({ className = '' }: QuickCaptureWidgetProps) 
                 <div className="flex items-start gap-2">
                   <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-purple-700">
-                    Ideas are stored for later refinement. They won't interrupt your current focus.
+                    Ideas are stored for later refinement. They won&apos;t interrupt your current focus.
                   </p>
                 </div>
               </motion.div>

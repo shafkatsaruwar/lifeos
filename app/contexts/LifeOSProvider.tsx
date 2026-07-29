@@ -3,12 +3,12 @@
 import React, { createContext, useContext } from 'react';
 import { useOperatingContext } from '@/lib/useOperatingContext';
 import { buildPersonalContextLayer, generateAllContextMetadata } from '@/lib/personalContextLayer';
-import type { OperatingContextState, FocusSession, LocalTask, PersonalContextLayer } from '@/lib/contextArchitecture';
+import type { OperatingContextState, OperatingContext, FocusSession, LocalTask, PersonalContextLayer } from '@/lib/contextArchitecture';
 
 interface LifeOSContextValue {
   // Operating Context
   contextState: OperatingContextState;
-  switchContext: (context: string) => void;
+  switchContext: (context: OperatingContext) => void;
 
   // Focus Sessions
   focusSessions: FocusSession[];

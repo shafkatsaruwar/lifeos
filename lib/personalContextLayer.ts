@@ -97,7 +97,7 @@ export function determineRecommendedContext(
   const criticalAlerts = extractCriticalAlerts(observations);
   if (criticalAlerts.length > 0) {
     const alertContexts = new Set(criticalAlerts.map(a => a.module));
-    for (const [context, score] of scores) {
+    for (const { context } of scores) {
       if (alertContexts.has(context)) {
         return context;
       }

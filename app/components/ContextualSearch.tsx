@@ -218,7 +218,7 @@ export function ContextualSearch({ className = '' }: ContextualSearchProps) {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                       >
-                        <p className="text-sm">No results found for "{query}"</p>
+                        <p className="text-sm">No results found for &quot;{query}&quot;</p>
                         <p className="text-xs mt-1">Try a different search term</p>
                       </motion.div>
                     ) : (

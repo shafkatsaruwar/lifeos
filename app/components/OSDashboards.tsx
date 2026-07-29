@@ -188,7 +188,7 @@ export function WorkDashboard({ tasks, projects, work, onComplete, onOpenTask, o
 }) {
   const now = new Date(), { today, end } = weekWindow();
   const workTasks = tasks.filter(task => !task.classId && openTask(task) && (!task.due || (task.due >= today && task.due <= end))).sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
-  const workProjects = projects.filter(p => p.name).slice(0, 5);
+  const workProjects = projects.filter(p => p.name).slice(0, 8);
   const databaseLinks: { key: WorkHubKey; label: string; icon: typeof Database }[] = [
     { key: "portfolio", label: "Portfolio", icon: FileText }, { key: "clients", label: "Clients", icon: Users },
     { key: "skills", label: "Skills", icon: Code2 }, { key: "goals", label: "Goals", icon: Target },
