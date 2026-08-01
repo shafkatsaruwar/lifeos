@@ -113,47 +113,36 @@ function periodProgress(now = new Date()) {
   return { Day: day, Week: week, Month: month, Year: (now.getTime() - start.getTime()) / (end.getTime() - start.getTime()) };
 }
 
-export function LifeDashboard({ tasks, projects, notes, events, life, workspaceName, onComplete, onOpenTask, onOpenProject, onOpenNote, onOpenTasks, onOpenProjects, onOpenNotes, onNewTask, onNewProject, onNewNote, onOpenCalendar, onOpenNow, onOpenCollection }: {
-  tasks: DashboardTask[]; projects: DashboardProject[]; notes: DashboardNote[]; events: DashboardEvent[]; life: LifeHubState; workspaceName: string;
+export function LifeDashboard({ tasks, projects, notes, events, workspaceName, onComplete, onOpenTask, onOpenProject, onOpenNote, onOpenTasks, onOpenProjects, onOpenNotes, onNewTask, onNewProject, onNewNote, onOpenCalendar, onOpenNow }: {
+  tasks: DashboardTask[]; projects: DashboardProject[]; notes: DashboardNote[]; events: DashboardEvent[]; workspaceName: string;
   onComplete: (id: number) => void; onOpenTask: (id: number) => void; onOpenProject: (name: string) => void; onOpenNote: (id: string) => void;
   onOpenTasks: () => void; onOpenProjects: () => void; onOpenNotes: () => void;
   onNewTask: () => void; onNewProject: () => void; onNewNote: () => void; onOpenCalendar: () => void; onOpenNow: () => void;
-  onOpenCollection: (key: LifeHubKey, startAdd?: boolean) => void;
 }) {
   const now = new Date(), { today, end } = weekWindow();
   const weekTasks = tasks.filter(task => !task.classId && openTask(task) && (!task.due || (task.due >= today && task.due <= end))).sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
-  const finishableProjects = projects.filter(item => item.kind === "finishable");
+  const activeProjects = projects;
   const recentNotes = notes.filter(note => !note.classId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 4);
   const upcoming = events.filter(event => event.start.slice(0, 10) >= today).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 4);
-  const media = (category: string) => life.media.filter(item => item.category === category).slice(0, 3);
   const progress = periodProgress(now);
-  const databaseLinks: { key: LifeHubKey; label: string; icon: typeof Database }[] = [
-    { key: "habits", label: "Habits", icon: Activity }, { key: "recipes", label: "Recipes", icon: Utensils }, { key: "exercises", label: "Exercise", icon: Activity },
-    { key: "trips", label: "Trips", icon: Map }, { key: "contacts", label: "Contacts", icon: Users },
-    { key: "documents", label: "Documents", icon: FileText }, { key: "tools", label: "Tools", icon: Link2 },
-    { key: "gallery", label: "Gallery", icon: Image }, { key: "archive", label: "Archive", icon: Archive },
-  ];
   return <div className="os-dashboard life-dashboard">
     <div className="os-hero"><div><p className="eyebrow">{now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p><h1>LifeOS</h1><p>Hey {workspaceName.split(" ")[0]}. Keep life moving without turning it into admin.</p></div><button className="os-now-button" onClick={onOpenNow}><Target size={18} /> Open Now</button></div>
-    <div className="os-quick-row"><QuickAction icon={NotebookPen} label="New note" onClick={onNewNote} /><QuickAction icon={ListTodo} label="New task" onClick={onNewTask} /><QuickAction icon={FolderKanban} label="New project" onClick={onNewProject} /><QuickAction icon={Map} label="Trip idea" onClick={() => onOpenCollection("trips", true)} /><QuickAction icon={Utensils} label="New recipe" onClick={() => onOpenCollection("recipes", true)} /><QuickAction icon={Activity} label="Training" onClick={() => onOpenCollection("trainings", true)} /></div>
+    <div className="os-quick-row"><QuickAction icon={NotebookPen} label="New note" onClick={onNewNote} /><QuickAction icon={ListTodo} label="New task" onClick={onNewTask} /><QuickAction icon={FolderKanban} label="New project" onClick={onNewProject} /></div>
     <div className="os-dashboard-grid life-dashboard-grid">
       <div className="os-two-up life-dashboard-priority">
         <Section icon={CheckCircle2} title="Tasks this week" action="All tasks" onAction={onOpenTasks}>{weekTasks.length ? weekTasks.slice(0, 6).map(task => <Row key={task.id} icon={ListTodo} color={task.color} title={task.title} meta={`${task.project || "Inbox"} · ${friendlyDate(task.due)} · ${task.priority}`} onClick={() => onOpenTask(task.id)} onComplete={() => onComplete(task.id)} />) : <Empty>No personal tasks are due in the next seven days.</Empty>}</Section>
-        <Section icon={FolderKanban} title="Active projects" action="All projects" onAction={onOpenProjects}>{finishableProjects.length ? <div className="os-project-strip life-project-strip">{finishableProjects.slice(0, 4).map(project => <button key={project.name} onClick={() => onOpenProject(project.name)}><i style={{ background: project.color }} /><strong>{project.name}</strong><span>{project.desc}</span><div><b style={{ width: `${project.progress}%`, background: project.color }} /></div></button>)}</div> : <Empty>Create a project with a finish line and it will live here.</Empty>}</Section>
+        <Section icon={FolderKanban} title="Active projects" action="All projects" onAction={onOpenProjects}>{activeProjects.length ? <div className="os-project-strip life-project-strip">{activeProjects.slice(0, 4).map(project => <button key={project.name} onClick={() => onOpenProject(project.name)}><i style={{ background: project.color }} /><strong>{project.name}</strong><span>{project.kind === "maintenance" ? `Maintenance · ${project.desc}` : project.desc}</span><div><b style={{ width: `${project.progress}%`, background: project.color }} /></div></button>)}</div> : <Empty>Create a project and it will show up here.</Empty>}</Section>
       </div>
       <div className="os-dashboard-main">
         <div className="os-two-up">
           <Section icon={NotebookPen} title="Recent notes" action="All notes" onAction={onOpenNotes}>{recentNotes.length ? recentNotes.map(note => <Row key={note.id} icon={NotebookPen} title={note.title || "Untitled note"} meta={`${stripHtml(note.body).slice(0, 48) || "Empty note"} · ${friendlyDate(note.updatedAt)}`} onClick={() => onOpenNote(note.id)} />) : <Empty>Your newest personal notes will show here.</Empty>}</Section>
           <Section icon={CalendarDays} title="Coming up" action="Calendar" onAction={onOpenCalendar}>{upcoming.length ? upcoming.map(event => <Row key={event.id} icon={CalendarDays} color={event.color} title={event.title} meta={new Date(event.start).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} onClick={onOpenCalendar} />) : <Empty>Your next calendar events will show here.</Empty>}</Section>
         </div>
-        <div className="os-media-grid">{["Watching", "Reading", "Listening"].map(category => <Section key={category} icon={category === "Reading" ? BookOpen : Library} title={`${category} now`} action="Add" onAction={() => onOpenCollection("media", true)}>{media(category).length ? media(category).map(item => <Row key={item.id} icon={Library} title={item.title} meta={item.subtitle || category} onClick={() => item.url && window.open(item.url, "_blank", "noopener,noreferrer")} />) : <Empty>Add something you are {category.toLowerCase()}.</Empty>}</Section>)}</div>
       </div>
       <aside className="os-dashboard-side">
         <Section icon={Clock3} title="Time progress"><div className="os-progress-list">{Object.entries(progress).map(([label, value]) => <div key={label}><span>{label}</span><div><i style={{ width: `${Math.round(value * 100)}%` }} /></div><strong>{Math.round(value * 100)}%</strong></div>)}</div></Section>
-        <Section icon={Database} title="Life databases"><div className="os-database-grid">{databaseLinks.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => onOpenCollection(key)}><Icon size={15} /><span>{label}</span><small>{life[key].length}</small></button>)}</div></Section>
       </aside>
     </div>
-    <Section icon={Image} title="Vision board" action="Open board" onAction={() => onOpenCollection("vision")} className="os-vision-section">{life.vision.length ? <div className="os-vision-grid">{life.vision.slice(0, 6).map(item => <button key={item.id} onClick={() => onOpenCollection("vision")} style={item.imageUrl ? { backgroundImage: `url(${item.imageUrl})` } : undefined}><span>{item.title}</span></button>)}</div> : <Empty>Add images and goals you want to keep visible.</Empty>}</Section>
   </div>;
 }
 
