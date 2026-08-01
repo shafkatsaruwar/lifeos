@@ -3,29 +3,39 @@
 import "./NotificationCenter.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bell, CalendarDays, Check, FileText, GraduationCap, ListTodo, X } from "lucide-react";
+import { Bell, BriefcaseBusiness, CalendarDays, Check, ChevronDown, FileText, FolderKanban, GraduationCap, ListTodo, X } from "lucide-react";
 import {
   type LifeOSNotification,
+  type NotificationKind,
   type NotificationSource,
+  formatGroupKindBreakdown,
   formatNotificationTime,
   groupNotificationsBySource,
   isBannerCandidate,
+  notificationKindLabel,
+  notificationEnvironmentSources,
   notificationSourceAccent,
   notificationSourceLabel,
+  summarizeNotificationGroup,
 } from "@/lib/notifications";
 
+const isEnvironmentSource = (source: NotificationSource) => notificationEnvironmentSources.includes(source);
+
 const BANNER_DURATION_MS = 5000;
-const sourceIcon = (source: NotificationSource) => {
-  switch (source) {
-    case "work": return ListTodo;
-    case "life": return Check;
-    case "school": return GraduationCap;
-    case "calendar": return CalendarDays;
-  }
+const kindIcon = (kind: NotificationKind, source: NotificationSource) => {
+  if (kind === "deliverable") return FileText;
+  if (kind === "project") return FolderKanban;
+  if (kind === "assignment") return GraduationCap;
+  if (kind === "meeting") return BriefcaseBusiness;
+  if (kind === "event") return CalendarDays;
+  if (source === "work") return ListTodo;
+  if (source === "life") return Check;
+  if (source === "school") return GraduationCap;
+  return CalendarDays;
 };
 
 function NotificationIcon({ item, size = 16 }: { item: LifeOSNotification; size?: number }) {
-  const Icon = item.kind === "deliverable" ? FileText : sourceIcon(item.source);
+  const Icon = kindIcon(item.kind, item.source);
   const accent = notificationSourceAccent[item.source];
   return (
     <span className="macos-notification-icon" style={{ color: accent, background: `${accent}18` }}>
@@ -75,7 +85,7 @@ function MacOSBanner({ item, onNavigate, onClose }: {
         <span className="macos-banner-copy">
           <strong>{notificationSourceLabel[item.source]}</strong>
           <span>{item.title}</span>
-          <small>{item.subtitle || item.kind} · {item.dueIn}</small>
+          <small>{item.subtitle || notificationKindLabel[item.kind]} · {item.dueIn}</small>
         </span>
       </button>
       <button type="button" className="macos-banner-close" aria-label={`Dismiss ${item.title}`} onClick={() => onClose(item.id)}>
@@ -151,6 +161,80 @@ function CenterNotificationRow({ item, onNavigate, onDismiss }: {
   );
 }
 
+export function GlobalNotificationShell({ notifications, onNavigate, onDismiss, onDismissAll }: {
+  notifications: LifeOSNotification[];
+  onNavigate: (item: LifeOSNotification) => void;
+  onDismiss: (id: string) => void;
+  onDismissAll: () => void;
+}) {
+  return (
+    <>
+      <NotificationBanners notifications={notifications} onNavigate={onNavigate} />
+      <div className="global-notification-bell-anchor">
+        <NotificationBell
+          notifications={notifications}
+          onNavigate={onNavigate}
+          onDismiss={onDismiss}
+          onDismissAll={onDismissAll}
+        />
+      </div>
+    </>
+  );
+}
+
+function NotificationGroupSection({ group, collapsed, onToggle, onNavigate, onDismiss, sectionRef }: {
+  group: { source: NotificationSource; items: LifeOSNotification[] };
+  collapsed: boolean;
+  onToggle: () => void;
+  onNavigate: (item: LifeOSNotification) => void;
+  onDismiss: (id: string) => void;
+  sectionRef?: (node: HTMLElement | null) => void;
+}) {
+  const summary = summarizeNotificationGroup(group.items);
+  const breakdown = formatGroupKindBreakdown(summary);
+  const accent = notificationSourceAccent[group.source];
+  const label = notificationSourceLabel[group.source];
+  const summaryLine = [breakdown, summary.overdue > 0 ? `${summary.overdue} overdue` : "", summary.today > 0 ? `${summary.today} due today` : ""]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <section
+      ref={sectionRef}
+      className={`macos-center-group ${collapsed ? "is-collapsed" : ""}`}
+      data-env={group.source}
+    >
+      <button
+        type="button"
+        className="macos-center-group-toggle"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        aria-label={`${collapsed ? "Expand" : "Collapse"} ${label} notifications`}
+      >
+        <span className="macos-center-group-dot" style={{ background: accent }} />
+        <span className="macos-center-group-label">
+          <strong>{label}</strong>
+          {collapsed && summaryLine ? <small>{summaryLine}</small> : null}
+        </span>
+        <span className="macos-center-group-count">{summary.total}</span>
+        <ChevronDown size={14} className={`macos-center-group-chevron ${collapsed ? "" : "is-open"}`} />
+      </button>
+      {!collapsed && (
+        <div className="macos-center-group-items">
+          {group.items.map(item => (
+            <CenterNotificationRow
+              key={item.id}
+              item={item}
+              onNavigate={onNavigate}
+              onDismiss={onDismiss}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function NotificationBell({ notifications, onNavigate, onDismiss, onDismissAll }: {
   notifications: LifeOSNotification[];
   onNavigate: (item: LifeOSNotification) => void;
@@ -158,9 +242,32 @@ export function NotificationBell({ notifications, onNavigate, onDismiss, onDismi
   onDismissAll: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<NotificationSource>>(new Set());
   const rootRef = useRef<HTMLDivElement>(null);
+  const groupRefs = useRef<Partial<Record<NotificationSource, HTMLElement | null>>>({});
   const groups = groupNotificationsBySource(notifications);
+  const environmentGroups = groups.filter(group => isEnvironmentSource(group.source));
   const todayLabel = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+
+  const toggleGroup = useCallback((source: NotificationSource, scrollIntoView = false) => {
+    setCollapsedGroups(current => {
+      const next = new Set(current);
+      if (next.has(source)) next.delete(source);
+      else next.add(source);
+      return next;
+    });
+
+    if (scrollIntoView) {
+      window.requestAnimationFrame(() => {
+        groupRefs.current[source]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      });
+    }
+  }, []);
+
+  const expandAll = useCallback(() => setCollapsedGroups(new Set()), []);
+  const collapseAll = useCallback(() => {
+    setCollapsedGroups(new Set(groups.map(group => group.source)));
+  }, [groups]);
 
   useEffect(() => {
     if (!open) return;
@@ -206,27 +313,52 @@ export function NotificationBell({ notifications, onNavigate, onDismiss, onDismi
             </header>
 
             <div className="macos-center-body">
-              {groups.length ? groups.map(group => (
-                <section key={group.source} className="macos-center-group">
-                  <header>
-                    <span className="macos-center-group-dot" style={{ background: notificationSourceAccent[group.source] }} />
-                    <strong>{notificationSourceLabel[group.source]}</strong>
-                    <span>{group.items.length}</span>
-                  </header>
-                  {group.items.map(item => (
-                    <CenterNotificationRow
-                      key={item.id}
-                      item={item}
-                      onNavigate={(entry) => { onNavigate(entry); setOpen(false); }}
-                      onDismiss={onDismiss}
-                    />
-                  ))}
-                </section>
-              )) : (
+              {groups.length ? <>
+                {environmentGroups.length > 0 && (
+                  <div className="macos-center-env-strip" role="toolbar" aria-label="Collapse or expand environments">
+                    {environmentGroups.map(group => {
+                      const summary = summarizeNotificationGroup(group.items);
+                      const collapsed = collapsedGroups.has(group.source);
+                      const label = notificationSourceLabel[group.source];
+                      return (
+                        <button
+                          key={group.source}
+                          type="button"
+                          className={collapsed ? "is-collapsed" : "is-expanded"}
+                          aria-pressed={!collapsed}
+                          aria-label={`${collapsed ? "Expand" : "Collapse"} ${label} (${summary.total})`}
+                          onClick={() => toggleGroup(group.source, true)}
+                        >
+                          <i style={{ background: notificationSourceAccent[group.source] }} />
+                          <span>{label}</span>
+                          <em>{summary.total}</em>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {groups.length > 1 && (
+                  <div className="macos-center-group-actions">
+                    <button type="button" onClick={expandAll}>Expand all</button>
+                    <button type="button" onClick={collapseAll}>Collapse all</button>
+                  </div>
+                )}
+                {groups.map(group => (
+                  <NotificationGroupSection
+                    key={group.source}
+                    group={group}
+                    collapsed={collapsedGroups.has(group.source)}
+                    onToggle={() => toggleGroup(group.source, false)}
+                    sectionRef={(node) => { groupRefs.current[group.source] = node; }}
+                    onNavigate={(entry) => { onNavigate(entry); setOpen(false); }}
+                    onDismiss={onDismiss}
+                  />
+                ))}
+              </> : (
                 <div className="macos-center-empty">
                   <Bell size={22} />
                   <strong>No Notifications</strong>
-                  <p>Alerts for meetings, due items, and calendar events will appear here.</p>
+                  <p>Tasks, projects, assignments, and deliverables from your enabled environments will appear here.</p>
                 </div>
               )}
             </div>

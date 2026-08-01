@@ -2,12 +2,13 @@ import { toDateKey } from "@/lib/helpers";
 import type { WorkHubState, WorkView } from "@/app/components/OSDashboards";
 
 export type NotificationSource = "work" | "life" | "school" | "calendar";
-export type NotificationKind = "task" | "deliverable" | "meeting" | "event";
+export type NotificationKind = "task" | "project" | "assignment" | "deliverable" | "meeting" | "event";
 export type NotificationUrgency = "overdue" | "today" | "soon";
 
 export type NotificationAction =
   | { type: "work"; view: WorkView; itemId?: string }
   | { type: "life-task"; taskId: number }
+  | { type: "life-project"; projectName: string }
   | { type: "school-task"; taskId: number }
   | { type: "calendar"; eventId?: string }
   | { type: "now" };
@@ -34,6 +35,18 @@ type LifeTaskInput = {
   project?: string;
   priority?: string;
   color?: string;
+  academicType?: string;
+};
+
+type LifeProjectInput = {
+  name: string;
+  kind: "maintenance" | "finishable";
+};
+
+type ClassInput = {
+  id: string;
+  code: string;
+  archived?: boolean;
 };
 
 type CalendarEventInput = {
@@ -88,10 +101,22 @@ const pushUnique = (list: LifeOSNotification[], item: LifeOSNotification) => {
   if (!list.some(entry => entry.id === item.id)) list.push(item);
 };
 
+const withinNotificationWindow = (dueKey: string, dueMs: number, today: string, weekLimit: number) =>
+  dueKey <= today || dueMs <= weekLimit;
+
+const isWorkEnabled = (settings: NotificationSettings) => settings.enableWorkOS !== false;
+const isLifeEnabled = (settings: NotificationSettings) => settings.enableLifeOS !== false;
+const isSchoolEnabled = (settings: NotificationSettings) => settings.enableSchoolOS !== false;
+
+const schoolKind = (academicType?: string): NotificationKind =>
+  academicType === "Project" ? "project" : "assignment";
+
 export function generateLifeOSNotifications(input: {
   now?: Date;
   workHub: WorkHubState;
   tasks: LifeTaskInput[];
+  projects?: LifeProjectInput[];
+  classes?: ClassInput[];
   events: CalendarEventInput[];
   settings?: NotificationSettings;
 }): LifeOSNotification[] {
@@ -102,19 +127,27 @@ export function generateLifeOSNotifications(input: {
   const weekLimit = nowMs + 7 * 24 * 60 * 60 * 1000;
   const settings = input.settings ?? {};
   const notifications: LifeOSNotification[] = [];
+  const projects = input.projects ?? [];
+  const classes = input.classes ?? [];
+  const classFor = (classId?: string) => classes.find(item => item.id === classId && !item.archived);
 
-  if (settings.enableWorkOS !== false) {
+  if (isWorkEnabled(settings)) {
+    const workProjectForDeliverable = (projectId: string) =>
+      input.workHub.projects.find(project => project.id === projectId);
+
     input.workHub.tasks.forEach(task => {
       if (task.status === "done" || !task.dueDate) return;
       const dueKey = dateOnly(task.dueDate);
       const dueMs = atLocalNoon(dueKey);
-      const include = dueKey <= today || dueMs <= weekLimit;
-      if (!include) return;
+      if (!withinNotificationWindow(dueKey, dueMs, today, weekLimit)) return;
+
+      const deliverable = input.workHub.deliverables.find(item => item.id === task.deliverableId);
+      const project = deliverable ? workProjectForDeliverable(deliverable.projectId) : undefined;
 
       pushUnique(notifications, {
         id: `work-task-${task.id}`,
         title: task.title,
-        subtitle: "Work task",
+        subtitle: project?.name ?? "Work task",
         source: "work",
         kind: "task",
         urgency: urgencyFrom(dueMs, nowMs, dueKey),
@@ -128,12 +161,14 @@ export function generateLifeOSNotifications(input: {
       if (deliverable.status === "delivered" || deliverable.status === "canceled") return;
       const dueKey = dateOnly(deliverable.dueDate);
       const dueMs = atLocalNoon(dueKey);
-      if (dueKey > today && dueMs > weekLimit) return;
+      if (!withinNotificationWindow(dueKey, dueMs, today, weekLimit)) return;
+
+      const project = workProjectForDeliverable(deliverable.projectId);
 
       pushUnique(notifications, {
         id: `work-deliverable-${deliverable.id}`,
         title: deliverable.title,
-        subtitle: "Deliverable",
+        subtitle: project?.name ?? "Deliverable",
         source: "work",
         kind: "deliverable",
         urgency: urgencyFrom(dueMs, nowMs, dueKey),
@@ -142,6 +177,31 @@ export function generateLifeOSNotifications(input: {
         action: { type: "work", view: "deliverables", itemId: deliverable.id },
       });
     });
+
+    input.workHub.projects
+      .filter(project => project.status === "active")
+      .forEach(project => {
+        const dueDeliverables = input.workHub.deliverables
+          .filter(item => item.projectId === project.id && item.status !== "delivered" && item.status !== "canceled")
+          .map(item => ({ item, dueKey: dateOnly(item.dueDate), dueMs: atLocalNoon(dateOnly(item.dueDate)) }))
+          .filter(entry => withinNotificationWindow(entry.dueKey, entry.dueMs, today, weekLimit))
+          .sort((a, b) => a.dueMs - b.dueMs);
+
+        if (!dueDeliverables.length) return;
+
+        const earliest = dueDeliverables[0];
+        pushUnique(notifications, {
+          id: `work-project-${project.id}`,
+          title: project.name,
+          subtitle: `${dueDeliverables.length} deliverable${dueDeliverables.length === 1 ? "" : "s"} due`,
+          source: "work",
+          kind: "project",
+          urgency: urgencyFrom(earliest.dueMs, nowMs, earliest.dueKey),
+          dueIn: formatDueIn(earliest.dueMs, nowMs, earliest.dueKey),
+          sortAt: earliest.dueMs,
+          action: { type: "work", view: "projects", itemId: project.id },
+        });
+      });
 
     input.workHub.meetings.forEach(meeting => {
       const startMs = atDateTime(meeting.start);
@@ -161,44 +221,77 @@ export function generateLifeOSNotifications(input: {
     });
   }
 
-  if (settings.enableLifeOS !== false) {
-    input.tasks.filter(task => !task.classId && !task.done && !task.canceled && task.due).forEach(task => {
-      const dueKey = dateOnly(task.due!);
-      const dueMs = atLocalNoon(dueKey);
-      if (dueKey > today && dueMs > weekLimit) return;
+  if (isLifeEnabled(settings)) {
+    input.tasks
+      .filter(task => !task.classId && !task.done && !task.canceled && task.due)
+      .forEach(task => {
+        const dueKey = dateOnly(task.due!);
+        const dueMs = atLocalNoon(dueKey);
+        if (!withinNotificationWindow(dueKey, dueMs, today, weekLimit)) return;
 
-      pushUnique(notifications, {
-        id: `life-task-${task.id}`,
-        title: task.title,
-        subtitle: task.project || "Personal task",
-        source: "life",
-        kind: "task",
-        urgency: urgencyFrom(dueMs, nowMs, dueKey),
-        dueIn: formatDueIn(dueMs, nowMs, dueKey),
-        sortAt: dueMs,
-        action: { type: "life-task", taskId: task.id },
+        pushUnique(notifications, {
+          id: `life-task-${task.id}`,
+          title: task.title,
+          subtitle: task.project || "Personal task",
+          source: "life",
+          kind: "task",
+          urgency: urgencyFrom(dueMs, nowMs, dueKey),
+          dueIn: formatDueIn(dueMs, nowMs, dueKey),
+          sortAt: dueMs,
+          action: { type: "life-task", taskId: task.id },
+        });
       });
-    });
+
+    projects
+      .filter(project => project.kind === "finishable")
+      .forEach(project => {
+        const dueTasks = input.tasks
+          .filter(task => !task.classId && !task.done && !task.canceled && task.due && task.project === project.name)
+          .map(task => ({ task, dueKey: dateOnly(task.due!), dueMs: atLocalNoon(dateOnly(task.due!)) }))
+          .filter(entry => withinNotificationWindow(entry.dueKey, entry.dueMs, today, weekLimit))
+          .sort((a, b) => a.dueMs - b.dueMs);
+
+        if (!dueTasks.length) return;
+
+        const earliest = dueTasks[0];
+        pushUnique(notifications, {
+          id: `life-project-${project.name}`,
+          title: project.name,
+          subtitle: `${dueTasks.length} task${dueTasks.length === 1 ? "" : "s"} due`,
+          source: "life",
+          kind: "project",
+          urgency: urgencyFrom(earliest.dueMs, nowMs, earliest.dueKey),
+          dueIn: formatDueIn(earliest.dueMs, nowMs, earliest.dueKey),
+          sortAt: earliest.dueMs,
+          action: { type: "life-project", projectName: project.name },
+        });
+      });
   }
 
-  if (settings.enableSchoolOS !== false) {
-    input.tasks.filter(task => task.classId && !task.done && !task.canceled && task.due).forEach(task => {
-      const dueKey = dateOnly(task.due!);
-      const dueMs = atLocalNoon(dueKey);
-      if (dueKey > today && dueMs > weekLimit) return;
+  if (isSchoolEnabled(settings)) {
+    input.tasks
+      .filter(task => task.classId && !task.done && !task.canceled && task.due && classFor(task.classId))
+      .forEach(task => {
+        const dueKey = dateOnly(task.due!);
+        const dueMs = atLocalNoon(dueKey);
+        if (!withinNotificationWindow(dueKey, dueMs, today, weekLimit)) return;
 
-      pushUnique(notifications, {
-        id: `school-task-${task.id}`,
-        title: task.title,
-        subtitle: "School task",
-        source: "school",
-        kind: "task",
-        urgency: urgencyFrom(dueMs, nowMs, dueKey),
-        dueIn: formatDueIn(dueMs, nowMs, dueKey),
-        sortAt: dueMs,
-        action: { type: "school-task", taskId: task.id },
+        const course = classFor(task.classId);
+        const kind = schoolKind(task.academicType);
+        const label = task.academicType ?? "Assignment";
+
+        pushUnique(notifications, {
+          id: `school-${kind}-${task.id}`,
+          title: task.title,
+          subtitle: `${course?.code ?? "School"} · ${label}`,
+          source: "school",
+          kind,
+          urgency: urgencyFrom(dueMs, nowMs, dueKey),
+          dueIn: formatDueIn(dueMs, nowMs, dueKey),
+          sortAt: dueMs,
+          action: { type: "school-task", taskId: task.id },
+        });
       });
-    });
   }
 
   if (settings.calendarAlerts !== false) {
@@ -235,7 +328,18 @@ export const notificationSourceLabel: Record<NotificationSource, string> = {
   calendar: "Calendar",
 };
 
+export const notificationKindLabel: Record<NotificationKind, string> = {
+  task: "Task",
+  project: "Project",
+  assignment: "Assignment",
+  deliverable: "Deliverable",
+  meeting: "Meeting",
+  event: "Event",
+};
+
 export const notificationSourceOrder: NotificationSource[] = ["calendar", "work", "school", "life"];
+
+export const notificationEnvironmentSources: NotificationSource[] = ["work", "life", "school"];
 
 export const notificationSourceAccent: Record<NotificationSource, string> = {
   work: "#625af6",
@@ -253,10 +357,50 @@ export function groupNotificationsBySource(notifications: LifeOSNotification[]) 
   return groups;
 }
 
+export type NotificationGroupSummary = {
+  total: number;
+  overdue: number;
+  today: number;
+  byKind: Partial<Record<NotificationKind, number>>;
+};
+
+const kindPlural: Record<NotificationKind, [string, string]> = {
+  task: ["task", "tasks"],
+  project: ["project", "projects"],
+  assignment: ["assignment", "assignments"],
+  deliverable: ["deliverable", "deliverables"],
+  meeting: ["meeting", "meetings"],
+  event: ["event", "events"],
+};
+
+export function summarizeNotificationGroup(items: LifeOSNotification[]): NotificationGroupSummary {
+  const byKind: Partial<Record<NotificationKind, number>> = {};
+  let overdue = 0;
+  let today = 0;
+  items.forEach(item => {
+    byKind[item.kind] = (byKind[item.kind] ?? 0) + 1;
+    if (item.urgency === "overdue") overdue += 1;
+    if (item.urgency === "today") today += 1;
+  });
+  return { total: items.length, overdue, today, byKind };
+}
+
+export function formatGroupKindBreakdown(summary: NotificationGroupSummary) {
+  const order: NotificationKind[] = ["task", "assignment", "deliverable", "project", "meeting", "event"];
+  return order
+    .filter(kind => summary.byKind[kind])
+    .map(kind => {
+      const count = summary.byKind[kind] ?? 0;
+      const [one, many] = kindPlural[kind];
+      return `${count} ${count === 1 ? one : many}`;
+    })
+    .join(" · ");
+}
+
 export function isBannerCandidate(notification: LifeOSNotification) {
   if (notification.kind === "meeting" || notification.kind === "event") return true;
-  if (notification.urgency === "soon") return true;
-  return false;
+  if (notification.urgency === "overdue" || notification.urgency === "today") return true;
+  return notification.urgency === "soon";
 }
 
 export function formatNotificationTime(sortAt: number, now = Date.now()) {

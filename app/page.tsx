@@ -37,7 +37,7 @@ import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
 import { getFileStorage } from "@/lib/fileStorage";
-import { NotificationBell, NotificationBanners } from "@/app/components/NotificationCenter";
+import { GlobalNotificationShell } from "@/app/components/NotificationCenter";
 import {
   generateLifeOSNotifications,
   loadDismissedNotificationIds,
@@ -49,7 +49,7 @@ import {
 } from "@/lib/notifications";
 import { NLTaskCreationModal } from "@/app/components/NLTaskCreationModal";
 import {
-  HubCollectionModal, LifeDashboard, SchoolClassPickerModal, SchoolDashboard, SchoolProfileModal, WorkDashboard, NowCommandPalette,
+  HubCollectionModal, LifeDashboard, SchoolClassPickerModal, SchoolDashboard, SchoolProfileModal, WorkDashboard,
   emptyLifeHub, emptySchoolHub, emptyWorkHub, createSampleWorkHub,
   type HubCollectionTarget, type LifeHubKey, type LifeHubState, type SchoolHubKey, type SchoolHubState,
   type WorkHubState, type WorkProject, type WorkDeliverable, type WorkTask, type WorkMeeting, type WorkView, type SchoolView,
@@ -492,6 +492,8 @@ export default function LifeOS() {
   const allNotifications = useMemo(() => generateLifeOSNotifications({
     workHub,
     tasks,
+    projects: projectItems,
+    classes,
     events: calendarEvents,
     settings: {
       calendarAlerts: settingsState.calendarAlerts,
@@ -499,7 +501,7 @@ export default function LifeOS() {
       enableSchoolOS: settingsState.enableSchoolOS,
       enableLifeOS: settingsState.enableLifeOS,
     },
-  }), [workHub, tasks, calendarEvents, settingsState.calendarAlerts, settingsState.enableWorkOS, settingsState.enableSchoolOS, settingsState.enableLifeOS, notificationsTick]);
+  }), [workHub, tasks, projectItems, classes, calendarEvents, settingsState.calendarAlerts, settingsState.enableWorkOS, settingsState.enableSchoolOS, settingsState.enableLifeOS, notificationsTick]);
 
   const visibleNotifications = useMemo(
     () => allNotifications.filter(item => !dismissedNotificationIds.has(item.id)),
@@ -526,6 +528,22 @@ export default function LifeOS() {
         });
       });
   }, [visibleNotifications, settingsState.calendarAlerts]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !settingsState.focusReminders || Notification.permission !== "granted") return;
+    visibleNotifications
+      .filter(item => item.kind === "task" && (item.urgency === "overdue" || item.urgency === "today"))
+      .slice(0, 5)
+      .forEach(item => {
+        const tag = `focus-${item.id}`;
+        if (systemNotifiedRef.current.has(tag)) return;
+        systemNotifiedRef.current.add(tag);
+        new Notification(`${notificationSourceLabel[item.source]} · ${item.title}`, {
+          body: `${item.dueIn}${item.subtitle ? ` · ${item.subtitle}` : ""}`,
+          tag,
+        });
+      });
+  }, [visibleNotifications, settingsState.focusReminders]);
 
   const dismissNotification = useCallback((id: string) => {
     setDismissedNotificationIds(current => {
@@ -555,26 +573,44 @@ export default function LifeOS() {
     }
     setFocus(true);
   }, [chooseNowTask, rememberSpaceTask, tasks]);
-  const focusWorkTask = useCallback((workTaskId: string) => {
+  const openTaskPage = useCallback((taskId: number) => {
+    const task = tasks.find(item => item.id === taskId);
+    if (task) rememberSpaceTask(task);
+    setTaskPageId(taskId);
+    setSidebar(false);
+  }, [rememberSpaceTask, tasks]);
+  const bridgeWorkTaskToLife = useCallback((workTaskId: string) => {
     const workTask = workHub.tasks.find(item => item.id === workTaskId);
-    if (!workTask) return;
+    if (!workTask) return null;
     setWorkFocusTaskId(workTaskId);
     const deliverable = workHub.deliverables.find(item => item.id === workTask.deliverableId);
     const project = workHub.projects.find(item => item.id === deliverable?.projectId);
     const projectName = project?.name ?? "Work";
-    const linked = tasks.find(task => !task.done && !task.canceled && (
+    const linked = tasks.find(task =>
       task.customProperties?.some(property => property.name === "workTaskId" && property.value === workTaskId)
-      || (task.title === workTask.title && task.project === projectName)
-    ));
-    if (linked) {
-      openFocus(linked.id);
-      return;
+      || (task.title === workTask.title && task.project === projectName),
+    );
+    if (linked) return linked.id;
+    if (project) {
+      setProjectItems(items => {
+        if (items.some(entry => entry.name === projectName)) return items;
+        return [...items, {
+          name: projectName,
+          desc: project.description?.trim() || "A focused project with a finish line.",
+          progress: 0,
+          color: project.color ?? "#625af6",
+          icon: projectIcons.BriefcaseBusiness,
+          iconName: "BriefcaseBusiness" as ProjectIcon,
+          tasks: 0,
+          kind: "finishable" as ProjectKind,
+        }];
+      });
     }
     const priorityMap = { high: "High", medium: "Medium", low: "Low" } as const;
     const statusMap = { open: "Not started", in_progress: "In progress", blocked: "Blocked", done: "Done" } as const;
-    const focusTaskId = Date.now();
+    const lifeTaskId = Date.now();
     setTasks(items => [...items, normalizeTask({
-      id: focusTaskId,
+      id: lifeTaskId,
       title: workTask.title,
       project: projectName,
       color: project?.color ?? "#625af6",
@@ -588,23 +624,100 @@ export default function LifeOS() {
       checklistProgress: workTask.checklistProgress ?? (workTask.checklist ?? []).map(() => false),
       customProperties: [{ id: "workTaskId", name: "workTaskId", value: workTaskId }],
     })]);
-    openFocus(focusTaskId);
-  }, [workHub, tasks, settingsState.defaultFocusMinutes, settingsState.defaultEnergy, openFocus]);
+    return lifeTaskId;
+  }, [workHub, tasks, settingsState.defaultFocusMinutes, settingsState.defaultEnergy]);
+  const openWorkTask = useCallback((workTaskId: string) => {
+    const lifeTaskId = bridgeWorkTaskToLife(workTaskId);
+    if (lifeTaskId) openTaskPage(lifeTaskId);
+  }, [bridgeWorkTaskToLife, openTaskPage]);
+  const focusWorkTask = useCallback((workTaskId: string) => {
+    const lifeTaskId = bridgeWorkTaskToLife(workTaskId);
+    if (lifeTaskId) openFocus(lifeTaskId);
+  }, [bridgeWorkTaskToLife, openFocus]);
   const go = useCallback((next: View) => {
     const destination: View = next === "Dashboard" ? "Life" : ["Notes", "Resources", "Brain", "Knowledge"].includes(next) ? "Library" : next;
     if (destination === "Spaces") { setSelectedProjectName(null); setSelectedClassId(null); }
     setView(destination); setSidebar(false); if (destination === "Focus") setFocus(true);
   }, []);
+  const openProjectSpace = useCallback((projectName: string, workProject?: WorkProject) => {
+    setProjectItems(items => {
+      if (items.some(project => project.name === projectName)) return items;
+      const source = workProject ?? workHub.projects.find(project => project.name === projectName);
+      if (!source) return items;
+      return [...items, {
+        name: projectName,
+        desc: source.description?.trim() || "A focused project with a finish line.",
+        progress: 0,
+        color: source.color ?? "#625af6",
+        icon: projectIcons.BriefcaseBusiness,
+        iconName: "BriefcaseBusiness" as ProjectIcon,
+        tasks: 0,
+        kind: "finishable" as ProjectKind,
+      }];
+    });
+    const context = settingsState.spaceContext?.[`project:${projectName}`];
+    if (context?.lastTaskId) setActiveTaskId(context.lastTaskId);
+    setSettingsState(current => ({
+      ...current,
+      spaceContext: {
+        ...current.spaceContext,
+        [`project:${projectName}`]: { ...current.spaceContext?.[`project:${projectName}`], updatedAt: new Date().toISOString() },
+      },
+    }));
+    setSpacesFilter("Projects");
+    setSelectedClassId(null);
+    setSelectedProjectName(projectName);
+    setView("Spaces");
+    setSidebar(false);
+  }, [settingsState.spaceContext, workHub.projects]);
+  const openClassSpace = useCallback((classId: string) => {
+    const context = settingsState.spaceContext?.[`class:${classId}`];
+    if (context?.lastTaskId) setActiveTaskId(context.lastTaskId);
+    setSettingsState(current => ({
+      ...current,
+      spaceContext: {
+        ...current.spaceContext,
+        [`class:${classId}`]: { ...current.spaceContext?.[`class:${classId}`], updatedAt: new Date().toISOString() },
+      },
+    }));
+    setSelectedProjectName(null);
+    setSelectedClassId(classId);
+    setView("Spaces");
+    setSidebar(false);
+  }, [settingsState.spaceContext]);
+  const openSpacesList = useCallback((filter: "All" | "Classes" | "Projects" | "Maintenance" | "Archived" = "All") => {
+    setSpacesFilter(filter);
+    setSelectedProjectName(null);
+    setSelectedClassId(null);
+    setView("Spaces");
+    setSidebar(false);
+  }, []);
+  const openWorkProjectSpace = useCallback((projectId: string) => {
+    const workProject = workHub.projects.find(item => item.id === projectId);
+    if (!workProject) return;
+    openProjectSpace(workProject.name, workProject);
+  }, [openProjectSpace, workHub.projects]);
   const handleNotificationNavigate = useCallback((notification: LifeOSNotification) => {
     const action: NotificationAction = notification.action;
     if (action.type === "work") {
+      if (action.view === "projects" && action.itemId) {
+        openWorkProjectSpace(action.itemId);
+        return;
+      }
+      if (action.view === "tasks" && action.itemId) {
+        openWorkTask(action.itemId);
+        return;
+      }
       setWorkView(action.view);
-      if (action.itemId && action.view === "tasks") setWorkFocusTaskId(action.itemId);
       go("Work");
       return;
     }
+    if (action.type === "life-project") {
+      openProjectSpace(action.projectName);
+      return;
+    }
     if (action.type === "life-task" || action.type === "school-task") {
-      setTaskPageId(action.taskId);
+      openTaskPage(action.taskId);
       return;
     }
     if (action.type === "calendar") {
@@ -613,7 +726,7 @@ export default function LifeOS() {
       return;
     }
     if (action.type === "now") go("Now");
-  }, [go]);
+  }, [go, openProjectSpace, openTaskPage, openWorkProjectSpace, openWorkTask]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const writeCurrentView = () => {
@@ -1059,10 +1172,8 @@ export default function LifeOS() {
   }, [cloudUserId, workHub, workHubHydrated]);
 
   useEffect(() => {
-    console.log('Tasks listener effect running, hydrated:', tasksHydrated);
     if (!cloudUserId || !tasksHydrated) return;
     listenToFirebaseChanges('tasks', (data) => {
-      console.log('Tasks listener callback fired');
       if (Array.isArray(data)) setTasks(data.map(task => normalizeTask(task)));
     });
     return () => stopListeningToFirebaseChanges('tasks');
@@ -1151,6 +1262,19 @@ export default function LifeOS() {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 2600);
   }, []);
+
+  useEffect(() => {
+    if (!settingsState.dailyDigest || !tasksHydrated || typeof window === "undefined") return;
+    const today = toDateKey(new Date());
+    const digestKey = `lifeos-digest-${cloudUserId ?? "local"}`;
+    if (window.localStorage.getItem(digestKey) === today) return;
+    const openTasks = tasks.filter(task => !task.done && !task.canceled);
+    const dueToday = openTasks.filter(task => task.due === today).length;
+    const overdue = openTasks.filter(task => task.due < today).length;
+    window.localStorage.setItem(digestKey, today);
+    flash(`Daily digest: ${openTasks.length} open · ${dueToday} due today · ${overdue} overdue`);
+  }, [cloudUserId, flash, settingsState.dailyDigest, tasks, tasksHydrated]);
+
   const uploadResource = async (file: File, classId?: string) => {
     if (file.size > 25 * 1024 * 1024) {
       flash("That file is over the 25 MB limit");
@@ -1248,18 +1372,14 @@ export default function LifeOS() {
     setProjectItems(items => [...items, { name, desc: description?.trim() || (kind === "maintenance" ? "An ongoing system to keep healthy." : "A focused project with a finish line."), progress: kind === "maintenance" ? 100 : 0, color, icon: iconComponent, iconName: icon, tasks: 0, kind }]);
     setComposer(null);
     setSpaceComposer(null);
-    setSelectedClassId(null);
-    setSelectedProjectName(name);
-    setView("Spaces");
     flash(kind === "maintenance" ? "Maintenance space created" : "Finishable project created");
+    openProjectSpace(name);
   };
   const addClass = (classRecord: Omit<ClassRecord, "id">) => {
     const next = normalizeClass({ ...classRecord, id: `${Date.now()}-${Math.random().toString(36).slice(2)}` });
     setClasses(items => [...items, next]);
     setSpaceComposer(null);
-    setSelectedProjectName(null);
-    setSelectedClassId(next.id);
-    setView("Spaces");
+    openClassSpace(next.id);
     flash(`${next.code} class created`);
   };
   const updateClass = (id: string, updates: Omit<ClassRecord, "id">) => {
@@ -1644,8 +1764,19 @@ export default function LifeOS() {
 
   const activeTask = activeTasks.find(task => task.id === activeTaskId) ?? activeTasks.find(task => task.id === settingsState.nowTaskId) ?? activeTasks[0];
   const taskPageTask = taskPageId === null ? null : tasks.find(task => task.id === taskPageId) ?? null;
+  const notificationShell = (
+    <GlobalNotificationShell
+      notifications={visibleNotifications}
+      onNavigate={handleNotificationNavigate}
+      onDismiss={dismissNotification}
+      onDismissAll={dismissAllNotifications}
+    />
+  );
+
   if (taskPageTask) {
-    return <TaskWorkspace
+    return <>
+      {notificationShell}
+      <TaskWorkspace
       task={taskPageTask}
       tasks={taskPageTask.done || taskPageTask.canceled ? [...activeTasks, taskPageTask] : activeTasks}
       projects={projectItems}
@@ -1656,14 +1787,18 @@ export default function LifeOS() {
       onFocus={() => { chooseNowTask(taskPageTask.id); rememberSpaceTask(taskPageTask); setTaskPageId(null); setFocus(true); }}
       onMarkDone={() => { updateTaskDetails(taskPageTask.id, { status: "Done" }); chooseNowTask(settingsState.nowTaskId === taskPageTask.id ? null : settingsState.nowTaskId ?? null); setTaskPageId(null); flash("Done. Cleared from active views."); }}
       onDelete={() => deleteTask(taskPageTask.id)}
-    />;
-  }
-  if (fullscreenProject && projectItems.find(p => p.name === fullscreenProject)) {
-    return <FullscreenProject project={projectItems.find(p => p.name === fullscreenProject)!} tasks={tasks} onExit={() => setFullscreenProject(null)} linkTask={linkTaskToProject} onOpenTask={setTaskPageId} />;
+    />
+    </>;
   }
   if (focus) {
-    if (!activeTask) return <EmptyFocus onExit={() => { setFocus(false); setView("Now"); }} onNewTask={() => { setFocus(false); setComposer("task"); }} />;
-    return <FocusMode key={activeTask.id} task={activeTask} tasks={activeTasks} onSwitch={(id) => { setActiveTaskId(id); chooseNowTask(id); const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); }} onUpdateChecklist={updateTaskChecklist} onUpdateChecklistProgress={updateTaskChecklistProgress} onUpdateFocusSession={updateFocusSession} onComplete={complete} onExit={(destination) => { setFocus(false); setView(destination ?? "Now"); }} />;
+    if (!activeTask) return <>
+      {notificationShell}
+      <EmptyFocus onExit={() => { setFocus(false); setView("Now"); }} onNewTask={() => { setFocus(false); setComposer("task"); }} />
+    </>;
+    return <>
+      {notificationShell}
+      <FocusMode key={activeTask.id} task={activeTask} tasks={activeTasks} soundEffectsEnabled={settingsState.soundEffects} onUpdateNotes={(id, notes) => updateTaskDetails(id, { notes })} onSwitch={(id) => { setActiveTaskId(id); chooseNowTask(id); const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); }} onUpdateChecklist={updateTaskChecklist} onUpdateChecklistProgress={updateTaskChecklistProgress} onUpdateFocusSession={updateFocusSession} onComplete={complete} onExit={(destination) => { setFocus(false); setView(destination ?? "Now"); }} />
+    </>;
   }
 
   const workspaceName = settingsState.preferredName?.trim() || user?.displayName?.trim() || "there";
@@ -1672,10 +1807,7 @@ export default function LifeOS() {
 
   return (
     <div className="app-shell">
-      <NotificationBanners
-        notifications={visibleNotifications}
-        onNavigate={handleNotificationNavigate}
-      />
+      {notificationShell}
       <AnimatePresence>{sidebar && <motion.button aria-label="Close navigation" className="mobile-scrim" onClick={() => setSidebar(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />}</AnimatePresence>
       <aside className={`sidebar ${sidebar ? "sidebar-open" : ""}`}>
         <div className="brand"><div className="brand-mark"><span /><span /><span /></div><span>LifeOS</span></div>
@@ -1698,31 +1830,25 @@ export default function LifeOS() {
         </div>
       </aside>
 
-      {user && <><ICloudCalendarAutoSync user={user} /><GoogleCalendarAutoSync user={user} /></>}
+      {user && <><ICloudCalendarAutoSync user={user} /><GoogleCalendarAutoSync user={user} /><OutlookCalendarAutoSync user={user} /></>}
       <main>
         {!fullscreenProject && <>
         <header className="topbar">
           <IconButton label="Open navigation" onClick={() => setSidebar(true)}><Menu size={19} /></IconButton>
           <div className="breadcrumb"><span>LifeOS</span><span>/</span><strong>{view}</strong></div>
           <div className="top-actions">
-            <NotificationBell
-              notifications={visibleNotifications}
-              onNavigate={handleNotificationNavigate}
-              onDismiss={dismissNotification}
-              onDismissAll={dismissAllNotifications}
-            />
             <IconButton label="Toggle theme" onClick={() => setDark(v => !v)}>{dark ? <Sun size={18} /> : <Moon size={18} />}</IconButton>
           </div>
         </header>
         <AnimatePresence mode="wait">
           <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Work" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
-            {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarEvents} life={lifeHub} workspaceName={workspaceName} onComplete={complete} onOpenTask={setTaskPageId} onOpenProject={(name) => { setSpacesFilter("Projects"); setSelectedClassId(null); setSelectedProjectName(name); setView("Spaces"); }} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => { setSpacesFilter("Projects"); setSelectedClassId(null); setSelectedProjectName(null); setView("Spaces"); }} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} onOpenCollection={(key: LifeHubKey, startAdd) => setHubCollection({ scope: "life", key, startAdd })} />}
-            {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} schoolView={schoolView} onChangeView={setSchoolView} schoolFocusTaskId={schoolFocusTaskId} onSelectFocusTask={setSchoolFocusTaskId} onComplete={complete} onOpenTask={setTaskPageId} onOpenClass={(id) => { setSelectedProjectName(null); setSelectedClassId(id); setView("Spaces"); }} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={(id) => { setSchoolFocusTaskId(id); openFocus(id); }} onOpenCalendar={() => go("Calendar")} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} />}
-            {view === "Work" && <WorkDashboard workHub={workHub} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenCalendar={() => go("Calendar")} />}
-            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarEvents} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onSetEnergy={(currentEnergy) => setSettingsState(current => ({ ...current, currentEnergy }))} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={setTaskPageId} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onAddTask={(title) => addTask(title)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} />}
-            {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={(name) => { const context = settingsState.spaceContext?.[`project:${name}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`project:${name}`]: { ...current.spaceContext?.[`project:${name}`], updatedAt: new Date().toISOString() } } })); setSelectedClassId(null); setSelectedProjectName(name); }} onOpenClass={(id) => { const context = settingsState.spaceContext?.[`class:${id}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`class:${id}`]: { ...current.spaceContext?.[`class:${id}`], updatedAt: new Date().toISOString() } } })); setSelectedProjectName(null); setSelectedClassId(id); }} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={(id) => { const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); setTaskPageId(id); }} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
-            {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={setTaskPageId} />}
-            {(view === "Today" || view === "Calendar") && <CalendarView events={[...calendarEvents, ...tasksToCalendarEvents(tasks)]} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => id.startsWith("task-") ? setTaskPageId(Number(id.slice(5))) : setEditingCalendarEventId(id)} onPlanTask={setEditingTaskId} />}
+            {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarEvents} life={lifeHub} workspaceName={workspaceName} onComplete={complete} onOpenTask={openTaskPage} onOpenProject={openProjectSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => openSpacesList("Projects")} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} onOpenCollection={(key: LifeHubKey, startAdd) => setHubCollection({ scope: "life", key, startAdd })} />}
+            {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} schoolView={schoolView} onChangeView={setSchoolView} schoolFocusTaskId={schoolFocusTaskId} onSelectFocusTask={setSchoolFocusTaskId} onComplete={complete} onOpenTask={openTaskPage} onOpenClass={openClassSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={(id) => { setSchoolFocusTaskId(id); openFocus(id); }} onOpenCalendar={() => go("Calendar")} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} />}
+            {view === "Work" && <WorkDashboard workHub={workHub} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => openSpacesList("Projects")} />}
+            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarEvents} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onSetEnergy={(currentEnergy) => setSettingsState(current => ({ ...current, currentEnergy }))} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onAddTask={(title) => addTask(title)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} />}
+            {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
+            {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} />}
+            {(view === "Today" || view === "Calendar") && <CalendarView events={[...calendarEvents, ...tasksToCalendarEvents(tasks)]} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => id.startsWith("task-") ? openTaskPage(Number(id.slice(5))) : setEditingCalendarEventId(id)} onPlanTask={setEditingTaskId} />}
             {view === "Notes" && <NotesView notes={notes} classes={classes} projects={projectItems} selectedNoteId={selectedNoteId} onSelect={setSelectedNoteId} onCreate={() => createNote()} onUpdate={updateNote} onDelete={deleteNote} onImport={importNotes} />}
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} lifeHub={lifeHub} onUpdateLifeHub={(updates) => setLifeHub(current => ({ ...current, ...updates }))} />}
@@ -1737,12 +1863,12 @@ export default function LifeOS() {
       {!focus && floatingFocusTask && <FloatingFocusDock task={floatingFocusTask} onResume={(session) => { updateFocusSession(floatingFocusTask.id, session); setActiveTaskId(floatingFocusTask.id); chooseNowTask(floatingFocusTask.id); setFocus(true); }} onUpdateSession={(session) => updateFocusSession(floatingFocusTask.id, session)} onEnd={() => updateFocusSession(floatingFocusTask.id, { remainingSeconds: getTaskFocusSeconds(floatingFocusTask), hasStarted: false, isRunning: false, halfwayPrompted: Boolean(floatingFocusTask.focusHalfwayPrompted) })} />}
       <AnimatePresence>
         {needsWorkspaceName && <WelcomeNameModal key="welcome-name-modal" suggestedName={user?.displayName} save={(preferredName) => setSettingsState(current => ({ ...current, preferredName }))} />}
-        {palette && <CommandPalette key="command-palette" query={query} setQuery={setQuery} results={filtered} close={() => { setPalette(false); setQuery(""); }} go={go} onFocus={() => { setPalette(false); openFocus(); }} onCapture={() => { setPalette(false); setCapture(true); }} onNewTask={() => { setPalette(false); setComposer("task"); }} onResult={(result) => { const task = activeTasks.find(item => item.title === result); const project = projectItems.find(item => item.name === result); const classRecord = classes.find(item => item.code === result); const note = notes.find(item => item.title === result); setPalette(false); setQuery(""); if (task) setTaskPageId(task.id); else if (project) { setSelectedClassId(null); setSelectedProjectName(project.name); setView("Spaces"); } else if (classRecord) { setSelectedProjectName(null); setSelectedClassId(classRecord.id); setView("Spaces"); } else if (note) { setSelectedNoteId(note.id); setView("Notes"); } }} />}
+        {palette && <CommandPalette key="command-palette" query={query} setQuery={setQuery} results={filtered} close={() => { setPalette(false); setQuery(""); }} go={go} onFocus={() => { setPalette(false); openFocus(); }} onCapture={() => { setPalette(false); setCapture(true); }} onNewTask={() => { setPalette(false); setComposer("task"); }} onResult={(result) => { const task = activeTasks.find(item => item.title === result); const project = projectItems.find(item => item.name === result); const classRecord = classes.find(item => item.code === result); const note = notes.find(item => item.title === result); setPalette(false); setQuery(""); if (task) openTaskPage(task.id); else if (project) openProjectSpace(project.name); else if (classRecord) openClassSpace(classRecord.id); else if (note) { setSelectedNoteId(note.id); setView("Notes"); } }} />}
         {capture && <CaptureModal key="capture-modal" close={() => setCapture(false)} add={(text) => { setBrainItems(x => [text, ...x]); setCapture(false); flash("Thought captured"); }} />}
         {ambientStartOpen && <AmbientStartModal key="ambient-start-modal" close={() => { setAmbientStartOpen(false); setAmbientDraft(null); }} start={beginAmbientActivity} draft={ambientDraft} spaces={[...projectItems.map(item => ({ name: item.name, color: item.color })), ...classes.filter(item => !item.archived).map(item => ({ name: item.code, color: item.color }))]} />}
         {ambientWrapupOpen && settingsState.ambientActivity && <AmbientWrapupModal key="ambient-wrapup-modal" activity={settingsState.ambientActivity} close={() => setAmbientWrapupOpen(false)} finish={wrapUpAmbientActivity} />}
         {dailyResetOpen && <DailyResetModal key="daily-reset" tasks={tasks} close={() => { setDailyResetOpen(false); setSettingsState(current => ({ ...current, dailyReviewDate: toDateKey(new Date()) })); }} choose={chooseNowTask} complete={complete} />}
-        {weeklyReviewOpen && <WeeklyReviewModal key="weekly-review" tasks={tasks} projects={projectItems} classes={classes} close={() => { setWeeklyReviewOpen(false); setSettingsState(current => ({ ...current, weeklyReviewDate: toDateKey(new Date()) })); }} onOpenTask={setTaskPageId} onGoSpaces={() => { setWeeklyReviewOpen(false); go("Spaces"); }} />}
+        {weeklyReviewOpen && <WeeklyReviewModal key="weekly-review" tasks={tasks} projects={projectItems} classes={classes} close={() => { setWeeklyReviewOpen(false); setSettingsState(current => ({ ...current, weeklyReviewDate: toDateKey(new Date()) })); }} onOpenTask={openTaskPage} onGoSpaces={() => { setWeeklyReviewOpen(false); go("Spaces"); }} />}
         {hubCollection?.scope === "life" && <HubCollectionModal key={`life-${hubCollection.key}`} target={hubCollection} records={lifeHub[hubCollection.key]} close={() => setHubCollection(null)} change={(records) => setLifeHub(current => ({ ...current, [hubCollection.key]: records }))} />}
         {hubCollection?.scope === "school" && <HubCollectionModal key={`school-${hubCollection.key}`} target={hubCollection} records={schoolHub[hubCollection.key]} close={() => setHubCollection(null)} change={(records) => setSchoolHub(current => ({ ...current, [hubCollection.key]: records }))} />}
         {schoolProfileOpen && <SchoolProfileModal profile={schoolHub.profile} close={() => setSchoolProfileOpen(false)} save={(profile) => setSchoolHub(current => ({ ...current, profile }))} />}
@@ -1755,7 +1881,7 @@ export default function LifeOS() {
         {editingCalendarEventId && calendarEvents.find(event => event.id === editingCalendarEventId) && <CalendarEventModal key={`calendar-edit-${editingCalendarEventId}`} event={calendarEvents.find(event => event.id === editingCalendarEventId)!} close={() => setEditingCalendarEventId(null)} add={updateCalendarEvent} remove={deleteCalendarEvent} onTaskAction={useCalendarEventAsTask} taskActionLabel={tasks.some(task => task.calendarEventId === editingCalendarEventId) ? "Open task" : "Create task"} />}
         {calendarImporter && <CalendarImportModal key="calendar-import-modal" close={() => setCalendarImporter(false)} add={importCalendarEvents} />}
         {breakOpen && <BreakModal key="break-modal" close={() => setBreakOpen(false)} done={() => { setBreakOpen(false); flash("Break complete — ease back in"); }} />}
-        {actionTaskId !== null && tasks.find(task => task.id === actionTaskId) && <TaskActionsModal key={`task-actions-${actionTaskId}`} task={tasks.find(task => task.id === actionTaskId)!} close={() => setActionTaskId(null)} open={() => { setTaskPageId(actionTaskId); setActionTaskId(null); }} edit={() => { setEditingTaskId(actionTaskId); setActionTaskId(null); }} toggleCanceled={() => toggleCanceled(actionTaskId)} remove={() => deleteTask(actionTaskId)} />}
+        {actionTaskId !== null && tasks.find(task => task.id === actionTaskId) && <TaskActionsModal key={`task-actions-${actionTaskId}`} task={tasks.find(task => task.id === actionTaskId)!} close={() => setActionTaskId(null)} open={() => { openTaskPage(actionTaskId); setActionTaskId(null); }} edit={() => { setEditingTaskId(actionTaskId); setActionTaskId(null); }} toggleCanceled={() => toggleCanceled(actionTaskId)} remove={() => deleteTask(actionTaskId)} />}
         {actionClassId && classes.find(item => item.id === actionClassId) && <ClassActionsModal key={`class-actions-${actionClassId}`} classRecord={classes.find(item => item.id === actionClassId)!} close={() => setActionClassId(null)} edit={() => { setEditingClassId(actionClassId); setActionClassId(null); }} remove={() => { deleteClass(actionClassId); setActionClassId(null); }} />}
         {editingTaskId !== null && tasks.find(task => task.id === editingTaskId) && <EditTaskModal key={`edit-task-${editingTaskId}`} task={tasks.find(task => task.id === editingTaskId)!} tasks={tasks} projects={projectItems} classes={classes} close={() => setEditingTaskId(null)} save={(updates) => updateTask(editingTaskId, updates)} />}
         {editingProjectName && projectItems.find(project => project.name === editingProjectName) && <EditProjectModal key={`edit-project-${editingProjectName}`} project={projectItems.find(project => project.name === editingProjectName)!} close={() => setEditingProjectName(null)} save={(name, desc) => updateProject(editingProjectName, name, desc)} />}
@@ -1771,7 +1897,6 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   const [handoff, setHandoff] = useState("");
   const [captureInput, setCaptureInput] = useState("");
   const [suggestedCommandIndex, setSuggestedCommandIndex] = useState(-1);
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false;
     const seen = localStorage.getItem('lifeos-onboarding-seen');
@@ -1779,16 +1904,6 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   });
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setIsCommandPaletteOpen(x => !x);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
   const today = toDateKey(new Date());
   const allActive = tasks.filter(task => !task.done && !task.canceled);
   const active = allActive.filter(task => getTaskStatus(task) !== "Waiting" || !task.followUpDate || task.followUpDate <= today);
@@ -1901,13 +2016,6 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     }
   };
   return <div className="now-view">
-    <NowCommandPalette
-      isOpen={isCommandPaletteOpen}
-      close={() => setIsCommandPaletteOpen(false)}
-      tasks={active}
-      projects={projects}
-      classes={classes}
-    />
     {showOnboarding && (
       <div className="onboarding-overlay">
         <div className="onboarding-modal">
@@ -1942,6 +2050,22 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       <div><p className="eyebrow">One thing, on purpose</p><h1>Now</h1><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
       <div className="now-header-actions"><button onClick={onCapture}><Inbox size={16} /> Capture thought</button><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
     </div>
+    <section className="energy-checkin">
+      <div>
+        <span className="section-icon green"><Zap size={14} /></span>
+        <div>
+          <strong>How&apos;s your energy?</strong>
+          <p>LifeOS uses this to rank what to suggest next.</p>
+        </div>
+      </div>
+      <div className="energy-options">
+        {(["Low", "Medium", "High"] as EnergyLevel[]).map(level => (
+          <button key={level} type="button" className={currentEnergy === level ? "selected" : ""} onClick={() => onSetEnergy(level)}>{level}</button>
+        ))}
+        <button type="button" className="review-button" onClick={onDailyReset}>Daily reset</button>
+        <button type="button" className="review-button" onClick={onWeeklyReview}>Weekly review</button>
+      </div>
+    </section>
     {ambientActivity ? (
       <section className="ambient-active-strip">
         <div><span className="section-icon orange"><TimerReset size={14} /></span><div><p>YOU’RE ALREADY DOING IT</p><strong>{ambientActivity.title}</strong><small>{formatAmbientDuration(now - new Date(ambientActivity.startedAt).getTime())} so far · no planning required</small></div></div>
@@ -2440,8 +2564,7 @@ function SpaceModal({ initialKind, close, addProject, addClass }: { initialKind:
 }
 
 function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask }: { tasks: Task[]; classes: ClassRecord[]; onComplete: (id: number) => void; onNew: () => void; onTaskMenu: (id: number) => void; onOpenTask: (id: number) => void }) {
-  const [layout, setLayout] = useState<"List" | "Board" | "Calendar">("List");
-  return <><div className="page-title"><div><p className="eyebrow">Make it happen</p><h1>Tasks</h1><p>A clear list of what needs your attention.</p></div><button className="primary" onClick={onNew}><Plus size={16} /> New task</button></div><div className="view-tabs"><button className={layout === "List" ? "selected" : ""} onClick={() => setLayout("List")}><ListTodo size={15} /> List</button><button className={layout === "Board" ? "selected" : ""} onClick={() => setLayout("Board")}><LayoutGrid size={15} /> Board</button><button className={layout === "Calendar" ? "selected" : ""} onClick={() => setLayout("Calendar")}><CalendarDays size={15} /> Calendar</button></div><section className={`card task-table layout-${layout.toLowerCase()}`}><div className="table-view-label">{layout} view</div><div className="table-head"><span>Task</span><span>Space</span><span>Due</span><span>Priority</span><span>Focus</span></div>{tasks.map(t => <div className={`table-row ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""}`} key={t.id}><button className="round-check" disabled={t.canceled} onClick={() => onComplete(t.id)}>{t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}</button><button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button><span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span><span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span><span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span><span>{t.focusMinutes}m · {t.energy}</span><button aria-label={`Actions for ${t.title}`} onClick={() => onTaskMenu(t.id)}><MoreHorizontal size={17} /></button></div>)}</section></>;
+  return <><div className="page-title"><div><p className="eyebrow">Make it happen</p><h1>Tasks</h1><p>A clear list of what needs your attention.</p></div><button className="primary" onClick={onNew}><Plus size={16} /> New task</button></div><section className="card task-table"><div className="table-view-label">List view</div><div className="table-head"><span>Task</span><span>Space</span><span>Due</span><span>Priority</span><span>Focus</span></div>{tasks.map(t => <div className={`table-row ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""}`} key={t.id}><button className="round-check" disabled={t.canceled} onClick={() => onComplete(t.id)}>{t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}</button><button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button><span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span><span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span><span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span><span>{t.focusMinutes}m · {t.energy}</span><button aria-label={`Actions for ${t.title}`} onClick={() => onTaskMenu(t.id)}><MoreHorizontal size={17} /></button></div>)}</section></>;
 }
 
 function ClassesView({ classes, tasks, notes, resources, selectedClassId, onSelectClass, onNewClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource }: { classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedClassId: string | null; onSelectClass: (id: string | null) => void; onNewClass: () => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void> }) {
@@ -2974,12 +3097,13 @@ function GoogleCalendarAutoSync({ user }: { user: any }) {
   return null;
 }
 function CalendarConnections({ user, flash }: { user?: any; flash: (message: string) => void }) {
-  const [provider, setProvider] = useState<"apple" | "google">("apple");
+  const [provider, setProvider] = useState<"apple" | "google" | "outlook">("apple");
   const choices = [
     { id: "apple" as const, number: "1", name: "Apple", detail: "iCloud Calendar" },
     { id: "google" as const, number: "2", name: "Google", detail: "Google Calendar" },
+    { id: "outlook" as const, number: "3", name: "Outlook", detail: "Outlook Calendar" },
   ];
-  return <section className="card settings-card calendar-hub"><div className="card-head"><div><span className="section-icon violet"><CalendarDays size={14} /></span><h2>Calendar connections</h2></div><span className="calendar-hub-note">Read-only imports</span></div><div className="calendar-auto-refresh"><span><CheckCircle2 size={14} /> Automatic refresh is on</span><small>Connected calendars update every 5 minutes while LifeOS is open.</small></div><div className="calendar-provider-tabs" role="tablist" aria-label="Calendar providers">{choices.map(choice => <button key={choice.id} role="tab" aria-selected={provider === choice.id} className={provider === choice.id ? "selected" : ""} onClick={() => setProvider(choice.id)}><b>{choice.number}</b><span>{choice.name}<small>{choice.detail}</small></span></button>)}</div><div className="calendar-provider-content">{provider === "apple" && <ICloudCalendarIntegration user={user} flash={flash} />}{provider === "google" && <GoogleCalendarIntegration user={user} flash={flash} />}</div></section>;
+  return <section className="card settings-card calendar-hub"><div className="card-head"><div><span className="section-icon violet"><CalendarDays size={14} /></span><h2>Calendar connections</h2></div><span className="calendar-hub-note">Read-only imports</span></div><div className="calendar-auto-refresh"><span><CheckCircle2 size={14} /> Automatic refresh is on</span><small>Connected calendars update every 5 minutes while LifeOS is open.</small></div><div className="calendar-provider-tabs" role="tablist" aria-label="Calendar providers">{choices.map(choice => <button key={choice.id} role="tab" aria-selected={provider === choice.id} className={provider === choice.id ? "selected" : ""} onClick={() => setProvider(choice.id)}><b>{choice.number}</b><span>{choice.name}<small>{choice.detail}</small></span></button>)}</div><div className="calendar-provider-content">{provider === "apple" && <ICloudCalendarIntegration user={user} flash={flash} />}{provider === "google" && <GoogleCalendarIntegration user={user} flash={flash} />}{provider === "outlook" && <OutlookCalendarIntegration user={user} flash={flash} />}</div></section>;
 }
 
 function GoogleCalendarIntegration({ user, flash }: { user?: any; flash: (message: string) => void }) {
@@ -3646,7 +3770,26 @@ function FloatingFocusDock({ task, onResume, onUpdateSession, onEnd }: { task: T
   return <motion.aside className="floating-focus-dock" aria-label={running ? "Focus session continues" : "Focus session paused"} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 18 }} transition={{ duration: .2 }}><span className="floating-focus-orb"><Focus size={16} /></span><div className="floating-focus-copy"><small>{running ? "FOCUS CONTINUES" : "FOCUS PAUSED"}</small><strong>{task.title}</strong><span>{formatFocusTime(seconds)} left · your notes are safe</span></div><button className="floating-focus-resume" onClick={() => onResume({ remainingSeconds: secondsRef.current, hasStarted: true, isRunning: running, halfwayPrompted: Boolean(task.focusHalfwayPrompted) })}><Focus size={15} /> Open focus</button><button className="floating-focus-toggle" aria-label={running ? "Pause focus session" : "Continue focus session"} onClick={toggleRunning}>{running ? <Circle size={15} fill="currentColor" /> : <Focus size={15} />}</button><button className="floating-focus-end" aria-label="End this focus session" onClick={onEnd}><X size={17} /></button></motion.aside>;
 }
 
-function FocusMode({ task, tasks, onSwitch, onUpdateChecklist, onUpdateChecklistProgress, onUpdateFocusSession, onComplete, onExit }: { task: Task; tasks: Task[]; onSwitch: (id: number) => void; onUpdateChecklist: (id: number, checklist: string[]) => void; onUpdateChecklistProgress: (id: number, progress: boolean[]) => void; onUpdateFocusSession: (id: number, session: FocusSessionUpdate) => void; onComplete: (id: number) => void; onExit: (destination?: View) => void }) {
+function playFocusCue(frequency: number, duration = 0.12, volume = 0.04) {
+  if (typeof window === "undefined") return;
+  try {
+    const ctx = new AudioContext();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = frequency;
+    gain.gain.value = volume;
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + duration);
+    window.setTimeout(() => { void ctx.close(); }, (duration + 0.1) * 1000);
+  } catch {
+    /* optional audio */
+  }
+}
+
+function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, onUpdateChecklist, onUpdateChecklistProgress, onUpdateFocusSession, onComplete, onExit }: { task: Task; tasks: Task[]; soundEffectsEnabled: boolean; onUpdateNotes: (id: number, notes: string) => void; onSwitch: (id: number) => void; onUpdateChecklist: (id: number, checklist: string[]) => void; onUpdateChecklistProgress: (id: number, progress: boolean[]) => void; onUpdateFocusSession: (id: number, session: FocusSessionUpdate) => void; onComplete: (id: number) => void; onExit: (destination?: View) => void }) {
   const totalSeconds = task.focusMinutes * 60;
   const savedSeconds = getTaskFocusSeconds(task);
   const [seconds, setSeconds] = useState(savedSeconds);
@@ -3658,7 +3801,9 @@ function FocusMode({ task, tasks, onSwitch, onUpdateChecklist, onUpdateChecklist
   const [checklist, setChecklist] = useState<string[]>(task.checklist ?? []);
   const nextChecklist = task.checklist ?? [];
   const [checks, setChecks] = useState<boolean[]>(() => task.checklistProgress?.length === nextChecklist.length ? task.checklistProgress : nextChecklist.map(() => false));
+  const [focusNotes, setFocusNotes] = useState(task.notes ?? "");
   const [sounds, setSounds] = useState(false);
+  const noiseRef = useRef<{ context: AudioContext | null; source: AudioBufferSourceNode | null; gain: GainNode | null }>({ context: null, source: null, gain: null });
   const secondsRef = useRef(seconds);
   const hasStartedRef = useRef(hasStarted);
   const runningRef = useRef(running);
@@ -3710,9 +3855,50 @@ function FocusMode({ task, tasks, onSwitch, onUpdateChecklist, onUpdateChecklist
     setBreakStage("hidden");
     setRunning(true);
   }, [breakStage, breakSeconds]);
+  useEffect(() => { onUpdateChecklistProgress(task.id, checks); }, [checks, task.id, onUpdateChecklistProgress]);
+  useEffect(() => { setFocusNotes(task.notes ?? ""); }, [task.id, task.notes]);
   useEffect(() => {
-    onUpdateChecklistProgress(task.id, checks);
-  }, [checks, task.id, onUpdateChecklistProgress]);
+    if (!sounds || !soundEffectsEnabled) {
+      noiseRef.current.source?.stop();
+      noiseRef.current.source?.disconnect();
+      noiseRef.current.gain?.disconnect();
+      noiseRef.current.source = null;
+      noiseRef.current.gain = null;
+      return;
+    }
+    const context = noiseRef.current.context ?? new AudioContext();
+    noiseRef.current.context = context;
+    const bufferSize = 2 * context.sampleRate;
+    const buffer = context.createBuffer(1, bufferSize, context.sampleRate);
+    const data = buffer.getChannelData(0);
+    let last = 0;
+    for (let index = 0; index < bufferSize; index += 1) {
+      const white = Math.random() * 2 - 1;
+      last = (last + 0.02 * white) / 1.02;
+      data[index] = last * 3.5;
+    }
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    const gain = context.createGain();
+    gain.gain.value = 0.06;
+    source.connect(gain);
+    gain.connect(context.destination);
+    source.start();
+    noiseRef.current.source = source;
+    noiseRef.current.gain = gain;
+    return () => {
+      source.stop();
+      source.disconnect();
+      gain.disconnect();
+      noiseRef.current.source = null;
+      noiseRef.current.gain = null;
+    };
+  }, [soundEffectsEnabled, sounds]);
+  useEffect(() => () => {
+    noiseRef.current.source?.stop();
+    void noiseRef.current.context?.close();
+  }, []);
   const saveChecklist = (next: string[]) => {
     setChecklist(next);
     setChecks(current => next.map((_, index) => current[index] ?? false));
@@ -3771,6 +3957,7 @@ function FocusMode({ task, tasks, onSwitch, onUpdateChecklist, onUpdateChecklist
     hasStartedRef.current = true;
     setRunning(true);
     saveFocusSession(seconds, true, halfwayPrompted, true);
+    if (soundEffectsEnabled) playFocusCue(440);
   };
   const resetTimer = () => {
     setSeconds(totalSeconds);
@@ -3796,12 +3983,12 @@ function FocusMode({ task, tasks, onSwitch, onUpdateChecklist, onUpdateChecklist
     <main>
       <section className="focus-main"><div className="focus-hero"><p className="focus-project"><i style={{ background: task.color }} />{task.project} <span>·</span> {task.focusMinutes} min <span>·</span> {task.energy} energy</p><h1>{task.title}</h1><p className="focus-sub">{running ? "One gentle pass. You don’t need to do the whole thing at once." : "Choose a tiny next step, then press start when you’re ready."}</p></div>
         <div className="checklist"><div className="checklist-head"><span>SESSION CHECKLIST</span><div><label htmlFor="checklist-template">Switch checklist</label><select id="checklist-template" value={activeTemplateName} onChange={event => switchChecklist(event.target.value)}><option value="Custom" disabled>Custom checklist</option>{focusChecklistTemplates.map(template => <option key={template.name} value={template.name}>{template.name}</option>)}</select><button type="button" onClick={addChecklistItem}><Plus size={13} /> Add step</button></div></div>{checklist.length ? checklist.map((item, i) => <div className={`checklist-row ${checks[i] ? "checked" : ""}`} key={`${task.id}-${i}`}><button type="button" className="check-toggle" aria-label={`Toggle ${item}`} onClick={() => setChecks(current => current.map((value, index) => index === i ? !value : value))}>{checks[i] && <Check size={14} />}</button><input autoFocus={i === checklist.length - 1} value={item} placeholder="Write the next tiny step…" onChange={event => updateChecklistItem(i, event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); addChecklistItem(); } }} /><button type="button" className="delete-step" aria-label={`Delete ${item || "step"}`} onClick={() => deleteChecklistItem(i)}><Trash2 size={13} /></button></div>) : <div className="empty-checklist"><strong>No steps yet.</strong><button type="button" onClick={addChecklistItem}><Plus size={13} /> Add the first step</button></div>}</div>
-        <div className="notes"><span>NOTES</span><textarea placeholder="Keep any thoughts here while you work…" /></div>
+        <div className="notes"><span>NOTES</span><textarea value={focusNotes} onChange={event => setFocusNotes(event.target.value)} onBlur={() => onUpdateNotes(task.id, focusNotes.trim())} placeholder="Keep any thoughts here while you work…" /></div>
       </section>
       <aside className={`timer-panel ${hasStarted ? "running" : ""}`}><span>{running ? "FOCUS IN PROGRESS" : hasStarted ? "FOCUS PAUSED" : "YOUR TIME"}</span><div className="timer-ring" style={{ "--progress": `${(seconds / totalSeconds) * 360}deg` } as React.CSSProperties}><div><strong>{time}</strong><span>{running ? "Stay with this one thing" : `${task.focusMinutes} minute session`}</span></div></div><button className="timer-button" onClick={toggleTimer}>{running ? <><Circle size={15} fill="currentColor" /> Pause & save</> : <><Focus size={16} /> {hasStarted ? "Resume focus" : "Start focus"}</>}</button><button className="reset" onClick={resetTimer}><TimerReset size={15} /> Reset to {task.focusMinutes}:00</button>
         <div className="focus-switcher"><div><span>SWITCH TASK</span><small><kbd>K</kbd><kbd>J</kbd></small></div><div className="switch-list">{tasks.filter(item => !item.done && !item.canceled).map(item => { const remaining = getTaskFocusSeconds(item); const hasProgress = Boolean(item.focusSessionStarted) || remaining < item.focusMinutes * 60; return <button key={item.id} className={item.id === task.id ? "active" : ""} onClick={() => switchTask(item.id)}><i style={{ background: item.color }} /><span><strong>{item.title}</strong>{hasProgress && <small>{formatFocusTime(remaining)} left</small>}</span>{item.id === task.id && <Check size={13} />}</button>; })}</div><div className="switch-arrows"><button onClick={() => switchBy(-1)}>← Previous</button><button onClick={() => switchBy(1)}>Next →</button></div></div>
-        <div className="music"><Music2 size={17} /><div><strong>Focus sounds</strong><span>{sounds ? "Brown noise connected" : "Sounds are off"}</span></div><button aria-label="Toggle focus sounds" onClick={() => setSounds(value => !value)}>{sounds ? <Check size={15} /> : <Plus size={15} />}</button></div>
-        <button className="mark-done-button" onClick={() => { onComplete(task.id); setTimeout(() => onExit(), 300); }}><CheckCircle2 size={16} /> Mark as done</button>
+        <div className="music"><Music2 size={17} /><div><strong>Focus sounds</strong><span>{!soundEffectsEnabled ? "Enable sound effects in Settings" : sounds ? "Brown noise on" : "Sounds are off"}</span></div><button aria-label="Toggle focus sounds" disabled={!soundEffectsEnabled} onClick={() => setSounds(value => !value)}>{sounds ? <Check size={15} /> : <Plus size={15} />}</button></div>
+        <button className="mark-done-button" onClick={() => { if (soundEffectsEnabled) playFocusCue(660, 0.16); onComplete(task.id); setTimeout(() => onExit(), 300); }}><CheckCircle2 size={16} /> Mark as done</button>
       </aside>
     </main>
     <footer><span>Session progress</span><div><i style={{ width: `${completedSteps / totalSteps * 100}%` }} /></div><strong>{completedSteps} of {checklist.length} complete</strong></footer>

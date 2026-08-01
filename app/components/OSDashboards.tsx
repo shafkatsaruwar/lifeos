@@ -94,10 +94,12 @@ function QuickAction({ icon: Icon, label, onClick }: { icon: typeof Database; la
   return <button className="os-quick-action" onClick={onClick}><Icon size={17} /><span>{label}</span></button>;
 }
 
-function WorkSubviewHeader({ title, subtitle, onBack }: { title: string; subtitle?: string; onBack: () => void }) {
+function WorkSubviewHeader({ title, subtitle, onBack }: { title: string; subtitle?: string; onBack?: () => void }) {
   return (
-    <div className="work-subview-header">
-      <button type="button" onClick={onBack}><ArrowLeft size={16} /> Dashboard</button>
+    <div className={`work-subview-header${onBack ? "" : " no-back"}`}>
+      {onBack ? (
+        <button type="button" onClick={onBack}><ArrowLeft size={16} /> Dashboard</button>
+      ) : null}
       <div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>
     </div>
   );
@@ -328,7 +330,7 @@ export function SchoolDashboard({ tasks, classes, notes, school, schoolView: con
       <aside className="work-sidebar">
         {focusTask && (
           <div className="work-focus-card">
-            <div className="work-focus-head"><span>Focus today</span><button type="button" onClick={cycleFocusTask}>Edit</button></div>
+            <div className="work-focus-head"><span>Focus today</span><button type="button" onClick={() => onOpenTask(focusTask.id)}>Edit</button></div>
             <strong>{focusTask.title}</strong>
             <small>{courseFor(focusTask.classId)?.code ?? "School"}</small>
             <p>{completedTasks} school task{completedTasks === 1 ? "" : "s"} completed</p>
@@ -624,29 +626,32 @@ function WorkCreateModal({ kind, hub, close, save }: { kind: WorkCreateKind; hub
   return <div className="modal-layer hub-modal-layer" onMouseDown={close}><form className="hub-profile-modal work-create-modal" onMouseDown={event => event.stopPropagation()} onSubmit={submit}><header><span><BriefcaseBusiness size={18} /></span><div><h2>{titles[kind]}</h2><p>Add it to WorkOS without leaving the dashboard.</p></div><button type="button" onClick={close}><X size={18} /></button></header><label>Title<input autoFocus value={name} onChange={event => setName(event.target.value)} placeholder={kind === "project" ? "WorkOS Redesign" : "Design landing page"} /></label>{kind === "project" && <label>Description<input value={description} onChange={event => setDescription(event.target.value)} placeholder="What is this project about?" /></label>}{(kind === "deliverable" || kind === "meeting") && activeProjects.length > 0 && <label>Project<select value={projectId} onChange={event => setProjectId(event.target.value)}>{activeProjects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}{kind === "task" && hub.deliverables.length > 0 && <label>Deliverable<select value={deliverableId} onChange={event => setDeliverableId(event.target.value)}>{hub.deliverables.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}{(kind === "deliverable" || kind === "task") && <><label>Priority<select value={priority} onChange={event => setPriority(event.target.value as WorkTask["priority"])}><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label><label>Due date<input type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} /></label></>}{kind === "meeting" && <label>Start<input type="datetime-local" value={start} onChange={event => setStart(event.target.value)} /></label>}{kind !== "project" && activeProjects.length === 0 && kind !== "meeting" && <p className="work-create-hint">Create a project first.</p>}{kind === "task" && hub.deliverables.length === 0 && <p className="work-create-hint">Create a deliverable first.</p>}<div><button type="button" onClick={close}>Cancel</button><button className="primary" disabled={!name.trim() || (kind === "deliverable" && !projectId) || (kind === "task" && !deliverableId)}>Save</button></div></form></div>;
 }
 
-function WorkTaskRow({ task, hub, today, onComplete }: { task: WorkTask; hub: WorkHubState; today: string; onComplete: (id: string) => void }) {
+function WorkTaskRow({ task, hub, today, onComplete, onOpen }: { task: WorkTask; hub: WorkHubState; today: string; onComplete: (id: string) => void; onOpen?: (id: string) => void }) {
   const project = projectForTask(hub, task);
   return (
     <div className="work-task-row">
-      <button className="work-task-check" aria-label={`Complete ${task.title}`} onClick={() => onComplete(task.id)}><span /></button>
-      <div className="work-task-copy">
+      <button type="button" className="work-task-check" aria-label={`Complete ${task.title}`} onClick={() => onComplete(task.id)}><span /></button>
+      <button type="button" className="work-task-copy" onClick={() => onOpen?.(task.id)}>
         <strong>{task.title}</strong>
         <small>{project?.name || "Project"}</small>
-      </div>
+      </button>
       <span className="work-priority-tag" style={{ color: priorityTone(task.priority), background: `${priorityTone(task.priority)}18` }}>{task.priority}</span>
       <span className="work-due">{dueLabel(task.dueDate, today)}</span>
     </div>
   );
 }
 
-export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, onChangeView, onChange, onFocusWork, onOpenCalendar }: {
+export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, onChangeView, onChange, onFocusWork, onOpenWorkTask, onOpenCalendar, onOpenProject, onBrowseProjects }: {
   workHub: WorkHubState;
   focusTaskId?: string | null;
   workView?: WorkView;
   onChangeView?: (view: WorkView) => void;
   onChange: (hub: WorkHubState) => void;
   onFocusWork?: (taskId: string) => void;
+  onOpenWorkTask?: (taskId: string) => void;
   onOpenCalendar?: () => void;
+  onOpenProject?: (projectId: string) => void;
+  onBrowseProjects?: () => void;
 }) {
   const [internalView, setInternalView] = useState<WorkView>("dashboard");
   const [taskFilter, setTaskFilter] = useState<WorkTask["priority"] | "completed" | "blocked" | "all">("all");
@@ -655,6 +660,12 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
   const setWorkView = (view: WorkView) => {
     onChangeView?.(view);
     if (controlledView === undefined) setInternalView(view);
+  };
+  const openWorkTask = onOpenWorkTask ?? onFocusWork;
+  const openProjects = onBrowseProjects ?? (() => setWorkView("projects"));
+  const openProject = (projectId: string) => {
+    if (onOpenProject) onOpenProject(projectId);
+    else setWorkView("projects");
   };
   const { today, end } = weekWindow();
   const activeProjects = workHub.projects.filter(item => item.status === "active");
@@ -708,9 +719,12 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
               { label: "Active tasks", count: activeTasks.length, view: "tasks" as WorkView },
               { label: "Due soon", count: deliverablesDue.length, view: "deliverables" as WorkView },
               { label: "Blocked", count: blockedTasks.length, view: "kanban" as WorkView },
-              { label: "Projects", count: activeProjects.length, view: "projects" as WorkView },
+              { label: "Projects", count: activeProjects.length, action: openProjects },
             ].map(stat => (
-              <button key={stat.label} type="button" className="work-stat-card" onClick={() => setWorkView(stat.view)}>
+              <button key={stat.label} type="button" className="work-stat-card" onClick={() => {
+                if ("action" in stat && stat.action) stat.action();
+                else if ("view" in stat) setWorkView(stat.view);
+              }}>
                 <strong>{stat.count}</strong>
                 <span>{stat.label}</span>
               </button>
@@ -720,16 +734,16 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
 
         <div className="os-two-up">
           <Section icon={Zap} title="Active tasks" action={activeTasks.length ? "View all" : undefined} onAction={() => openTasksView("all")}>
-            {activeTasks.length ? activeTasks.slice(0, 5).map(task => <WorkTaskRow key={task.id} task={task} hub={workHub} today={today} onComplete={completeTask} />) : <Empty>No active tasks yet. Add one to get moving.</Empty>}
+            {activeTasks.length ? activeTasks.slice(0, 5).map(task => <WorkTaskRow key={task.id} task={task} hub={workHub} today={today} onComplete={completeTask} onOpen={openWorkTask} />) : <Empty>No active tasks yet. Add one to get moving.</Empty>}
           </Section>
 
-          <Section icon={FolderKanban} title="Projects" action={activeProjects.length ? "View all" : undefined} onAction={() => setWorkView("projects")}>
+          <Section icon={FolderKanban} title="Projects" action={activeProjects.length ? "View all" : undefined} onAction={openProjects}>
             {activeProjects.length ? activeProjects.slice(0, 2).map(project => {
               const projectTasks = workHub.tasks.filter(task => projectForTask(workHub, task)?.id === project.id);
               const done = projectTasks.filter(task => task.status === "done").length;
               const total = projectTasks.length;
               return (
-                <button key={project.id} type="button" className="work-project-card" onClick={() => setWorkView("projects")}>
+                <button key={project.id} type="button" className="work-project-card" onClick={() => openProject(project.id)}>
                   <div className="work-project-head">
                     <span className="work-project-icon" style={{ color: project.color, background: `${project.color}18` }}><Database size={14} /></span>
                     <div><strong>{project.name}</strong><p>{project.description || "Active project"}</p></div>
@@ -771,7 +785,7 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
       <aside className="work-sidebar">
         {focusTask && (
           <div className="work-focus-card">
-            <div className="work-focus-head"><span>Focus today</span><button type="button" onClick={cycleFocusTask}>Edit</button></div>
+            <div className="work-focus-head"><span>Focus today</span><button type="button" onClick={() => openWorkTask?.(focusTask.id)}>Edit</button></div>
             <strong>{focusTask.title}</strong>
             <small>{projectForTask(workHub, focusTask)?.name || "Project"}</small>
             <p>{completedTasks} of {workHub.tasks.length} tasks completed</p>
@@ -806,7 +820,7 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
 
         <Section icon={Clock3} title="Recent activity" action="View all" onAction={() => setWorkView("activity")}>
           {recentActivity.length ? recentActivity.map(item => (
-            <button key={item.id} type="button" className="work-activity-row" onClick={() => setWorkView("activity")}>
+            <button key={item.id} type="button" className="work-activity-row" onClick={() => openWorkTask?.(item.id)}>
               <strong>{item.title}</strong>
               <small>{item.status === "done" ? "completed" : "updated"} · {relativeTime(item.updatedAt ?? item.createdAt)}</small>
             </button>
@@ -819,20 +833,20 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
   const subview = (() => {
     if (workView === "tasks") {
       return <>
-        <WorkSubviewHeader title="All tasks" subtitle={`${filteredTasks.length} task${filteredTasks.length === 1 ? "" : "s"} shown`} onBack={() => setWorkView("dashboard")} />
+        <WorkSubviewHeader title="All tasks" subtitle={`${filteredTasks.length} task${filteredTasks.length === 1 ? "" : "s"} shown`} />
         <div className="work-view-tabs">
           {(["all", "high", "medium", "low", "blocked", "completed"] as const).map(filter => (
             <button key={filter} type="button" className={taskFilter === filter ? "selected" : ""} onClick={() => setTaskFilter(filter)}>{filter === "all" ? "All" : filter.charAt(0).toUpperCase() + filter.slice(1)}</button>
           ))}
         </div>
         <Section icon={ListTodo} title="Task list">
-          {filteredTasks.length ? filteredTasks.map(task => <WorkTaskRow key={task.id} task={task} hub={workHub} today={today} onComplete={completeTask} />) : <Empty>No tasks match this filter.</Empty>}
+          {filteredTasks.length ? filteredTasks.map(task => <WorkTaskRow key={task.id} task={task} hub={workHub} today={today} onComplete={completeTask} onOpen={openWorkTask} />) : <Empty>No tasks match this filter.</Empty>}
         </Section>
       </>;
     }
     if (workView === "projects") {
       return <>
-        <WorkSubviewHeader title="Projects" subtitle={`${activeProjects.length} active project${activeProjects.length === 1 ? "" : "s"}`} onBack={() => setWorkView("dashboard")} />
+        <WorkSubviewHeader title="Projects" subtitle={`${activeProjects.length} active project${activeProjects.length === 1 ? "" : "s"}`} />
         <div className="work-projects-grid">
           {activeProjects.length ? activeProjects.map(project => {
             const projectTasks = workHub.tasks.filter(task => projectForTask(workHub, task)?.id === project.id);
@@ -840,7 +854,7 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
             const total = projectTasks.length;
             const projectDeliverables = workHub.deliverables.filter(item => item.projectId === project.id);
             return (
-              <section key={project.id} className="work-project-detail-card">
+              <button key={project.id} type="button" className="work-project-detail-card" onClick={() => openProject(project.id)}>
                 <div className="work-project-head">
                   <span className="work-project-icon" style={{ color: project.color, background: `${project.color}18` }}><Database size={16} /></span>
                   <div><strong>{project.name}</strong><p>{project.description || "Active project"}</p></div>
@@ -850,7 +864,7 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
                   <small>{done}/{total} tasks complete</small>
                 </>}
                 <div className="work-project-meta"><span>{projectDeliverables.length} deliverable{projectDeliverables.length === 1 ? "" : "s"}</span><span>{projectTasks.filter(task => task.status !== "done").length} active tasks</span></div>
-              </section>
+              </button>
             );
           }) : <Empty>Create your first project to organize deliverables and tasks.</Empty>}
         </div>
@@ -858,7 +872,7 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
     }
     if (workView === "deliverables") {
       return <>
-        <WorkSubviewHeader title="Deliverables" subtitle={`${allDeliverables.length} open deliverable${allDeliverables.length === 1 ? "" : "s"}`} onBack={() => setWorkView("dashboard")} />
+        <WorkSubviewHeader title="Deliverables" subtitle={`${allDeliverables.length} open deliverable${allDeliverables.length === 1 ? "" : "s"}`} />
         <Section icon={FileText} title="All deliverables">
           {allDeliverables.length ? allDeliverables.map(item => (
             <div key={item.id} className="work-deliverable-row">
@@ -871,7 +885,7 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
     }
     if (workView === "kanban") {
       return <>
-        <WorkSubviewHeader title="Kanban board" subtitle="Move tasks across columns as work progresses" onBack={() => setWorkView("dashboard")} />
+        <WorkSubviewHeader title="Kanban board" subtitle="Move tasks across columns as work progresses" />
         <div className="work-kanban-board">
           {kanbanColumns.map(column => (
             <div key={column.key} className="work-kanban-column">
@@ -881,8 +895,10 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
                   const project = projectForTask(workHub, task);
                   return (
                     <article key={task.id} className="work-kanban-task">
-                      <strong>{task.title}</strong>
-                      <small>{project?.name || "Project"}</small>
+                      <button type="button" className="work-kanban-task-main" onClick={() => openWorkTask?.(task.id)}>
+                        <strong>{task.title}</strong>
+                        <small>{project?.name || "Project"}</small>
+                      </button>
                       <div className="work-kanban-task-actions">
                         {column.key !== "open" && <button type="button" onClick={() => setTaskStatus(task.id, "open")}>Open</button>}
                         {column.key !== "in_progress" && <button type="button" onClick={() => setTaskStatus(task.id, "in_progress")}>Progress</button>}
@@ -900,7 +916,7 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
     }
     if (workView === "calendar") {
       return <>
-        <WorkSubviewHeader title="Calendar & meetings" subtitle={`${upcomingMeetings.length} upcoming meeting${upcomingMeetings.length === 1 ? "" : "s"}`} onBack={() => setWorkView("dashboard")} />
+        <WorkSubviewHeader title="Calendar & meetings" subtitle={`${upcomingMeetings.length} upcoming meeting${upcomingMeetings.length === 1 ? "" : "s"}`} />
         <div className="work-calendar-actions">{onOpenCalendar && <button type="button" onClick={onOpenCalendar}>Open full calendar</button>}</div>
         <Section icon={Clock3} title="Upcoming meetings">
           {upcomingMeetings.length ? upcomingMeetings.map(item => (
@@ -914,13 +930,13 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
     }
     if (workView === "activity") {
       return <>
-        <WorkSubviewHeader title="Recent activity" subtitle="Latest updates across work tasks" onBack={() => setWorkView("dashboard")} />
+        <WorkSubviewHeader title="Recent activity" subtitle="Latest updates across work tasks" />
         <Section icon={Clock3} title="Activity feed">
           {allActivity.length ? allActivity.map(item => (
-            <div key={item.id} className="work-activity-row">
+            <button key={item.id} type="button" className="work-activity-row" onClick={() => openWorkTask?.(item.id)}>
               <strong>{item.title}</strong>
               <small>{item.status === "done" ? "completed" : item.status.replace("_", " ")} · {projectForTask(workHub, item)?.name || "Project"} · {relativeTime(item.updatedAt ?? item.createdAt)}</small>
-            </div>
+            </button>
           )) : <Empty>Activity from tasks will show up here.</Empty>}
         </Section>
       </>;
@@ -1029,256 +1045,4 @@ export function SchoolProfileModal({ profile, close, save }: { profile: SchoolHu
 
 export function SchoolClassPickerModal({ classes, title, close, pick }: { classes: DashboardClass[]; title: string; close: () => void; pick: (id: string) => void }) {
   return <div className="modal-layer hub-modal-layer" onMouseDown={close}><div className="hub-class-picker" onMouseDown={event => event.stopPropagation()}><header><div><p className="eyebrow">SchoolOS</p><h2>{title}</h2><p>Choose the course this belongs to.</p></div><button onClick={close}><X size={18} /></button></header><div>{classes.filter(item => !item.archived).map(item => <button key={item.id} onClick={() => pick(item.id)}><i style={{ background: item.color }} /><span><strong>{item.code}</strong><small>{item.name}</small></span><ChevronRight size={16} /></button>)}</div></div></div>;
-}
-
-export function NowCommandPalette({ isOpen, close, tasks, projects, classes }: {
-  isOpen: boolean;
-  close: () => void;
-  tasks: DashboardTask[];
-  projects: DashboardProject[];
-  classes: DashboardClass[];
-}) {
-  const [search, setSearch] = useState("");
-  const [selectedIndex, setSelectedIndex] = useState(0);
-
-  const quickActions = [
-    { icon: ListTodo, label: "New task", desc: "/t", action: () => {} },
-    { icon: FolderKanban, label: "New project", desc: "/proj", action: () => {} },
-    { icon: BookOpen, label: "New course", desc: "/course", action: () => {} },
-    { icon: NotebookPen, label: "New note", desc: "/note", action: () => {} },
-    { icon: Clock3, label: "Schedule meeting", desc: "/meet", action: () => {} },
-  ];
-
-  const allCommands = [
-    ...quickActions,
-    ...tasks.slice(0, 3).map(task => ({
-      icon: ListTodo as typeof ListTodo,
-      label: task.title,
-      desc: `${task.project || "Task"} · ${task.priority}`,
-      action: () => {},
-    })),
-  ];
-
-  const filtered = search
-    ? allCommands.filter(cmd =>
-        cmd.label.toLowerCase().includes(search.toLowerCase()) ||
-        cmd.desc.toLowerCase().includes(search.toLowerCase())
-      )
-    : allCommands;
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setSelectedIndex(Math.min(selectedIndex + 1, filtered.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setSelectedIndex(Math.max(selectedIndex - 1, 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      filtered[selectedIndex]?.action();
-      close();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      close();
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div
-      className="command-palette-overlay"
-      onMouseDown={close}
-      onClick={close}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.4)",
-        backdropFilter: "blur(8px)",
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        paddingTop: "80px",
-        zIndex: 1000,
-      }}
-    >
-      <div
-        className="command-palette"
-        onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: "var(--panel)",
-          border: "1px solid var(--line)",
-          borderRadius: "16px",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
-          width: "90%",
-          maxWidth: "600px",
-          overflow: "hidden",
-          animation: "slideDown 0.2s ease-out",
-        }}
-      >
-        <div
-          style={{
-            padding: "16px 20px",
-            borderBottom: "1px solid var(--line)",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-          }}
-        >
-          <Search size={18} style={{ color: "var(--muted)" }} />
-          <input
-            autoFocus
-            type="text"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setSelectedIndex(0);
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder="Search commands, tasks, projects…"
-            style={{
-              flex: 1,
-              height: "38px",
-              border: "none",
-              background: "transparent",
-              color: "var(--ink)",
-              fontSize: "13px",
-              outline: "none",
-            }}
-          />
-          <kbd
-            style={{
-              padding: "4px 8px",
-              background: "var(--canvas)",
-              border: "1px solid var(--line)",
-              borderRadius: "4px",
-              fontSize: "11px",
-              color: "var(--muted)",
-              fontFamily: "monospace",
-            }}
-          >
-            ESC
-          </kbd>
-        </div>
-
-        <div
-          style={{
-            maxHeight: "400px",
-            overflowY: "auto",
-            padding: "8px",
-          }}
-        >
-          {filtered.length === 0 ? (
-            <div
-              style={{
-                padding: "40px 20px",
-                textAlign: "center",
-                color: "var(--muted)",
-                fontSize: "12px",
-              }}
-            >
-              <p>No commands found.</p>
-            </div>
-          ) : (
-            filtered.map((cmd, idx) => {
-              const Icon = cmd.icon;
-              return (
-                <button
-                  key={idx}
-                  onMouseEnter={() => setSelectedIndex(idx)}
-                  onClick={() => {
-                    cmd.action();
-                    close();
-                  }}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    border: "none",
-                    background:
-                      idx === selectedIndex
-                        ? "color-mix(in srgb, var(--accent) 12%, var(--canvas))"
-                        : "transparent",
-                    color: "var(--ink)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "12px",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    fontSize: "12px",
-                    transition: "background 0.1s",
-                  }}
-                >
-                  <Icon
-                    size={16}
-                    style={{ color: "var(--accent)", flexShrink: 0 }}
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {cmd.label}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "var(--muted)",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {cmd.desc}
-                    </div>
-                  </div>
-                  {idx === selectedIndex && (
-                    <kbd
-                      style={{
-                        fontSize: "10px",
-                        color: "var(--muted)",
-                        padding: "3px 6px",
-                        background: "var(--canvas)",
-                        border: "1px solid var(--line)",
-                        borderRadius: "3px",
-                        flexShrink: 0,
-                      }}
-                    >
-                      Enter
-                    </kbd>
-                  )}
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        <div
-          style={{
-            padding: "12px 16px",
-            borderTop: "1px solid var(--line)",
-            fontSize: "11px",
-            color: "var(--muted)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <span>⌘K to open • ↑↓ to navigate • Enter to select</span>
-          <span>{filtered.length} results</span>
-        </div>
-      </div>
-
-      <style>{`
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
-    </div>
-  );
 }

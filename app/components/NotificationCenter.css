@@ -1,3 +1,16 @@
+.global-notification-bell-anchor {
+  position: fixed;
+  top: 14px;
+  right: 18px;
+  z-index: 1300;
+}
+
+.app-shell .topbar,
+.focus-mode > header,
+.task-page-topbar {
+  padding-right: 68px;
+}
+
 .notification-bell-wrap {
   position: relative;
 }
@@ -203,20 +216,133 @@
   padding: 8px 0 10px;
 }
 
-.macos-center-group {
-  padding: 4px 0 8px;
+.macos-center-env-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 12px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
 }
 
-.macos-center-group > header {
-  display: flex;
+.macos-center-env-strip button {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px 6px;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, opacity 0.15s;
+}
+
+.macos-center-env-strip button i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.macos-center-env-strip button em {
+  font-style: normal;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  font-size: 9px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.macos-center-env-strip button.is-expanded {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+}
+
+.macos-center-env-strip button.is-collapsed {
+  opacity: 0.55;
+}
+
+.macos-center-group-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 4px 16px 6px;
+}
+
+.macos-center-group-actions button {
+  border: 0;
+  background: transparent;
   color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.macos-center-group-actions button:hover {
+  color: var(--ink);
+}
+
+.macos-center-group {
+  padding: 2px 0 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+
+.macos-center-group:last-child {
+  border-bottom: 0;
+}
+
+.macos-center-group-toggle {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 16px 8px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink);
+  user-select: none;
+}
+
+.macos-center-group-toggle:hover,
+.macos-center-group-toggle:focus-visible {
+  background: color-mix(in srgb, var(--accent) 3%, transparent);
+}
+
+.macos-center-group.is-collapsed .macos-center-group-toggle {
+  background: color-mix(in srgb, var(--ink) 2%, transparent);
+}
+
+.macos-center-group-label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.macos-center-group-label strong {
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: var(--muted);
+}
+
+.macos-center-group-label small {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.macos-center-group.is-collapsed .macos-center-group-label small {
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
 }
 
 .macos-center-group-dot {
@@ -225,10 +351,33 @@
   border-radius: 50%;
 }
 
-.macos-center-group > header span:last-child {
-  margin-left: auto;
-  font-size: 9px;
-  font-weight: 700;
+.macos-center-group-count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 22px;
+  text-align: center;
+}
+
+.macos-center-group-chevron {
+  color: var(--muted);
+  transition: transform 0.18s ease;
+}
+
+.macos-center-group-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.macos-center-group-items {
+  padding-bottom: 4px;
+}
+
+.macos-center-group > header {
+  display: none;
 }
 
 .macos-center-row {
