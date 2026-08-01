@@ -1622,42 +1622,6 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           <label className="handoff-field"><span>What is the smallest visible next step?</span><input value={handoff} onChange={event => setHandoff(event.target.value)} onBlur={() => handoff.trim() && onUpdateTask(current.id, { handoffNote: handoff.trim(), nextAction: handoff.trim() })} placeholder={current.nextAction || "Next visible step…"} /></label>
         </div> : <div className="priority-empty now-empty now-empty-productive"><div><strong>Nothing is claiming your attention.</strong><p>That’s not a void — it’s room to choose your next move on purpose.</p></div><div className="now-idle-actions"><button onClick={onStartAmbient}><TimerReset size={15} /><span><strong>I already started</strong><small>Track it without stopping</small></span></button><button onClick={onSmartCapture}><Sparkles size={15} /><span><strong>Make a task</strong><small>Say it naturally</small></span></button><button onClick={() => onGo("Today")}><CalendarDays size={15} /><span><strong>Protect time</strong><small>Plan a spot today</small></span></button></div></div>}
       </section>
-      <div className="now-middle-section">
-        <section className="card monthly-calendar-card">
-          <div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>Next 5 days</h2></div><button onClick={() => onGo("Calendar")}>Open calendar <ArrowRight size={14} /></button></div>
-          <div className="upcoming-days-list">
-            {(() => {
-              const today = new Date();
-              const upcomingDays = [];
-              for (let i = 0; i < 5; i++) {
-                const date = new Date(today);
-                date.setDate(date.getDate() + i);
-                upcomingDays.push(date);
-              }
-              return upcomingDays.map(date => {
-                const dateStr = toDateKey(date);
-                const dayTasks = tasks.filter(t => t.due === dateStr && !t.done && !t.canceled);
-                const dayEvents = events.filter(e => e.start.startsWith(dateStr));
-                const isToday = dateStr === toDateKey(today);
-                const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-                const dateNum = date.getDate();
-                return (
-                  <button key={dateStr} className={`upcoming-day-item ${isToday ? 'today' : ''} ${dayTasks.length > 0 ? 'has-tasks' : ''} ${dayEvents.length > 0 ? 'has-events' : ''}`} onClick={() => { window.location.href = `?view=Calendar&date=${dateStr}`; }}>
-                    <div className="day-info">
-                      <div className="day-name">{dayName}</div>
-                      <div className="day-date">{dateNum}</div>
-                    </div>
-                    <div className="day-indicators">
-                      {dayTasks.length > 0 && <span className="task-badge" style={{background: dayTasks[0].color}}>{dayTasks.length}</span>}
-                      {dayEvents.length > 0 && <span className="event-badge">📅</span>}
-                    </div>
-                  </button>
-                );
-              });
-            })()}
-          </div>
-        </section>
-      </div>
       <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} />
     </div>
     <section className="card week-brainstorm">
