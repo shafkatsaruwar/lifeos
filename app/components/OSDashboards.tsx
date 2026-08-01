@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import {
-  Activity, Archive, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight,
+  Activity, Archive, ArrowLeft, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight,
   Clock3, Database, ExternalLink, FileText, FolderKanban, GraduationCap, Image,
   Library, Link2, ListTodo, Map, NotebookPen, Plus, Search,
-  Target, Trash2, UserRound, Users, Utensils, X, BriefcaseBusiness, Zap,
+  Target, Trash2, UserRound, Users, Utensils, X, BriefcaseBusiness, Zap, LayoutGrid,
 } from "lucide-react";
 import { getCountdownText, getUrgencyColor } from "@/lib/helpers";
 
@@ -94,6 +94,15 @@ function QuickAction({ icon: Icon, label, onClick }: { icon: typeof Database; la
   return <button className="os-quick-action" onClick={onClick}><Icon size={17} /><span>{label}</span></button>;
 }
 
+function WorkSubviewHeader({ title, subtitle, onBack }: { title: string; subtitle?: string; onBack: () => void }) {
+  return (
+    <div className="work-subview-header">
+      <button type="button" onClick={onBack}><ArrowLeft size={16} /> Dashboard</button>
+      <div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>
+    </div>
+  );
+}
+
 function periodProgress(now = new Date()) {
   const day = (now.getHours() * 60 + now.getMinutes()) / 1440;
   const week = (((now.getDay() + 6) % 7) + day) / 7;
@@ -102,22 +111,22 @@ function periodProgress(now = new Date()) {
   return { Day: day, Week: week, Month: month, Year: (now.getTime() - start.getTime()) / (end.getTime() - start.getTime()) };
 }
 
-export function LifeDashboard({ tasks, projects, notes, events, life, workspaceName, onComplete, onOpenTask, onOpenProject, onOpenNote, onOpenTasks, onOpenProjects, onOpenNotes, onNewTask, onNewProject, onNewNote, onOpenCalendar, onOpenNow, onOpenCollection, onToggleHabit }: {
+export function LifeDashboard({ tasks, projects, notes, events, life, workspaceName, onComplete, onOpenTask, onOpenProject, onOpenNote, onOpenTasks, onOpenProjects, onOpenNotes, onNewTask, onNewProject, onNewNote, onOpenCalendar, onOpenNow, onOpenCollection }: {
   tasks: DashboardTask[]; projects: DashboardProject[]; notes: DashboardNote[]; events: DashboardEvent[]; life: LifeHubState; workspaceName: string;
   onComplete: (id: number) => void; onOpenTask: (id: number) => void; onOpenProject: (name: string) => void; onOpenNote: (id: string) => void;
   onOpenTasks: () => void; onOpenProjects: () => void; onOpenNotes: () => void;
   onNewTask: () => void; onNewProject: () => void; onNewNote: () => void; onOpenCalendar: () => void; onOpenNow: () => void;
-  onOpenCollection: (key: LifeHubKey, startAdd?: boolean) => void; onToggleHabit: (id: string) => void;
+  onOpenCollection: (key: LifeHubKey, startAdd?: boolean) => void;
 }) {
   const now = new Date(), { today, end } = weekWindow();
   const weekTasks = tasks.filter(task => !task.classId && openTask(task) && (!task.due || (task.due >= today && task.due <= end))).sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
+  const finishableProjects = projects.filter(item => item.kind === "finishable");
   const recentNotes = notes.filter(note => !note.classId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 4);
   const upcoming = events.filter(event => event.start.slice(0, 10) >= today).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 4);
   const media = (category: string) => life.media.filter(item => item.category === category).slice(0, 3);
-  const habitsDone = life.habits.filter(item => item.completedDates?.includes(today)).length;
   const progress = periodProgress(now);
   const databaseLinks: { key: LifeHubKey; label: string; icon: typeof Database }[] = [
-    { key: "recipes", label: "Recipes", icon: Utensils }, { key: "exercises", label: "Exercise", icon: Activity },
+    { key: "habits", label: "Habits", icon: Activity }, { key: "recipes", label: "Recipes", icon: Utensils }, { key: "exercises", label: "Exercise", icon: Activity },
     { key: "trips", label: "Trips", icon: Map }, { key: "contacts", label: "Contacts", icon: Users },
     { key: "documents", label: "Documents", icon: FileText }, { key: "tools", label: "Tools", icon: Link2 },
     { key: "gallery", label: "Gallery", icon: Image }, { key: "archive", label: "Archive", icon: Archive },
@@ -125,10 +134,12 @@ export function LifeDashboard({ tasks, projects, notes, events, life, workspaceN
   return <div className="os-dashboard life-dashboard">
     <div className="os-hero"><div><p className="eyebrow">{now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p><h1>LifeOS</h1><p>Hey {workspaceName.split(" ")[0]}. Keep life moving without turning it into admin.</p></div><button className="os-now-button" onClick={onOpenNow}><Target size={18} /> Open Now</button></div>
     <div className="os-quick-row"><QuickAction icon={NotebookPen} label="New note" onClick={onNewNote} /><QuickAction icon={ListTodo} label="New task" onClick={onNewTask} /><QuickAction icon={FolderKanban} label="New project" onClick={onNewProject} /><QuickAction icon={Map} label="Trip idea" onClick={() => onOpenCollection("trips", true)} /><QuickAction icon={Utensils} label="New recipe" onClick={() => onOpenCollection("recipes", true)} /><QuickAction icon={Activity} label="Training" onClick={() => onOpenCollection("trainings", true)} /></div>
-    <div className="os-dashboard-grid">
+    <div className="os-dashboard-grid life-dashboard-grid">
+      <div className="os-two-up life-dashboard-priority">
+        <Section icon={CheckCircle2} title="Tasks this week" action="All tasks" onAction={onOpenTasks}>{weekTasks.length ? weekTasks.slice(0, 6).map(task => <Row key={task.id} icon={ListTodo} color={task.color} title={task.title} meta={`${task.project || "Inbox"} · ${friendlyDate(task.due)} · ${task.priority}`} onClick={() => onOpenTask(task.id)} onComplete={() => onComplete(task.id)} />) : <Empty>No personal tasks are due in the next seven days.</Empty>}</Section>
+        <Section icon={FolderKanban} title="Active projects" action="All projects" onAction={onOpenProjects}>{finishableProjects.length ? <div className="os-project-strip life-project-strip">{finishableProjects.slice(0, 4).map(project => <button key={project.name} onClick={() => onOpenProject(project.name)}><i style={{ background: project.color }} /><strong>{project.name}</strong><span>{project.desc}</span><div><b style={{ width: `${project.progress}%`, background: project.color }} /></div></button>)}</div> : <Empty>Create a project with a finish line and it will live here.</Empty>}</Section>
+      </div>
       <div className="os-dashboard-main">
-        <Section icon={CheckCircle2} title="Tasks this week" action="All tasks" onAction={onOpenTasks}>{weekTasks.length ? weekTasks.slice(0, 5).map(task => <Row key={task.id} icon={ListTodo} color={task.color} title={task.title} meta={`${task.project || "Inbox"} · ${friendlyDate(task.due)} · ${task.priority}`} onClick={() => onOpenTask(task.id)} onComplete={() => onComplete(task.id)} />) : <Empty>No personal tasks are due in the next seven days.</Empty>}</Section>
-        <Section icon={FolderKanban} title="Active projects" action="All projects" onAction={onOpenProjects}>{projects.filter(item => item.kind === "finishable").length ? <div className="os-project-strip">{projects.filter(item => item.kind === "finishable").slice(0, 4).map(project => <button key={project.name} onClick={() => onOpenProject(project.name)}><i style={{ background: project.color }} /><strong>{project.name}</strong><span>{project.desc}</span><div><b style={{ width: `${project.progress}%`, background: project.color }} /></div></button>)}</div> : <Empty>Create a project with a finish line and it will live here.</Empty>}</Section>
         <div className="os-two-up">
           <Section icon={NotebookPen} title="Recent notes" action="All notes" onAction={onOpenNotes}>{recentNotes.length ? recentNotes.map(note => <Row key={note.id} icon={NotebookPen} title={note.title || "Untitled note"} meta={`${stripHtml(note.body).slice(0, 48) || "Empty note"} · ${friendlyDate(note.updatedAt)}`} onClick={() => onOpenNote(note.id)} />) : <Empty>Your newest personal notes will show here.</Empty>}</Section>
           <Section icon={CalendarDays} title="Coming up" action="Calendar" onAction={onOpenCalendar}>{upcoming.length ? upcoming.map(event => <Row key={event.id} icon={CalendarDays} color={event.color} title={event.title} meta={new Date(event.start).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} onClick={onOpenCalendar} />) : <Empty>Your next calendar events will show here.</Empty>}</Section>
@@ -136,7 +147,6 @@ export function LifeDashboard({ tasks, projects, notes, events, life, workspaceN
         <div className="os-media-grid">{["Watching", "Reading", "Listening"].map(category => <Section key={category} icon={category === "Reading" ? BookOpen : Library} title={`${category} now`} action="Add" onAction={() => onOpenCollection("media", true)}>{media(category).length ? media(category).map(item => <Row key={item.id} icon={Library} title={item.title} meta={item.subtitle || category} onClick={() => item.url && window.open(item.url, "_blank", "noopener,noreferrer")} />) : <Empty>Add something you are {category.toLowerCase()}.</Empty>}</Section>)}</div>
       </div>
       <aside className="os-dashboard-side">
-        <Section icon={Activity} title="Habits today" action="Manage" onAction={() => onOpenCollection("habits")}><div className="os-habit-summary"><strong>{habitsDone}<span>/{life.habits.length}</span></strong><p>completed today</p></div>{life.habits.length ? life.habits.slice(0, 6).map(habit => <button className="os-habit" key={habit.id} onClick={() => onToggleHabit(habit.id)}><span className={habit.completedDates?.includes(today) ? "done" : ""}>{habit.completedDates?.includes(today) && <Check size={12} />}</span><strong>{habit.title}</strong></button>) : <Empty>Add a few habits worth repeating.</Empty>}</Section>
         <Section icon={Clock3} title="Time progress"><div className="os-progress-list">{Object.entries(progress).map(([label, value]) => <div key={label}><span>{label}</span><div><i style={{ width: `${Math.round(value * 100)}%` }} /></div><strong>{Math.round(value * 100)}%</strong></div>)}</div></Section>
         <Section icon={Database} title="Life databases"><div className="os-database-grid">{databaseLinks.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => onOpenCollection(key)}><Icon size={15} /><span>{label}</span><small>{life[key].length}</small></button>)}</div></Section>
       </aside>
@@ -145,168 +155,815 @@ export function LifeDashboard({ tasks, projects, notes, events, life, workspaceN
   </div>;
 }
 
-export function SchoolDashboard({ tasks, classes, notes, school, onComplete, onOpenTask, onOpenClass, onOpenNote, onNewCourse, onNewAcademic, onNewLecture, onOpenCollection, onOpenProfile, onFocus }: {
-  tasks: DashboardTask[]; classes: DashboardClass[]; notes: DashboardNote[]; school: SchoolHubState;
-  onComplete: (id: number) => void; onOpenTask: (id: number) => void; onOpenClass: (id: string) => void; onOpenNote: (id: string) => void;
-  onNewCourse: () => void; onNewAcademic: () => void; onNewLecture: () => void; onOpenCollection: (key: SchoolHubKey, startAdd?: boolean) => void; onOpenProfile: () => void; onFocus: (id: number) => void;
+export type SchoolView = "dashboard" | "tasks" | "courses" | "assignments" | "notes" | "board" | "activity";
+
+const schoolPriorityTone = (priority: string) => priority.toLowerCase() === "high" ? "#e25555" : priority.toLowerCase() === "medium" ? "#e89b3a" : "#6b8fd4";
+const schoolBoardStatus = (task: DashboardTask): "Not started" | "In progress" | "Blocked" | "Done" => {
+  if (task.done || task.status === "Done") return "Done";
+  if (task.status === "Blocked") return "Blocked";
+  if (task.status === "In progress") return "In progress";
+  return "Not started";
+};
+
+function SchoolTaskRow({ task, course, today, onComplete, onOpen }: {
+  task: DashboardTask;
+  course?: DashboardClass;
+  today: string;
+  onComplete: (id: number) => void;
+  onOpen?: (id: number) => void;
 }) {
-  const { today, end } = weekWindow();
-  const courses = classes.filter(item => !item.archived);
-  const academic = tasks.filter(task => task.classId && openTask(task) && (!task.due || (task.due >= today && task.due <= end))).sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
-  const assignments = academic.filter(task => task.academicType && !["Reading", "Discussion"].includes(task.academicType));
-  const lectureNotes = notes.filter(note => note.classId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5);
-  const courseFor = (id?: string) => courses.find(course => course.id === id);
-  return <div className="os-dashboard school-dashboard">
-    <div className="os-hero"><div><p className="eyebrow">Current term</p><h1>SchoolOS</h1><p>{courses.length} course{courses.length === 1 ? "" : "s"} · {academic.length} item{academic.length === 1 ? "" : "s"} due this week</p></div><button className="os-profile-button" onClick={onOpenProfile}><UserRound size={18} /><span>{school.profile.major || "Academic profile"}</span></button></div>
-    <div className="os-quick-row"><QuickAction icon={BookOpen} label="New course" onClick={onNewCourse} /><QuickAction icon={ListTodo} label="School task" onClick={onNewAcademic} /><QuickAction icon={FileText} label="Assignment" onClick={onNewAcademic} /><QuickAction icon={NotebookPen} label="Lecture note" onClick={onNewLecture} /><QuickAction icon={Database} label="New topic" onClick={() => onOpenCollection("topics", true)} /></div>
-    <div className="os-school-layout"><div className="os-school-main">
-      <Section icon={BookOpen} title="Courses right now" action="New course" onAction={onNewCourse}>{courses.length ? <div className="os-course-strip">{courses.map(course => <button key={course.id} onClick={() => onOpenClass(course.id)} style={{ borderTopColor: course.color }}><span style={{ background: course.color }}><BookOpen size={16} /></span><strong>{course.code}</strong><p>{course.name}</p><small>{academic.filter(task => task.classId === course.id).length} due this week</small></button>)}</div> : <Empty>Add your current courses to start the academic dashboard.</Empty>}</Section>
-      <div className="os-two-up"><Section icon={ListTodo} title="Tasks this week" action="Add" onAction={onNewAcademic}>{academic.length ? academic.slice(0, 5).map(task => <Row key={task.id} icon={ListTodo} color={courseFor(task.classId)?.color} title={task.title} meta={`${courseFor(task.classId)?.code ?? "School"} · ${friendlyDate(task.due)} · ${task.priority}`} onClick={() => onOpenTask(task.id)} onComplete={() => onComplete(task.id)} />) : <Empty>No school tasks are due in the next seven days.</Empty>}</Section><Section icon={FileText} title="Assignments this week" action="Add" onAction={onNewAcademic}>{assignments.length ? assignments.slice(0, 5).map(task => <Row key={task.id} icon={FileText} color={courseFor(task.classId)?.color} title={task.title} meta={`${task.academicType} · ${friendlyDate(task.due)}${task.gradeWeight !== undefined ? ` · ${task.gradeWeight}%` : ""}`} onClick={() => onOpenTask(task.id)} />) : <Empty>Assignments, exams, labs, and projects collect here.</Empty>}</Section></div>
-      <Section icon={NotebookPen} title="Lecture notes this week" action="New note" onAction={onNewLecture}>{lectureNotes.length ? lectureNotes.map(note => <Row key={note.id} icon={NotebookPen} color={courseFor(note.classId)?.color} title={note.title || "Untitled note"} meta={`${courseFor(note.classId)?.code ?? "School"} · ${friendlyDate(note.updatedAt)}`} onClick={() => onOpenNote(note.id)} />) : <Empty>Course-linked notes will show up here.</Empty>}</Section>
-    </div><aside>
-      <button className="os-focus-callout" onClick={academic[0] ? () => onFocus(academic[0].id) : courses.length ? onNewAcademic : onNewCourse}><Target size={22} /><span><small>{academic[0] ? "Start focus" : courses.length ? "Next step" : "Set up SchoolOS"}</small><strong>{academic[0]?.title || (courses.length ? "Add a school task" : "Add your first course")}</strong><p>{academic[0] ? `${courseFor(academic[0].classId)?.code ?? "School"} · ${friendlyDate(academic[0].due)}` : courses.length ? "Create coursework before starting focus" : "Courses hold tasks, assignments, and notes"}</p></span><ChevronRight size={18} /></button>
-      <Section icon={UserRound} title="Personal" action="Edit" onAction={onOpenProfile}><dl className="os-profile-list"><div><dt>Major</dt><dd>{school.profile.major || "Not set"}</dd></div><div><dt>Minor</dt><dd>{school.profile.minor || "Not set"}</dd></div><div><dt>Class of</dt><dd>{school.profile.classOf || "Not set"}</dd></div></dl></Section>
-      <Section icon={Database} title="Academic databases"><div className="os-database-grid single">{([{ key: "topics", label: "Topics", icon: Database }, { key: "professors", label: "Professors", icon: Users }, { key: "goals", label: "Goals", icon: Target }] as const).map(({ key, label, icon: Icon }) => <button key={key} onClick={() => onOpenCollection(key)}><Icon size={15} /><span>{label}</span><small>{school[key].length}</small></button>)}</div></Section>
-    </aside></div>
-  </div>;
+  return (
+    <div className="work-task-row">
+      <button type="button" className="work-task-check" aria-label={`Complete ${task.title}`} onClick={() => onComplete(task.id)}><span /></button>
+      <button type="button" className="work-task-copy" onClick={() => onOpen?.(task.id)}>
+        <strong>{task.title}</strong>
+        <small>{course?.code ?? "School"}{task.academicType ? ` · ${task.academicType}` : ""}</small>
+      </button>
+      <span className="work-priority-tag" style={{ color: schoolPriorityTone(task.priority), background: `${schoolPriorityTone(task.priority)}18` }}>{task.priority}</span>
+      <span className="work-due">{dueLabel(task.due, today)}</span>
+    </div>
+  );
 }
 
-type WorkProjectType = { id: string; name: string; description?: string; color: string; icon: any; status: "active" | "completed" | "paused"; createdAt: string; completedAt?: string };
-type WorkDeliverableType = { id: string; projectId: string; title: string; description?: string; type: string; status: "planned" | "in_progress" | "review" | "approved" | "delivered" | "canceled"; priority: "high" | "medium" | "low"; dueDate: string; createdAt: string; completedAt?: string; notes?: string };
-type WorkTaskType = { id: string; deliverableId: string; title: string; description?: string; status: "open" | "in_progress" | "blocked" | "done"; priority: "high" | "medium" | "low"; dueDate?: string; tags?: string[]; dependsOn?: string[]; notes?: string; checklist?: string[]; checklistProgress?: boolean[]; createdAt: string; completedAt?: string };
-type WorkMeetingType = { id: string; title: string; description?: string; start: string; end?: string; type: string; projectId?: string; attendees?: string[]; location?: string; notes?: string; actionItems?: { text: string; done: boolean }[]; recurring?: string; createdAt: string };
-
-export function WorkDashboard({ workHub, workView, onChangeView }: {
-  workHub: { projects: WorkProjectType[]; deliverables: WorkDeliverableType[]; tasks: WorkTaskType[]; meetings: WorkMeetingType[] };
-  workView: "dashboard" | "kanban" | "list" | "calendar" | "deliverables";
-  onChangeView: (view: "dashboard" | "kanban" | "list" | "calendar" | "deliverables") => void;
+export function SchoolDashboard({ tasks, classes, notes, school, schoolView: controlledView, onChangeView, schoolFocusTaskId, onSelectFocusTask, onComplete, onOpenTask, onOpenClass, onOpenNote, onNewCourse, onNewAcademic, onNewLecture, onOpenCollection, onOpenProfile, onFocus, onOpenCalendar, onUpdateTaskStatus }: {
+  tasks: DashboardTask[];
+  classes: DashboardClass[];
+  notes: DashboardNote[];
+  school: SchoolHubState;
+  schoolView?: SchoolView;
+  onChangeView?: (view: SchoolView) => void;
+  schoolFocusTaskId?: number | null;
+  onSelectFocusTask?: (id: number) => void;
+  onComplete: (id: number) => void;
+  onOpenTask: (id: number) => void;
+  onOpenClass: (id: string) => void;
+  onOpenNote: (id: string) => void;
+  onNewCourse: () => void;
+  onNewAcademic: () => void;
+  onNewLecture: () => void;
+  onOpenCollection: (key: SchoolHubKey, startAdd?: boolean) => void;
+  onOpenProfile: () => void;
+  onFocus: (id: number) => void;
+  onOpenCalendar?: () => void;
+  onUpdateTaskStatus?: (id: number, status: "Not started" | "In progress" | "Blocked" | "Done") => void;
 }) {
+  const [internalView, setInternalView] = useState<SchoolView>("dashboard");
+  const [taskFilter, setTaskFilter] = useState<"all" | "high" | "medium" | "low" | "blocked" | "completed">("all");
+  const schoolView = controlledView ?? internalView;
+  const setSchoolView = (view: SchoolView) => {
+    onChangeView?.(view);
+    if (controlledView === undefined) setInternalView(view);
+  };
   const { today, end } = weekWindow();
-  const activeProjects = workHub.projects.filter(p => p.status === "active");
-  const activeTasks = workHub.tasks.filter(t => t.status !== "done");
-  const blockedTasks = activeTasks.filter(t => t.status === "blocked");
-  const deliverablesDue = workHub.deliverables.filter(d => d.status !== "delivered" && d.status !== "canceled" && d.dueDate >= today && d.dueDate <= end).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const todayMeetings = workHub.meetings.filter(m => m.start.slice(0, 10) === today).sort((a, b) => a.start.localeCompare(b.start));
+  const courses = classes.filter(item => !item.archived);
+  const courseFor = (id?: string) => courses.find(course => course.id === id);
+  const schoolTasks = tasks.filter(task => task.classId && openTask(task));
+  const dueThisWeek = schoolTasks.filter(task => !task.due || (task.due >= today && task.due <= end));
+  const assignments = schoolTasks.filter(task => task.academicType && !["Reading", "Discussion"].includes(task.academicType));
+  const assignmentsDue = assignments.filter(task => !task.due || (task.due >= today && task.due <= end)).sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
+  const exams = schoolTasks.filter(task => task.academicType === "Exam");
+  const blockedTasks = schoolTasks.filter(task => task.status === "Blocked");
+  const completedTasks = tasks.filter(task => task.classId && (task.done || task.status === "Done")).length;
+  const lectureNotes = notes.filter(note => note.classId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const recentNotes = lectureNotes.slice(0, 4);
+  const focusTask = schoolTasks.find(task => task.id === schoolFocusTaskId)
+    ?? schoolTasks.find(task => task.priority.toLowerCase() === "high")
+    ?? dueThisWeek[0]
+    ?? schoolTasks[0];
+  const cycleFocusTask = () => {
+    if (!schoolTasks.length) return;
+    const currentIndex = focusTask ? schoolTasks.findIndex(item => item.id === focusTask.id) : -1;
+    const next = schoolTasks[(currentIndex + 1) % schoolTasks.length];
+    if (next) onSelectFocusTask?.(next.id);
+  };
+  const openTasksView = (filter: typeof taskFilter = "all") => {
+    setTaskFilter(filter);
+    setSchoolView("tasks");
+  };
+  const filteredTasks = taskFilter === "all" ? schoolTasks
+    : taskFilter === "completed" ? tasks.filter(task => task.classId && (task.done || task.status === "Done"))
+    : taskFilter === "blocked" ? blockedTasks
+    : schoolTasks.filter(task => task.priority.toLowerCase() === taskFilter);
+  const boardColumns: { key: ReturnType<typeof schoolBoardStatus>; label: string }[] = [
+    { key: "Not started", label: "Not started" },
+    { key: "In progress", label: "In progress" },
+    { key: "Blocked", label: "Blocked" },
+    { key: "Done", label: "Done" },
+  ];
+  const setBoardStatus = (taskId: number, status: ReturnType<typeof schoolBoardStatus>) => onUpdateTaskStatus?.(taskId, status);
+  const notStartedCount = schoolTasks.filter(task => schoolBoardStatus(task) === "Not started").length;
+  const inProgressCount = schoolTasks.filter(task => schoolBoardStatus(task) === "In progress").length;
 
-  return <div className="os-dashboard work-dashboard">
-    <div className="os-hero"><div><p className="eyebrow">Your work, in focus</p><h1>WorkOS</h1><p>{activeProjects.length} project{activeProjects.length === 1 ? "" : "s"} · {activeTasks.length} active task{activeTasks.length === 1 ? "" : "s"} · {blockedTasks.length} blocked</p></div></div>
-
-    <div className="os-quick-row">
-      <QuickAction icon={FolderKanban} label="New project" onClick={() => alert('Create project via /w proj')} />
-      <QuickAction icon={FileText} label="New deliverable" onClick={() => alert('Create deliverable via /w deliver')} />
-      <QuickAction icon={ListTodo} label="New task" onClick={() => alert('Create task via /w task')} />
-      <QuickAction icon={Clock3} label="Schedule meeting" onClick={() => alert('Schedule via /w meet')} />
-    </div>
-
-    {workView === "dashboard" && (
-      <div className="os-work-layout">
-        <div className="os-work-main">
-          <Section icon={Zap} title="Active tasks" action="View all" onAction={() => onChangeView("kanban")}>
-            {activeTasks.length ? activeTasks.slice(0, 5).map(task => {
-              const deliverable = workHub.deliverables.find(d => d.id === task.deliverableId);
-              const project = workHub.projects.find(p => p.id === deliverable?.projectId);
-              return <Row key={task.id} icon={ListTodo} title={task.title} meta={`${project?.name ?? 'Project'} · ${task.priority}`} />;
-            }) : <Empty>No active tasks. Create one with /w task.</Empty>}
-          </Section>
-          <div className="os-two-up">
-            <Section icon={FileText} title="Deliverables due" action="View" onAction={() => onChangeView("deliverables")}>
-              {deliverablesDue.length ? deliverablesDue.slice(0, 5).map(del => <Row key={del.id} icon={FileText} title={del.title} meta={`${friendlyDate(del.dueDate)} · ${del.status}`} />) : <Empty>No deliverables due this week.</Empty>}
-            </Section>
-            <Section icon={Clock3} title="Today's meetings" action="View" onAction={() => onChangeView("calendar")}>
-              {todayMeetings.length ? todayMeetings.slice(0, 5).map(meet => <Row key={meet.id} icon={Clock3} title={meet.title} meta={meet.start.slice(11, 16)} />) : <Empty>No meetings scheduled today.</Empty>}
-            </Section>
-          </div>
-        </div>
-        <aside>
-          <Section icon={FolderKanban} title="Active projects">
-            {activeProjects.length ? <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>{activeProjects.slice(0, 5).map(proj => <div key={proj.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px", borderRadius: "6px", background: "rgba(255,255,255,0.05)" }}><div style={{ width: "24px", height: "24px", borderRadius: "4px", background: proj.color, opacity: 0.7 }} /><span style={{ fontSize: "13px", fontWeight: "500" }}>{proj.name}</span></div>)}</div> : <Empty>Create your first project with /w proj.</Empty>}
-          </Section>
-          <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
-            {["dashboard", "kanban", "list", "calendar", "deliverables"].map(view => (
-              <button key={view} onClick={() => onChangeView(view as any)} style={{ padding: "6px 12px", fontSize: "12px", background: workView === view ? "#625af6" : "rgba(255,255,255,0.1)", border: "1px solid #625af6", borderRadius: "4px", color: "#fff", cursor: "pointer", textTransform: "capitalize" }}>
-                {view}
+  const dashboard = (
+    <div className="work-layout">
+      <div className="work-main">
+        <Section icon={LayoutGrid} title="Overview">
+          <div className="work-stat-grid">
+            {[
+              { label: "Active tasks", count: schoolTasks.length, view: "tasks" as SchoolView },
+              { label: "Due this week", count: dueThisWeek.length, view: "assignments" as SchoolView },
+              { label: "Exams", count: exams.length, view: "assignments" as SchoolView },
+              { label: "Courses", count: courses.length, view: "courses" as SchoolView },
+            ].map(stat => (
+              <button key={stat.label} type="button" className="work-stat-card" onClick={() => setSchoolView(stat.view)}>
+                <strong>{stat.count}</strong>
+                <span>{stat.label}</span>
               </button>
             ))}
           </div>
-        </aside>
-      </div>
-    )}
+        </Section>
 
-    {workView === "kanban" && (
-      <div className="os-kanban-board" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", padding: "16px 0" }}>
-        {(["open", "in_progress", "blocked", "done"] as const).map(status => (
-          <div key={status} style={{ background: "rgba(255,255,255,0.05)", borderRadius: "8px", padding: "12px", minHeight: "400px" }}>
-            <h3 style={{ fontSize: "13px", fontWeight: "600", textTransform: "capitalize", marginBottom: "12px", opacity: 0.7 }}>{status.replace("_", " ")}</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {workHub.tasks.filter(t => t.status === status).map(task => (
-                <div key={task.id} style={{ background: "rgba(255,255,255,0.08)", padding: "10px", borderRadius: "6px", fontSize: "12px", cursor: "pointer", borderLeft: `3px solid ${task.priority === "high" ? "#ff6b6b" : task.priority === "medium" ? "#ffa500" : "#4a90e2"}` }}>
-                  <div style={{ fontWeight: "500" }}>{task.title}</div>
-                  <div style={{ fontSize: "11px", opacity: 0.6, marginTop: "4px" }}>{task.priority}</div>
-                </div>
+        <div className="os-two-up">
+          <Section icon={Zap} title="Active tasks" action={schoolTasks.length ? "View all" : undefined} onAction={() => openTasksView("all")}>
+            {schoolTasks.length ? schoolTasks.slice(0, 5).map(task => (
+              <SchoolTaskRow key={task.id} task={task} course={courseFor(task.classId)} today={today} onComplete={onComplete} onOpen={onOpenTask} />
+            )) : <Empty>No school tasks yet. Add coursework to get started.</Empty>}
+          </Section>
+
+          <Section icon={BookOpen} title="Courses" action={courses.length ? "View all" : undefined} onAction={() => setSchoolView("courses")}>
+            {courses.length ? courses.slice(0, 2).map(course => {
+              const courseTasks = schoolTasks.filter(task => task.classId === course.id);
+              const done = tasks.filter(task => task.classId === course.id && (task.done || task.status === "Done")).length;
+              const total = tasks.filter(task => task.classId === course.id).length;
+              return (
+                <button key={course.id} type="button" className="work-project-card" onClick={() => onOpenClass(course.id)}>
+                  <div className="work-project-head">
+                    <span className="work-project-icon" style={{ color: course.color, background: `${course.color}18` }}><BookOpen size={14} /></span>
+                    <div><strong>{course.code}</strong><p>{course.name}</p></div>
+                  </div>
+                  {total > 0 && <>
+                    <div className="work-project-progress"><i style={{ width: `${total ? (done / total) * 100 : 0}%`, background: course.color }} /></div>
+                    <small>{done}/{total} tasks complete</small>
+                  </>}
+                </button>
+              );
+            }) : <Empty>Add your first course to organize coursework and notes.</Empty>}
+          </Section>
+        </div>
+
+        <div className="os-two-up">
+          <Section icon={FileText} title="Assignments due" action={assignmentsDue.length ? "View all" : undefined} onAction={() => setSchoolView("assignments")}>
+            {assignmentsDue.length ? assignmentsDue.slice(0, 4).map(task => (
+              <button key={task.id} type="button" className="work-deliverable-row" onClick={() => onOpenTask(task.id)}>
+                <span className="work-deliverable-icon"><FileText size={15} /></span>
+                <div><strong>{task.title}</strong><small>{courseFor(task.classId)?.code ?? "School"} · {task.academicType ?? "Assignment"} · {dueLabel(task.due, today)}</small></div>
+              </button>
+            )) : <Empty>Nothing due this week. You're in good shape.</Empty>}
+          </Section>
+
+          <Section icon={LayoutGrid} title="Progress board" action="Open board" onAction={() => setSchoolView("board")}>
+            <div className="work-kanban-grid">
+              {[
+                { label: "Not started", count: notStartedCount },
+                { label: "In progress", count: inProgressCount },
+                { label: "Blocked", count: blockedTasks.length },
+              ].map(item => (
+                <button key={item.label} type="button" className="work-kanban-card" onClick={() => setSchoolView("board")}><strong>{item.count}</strong><span>{item.label}</span></button>
               ))}
             </div>
+          </Section>
+        </div>
+      </div>
+
+      <aside className="work-sidebar">
+        {focusTask && (
+          <div className="work-focus-card">
+            <div className="work-focus-head"><span>Focus today</span><button type="button" onClick={cycleFocusTask}>Edit</button></div>
+            <strong>{focusTask.title}</strong>
+            <small>{courseFor(focusTask.classId)?.code ?? "School"}</small>
+            <p>{completedTasks} school task{completedTasks === 1 ? "" : "s"} completed</p>
+            <button type="button" className="work-focus-start" onClick={() => onFocus(focusTask.id)}>Start focus</button>
           </div>
+        )}
+
+        <Section icon={ListTodo} title="All tasks" action="View all" onAction={() => openTasksView("all")}>
+          <div className="work-priority-list">
+            {[
+              { label: "High priority", count: schoolTasks.filter(item => item.priority.toLowerCase() === "high").length, color: "#e25555", filter: "high" as const },
+              { label: "Medium priority", count: schoolTasks.filter(item => item.priority.toLowerCase() === "medium").length, color: "#e89b3a", filter: "medium" as const },
+              { label: "Low priority", count: schoolTasks.filter(item => item.priority.toLowerCase() === "low").length, color: "#6b8fd4", filter: "low" as const },
+              { label: "Completed", count: completedTasks, color: "#47a47b", filter: "completed" as const },
+              { label: "Blocked", count: blockedTasks.length, color: "#cf625a", filter: "blocked" as const },
+            ].map(item => (
+              <button key={item.label} type="button" className="work-priority-row" onClick={() => openTasksView(item.filter)}>
+                <span><i style={{ background: item.color }} />{item.label}</span><strong>{item.count}</strong>
+              </button>
+            ))}
+          </div>
+        </Section>
+
+        <Section icon={NotebookPen} title="Lecture notes" action="View all" onAction={() => setSchoolView("notes")}>
+          {recentNotes.length ? recentNotes.map(note => (
+            <button key={note.id} type="button" className="work-meeting-row" onClick={() => onOpenNote(note.id)}>
+              <strong>{note.title || "Untitled note"}</strong>
+              <small>{courseFor(note.classId)?.code ?? "School"} · {friendlyDate(note.updatedAt)}</small>
+            </button>
+          )) : <Empty>Course-linked notes will show up here.</Empty>}
+        </Section>
+
+        <Section icon={UserRound} title="Academic profile" action="Edit" onAction={onOpenProfile}>
+          <dl className="os-profile-list">
+            <div><dt>Major</dt><dd>{school.profile.major || "Not set"}</dd></div>
+            <div><dt>Class of</dt><dd>{school.profile.classOf || "Not set"}</dd></div>
+          </dl>
+        </Section>
+      </aside>
+    </div>
+  );
+
+  const subview = (() => {
+    if (schoolView === "tasks") {
+      return <>
+        <WorkSubviewHeader title="All tasks" subtitle={`${filteredTasks.length} task${filteredTasks.length === 1 ? "" : "s"} shown`} onBack={() => setSchoolView("dashboard")} />
+        <div className="work-view-tabs">
+          {(["all", "high", "medium", "low", "blocked", "completed"] as const).map(filter => (
+            <button key={filter} type="button" className={taskFilter === filter ? "selected" : ""} onClick={() => setTaskFilter(filter)}>{filter === "all" ? "All" : filter.charAt(0).toUpperCase() + filter.slice(1)}</button>
+          ))}
+        </div>
+        <Section icon={ListTodo} title="Task list">
+          {filteredTasks.length ? filteredTasks.map(task => (
+            <SchoolTaskRow key={task.id} task={task} course={courseFor(task.classId)} today={today} onComplete={onComplete} onOpen={onOpenTask} />
+          )) : <Empty>No tasks match this filter.</Empty>}
+        </Section>
+      </>;
+    }
+    if (schoolView === "courses") {
+      return <>
+        <WorkSubviewHeader title="Courses" subtitle={`${courses.length} active course${courses.length === 1 ? "" : "s"}`} onBack={() => setSchoolView("dashboard")} />
+        <div className="work-projects-grid">
+          {courses.length ? courses.map(course => {
+            const courseTasks = tasks.filter(task => task.classId === course.id);
+            const done = courseTasks.filter(task => task.done || task.status === "Done").length;
+            const total = courseTasks.length;
+            const dueCount = courseTasks.filter(task => openTask(task)).length;
+            return (
+              <button key={course.id} type="button" className="work-project-detail-card" onClick={() => onOpenClass(course.id)}>
+                <div className="work-project-head">
+                  <span className="work-project-icon" style={{ color: course.color, background: `${course.color}18` }}><BookOpen size={16} /></span>
+                  <div><strong>{course.code}</strong><p>{course.name}</p></div>
+                </div>
+                {total > 0 && <>
+                  <div className="work-project-progress"><i style={{ width: `${(done / total) * 100}%`, background: course.color }} /></div>
+                  <small>{done}/{total} tasks complete</small>
+                </>}
+                <div className="work-project-meta"><span>{course.instructor || "Instructor TBD"}</span><span>{dueCount} active task{dueCount === 1 ? "" : "s"}</span></div>
+              </button>
+            );
+          }) : <Empty>Add your first course to start the academic dashboard.</Empty>}
+        </div>
+      </>;
+    }
+    if (schoolView === "assignments") {
+      return <>
+        <WorkSubviewHeader title="Assignments" subtitle={`${assignments.length} open assignment${assignments.length === 1 ? "" : "s"}`} onBack={() => setSchoolView("dashboard")} />
+        <Section icon={FileText} title="All assignments">
+          {assignments.length ? assignments.map(task => (
+            <button key={task.id} type="button" className="work-deliverable-row" onClick={() => onOpenTask(task.id)}>
+              <span className="work-deliverable-icon"><FileText size={15} /></span>
+              <div><strong>{task.title}</strong><small>{courseFor(task.classId)?.code ?? "School"} · {task.academicType ?? "Assignment"} · {dueLabel(task.due, today)}{task.gradeWeight !== undefined ? ` · ${task.gradeWeight}%` : ""}</small></div>
+            </button>
+          )) : <Empty>Assignments, exams, labs, and projects collect here.</Empty>}
+        </Section>
+      </>;
+    }
+    if (schoolView === "notes") {
+      return <>
+        <WorkSubviewHeader title="Lecture notes" subtitle={`${lectureNotes.length} course note${lectureNotes.length === 1 ? "" : "s"}`} onBack={() => setSchoolView("dashboard")} />
+        <div className="work-calendar-actions"><button type="button" onClick={onNewLecture}>New lecture note</button></div>
+        <Section icon={NotebookPen} title="All notes">
+          {lectureNotes.length ? lectureNotes.map(note => (
+            <button key={note.id} type="button" className="work-deliverable-row" onClick={() => onOpenNote(note.id)}>
+              <span className="work-deliverable-icon"><NotebookPen size={15} /></span>
+              <div><strong>{note.title || "Untitled note"}</strong><small>{courseFor(note.classId)?.code ?? "School"} · {friendlyDate(note.updatedAt)} · {stripHtml(note.body).slice(0, 48) || "Empty note"}</small></div>
+            </button>
+          )) : <Empty>Course-linked notes will show up here.</Empty>}
+        </Section>
+      </>;
+    }
+    if (schoolView === "board") {
+      return <>
+        <WorkSubviewHeader title="Progress board" subtitle="Move coursework across columns as you work" onBack={() => setSchoolView("dashboard")} />
+        <div className="work-kanban-board">
+          {boardColumns.map(column => {
+            const columnTasks = column.key === "Done"
+              ? tasks.filter(task => task.classId && (task.done || task.status === "Done"))
+              : schoolTasks.filter(task => schoolBoardStatus(task) === column.key);
+            return (
+            <div key={column.key} className="work-kanban-column">
+              <header><strong>{column.label}</strong><span>{columnTasks.length}</span></header>
+              <div className="work-kanban-column-body">
+                {columnTasks.map(task => (
+                  <article key={task.id} className="work-kanban-task">
+                    <strong>{task.title}</strong>
+                    <small>{courseFor(task.classId)?.code ?? "School"}</small>
+                    {onUpdateTaskStatus && column.key !== "Done" && (
+                      <div className="work-kanban-task-actions">
+                        {column.key !== "Not started" && <button type="button" onClick={() => setBoardStatus(task.id, "Not started")}>Not started</button>}
+                        {column.key !== "In progress" && <button type="button" onClick={() => setBoardStatus(task.id, "In progress")}>Progress</button>}
+                        {column.key !== "Blocked" && <button type="button" onClick={() => setBoardStatus(task.id, "Blocked")}>Block</button>}
+                        {column.key !== "Done" && <button type="button" onClick={() => setBoardStatus(task.id, "Done")}>Done</button>}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </div>
+            );
+          })}
+        </div>
+      </>;
+    }
+    if (schoolView === "activity") {
+      const activity = [...schoolTasks, ...tasks.filter(task => task.classId && (task.done || task.status === "Done"))].slice(0, 20);
+      return <>
+        <WorkSubviewHeader title="Recent activity" subtitle="Latest coursework across SchoolOS" onBack={() => setSchoolView("dashboard")} />
+        <Section icon={Clock3} title="Activity feed">
+          {activity.length ? activity.map(task => (
+            <button key={task.id} type="button" className="work-activity-row" onClick={() => onOpenTask(task.id)}>
+              <strong>{task.title}</strong>
+              <small>{courseFor(task.classId)?.code ?? "School"} · {task.done || task.status === "Done" ? "completed" : task.status ?? "active"} · {dueLabel(task.due, today)}</small>
+            </button>
+          )) : <Empty>Activity from coursework will show up here.</Empty>}
+        </Section>
+      </>;
+    }
+    return null;
+  })();
+
+  return <div className="os-dashboard school-dashboard work-dashboard">
+    <div className="os-hero">
+      <div>
+        <p className="eyebrow">Your academics, in focus</p>
+        <h1>SchoolOS</h1>
+        <p>{courses.length} course{courses.length === 1 ? "" : "s"} · {schoolTasks.length} active task{schoolTasks.length === 1 ? "" : "s"} · {dueThisWeek.length} due this week</p>
+      </div>
+      <button type="button" className="os-profile-button" onClick={() => focusTask ? onFocus(focusTask.id) : onOpenProfile()} disabled={!focusTask && !courses.length}><Target size={18} /><span>{focusTask ? "Focus on school" : "Set up profile"}</span></button>
+    </div>
+
+    <div className="os-quick-row work-quick-row">
+      <QuickAction icon={BookOpen} label="New course" onClick={onNewCourse} />
+      <QuickAction icon={ListTodo} label="School task" onClick={onNewAcademic} />
+      <QuickAction icon={NotebookPen} label="Lecture note" onClick={onNewLecture} />
+      <QuickAction icon={Database} label="New topic" onClick={() => onOpenCollection("topics", true)} />
+    </div>
+
+    {schoolView !== "dashboard" && (
+      <div className="work-view-nav">
+        {([
+          { id: "dashboard", label: "Dashboard" },
+          { id: "tasks", label: "Tasks" },
+          { id: "courses", label: "Courses" },
+          { id: "assignments", label: "Assignments" },
+          { id: "notes", label: "Notes" },
+          { id: "board", label: "Board" },
+          { id: "activity", label: "Activity" },
+        ] as const).map(item => (
+          <button key={item.id} type="button" className={schoolView === item.id ? "selected" : ""} onClick={() => setSchoolView(item.id)}>{item.label}</button>
         ))}
       </div>
     )}
 
-    {workView === "list" && (
-      <div style={{ marginTop: "16px" }}>
-        <table style={{ width: "100%", fontSize: "13px", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-              <th style={{ textAlign: "left", padding: "8px", fontWeight: "600" }}>Task</th>
-              <th style={{ textAlign: "left", padding: "8px", fontWeight: "600" }}>Project</th>
-              <th style={{ textAlign: "left", padding: "8px", fontWeight: "600" }}>Status</th>
-              <th style={{ textAlign: "left", padding: "8px", fontWeight: "600" }}>Priority</th>
-              <th style={{ textAlign: "left", padding: "8px", fontWeight: "600" }}>Due</th>
-            </tr>
-          </thead>
-          <tbody>
-            {workHub.tasks.map(task => {
-              const deliverable = workHub.deliverables.find(d => d.id === task.deliverableId);
-              const project = workHub.projects.find(p => p.id === deliverable?.projectId);
-              return (
-                <tr key={task.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                  <td style={{ padding: "8px" }}>{task.title}</td>
-                  <td style={{ padding: "8px" }}>{project?.name}</td>
-                  <td style={{ padding: "8px", textTransform: "capitalize" }}>{task.status.replace("_", " ")}</td>
-                  <td style={{ padding: "8px", textTransform: "capitalize" }}>{task.priority}</td>
-                  <td style={{ padding: "8px" }}>{task.dueDate ? friendlyDate(task.dueDate) : "-"}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    )}
+    {schoolView === "dashboard" ? dashboard : subview}
+  </div>;
+}
 
-    {workView === "calendar" && (
-      <div style={{ marginTop: "16px" }}>
-        <h3 style={{ marginBottom: "12px" }}>Meetings</h3>
-        {workHub.meetings.length ? workHub.meetings.sort((a, b) => a.start.localeCompare(b.start)).map(meet => (
-          <div key={meet.id} style={{ background: "rgba(255,255,255,0.05)", padding: "12px", borderRadius: "6px", marginBottom: "8px", fontSize: "13px" }}>
-            <div style={{ fontWeight: "500" }}>{meet.title}</div>
-            <div style={{ fontSize: "12px", opacity: 0.6, marginTop: "4px" }}>{meet.start} {meet.type ? `· ${meet.type}` : ""}</div>
+export type WorkProject = { id: string; name: string; description?: string; color: string; icon?: string; status: "active" | "completed" | "paused"; createdAt: string; completedAt?: string };
+export type WorkDeliverable = { id: string; projectId: string; title: string; description?: string; type: "document" | "code" | "design" | "presentation" | "analysis" | "other"; status: "planned" | "in_progress" | "review" | "approved" | "delivered" | "canceled"; priority: "high" | "medium" | "low"; dueDate: string; createdAt: string; completedAt?: string; notes?: string };
+export type WorkTask = { id: string; deliverableId: string; title: string; description?: string; status: "open" | "in_progress" | "blocked" | "done"; priority: "high" | "medium" | "low"; dueDate?: string; tags?: string[]; dependsOn?: string[]; notes?: string; checklist?: string[]; checklistProgress?: boolean[]; createdAt: string; completedAt?: string; updatedAt?: string };
+export type WorkMeeting = { id: string; title: string; description?: string; start: string; end?: string; type: "standup" | "review" | "planning" | "retrospective" | "other"; projectId?: string; attendees?: string[]; location?: string; notes?: string; actionItems?: { text: string; done: boolean }[]; recurring?: "daily" | "weekly" | "biweekly" | "monthly"; createdAt: string };
+export type WorkHubState = { projects: WorkProject[]; deliverables: WorkDeliverable[]; tasks: WorkTask[]; meetings: WorkMeeting[] };
+
+export const emptyWorkHub: WorkHubState = { projects: [], deliverables: [], tasks: [], meetings: [] };
+export type WorkView = "dashboard" | "tasks" | "projects" | "deliverables" | "kanban" | "calendar" | "activity";
+
+const workColors = ["#625af6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b"];
+
+export function createSampleWorkHub(now = new Date()): WorkHubState {
+  const today = dateKey(now);
+  const addDays = (days: number) => { const d = new Date(now); d.setDate(d.getDate() + days); return dateKey(d); };
+  const atTime = (date: string, hour: number, minute = 0) => `${date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`;
+  const projA = "proj-workos-redesign";
+  const projB = "proj-partner-audit";
+  const delA = "del-marketing-brief";
+  const delB = "del-audit-checklist";
+  const stamp = now.toISOString();
+  return {
+    projects: [
+      { id: projA, name: "WorkOS Redesign", description: "Dashboard, flows, and polish", color: workColors[0], status: "active", createdAt: stamp },
+      { id: projB, name: "Partner Audit", description: "Q2 compliance review", color: workColors[1], status: "active", createdAt: stamp },
+    ],
+    deliverables: [
+      { id: delA, projectId: projA, title: "Marketing brief", type: "document", status: "in_progress", priority: "high", dueDate: addDays(2), createdAt: stamp },
+      { id: delB, projectId: projB, title: "Audit checklist", type: "document", status: "planned", priority: "medium", dueDate: addDays(4), createdAt: stamp },
+    ],
+    tasks: [
+      { id: "task-1", deliverableId: delA, title: "Design landing page", status: "in_progress", priority: "high", dueDate: today, createdAt: stamp, updatedAt: stamp },
+      { id: "task-2", deliverableId: delA, title: "Write blog draft", status: "open", priority: "medium", dueDate: addDays(3), createdAt: stamp, updatedAt: stamp },
+      { id: "task-3", deliverableId: delA, title: "Review brand guide", status: "open", priority: "low", dueDate: addDays(1), createdAt: stamp, updatedAt: stamp },
+      { id: "task-4", deliverableId: delB, title: "Audit data contracts", status: "in_progress", priority: "high", dueDate: today, createdAt: stamp, updatedAt: stamp },
+      { id: "task-5", deliverableId: delB, title: "Update client dashboard", status: "open", priority: "medium", dueDate: addDays(5), createdAt: stamp, updatedAt: stamp },
+    ],
+    meetings: [
+      { id: "meet-1", title: "Team standup", start: atTime(today, 10), type: "standup", projectId: projA, createdAt: stamp },
+      { id: "meet-2", title: "Client sync", start: atTime(today, 15), type: "other", projectId: projB, createdAt: stamp },
+    ],
+  };
+}
+
+const priorityTone = (priority: WorkTask["priority"]) => priority === "high" ? "#e25555" : priority === "medium" ? "#e89b3a" : "#6b8fd4";
+const dueLabel = (value: string | undefined, today: string) => {
+  if (!value) return "No date";
+  const key = value.slice(0, 10);
+  if (key === today) return "Today";
+  return friendlyDate(value);
+};
+const relativeTime = (value?: string) => {
+  if (!value) return "Recently";
+  const diff = Date.now() - new Date(value).getTime();
+  if (diff < 60_000) return "Just now";
+  if (diff < 3_600_000) return `${Math.max(1, Math.round(diff / 60_000))}m ago`;
+  if (diff < 86_400_000) return `${Math.max(1, Math.round(diff / 3_600_000))}h ago`;
+  return friendlyDate(value);
+};
+const projectForTask = (hub: WorkHubState, task: WorkTask) => {
+  const deliverable = hub.deliverables.find(item => item.id === task.deliverableId);
+  return hub.projects.find(item => item.id === deliverable?.projectId);
+};
+
+type WorkCreateKind = "project" | "deliverable" | "task" | "meeting";
+
+function WorkCreateModal({ kind, hub, close, save }: { kind: WorkCreateKind; hub: WorkHubState; close: () => void; save: (hub: WorkHubState) => void }) {
+  const activeProjects = hub.projects.filter(item => item.status === "active");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [projectId, setProjectId] = useState(activeProjects[0]?.id ?? "");
+  const [deliverableId, setDeliverableId] = useState(hub.deliverables.find(item => item.projectId === activeProjects[0]?.id)?.id ?? "");
+  const [priority, setPriority] = useState<WorkTask["priority"]>("medium");
+  const [dueDate, setDueDate] = useState(dateKey(new Date()));
+  const [start, setStart] = useState(() => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 30 - (now.getMinutes() % 30));
+    return now.toISOString().slice(0, 16);
+  });
+  const titles: Record<WorkCreateKind, string> = { project: "New project", deliverable: "New deliverable", task: "New task", meeting: "Schedule meeting" };
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!name.trim()) return;
+    const stamp = new Date().toISOString();
+    if (kind === "project") {
+      save({ ...hub, projects: [{ id: `proj-${Date.now()}`, name: name.trim(), description: description.trim() || undefined, color: workColors[hub.projects.length % workColors.length], status: "active", createdAt: stamp }, ...hub.projects] });
+    } else if (kind === "deliverable" && projectId) {
+      save({ ...hub, deliverables: [{ id: `del-${Date.now()}`, projectId, title: name.trim(), type: "document", status: "planned", priority, dueDate, createdAt: stamp }, ...hub.deliverables] });
+    } else if (kind === "task" && deliverableId) {
+      save({ ...hub, tasks: [{ id: `task-${Date.now()}`, deliverableId, title: name.trim(), status: "open", priority, dueDate, createdAt: stamp, updatedAt: stamp }, ...hub.tasks] });
+    } else if (kind === "meeting") {
+      save({ ...hub, meetings: [{ id: `meet-${Date.now()}`, title: name.trim(), start: new Date(start).toISOString(), type: "other", projectId: projectId || undefined, createdAt: stamp }, ...hub.meetings] });
+    }
+    close();
+  };
+  return <div className="modal-layer hub-modal-layer" onMouseDown={close}><form className="hub-profile-modal work-create-modal" onMouseDown={event => event.stopPropagation()} onSubmit={submit}><header><span><BriefcaseBusiness size={18} /></span><div><h2>{titles[kind]}</h2><p>Add it to WorkOS without leaving the dashboard.</p></div><button type="button" onClick={close}><X size={18} /></button></header><label>Title<input autoFocus value={name} onChange={event => setName(event.target.value)} placeholder={kind === "project" ? "WorkOS Redesign" : "Design landing page"} /></label>{kind === "project" && <label>Description<input value={description} onChange={event => setDescription(event.target.value)} placeholder="What is this project about?" /></label>}{(kind === "deliverable" || kind === "meeting") && activeProjects.length > 0 && <label>Project<select value={projectId} onChange={event => setProjectId(event.target.value)}>{activeProjects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}{kind === "task" && hub.deliverables.length > 0 && <label>Deliverable<select value={deliverableId} onChange={event => setDeliverableId(event.target.value)}>{hub.deliverables.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}{(kind === "deliverable" || kind === "task") && <><label>Priority<select value={priority} onChange={event => setPriority(event.target.value as WorkTask["priority"])}><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label><label>Due date<input type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} /></label></>}{kind === "meeting" && <label>Start<input type="datetime-local" value={start} onChange={event => setStart(event.target.value)} /></label>}{kind !== "project" && activeProjects.length === 0 && kind !== "meeting" && <p className="work-create-hint">Create a project first.</p>}{kind === "task" && hub.deliverables.length === 0 && <p className="work-create-hint">Create a deliverable first.</p>}<div><button type="button" onClick={close}>Cancel</button><button className="primary" disabled={!name.trim() || (kind === "deliverable" && !projectId) || (kind === "task" && !deliverableId)}>Save</button></div></form></div>;
+}
+
+function WorkTaskRow({ task, hub, today, onComplete }: { task: WorkTask; hub: WorkHubState; today: string; onComplete: (id: string) => void }) {
+  const project = projectForTask(hub, task);
+  return (
+    <div className="work-task-row">
+      <button className="work-task-check" aria-label={`Complete ${task.title}`} onClick={() => onComplete(task.id)}><span /></button>
+      <div className="work-task-copy">
+        <strong>{task.title}</strong>
+        <small>{project?.name || "Project"}</small>
+      </div>
+      <span className="work-priority-tag" style={{ color: priorityTone(task.priority), background: `${priorityTone(task.priority)}18` }}>{task.priority}</span>
+      <span className="work-due">{dueLabel(task.dueDate, today)}</span>
+    </div>
+  );
+}
+
+export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, onChangeView, onChange, onFocusWork, onOpenCalendar }: {
+  workHub: WorkHubState;
+  focusTaskId?: string | null;
+  workView?: WorkView;
+  onChangeView?: (view: WorkView) => void;
+  onChange: (hub: WorkHubState) => void;
+  onFocusWork?: (taskId: string) => void;
+  onOpenCalendar?: () => void;
+}) {
+  const [internalView, setInternalView] = useState<WorkView>("dashboard");
+  const [taskFilter, setTaskFilter] = useState<WorkTask["priority"] | "completed" | "blocked" | "all">("all");
+  const [createKind, setCreateKind] = useState<WorkCreateKind | null>(null);
+  const workView = controlledView ?? internalView;
+  const setWorkView = (view: WorkView) => {
+    onChangeView?.(view);
+    if (controlledView === undefined) setInternalView(view);
+  };
+  const { today, end } = weekWindow();
+  const activeProjects = workHub.projects.filter(item => item.status === "active");
+  const activeTasks = workHub.tasks.filter(item => item.status !== "done");
+  const blockedTasks = activeTasks.filter(item => item.status === "blocked");
+  const openTasks = activeTasks.filter(item => item.status === "open").length;
+  const inProgressTasks = activeTasks.filter(item => item.status === "in_progress").length;
+  const deliverablesDue = workHub.deliverables.filter(item => item.status !== "delivered" && item.status !== "canceled" && item.dueDate >= today && item.dueDate <= end).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const todayMeetings = workHub.meetings.filter(item => item.start.slice(0, 10) === today).sort((a, b) => a.start.localeCompare(b.start));
+  const completedTasks = workHub.tasks.filter(item => item.status === "done").length;
+  const focusTask = workHub.tasks.find(item => item.id === focusTaskId) ?? activeTasks.find(item => item.priority === "high") ?? activeTasks[0];
+  const recentActivity = [...workHub.tasks].sort((a, b) => (b.updatedAt ?? b.createdAt).localeCompare(a.updatedAt ?? a.createdAt)).slice(0, 4);
+  const completeTask = (taskId: string) => onChange({
+    ...workHub,
+    tasks: workHub.tasks.map(item => item.id === taskId ? { ...item, status: "done" as const, completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : item),
+  });
+  const cycleFocusTask = () => {
+    if (!activeTasks.length) return;
+    const currentIndex = focusTask ? activeTasks.findIndex(item => item.id === focusTask.id) : -1;
+    const next = activeTasks[(currentIndex + 1) % activeTasks.length];
+    if (next) onFocusWork?.(next.id);
+  };
+  const setTaskStatus = (taskId: string, status: WorkTask["status"]) => onChange({
+    ...workHub,
+    tasks: workHub.tasks.map(item => item.id === taskId ? { ...item, status, completedAt: status === "done" ? new Date().toISOString() : item.completedAt, updatedAt: new Date().toISOString() } : item),
+  });
+  const openTasksView = (filter: typeof taskFilter = "all") => {
+    setTaskFilter(filter);
+    setWorkView("tasks");
+  };
+  const allDeliverables = workHub.deliverables.filter(item => item.status !== "delivered" && item.status !== "canceled").sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const upcomingMeetings = [...workHub.meetings].filter(item => item.start.slice(0, 10) >= today).sort((a, b) => a.start.localeCompare(b.start));
+  const allActivity = [...workHub.tasks].sort((a, b) => (b.updatedAt ?? b.createdAt).localeCompare(a.updatedAt ?? a.createdAt));
+  const filteredTasks = taskFilter === "all" ? activeTasks
+    : taskFilter === "completed" ? workHub.tasks.filter(item => item.status === "done")
+    : taskFilter === "blocked" ? blockedTasks
+    : activeTasks.filter(item => item.priority === taskFilter);
+  const kanbanColumns: { key: WorkTask["status"]; label: string }[] = [
+    { key: "open", label: "Open" },
+    { key: "in_progress", label: "In Progress" },
+    { key: "blocked", label: "Blocked" },
+    { key: "done", label: "Done" },
+  ];
+
+  const dashboard = (
+    <div className="work-layout">
+      <div className="work-main">
+        <Section icon={LayoutGrid} title="Overview">
+          <div className="work-stat-grid">
+            {[
+              { label: "Active tasks", count: activeTasks.length, view: "tasks" as WorkView },
+              { label: "Due soon", count: deliverablesDue.length, view: "deliverables" as WorkView },
+              { label: "Blocked", count: blockedTasks.length, view: "kanban" as WorkView },
+              { label: "Projects", count: activeProjects.length, view: "projects" as WorkView },
+            ].map(stat => (
+              <button key={stat.label} type="button" className="work-stat-card" onClick={() => setWorkView(stat.view)}>
+                <strong>{stat.count}</strong>
+                <span>{stat.label}</span>
+              </button>
+            ))}
           </div>
-        )) : <Empty>No meetings scheduled.</Empty>}
+        </Section>
+
+        <div className="os-two-up">
+          <Section icon={Zap} title="Active tasks" action={activeTasks.length ? "View all" : undefined} onAction={() => openTasksView("all")}>
+            {activeTasks.length ? activeTasks.slice(0, 5).map(task => <WorkTaskRow key={task.id} task={task} hub={workHub} today={today} onComplete={completeTask} />) : <Empty>No active tasks yet. Add one to get moving.</Empty>}
+          </Section>
+
+          <Section icon={FolderKanban} title="Projects" action={activeProjects.length ? "View all" : undefined} onAction={() => setWorkView("projects")}>
+            {activeProjects.length ? activeProjects.slice(0, 2).map(project => {
+              const projectTasks = workHub.tasks.filter(task => projectForTask(workHub, task)?.id === project.id);
+              const done = projectTasks.filter(task => task.status === "done").length;
+              const total = projectTasks.length;
+              return (
+                <button key={project.id} type="button" className="work-project-card" onClick={() => setWorkView("projects")}>
+                  <div className="work-project-head">
+                    <span className="work-project-icon" style={{ color: project.color, background: `${project.color}18` }}><Database size={14} /></span>
+                    <div><strong>{project.name}</strong><p>{project.description || "Active project"}</p></div>
+                  </div>
+                  {total > 0 && <>
+                    <div className="work-project-progress"><i style={{ width: `${(done / total) * 100}%`, background: project.color }} /></div>
+                    <small>{done}/{total} tasks</small>
+                  </>}
+                </button>
+              );
+            }) : <Empty>Create your first project to organize deliverables and tasks.</Empty>}
+          </Section>
+        </div>
+
+        <div className="os-two-up">
+          <Section icon={FileText} title="Deliverables due" action={deliverablesDue.length ? "View all" : undefined} onAction={() => setWorkView("deliverables")}>
+            {deliverablesDue.length ? deliverablesDue.slice(0, 4).map(item => (
+              <button key={item.id} type="button" className="work-deliverable-row" onClick={() => setWorkView("deliverables")}>
+                <span className="work-deliverable-icon"><FileText size={15} /></span>
+                <div><strong>{item.title}</strong><small>{workHub.projects.find(project => project.id === item.projectId)?.name || "Project"} · {dueLabel(item.dueDate, today)}</small></div>
+              </button>
+            )) : <Empty>No deliverables due this week.</Empty>}
+          </Section>
+
+          <Section icon={LayoutGrid} title="Kanban board" action="Open board" onAction={() => setWorkView("kanban")}>
+            <div className="work-kanban-grid">
+              {[
+                { label: "Open", count: openTasks, view: "kanban" as const },
+                { label: "In Progress", count: inProgressTasks, view: "kanban" as const },
+                { label: "Blocked", count: blockedTasks.length, view: "kanban" as const },
+              ].map(item => (
+                <button key={item.label} type="button" className="work-kanban-card" onClick={() => setWorkView(item.view)}><strong>{item.count}</strong><span>{item.label}</span></button>
+              ))}
+            </div>
+          </Section>
+        </div>
+      </div>
+
+      <aside className="work-sidebar">
+        {focusTask && (
+          <div className="work-focus-card">
+            <div className="work-focus-head"><span>Focus today</span><button type="button" onClick={cycleFocusTask}>Edit</button></div>
+            <strong>{focusTask.title}</strong>
+            <small>{projectForTask(workHub, focusTask)?.name || "Project"}</small>
+            <p>{completedTasks} of {workHub.tasks.length} tasks completed</p>
+            <button type="button" className="work-focus-start" onClick={() => onFocusWork?.(focusTask.id)}>Start focus</button>
+          </div>
+        )}
+
+        <Section icon={ListTodo} title="All tasks" action="View all" onAction={() => openTasksView("all")}>
+          <div className="work-priority-list">
+            {[
+              { label: "High priority", count: activeTasks.filter(item => item.priority === "high").length, color: "#e25555", filter: "high" as const },
+              { label: "Medium priority", count: activeTasks.filter(item => item.priority === "medium").length, color: "#e89b3a", filter: "medium" as const },
+              { label: "Low priority", count: activeTasks.filter(item => item.priority === "low").length, color: "#6b8fd4", filter: "low" as const },
+              { label: "Completed", count: completedTasks, color: "#47a47b", filter: "completed" as const },
+              { label: "Blocked", count: blockedTasks.length, color: "#cf625a", filter: "blocked" as const },
+            ].map(item => (
+              <button key={item.label} type="button" className="work-priority-row" onClick={() => openTasksView(item.filter)}>
+                <span><i style={{ background: item.color }} />{item.label}</span><strong>{item.count}</strong>
+              </button>
+            ))}
+          </div>
+        </Section>
+
+        <Section icon={Clock3} title="Calendar & meetings" action="View calendar" onAction={() => setWorkView("calendar")}>
+          {todayMeetings.length ? todayMeetings.map(item => (
+            <button key={item.id} type="button" className="work-meeting-row" onClick={() => setWorkView("calendar")}>
+              <strong>{item.title}</strong>
+              <small>Today, {new Date(item.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small>
+            </button>
+          )) : <Empty>No meetings scheduled today.</Empty>}
+        </Section>
+
+        <Section icon={Clock3} title="Recent activity" action="View all" onAction={() => setWorkView("activity")}>
+          {recentActivity.length ? recentActivity.map(item => (
+            <button key={item.id} type="button" className="work-activity-row" onClick={() => setWorkView("activity")}>
+              <strong>{item.title}</strong>
+              <small>{item.status === "done" ? "completed" : "updated"} · {relativeTime(item.updatedAt ?? item.createdAt)}</small>
+            </button>
+          )) : <Empty>Activity from tasks and deliverables will show here.</Empty>}
+        </Section>
+      </aside>
+    </div>
+  );
+
+  const subview = (() => {
+    if (workView === "tasks") {
+      return <>
+        <WorkSubviewHeader title="All tasks" subtitle={`${filteredTasks.length} task${filteredTasks.length === 1 ? "" : "s"} shown`} onBack={() => setWorkView("dashboard")} />
+        <div className="work-view-tabs">
+          {(["all", "high", "medium", "low", "blocked", "completed"] as const).map(filter => (
+            <button key={filter} type="button" className={taskFilter === filter ? "selected" : ""} onClick={() => setTaskFilter(filter)}>{filter === "all" ? "All" : filter.charAt(0).toUpperCase() + filter.slice(1)}</button>
+          ))}
+        </div>
+        <Section icon={ListTodo} title="Task list">
+          {filteredTasks.length ? filteredTasks.map(task => <WorkTaskRow key={task.id} task={task} hub={workHub} today={today} onComplete={completeTask} />) : <Empty>No tasks match this filter.</Empty>}
+        </Section>
+      </>;
+    }
+    if (workView === "projects") {
+      return <>
+        <WorkSubviewHeader title="Projects" subtitle={`${activeProjects.length} active project${activeProjects.length === 1 ? "" : "s"}`} onBack={() => setWorkView("dashboard")} />
+        <div className="work-projects-grid">
+          {activeProjects.length ? activeProjects.map(project => {
+            const projectTasks = workHub.tasks.filter(task => projectForTask(workHub, task)?.id === project.id);
+            const done = projectTasks.filter(task => task.status === "done").length;
+            const total = projectTasks.length;
+            const projectDeliverables = workHub.deliverables.filter(item => item.projectId === project.id);
+            return (
+              <section key={project.id} className="work-project-detail-card">
+                <div className="work-project-head">
+                  <span className="work-project-icon" style={{ color: project.color, background: `${project.color}18` }}><Database size={16} /></span>
+                  <div><strong>{project.name}</strong><p>{project.description || "Active project"}</p></div>
+                </div>
+                {total > 0 && <>
+                  <div className="work-project-progress"><i style={{ width: `${(done / total) * 100}%`, background: project.color }} /></div>
+                  <small>{done}/{total} tasks complete</small>
+                </>}
+                <div className="work-project-meta"><span>{projectDeliverables.length} deliverable{projectDeliverables.length === 1 ? "" : "s"}</span><span>{projectTasks.filter(task => task.status !== "done").length} active tasks</span></div>
+              </section>
+            );
+          }) : <Empty>Create your first project to organize deliverables and tasks.</Empty>}
+        </div>
+      </>;
+    }
+    if (workView === "deliverables") {
+      return <>
+        <WorkSubviewHeader title="Deliverables" subtitle={`${allDeliverables.length} open deliverable${allDeliverables.length === 1 ? "" : "s"}`} onBack={() => setWorkView("dashboard")} />
+        <Section icon={FileText} title="All deliverables">
+          {allDeliverables.length ? allDeliverables.map(item => (
+            <div key={item.id} className="work-deliverable-row">
+              <span className="work-deliverable-icon"><FileText size={15} /></span>
+              <div><strong>{item.title}</strong><small>{workHub.projects.find(project => project.id === item.projectId)?.name || "Project"} · {dueLabel(item.dueDate, today)} · {item.status.replace("_", " ")}</small></div>
+            </div>
+          )) : <Empty>No open deliverables yet.</Empty>}
+        </Section>
+      </>;
+    }
+    if (workView === "kanban") {
+      return <>
+        <WorkSubviewHeader title="Kanban board" subtitle="Move tasks across columns as work progresses" onBack={() => setWorkView("dashboard")} />
+        <div className="work-kanban-board">
+          {kanbanColumns.map(column => (
+            <div key={column.key} className="work-kanban-column">
+              <header><strong>{column.label}</strong><span>{workHub.tasks.filter(task => task.status === column.key).length}</span></header>
+              <div className="work-kanban-column-body">
+                {workHub.tasks.filter(task => task.status === column.key).map(task => {
+                  const project = projectForTask(workHub, task);
+                  return (
+                    <article key={task.id} className="work-kanban-task">
+                      <strong>{task.title}</strong>
+                      <small>{project?.name || "Project"}</small>
+                      <div className="work-kanban-task-actions">
+                        {column.key !== "open" && <button type="button" onClick={() => setTaskStatus(task.id, "open")}>Open</button>}
+                        {column.key !== "in_progress" && <button type="button" onClick={() => setTaskStatus(task.id, "in_progress")}>Progress</button>}
+                        {column.key !== "blocked" && <button type="button" onClick={() => setTaskStatus(task.id, "blocked")}>Block</button>}
+                        {column.key !== "done" && <button type="button" onClick={() => setTaskStatus(task.id, "done")}>Done</button>}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </>;
+    }
+    if (workView === "calendar") {
+      return <>
+        <WorkSubviewHeader title="Calendar & meetings" subtitle={`${upcomingMeetings.length} upcoming meeting${upcomingMeetings.length === 1 ? "" : "s"}`} onBack={() => setWorkView("dashboard")} />
+        <div className="work-calendar-actions">{onOpenCalendar && <button type="button" onClick={onOpenCalendar}>Open full calendar</button>}</div>
+        <Section icon={Clock3} title="Upcoming meetings">
+          {upcomingMeetings.length ? upcomingMeetings.map(item => (
+            <div key={item.id} className="work-meeting-row">
+              <strong>{item.title}</strong>
+              <small>{new Date(item.start).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}{item.start.slice(0, 10) === today ? " · Today" : ""}</small>
+            </div>
+          )) : <Empty>Schedule a meeting to keep work visible here.</Empty>}
+        </Section>
+      </>;
+    }
+    if (workView === "activity") {
+      return <>
+        <WorkSubviewHeader title="Recent activity" subtitle="Latest updates across work tasks" onBack={() => setWorkView("dashboard")} />
+        <Section icon={Clock3} title="Activity feed">
+          {allActivity.length ? allActivity.map(item => (
+            <div key={item.id} className="work-activity-row">
+              <strong>{item.title}</strong>
+              <small>{item.status === "done" ? "completed" : item.status.replace("_", " ")} · {projectForTask(workHub, item)?.name || "Project"} · {relativeTime(item.updatedAt ?? item.createdAt)}</small>
+            </div>
+          )) : <Empty>Activity from tasks will show up here.</Empty>}
+        </Section>
+      </>;
+    }
+    return null;
+  })();
+
+  return <div className="os-dashboard work-dashboard">
+    <div className="os-hero">
+      <div>
+        <p className="eyebrow">Your work, in focus</p>
+        <h1>WorkOS</h1>
+        <p>{activeProjects.length} project{activeProjects.length === 1 ? "" : "s"} · {activeTasks.length} active task{activeTasks.length === 1 ? "" : "s"} · {deliverablesDue.length} due soon</p>
+      </div>
+      <button className="os-profile-button" onClick={() => focusTask && onFocusWork?.(focusTask.id)} disabled={!focusTask}><Zap size={18} /><span>Focus on work</span></button>
+    </div>
+
+    <div className="os-quick-row work-quick-row">
+      <QuickAction icon={FolderKanban} label="New project" onClick={() => setCreateKind("project")} />
+      <QuickAction icon={FileText} label="New deliverable" onClick={() => setCreateKind("deliverable")} />
+      <QuickAction icon={ListTodo} label="New task" onClick={() => setCreateKind("task")} />
+      <QuickAction icon={Clock3} label="Schedule meeting" onClick={() => setCreateKind("meeting")} />
+    </div>
+
+    {workView !== "dashboard" && (
+      <div className="work-view-nav">
+        {([
+          { id: "dashboard", label: "Dashboard" },
+          { id: "tasks", label: "Tasks" },
+          { id: "projects", label: "Projects" },
+          { id: "deliverables", label: "Deliverables" },
+          { id: "kanban", label: "Kanban" },
+          { id: "calendar", label: "Calendar" },
+          { id: "activity", label: "Activity" },
+        ] as const).map(item => (
+          <button key={item.id} type="button" className={workView === item.id ? "selected" : ""} onClick={() => setWorkView(item.id)}>{item.label}</button>
+        ))}
       </div>
     )}
 
-    {workView === "deliverables" && (
-      <div style={{ marginTop: "16px" }}>
-        <h3 style={{ marginBottom: "12px" }}>Deliverables Timeline</h3>
-        {workHub.deliverables.length ? workHub.deliverables.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(del => {
-          const project = workHub.projects.find(p => p.id === del.projectId);
-          return (
-            <div key={del.id} style={{ background: "rgba(255,255,255,0.05)", padding: "12px", borderRadius: "6px", marginBottom: "8px", fontSize: "13px", borderLeft: `3px solid ${del.priority === "high" ? "#ff6b6b" : del.priority === "medium" ? "#ffa500" : "#4a90e2"}` }}>
-              <div style={{ fontWeight: "500" }}>{del.title}</div>
-              <div style={{ fontSize: "12px", opacity: 0.6, marginTop: "4px" }}>{project?.name} · {friendlyDate(del.dueDate)} · {del.status}</div>
-            </div>
-          );
-        }) : <Empty>No deliverables tracked.</Empty>}
-      </div>
-    )}
+    {workView === "dashboard" ? dashboard : subview}
+
+    {createKind && <WorkCreateModal kind={createKind} hub={workHub} close={() => setCreateKind(null)} save={onChange} />}
   </div>;
 }
 
@@ -372,4 +1029,256 @@ export function SchoolProfileModal({ profile, close, save }: { profile: SchoolHu
 
 export function SchoolClassPickerModal({ classes, title, close, pick }: { classes: DashboardClass[]; title: string; close: () => void; pick: (id: string) => void }) {
   return <div className="modal-layer hub-modal-layer" onMouseDown={close}><div className="hub-class-picker" onMouseDown={event => event.stopPropagation()}><header><div><p className="eyebrow">SchoolOS</p><h2>{title}</h2><p>Choose the course this belongs to.</p></div><button onClick={close}><X size={18} /></button></header><div>{classes.filter(item => !item.archived).map(item => <button key={item.id} onClick={() => pick(item.id)}><i style={{ background: item.color }} /><span><strong>{item.code}</strong><small>{item.name}</small></span><ChevronRight size={16} /></button>)}</div></div></div>;
+}
+
+export function NowCommandPalette({ isOpen, close, tasks, projects, classes }: {
+  isOpen: boolean;
+  close: () => void;
+  tasks: DashboardTask[];
+  projects: DashboardProject[];
+  classes: DashboardClass[];
+}) {
+  const [search, setSearch] = useState("");
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const quickActions = [
+    { icon: ListTodo, label: "New task", desc: "/t", action: () => {} },
+    { icon: FolderKanban, label: "New project", desc: "/proj", action: () => {} },
+    { icon: BookOpen, label: "New course", desc: "/course", action: () => {} },
+    { icon: NotebookPen, label: "New note", desc: "/note", action: () => {} },
+    { icon: Clock3, label: "Schedule meeting", desc: "/meet", action: () => {} },
+  ];
+
+  const allCommands = [
+    ...quickActions,
+    ...tasks.slice(0, 3).map(task => ({
+      icon: ListTodo as typeof ListTodo,
+      label: task.title,
+      desc: `${task.project || "Task"} · ${task.priority}`,
+      action: () => {},
+    })),
+  ];
+
+  const filtered = search
+    ? allCommands.filter(cmd =>
+        cmd.label.toLowerCase().includes(search.toLowerCase()) ||
+        cmd.desc.toLowerCase().includes(search.toLowerCase())
+      )
+    : allCommands;
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSelectedIndex(Math.min(selectedIndex + 1, filtered.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelectedIndex(Math.max(selectedIndex - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      filtered[selectedIndex]?.action();
+      close();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      close();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="command-palette-overlay"
+      onMouseDown={close}
+      onClick={close}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.4)",
+        backdropFilter: "blur(8px)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        paddingTop: "80px",
+        zIndex: 1000,
+      }}
+    >
+      <div
+        className="command-palette"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "var(--panel)",
+          border: "1px solid var(--line)",
+          borderRadius: "16px",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+          width: "90%",
+          maxWidth: "600px",
+          overflow: "hidden",
+          animation: "slideDown 0.2s ease-out",
+        }}
+      >
+        <div
+          style={{
+            padding: "16px 20px",
+            borderBottom: "1px solid var(--line)",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+          }}
+        >
+          <Search size={18} style={{ color: "var(--muted)" }} />
+          <input
+            autoFocus
+            type="text"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setSelectedIndex(0);
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="Search commands, tasks, projects…"
+            style={{
+              flex: 1,
+              height: "38px",
+              border: "none",
+              background: "transparent",
+              color: "var(--ink)",
+              fontSize: "13px",
+              outline: "none",
+            }}
+          />
+          <kbd
+            style={{
+              padding: "4px 8px",
+              background: "var(--canvas)",
+              border: "1px solid var(--line)",
+              borderRadius: "4px",
+              fontSize: "11px",
+              color: "var(--muted)",
+              fontFamily: "monospace",
+            }}
+          >
+            ESC
+          </kbd>
+        </div>
+
+        <div
+          style={{
+            maxHeight: "400px",
+            overflowY: "auto",
+            padding: "8px",
+          }}
+        >
+          {filtered.length === 0 ? (
+            <div
+              style={{
+                padding: "40px 20px",
+                textAlign: "center",
+                color: "var(--muted)",
+                fontSize: "12px",
+              }}
+            >
+              <p>No commands found.</p>
+            </div>
+          ) : (
+            filtered.map((cmd, idx) => {
+              const Icon = cmd.icon;
+              return (
+                <button
+                  key={idx}
+                  onMouseEnter={() => setSelectedIndex(idx)}
+                  onClick={() => {
+                    cmd.action();
+                    close();
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "12px 14px",
+                    border: "none",
+                    background:
+                      idx === selectedIndex
+                        ? "color-mix(in srgb, var(--accent) 12%, var(--canvas))"
+                        : "transparent",
+                    color: "var(--ink)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    fontSize: "12px",
+                    transition: "background 0.1s",
+                  }}
+                >
+                  <Icon
+                    size={16}
+                    style={{ color: "var(--accent)", flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {cmd.label}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "var(--muted)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {cmd.desc}
+                    </div>
+                  </div>
+                  {idx === selectedIndex && (
+                    <kbd
+                      style={{
+                        fontSize: "10px",
+                        color: "var(--muted)",
+                        padding: "3px 6px",
+                        background: "var(--canvas)",
+                        border: "1px solid var(--line)",
+                        borderRadius: "3px",
+                        flexShrink: 0,
+                      }}
+                    >
+                      Enter
+                    </kbd>
+                  )}
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        <div
+          style={{
+            padding: "12px 16px",
+            borderTop: "1px solid var(--line)",
+            fontSize: "11px",
+            color: "var(--muted)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span>⌘K to open • ↑↓ to navigate • Enter to select</span>
+          <span>{filtered.length} results</span>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+    </div>
+  );
 }

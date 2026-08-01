@@ -182,7 +182,7 @@ export function stopListeningToFirebaseChanges(key: string) {
   }
 }
 
-export async function syncAllData(tasks: any, projects: any, events: any, brainItems: any, settings: any, dark: boolean, classes: any[] = [], notes: any[] = [], resources: any[] = [], life: any = null, school: any = null) {
+export async function syncAllData(tasks: any, projects: any, events: any, brainItems: any, settings: any, dark: boolean, classes: any[] = [], notes: any[] = [], resources: any[] = [], life: any = null, school: any = null, work: any = null) {
   await Promise.all([
     syncDataToFirebase('tasks', tasks),
     syncDataToFirebase('projects', projects),
@@ -195,6 +195,7 @@ export async function syncAllData(tasks: any, projects: any, events: any, brainI
     syncDataToFirebase('resources', resources),
     ...(life ? [syncDataToFirebase('life', life)] : []),
     ...(school ? [syncDataToFirebase('school', school)] : []),
+    ...(work ? [syncDataToFirebase('work', work)] : []),
   ]);
 }
 
@@ -203,7 +204,7 @@ export async function pullAllDataFromFirebase() {
   if (typeof window === 'undefined') return null;
 
   try {
-    const [tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school] = await Promise.all([
+    const [tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school, work] = await Promise.all([
       loadDataFromFirebase('tasks'),
       loadDataFromFirebase('projects'),
       loadDataFromFirebase('calendar'),
@@ -215,9 +216,10 @@ export async function pullAllDataFromFirebase() {
       loadDataFromFirebase('resources'),
       loadDataFromFirebase('life'),
       loadDataFromFirebase('school'),
+      loadDataFromFirebase('work'),
     ]);
 
-    return { tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school };
+    return { tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school, work };
   } catch (error) {
     console.error('Failed to pull data from Firebase:', error);
     return null;
