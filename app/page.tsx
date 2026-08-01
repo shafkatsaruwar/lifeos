@@ -1580,6 +1580,7 @@ export default function LifeOS() {
 
 function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onSetEnergy, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onSetEnergy: (energy: EnergyLevel) => void; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void }) {
   const [handoff, setHandoff] = useState("");
+  const [captureInput, setCaptureInput] = useState("");
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
   const today = toDateKey(new Date());
@@ -1605,12 +1606,30 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     setHandoff("");
     onChoose(task.id);
   };
+  const handleCaptureKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const val = e.currentTarget.value.trim();
+    if (e.key === 'Enter' && val) {
+      if (val.startsWith('/t ')) {
+        const taskTitle = val.slice(3);
+        const newTask: Task = { id: Math.max(...tasks.map(t => t.id), 0) + 1, title: taskTitle, project: '', color: '#625af6', due: '', priority: 'Medium', focusMinutes: 25, energy: 'Medium' };
+        onComplete(-1);
+        onChoose(newTask.id);
+      } else if (val.startsWith('/proj ')) {
+        alert('Project creation coming soon');
+      } else if (val.startsWith('/asg ')) {
+        alert('Assignment creation coming soon (School mode)');
+      } else {
+        onStartAmbient();
+      }
+      setCaptureInput('');
+    }
+  };
   return <div className="now-view">
     <div className="page-title">
       <div><p className="eyebrow">One thing, on purpose</p><h1>Now</h1><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
       <div className="now-header-actions"><button onClick={onCapture}><Inbox size={16} /> Capture thought</button><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
     </div>
-    {ambientActivity ? <section className="ambient-active-strip"><div><span className="section-icon orange"><TimerReset size={14} /></span><div><p>YOU’RE ALREADY DOING IT</p><strong>{ambientActivity.title}</strong><small>{formatAmbientDuration(now - new Date(ambientActivity.startedAt).getTime())} so far · no planning required</small></div></div><button onClick={onWrapAmbient}>Finish & sort later <ArrowRight size={15} /></button></section> : <section className="capture-bar-section"><input type="text" placeholder="Type / for commands: /t (task), /proj (project), /asg (assignment)" onKeyDown={(e) => { const val = e.currentTarget.value.trim(); if (e.key === ‘Enter’ && val) { if (val.startsWith(‘/t ‘)) { onCreateTask(val.slice(3)); e.currentTarget.value = ‘’; } else if (val.startsWith(‘/proj ‘)) { alert(‘Project creation - coming soon’); e.currentTarget.value = ‘’; } else if (val.startsWith(‘/asg ‘)) { alert(‘Assignment creation - coming soon’); e.currentTarget.value = ‘’; } else { onStartAmbient(val); e.currentTarget.value = ‘’; } } }} /></section>}
+    {ambientActivity ? <section className="ambient-active-strip"><div><span className="section-icon orange"><TimerReset size={14} /></span><div><p>YOU’RE ALREADY DOING IT</p><strong>{ambientActivity.title}</strong><small>{formatAmbientDuration(now - new Date(ambientActivity.startedAt).getTime())} so far · no planning required</small></div></div><button onClick={onWrapAmbient}>Finish & sort later <ArrowRight size={15} /></button></section> : <section className="capture-bar-section"><input type="text" placeholder="Type / for commands: /t (task), /proj (project), /asg (assignment)" value={captureInput} onChange={(e) => setCaptureInput(e.currentTarget.value)} onKeyDown={handleCaptureKeyDown} /></section>}
     <div className="now-layout">
       <section className="card now-current-card">
         <div className="card-head"><div><span className="section-icon violet"><Focus size={14} /></span><h2>Current task</h2></div>{current && <button className="text-button" onClick={() => onChoose(null)}>Clear</button>}</div>
