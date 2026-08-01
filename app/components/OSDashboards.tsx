@@ -5,7 +5,7 @@ import {
   Activity, Archive, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight,
   Clock3, Database, ExternalLink, FileText, FolderKanban, GraduationCap, Image,
   Library, Link2, ListTodo, Map, NotebookPen, Plus, Search,
-  Target, Trash2, UserRound, Users, Utensils, X,
+  Target, Trash2, UserRound, Users, Utensils, X, BriefcaseBusiness, Users2,
 } from "lucide-react";
 import { getCountdownText, getUrgencyColor } from "@/lib/helpers";
 
@@ -167,6 +167,27 @@ export function SchoolDashboard({ tasks, classes, notes, school, onComplete, onO
       <button className="os-focus-callout" onClick={academic[0] ? () => onFocus(academic[0].id) : courses.length ? onNewAcademic : onNewCourse}><Target size={22} /><span><small>{academic[0] ? "Start focus" : courses.length ? "Next step" : "Set up SchoolOS"}</small><strong>{academic[0]?.title || (courses.length ? "Add a school task" : "Add your first course")}</strong><p>{academic[0] ? `${courseFor(academic[0].classId)?.code ?? "School"} · ${friendlyDate(academic[0].due)}` : courses.length ? "Create coursework before starting focus" : "Courses hold tasks, assignments, and notes"}</p></span><ChevronRight size={18} /></button>
       <Section icon={UserRound} title="Personal" action="Edit" onAction={onOpenProfile}><dl className="os-profile-list"><div><dt>Major</dt><dd>{school.profile.major || "Not set"}</dd></div><div><dt>Minor</dt><dd>{school.profile.minor || "Not set"}</dd></div><div><dt>Class of</dt><dd>{school.profile.classOf || "Not set"}</dd></div></dl></Section>
       <Section icon={Database} title="Academic databases"><div className="os-database-grid single">{([{ key: "topics", label: "Topics", icon: Database }, { key: "professors", label: "Professors", icon: Users }, { key: "goals", label: "Goals", icon: Target }] as const).map(({ key, label, icon: Icon }) => <button key={key} onClick={() => onOpenCollection(key)}><Icon size={15} /><span>{label}</span><small>{school[key].length}</small></button>)}</div></Section>
+    </aside></div>
+  </div>;
+}
+
+export function WorkDashboard({ tasks, events, workHub, onOpenTask, onNewTask, onOpenEvent }: {
+  tasks: DashboardTask[]; events: DashboardEvent[]; workHub: { clients: Array<{ id: string; name: string; color: string; status: string }>; deliverables: Array<{ id: string; title: string; dueDate: string; status: string }>; meetings: Array<{ id: string; title: string; start: string }>; timeLogs: any[]; goals: any[] };
+  onOpenTask: (id: number) => void; onNewTask: () => void; onOpenEvent: (id: string) => void;
+}) {
+  const { today, end } = weekWindow();
+  const workTasks = tasks.filter(task => task.project !== "Inbox" && openTask(task) && (!task.due || (task.due >= today && task.due <= end))).sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
+  const deliverables = workHub.deliverables.filter(d => d.status !== "delivered" && d.status !== "canceled").sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 5);
+  const meetings = workHub.meetings.filter(m => m.start >= today).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 3);
+  const activeClients = workHub.clients.filter(c => c.status === "active");
+  return <div className="os-dashboard work-dashboard">
+    <div className="os-hero"><div><p className="eyebrow">Professional focus</p><h1>WorkOS</h1><p>{activeClients.length} active client{activeClients.length === 1 ? "" : "s"} · {deliverables.length} deliverable{deliverables.length === 1 ? "" : "s"} in progress</p></div></div>
+    <div className="os-quick-row"><QuickAction icon={ListTodo} label="Work task" onClick={onNewTask} /><QuickAction icon={BriefcaseBusiness} label="Add client" onClick={() => alert('Add client form coming soon')} /><QuickAction icon={FileText} label="Deliverable" onClick={() => alert('Deliverable tracking coming soon')} /><QuickAction icon={Clock3} label="Schedule meeting" onClick={() => alert('Meeting scheduler coming soon')} /></div>
+    <div className="os-work-layout"><div className="os-work-main">
+      <Section icon={FileText} title="This week's deliverables" action="Add" onAction={onNewTask}>{deliverables.length ? <div className="os-deliverables-strip">{deliverables.map(del => <div key={del.id} className="os-deliverable-card" style={{ borderLeftColor: "#625af6" }}><strong>{del.title}</strong><small>{friendlyDate(del.dueDate)} · {del.status}</small></div>)}</div> : <Empty>No deliverables tracked yet. Add work projects to start.</Empty>}</Section>
+      <div className="os-two-up"><Section icon={ListTodo} title="Work tasks" action="Add" onAction={onNewTask}>{workTasks.length ? workTasks.slice(0, 5).map(task => <Row key={task.id} icon={ListTodo} title={task.title} meta={`${friendlyDate(task.due)} · ${task.priority}`} onClick={() => onOpenTask(task.id)} onComplete={() => alert('Mark complete from Work view coming soon')} />) : <Empty>Work tasks appear here. Create one with /w task.</Empty>}</Section><Section icon={Clock3} title="Today's meetings" action="Add" onAction={onNewTask}>{meetings.length ? meetings.slice(0, 5).map(meet => <Row key={meet.id} icon={Clock3} title={meet.title} meta={friendlyDate(meet.start)} onClick={() => onOpenEvent(meet.id)} />) : <Empty>No meetings scheduled yet.</Empty>}</Section></div>
+    </div><aside>
+      <Section icon={Users} title="Active clients"><div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>{activeClients.length ? activeClients.slice(0, 5).map(client => <div key={client.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px", borderRadius: "6px", background: "rgba(255,255,255,0.05)" }}><div style={{ width: "24px", height: "24px", borderRadius: "4px", background: client.color, opacity: 0.7 }} /><span style={{ fontSize: "13px", fontWeight: "500" }}>{client.name}</span></div>) : <Empty>Add your first client with /w client.</Empty>}</div></Section>
     </aside></div>
   </div>;
 }

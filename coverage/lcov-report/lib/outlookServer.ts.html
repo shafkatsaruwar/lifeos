@@ -1,0 +1,160 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for lib/outlookServer.ts</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../prettify.css" />
+    <link rel="stylesheet" href="../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../index.html">All files</a> / <a href="index.html">lib</a> outlookServer.ts</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">0% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>0/70</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">0% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>0/50</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">0% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>0/18</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">0% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>0/18</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line low'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
+&nbsp;
+export type OutlookCalendarChoice = { id: string; name: string; color?: string; primary?: boolean };
+type OutlookTokens = { access_token: string; refresh_token?: string; expiry_date: number };
+export type StoredOutlookConnection = { encrypted: string; connectedAt: string; calendars?: OutlookCalendarChoice[]; selectedCalendarIds?: string[] };
+&nbsp;
+const required = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(n</span>ame: "MICROSOFT_OUTLOOK_CLIENT_ID" | "MICROSOFT_OUTLOOK_CLIENT_SECRET") =&gt; {</span>
+  const value = <span class="cstat-no" title="statement not covered" >process.env[name];</span>
+<span class="cstat-no" title="statement not covered" >  if (!value) <span class="cstat-no" title="statement not covered" >throw new Error(`Outlook is not configured yet. Add ${name} in Vercel, then redeploy.`);</span></span>
+<span class="cstat-no" title="statement not covered" >  return value;</span>
+};
+const key = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(p</span>urpose: string) =&gt; <span class="cstat-no" title="statement not covered" >createHash("sha256").update(`${required("MICROSOFT_OUTLOOK_CLIENT_SECRET")}:${purpose}`).digest();</span></span>
+const b64 = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>alue: Buffer) =&gt; <span class="cstat-no" title="statement not covered" >value.toString("base64url");</span></span>
+const unb64 = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>alue: string) =&gt; <span class="cstat-no" title="statement not covered" >Buffer.from(value, "base64url");</span></span>
+export const outlookConfigured = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >B</span>oolean(process.env.MICROSOFT_OUTLOOK_CLIENT_ID &amp;&amp; process.env.MICROSOFT_OUTLOOK_CLIENT_SECRET);</span></span>
+export const outlookClientId = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >r</span>equired("MICROSOFT_OUTLOOK_CLIENT_ID");</span></span>
+export const outlookTenant = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >p</span>rocess.env.MICROSOFT_OUTLOOK_TENANT_ID || "common";</span></span>
+export const createOutlookState = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(p</span>ayload: Record&lt;string, unknown&gt;) =&gt; { const body = <span class="cstat-no" title="statement not covered" >b64(Buffer.from(JSON.stringify(payload))); <span class="cstat-no" title="statement not covered" >r</span>eturn `${body}.${createHmac("sha256", key("oauth-state")).update(body).digest("base64url")}`; }</span>;</span>
+export const readOutlookState = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >&lt;T,&gt;(v</span>alue: string): T | null =&gt; { const [body, signature] = <span class="cstat-no" title="statement not covered" >value.split("."); <span class="cstat-no" title="statement not covered" >i</span>f (!body || !signature) <span class="cstat-no" title="statement not covered" >return null; c</span></span>onst expected = <span class="cstat-no" title="statement not covered" >createHmac("sha256", key("oauth-state")).update(body).digest(); c</span>onst actual = <span class="cstat-no" title="statement not covered" >unb64(signature); <span class="cstat-no" title="statement not covered" >i</span>f (expected.length !== actual.length || !timingSafeEqual(expected, actual)) <span class="cstat-no" title="statement not covered" >return null; <span class="cstat-no" title="statement not covered" >t</span></span>ry { <span class="cstat-no" title="statement not covered" >return JSON.parse(unb64(body).toString("utf8")) as T; }</span> catch { <span class="cstat-no" title="statement not covered" >return null; }</span> }</span>;</span>
+export const encryptOutlookTokens = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(t</span>okens: OutlookTokens) =&gt; { const iv = <span class="cstat-no" title="statement not covered" >randomBytes(12); c</span>onst cipher = <span class="cstat-no" title="statement not covered" >createCipheriv("aes-256-gcm", key("tokens"), iv); c</span>onst body = <span class="cstat-no" title="statement not covered" >Buffer.concat([cipher.update(JSON.stringify(tokens), "utf8"), cipher.final()]); <span class="cstat-no" title="statement not covered" >r</span>eturn [b64(iv), b64(cipher.getAuthTag()), b64(body)].join("."); }</span>;</span>
+export const decryptOutlookTokens = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>alue: string): OutlookTokens =&gt; { const [iv, tag, body] = <span class="cstat-no" title="statement not covered" >value.split("."); <span class="cstat-no" title="statement not covered" >i</span>f (!iv || !tag || !body) <span class="cstat-no" title="statement not covered" >throw new Error("Saved Outlook connection is invalid. Reconnect Outlook."); c</span></span>onst decipher = <span class="cstat-no" title="statement not covered" >createDecipheriv("aes-256-gcm", key("tokens"), unb64(iv)); <span class="cstat-no" title="statement not covered" >d</span>ecipher.setAuthTag(unb64(tag)); <span class="cstat-no" title="statement not covered" >r</span>eturn JSON.parse(Buffer.concat([decipher.update(unb64(body)), decipher.final()]).toString("utf8")) as OutlookTokens; }</span>;</span>
+const url = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(u</span>id: string, token: string) =&gt; { const base = <span class="cstat-no" title="statement not covered" >(process.env.NEXT_PUBLIC_FIREBASE_DB_URL || "").replace(/\/$/, ""); <span class="cstat-no" title="statement not covered" >i</span>f (!base) <span class="cstat-no" title="statement not covered" >throw new Error("Firebase database is not configured."); <span class="cstat-no" title="statement not covered" >r</span></span>eturn `${base}/users/${encodeURIComponent(uid)}/outlook.json?auth=${encodeURIComponent(token)}`; }</span>;</span>
+export async function <span class="fstat-no" title="function not covered" >getOutlookConnection(u</span>id: string, token: string) { const response = <span class="cstat-no" title="statement not covered" >await fetch(url(uid, token), { cache: "no-store" }); <span class="cstat-no" title="statement not covered" >i</span>f (!response.ok) <span class="cstat-no" title="statement not covered" >throw new Error("Could not read your Outlook connection."); c</span></span>onst value = <span class="cstat-no" title="statement not covered" >await response.json() as StoredOutlookConnection | null; <span class="cstat-no" title="statement not covered" >i</span>f (!value?.encrypted) <span class="cstat-no" title="statement not covered" >return null; <span class="cstat-no" title="statement not covered" >r</span></span>eturn { ...value, calendars: Array.isArray(value.calendars) ? value.calendars.filter(<span class="fstat-no" title="function not covered" >(i</span>tem): item is OutlookCalendarChoice =&gt; <span class="cstat-no" title="statement not covered" >Boolean(item &amp;&amp; typeof item.id === "string" &amp;&amp; typeof item.name === "string")) : [</span>], selectedCalendarIds: Array.isArray(value.selectedCalendarIds) ? value.selectedCalendarIds.filter(<span class="fstat-no" title="function not covered" >(i</span>d): id is string =&gt; <span class="cstat-no" title="statement not covered" >typeof id === "string") : [</span>] }; }</span>
+export async function <span class="fstat-no" title="function not covered" >saveOutlookConnection(u</span>id: string, token: string, value: StoredOutlookConnection | null) { const response = <span class="cstat-no" title="statement not covered" >await fetch(url(uid, token), { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(value), cache: "no-store" }); <span class="cstat-no" title="statement not covered" >i</span>f (!response.ok) <span class="cstat-no" title="statement not covered" >throw new Error("Could not save your Outlook connection. Check your Firebase Database rules, then try again."); }</span></span>
+export async function <span class="fstat-no" title="function not covered" >refreshOutlookTokens(t</span>okens: OutlookTokens) { <span class="cstat-no" title="statement not covered" >if (tokens.expiry_date &gt; Date.now() + 60_000) <span class="cstat-no" title="statement not covered" >return tokens; <span class="cstat-no" title="statement not covered" >i</span></span>f (!tokens.refresh_token) <span class="cstat-no" title="statement not covered" >throw new Error("Your Outlook connection expired. Reconnect Outlook."); c</span></span>onst response = <span class="cstat-no" title="statement not covered" >await fetch(`https://login.microsoftonline.com/${outlookTenant()}/oauth2/v2.0/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: outlookClientId(), client_secret: required("MICROSOFT_OUTLOOK_CLIENT_SECRET"), refresh_token: tokens.refresh_token, grant_type: "refresh_token", scope: "offline_access Calendars.Read" }) }); c</span>onst body = <span class="cstat-no" title="statement not covered" >await response.json().catch(<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >n</span>ull); <span class="cstat-no" title="statement not covered" >i</span></span>f (!response.ok || !body?.access_token) <span class="cstat-no" title="statement not covered" >throw new Error(body?.error_description || "Your Outlook connection expired. Reconnect Outlook."); <span class="cstat-no" title="statement not covered" >r</span></span>eturn { access_token: body.access_token, refresh_token: body.refresh_token || tokens.refresh_token, expiry_date: Date.now() + Number(body.expires_in || 3600) * 1000 }; }</span>
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-07-29T16:46:52.339Z
+            </div>
+        <script src="../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../sorter.js"></script>
+        <script src="../block-navigation.js"></script>
+    </body>
+</html>
+    

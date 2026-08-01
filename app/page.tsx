@@ -39,7 +39,7 @@ import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrge
 import { getFileStorage } from "@/lib/fileStorage";
 import { NLTaskCreationModal } from "@/app/components/NLTaskCreationModal";
 import {
-  HubCollectionModal, LifeDashboard, SchoolClassPickerModal, SchoolDashboard, SchoolProfileModal,
+  HubCollectionModal, LifeDashboard, SchoolClassPickerModal, SchoolDashboard, SchoolProfileModal, WorkDashboard,
   emptyLifeHub, emptySchoolHub,
   type HubCollectionTarget, type LifeHubKey, type LifeHubState, type SchoolHubKey, type SchoolHubState,
 } from "@/app/components/OSDashboards";
@@ -55,7 +55,7 @@ import {
   BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils,
 } from "lucide-react";
 
-type View = "Life" | "School" | "Now" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
+type View = "Life" | "School" | "Work" | "Now" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
 type EnergyLevel = "Low" | "Medium" | "High";
 type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
 type AcademicItemType = "Assignment" | "Project" | "Exam" | "Quiz" | "Lab" | "Reading" | "Discussion";
@@ -75,8 +75,16 @@ type AmbientDraft = { title: string; spaceName?: string; sourceLabel?: string } 
 type WeeklyPlanItem = { id: string; text: string };
 type WeeklyPlan = { [dayOfWeek: number]: WeeklyPlanItem[] }; // 0=Sunday through 6=Saturday
 
+// Work OS Types
+type Client = { id: string; name: string; email: string; phone?: string; company?: string; rate?: number; currency?: string; color: string; status: "active" | "inactive" | "archived"; notes?: string; contactFrequency?: "weekly" | "biweekly" | "monthly" | "asNeeded"; lastInteraction?: string; preferredComm?: "email" | "phone" | "slack" | "meeting" };
+type Deliverable = { id: string; projectId: string; title: string; type: "document" | "code" | "design" | "presentation" | "analysis" | "other"; dueDate: string; status: "planned" | "in_progress" | "review" | "approved" | "delivered" | "canceled"; description?: string; assignee?: string; reviewedBy?: string; deliveredDate?: string; notes?: string };
+type WorkMeeting = { id: string; title: string; start: string; end?: string; clientId?: string; projectId?: string; attendees: string[]; agenda?: string; notes?: string; outcome?: string; meetingType: "standup" | "client" | "review" | "planning" | "retrospective" | "other" };
+type TimeLog = { id: string; taskId?: number; projectId?: string; deliverableId?: string; clientId?: string; date: string; duration: number; type: "work" | "meeting" | "admin" | "learning"; billable: boolean; notes?: string };
+type ProfessionalGoal = { id: string; title: string; category: "skill" | "career" | "financial" | "project" | "leadership"; timeframe: "3-month" | "6-month" | "1-year" | "3-year" | "5-year"; status: "active" | "completed" | "paused"; progress: number; keyResults?: string[]; notes?: string; createdAt: string; completedAt?: string };
+type WorkHubState = { clients: Client[]; deliverables: Deliverable[]; meetings: WorkMeeting[]; goals: ProfessionalGoal[]; timeLogs: TimeLog[] };
+
 const routedViews: Record<string, View> = {
-  life: "Life", school: "School",
+  life: "Life", school: "School", work: "Work",
   now: "Now", dashboard: "Life", today: "Calendar", calendar: "Calendar", spaces: "Spaces",
   library: "Library", notes: "Library", resources: "Library", brain: "Library", knowledge: "Library",
   settings: "Settings", tasks: "Tasks",
@@ -109,7 +117,7 @@ type SettingsState = {
 const projectIcons: Record<ProjectIcon, typeof Home> = { Zap, Aperture, Sparkles, FileText, UserRound, FolderKanban, BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, BookOpen };
 
 const nav: { name: View; icon: typeof Home }[] = [
-  { name: "Now", icon: TimerReset }, { name: "Life", icon: Home }, { name: "Tasks", icon: CheckCircle2 },
+  { name: "Now", icon: TimerReset }, { name: "Life", icon: Home }, { name: "Work", icon: BriefcaseBusiness }, { name: "Tasks", icon: CheckCircle2 },
   { name: "Calendar", icon: CalendarDays }, { name: "School", icon: GraduationCap },
   { name: "Library", icon: Library },
 ];
@@ -402,6 +410,8 @@ export default function LifeOS() {
   const [lifeHubHydrated, setLifeHubHydrated] = useState(false);
   const [schoolHub, setSchoolHub] = useState<SchoolHubState>(emptySchoolHub);
   const [schoolHubHydrated, setSchoolHubHydrated] = useState(false);
+  const [workHub, setWorkHub] = useState<WorkHubState>({ clients: [], deliverables: [], meetings: [], goals: [], timeLogs: [] });
+  const [workHubHydrated, setWorkHubHydrated] = useState(false);
   const [hubCollection, setHubCollection] = useState<HubCollectionTarget | null>(null);
   const [schoolProfileOpen, setSchoolProfileOpen] = useState(false);
   const [schoolClassAction, setSchoolClassAction] = useState<"coursework" | "lecture" | null>(null);
@@ -1523,9 +1533,10 @@ export default function LifeOS() {
           </div>
         </header>
         <AnimatePresence mode="wait">
-          <motion.div key={view} className={`page ${view === "Life" || view === "School" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
+          <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Work" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
             {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarEvents} life={lifeHub} workspaceName={workspaceName} onComplete={complete} onOpenTask={setTaskPageId} onOpenProject={(name) => { setSpacesFilter("Projects"); setSelectedClassId(null); setSelectedProjectName(name); setView("Spaces"); }} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => { setSpacesFilter("Projects"); setSelectedClassId(null); setSelectedProjectName(null); setView("Spaces"); }} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} onOpenCollection={(key: LifeHubKey, startAdd) => setHubCollection({ scope: "life", key, startAdd })} onToggleHabit={(id) => { const today = toDateKey(new Date()); setLifeHub(current => ({ ...current, habits: current.habits.map(habit => { if (habit.id !== id) return habit; const dates = habit.completedDates ?? []; return { ...habit, completedDates: dates.includes(today) ? dates.filter(date => date !== today) : [...dates, today] }; }) })); }} />}
             {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} onComplete={complete} onOpenTask={setTaskPageId} onOpenClass={(id) => { setSelectedProjectName(null); setSelectedClassId(id); setView("Spaces"); }} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={openFocus} />}
+            {view === "Work" && <WorkDashboard tasks={tasks} events={calendarEvents} workHub={workHub} onOpenTask={setTaskPageId} onNewTask={() => setComposer("task")} onOpenEvent={(id) => setEditingCalendarEventId(id)} />}
             {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarEvents} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onSetEnergy={(currentEnergy) => setSettingsState(current => ({ ...current, currentEnergy }))} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={setTaskPageId} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={(name) => { const context = settingsState.spaceContext?.[`project:${name}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`project:${name}`]: { ...current.spaceContext?.[`project:${name}`], updatedAt: new Date().toISOString() } } })); setSelectedClassId(null); setSelectedProjectName(name); }} onOpenClass={(id) => { const context = settingsState.spaceContext?.[`class:${id}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`class:${id}`]: { ...current.spaceContext?.[`class:${id}`], updatedAt: new Date().toISOString() } } })); setSelectedProjectName(null); setSelectedClassId(id); }} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={(id) => { const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); setTaskPageId(id); }} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
             {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={setTaskPageId} />}
@@ -1536,7 +1547,7 @@ export default function LifeOS() {
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} />}
             {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} onLogout={handleLogout} />}
             {view === "Settings" && <CalendarConnections user={user} flash={flash} />}
-            {!["Life", "School", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
+            {!["Life", "School", "Work", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
         </AnimatePresence>
         </>}
@@ -1621,6 +1632,10 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     { shortcut: '/proj', label: 'Add project', desc: 'Start a new project' },
     { shortcut: '/asg', label: 'Add assignment', desc: 'School mode only' },
     { shortcut: '/note', label: 'Add note', desc: 'Capture a quick note' },
+    { shortcut: '/w task', label: 'Work task', desc: 'Add a work task' },
+    { shortcut: '/w client', label: 'Add client', desc: 'Register a new client' },
+    { shortcut: '/w deliver', label: 'Deliverable', desc: 'Track a work deliverable' },
+    { shortcut: '/w meet', label: 'Schedule meeting', desc: 'Add a work meeting' },
   ];
   const filtered = captureInput.startsWith('/') ? commands.filter(c => c.shortcut.includes(captureInput.split(' ')[0])) : [];
   const handleCaptureKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -1647,6 +1662,24 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           alert('Assignment creation coming soon (School mode)');
         } else if (val.startsWith('/note ')) {
           alert('Note creation coming soon');
+        } else if (val.startsWith('/w task ')) {
+          const taskTitle = val.slice(7);
+          const newId = Math.max(...tasks.map(t => t.id), 0) + 1;
+          onChoose(newId);
+        } else if (val.startsWith('/w client ')) {
+          const clientName = val.slice(9);
+          const newClient: Client = {
+            id: `client-${Date.now()}`,
+            name: clientName || 'New Client',
+            email: '',
+            color: '#625af6',
+            status: 'active'
+          };
+          setWorkHub(current => ({ ...current, clients: [...current.clients, newClient] }));
+        } else if (val.startsWith('/w deliver ')) {
+          alert('Deliverable tracking coming soon');
+        } else if (val.startsWith('/w meet ')) {
+          alert('Meeting scheduling coming soon');
         } else {
           onStartAmbient();
         }
