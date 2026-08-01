@@ -5,7 +5,7 @@ import {
   Activity, Archive, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight,
   Clock3, Database, ExternalLink, FileText, FolderKanban, GraduationCap, Image,
   Library, Link2, ListTodo, Map, NotebookPen, Plus, Search,
-  Target, Trash2, UserRound, Users, Utensils, X, BriefcaseBusiness, Users2,
+  Target, Trash2, UserRound, Users, Utensils, X, BriefcaseBusiness,
 } from "lucide-react";
 import { getCountdownText, getUrgencyColor } from "@/lib/helpers";
 
