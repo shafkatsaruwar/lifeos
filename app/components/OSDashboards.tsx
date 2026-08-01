@@ -287,7 +287,7 @@ export function WorkDashboard({ workHub, workView, onChangeView }: {
         {workHub.meetings.length ? workHub.meetings.sort((a, b) => a.start.localeCompare(b.start)).map(meet => (
           <div key={meet.id} style={{ background: "rgba(255,255,255,0.05)", padding: "12px", borderRadius: "6px", marginBottom: "8px", fontSize: "13px" }}>
             <div style={{ fontWeight: "500" }}>{meet.title}</div>
-            <div style={{ fontSize: "12px", opacity: 0.6", marginTop: "4px" }}>{meet.start} {meet.type ? `· ${meet.type}` : ""}</div>
+            <div style={{ fontSize: "12px", opacity: 0.6, marginTop: "4px" }}>{meet.start} {meet.type ? `· ${meet.type}` : ""}</div>
           </div>
         )) : <Empty>No meetings scheduled.</Empty>}
       </div>
