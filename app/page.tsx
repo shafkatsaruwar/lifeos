@@ -1630,9 +1630,8 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       } else if (val) {
         if (val.startsWith('/t ')) {
           const taskTitle = val.slice(3);
-          const newTask: Task = { id: Math.max(...tasks.map(t => t.id), 0) + 1, title: taskTitle, project: '', color: '#625af6', due: '', priority: 'Medium', focusMinutes: 25, energy: 'Medium' };
-          onComplete(-1);
-          onChoose(newTask.id);
+          const newId = Math.max(...tasks.map(t => t.id), 0) + 1;
+          onChoose(newId);
         } else if (val.startsWith('/proj ')) {
           alert('Project creation coming soon');
         } else if (val.startsWith('/asg ')) {
