@@ -516,7 +516,8 @@ export default function LifeOS() {
 
   const systemNotifiedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (typeof window === "undefined" || !settingsState.calendarAlerts || Notification.permission !== "granted") return;
+    // iOS Safari (and some WebViews) have no Notification global — guard before touching it.
+    if (typeof window === "undefined" || !("Notification" in window) || !settingsState.calendarAlerts || Notification.permission !== "granted") return;
     visibleNotifications
       .filter(item => (item.kind === "meeting" || item.kind === "event") && isBannerCandidate(item))
       .forEach(item => {
@@ -530,7 +531,7 @@ export default function LifeOS() {
   }, [visibleNotifications, settingsState.calendarAlerts]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !settingsState.focusReminders || Notification.permission !== "granted") return;
+    if (typeof window === "undefined" || !("Notification" in window) || !settingsState.focusReminders || Notification.permission !== "granted") return;
     visibleNotifications
       .filter(item => item.kind === "task" && (item.urgency === "overdue" || item.urgency === "today"))
       .slice(0, 5)
