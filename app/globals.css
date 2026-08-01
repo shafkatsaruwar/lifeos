@@ -242,3 +242,87 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .work-task-copy:hover strong{color:var(--accent)}
 .work-kanban-task-main{display:grid;gap:4px;width:100%;border:0;background:transparent;padding:0;text-align:left;cursor:pointer;color:inherit;font:inherit}
 .work-kanban-task-main:hover strong{color:var(--accent)}
+
+/* Create-space modal: keep Create reachable on short / zoomed viewports */
+.modal-layer.space-modal-layer{
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+  overflow-y:auto;
+  box-sizing:border-box;
+}
+.create-modal.space-modal{
+  width:min(620px,calc(100vw - 32px));
+  max-height:calc(100vh - 32px);
+  max-height:calc(100dvh - 32px);
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  padding-bottom:14px;
+}
+.space-modal .capture-head{flex:0 0 auto}
+.space-modal-body{
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  padding-right:2px;
+}
+.space-modal-body>label{
+  display:block;
+  margin:16px 0 7px;
+  color:var(--muted);
+  font-size:9px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.space-modal-body>input,
+.space-modal-body>select{
+  width:100%;
+  height:43px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:var(--canvas);
+  padding:0 12px;
+  outline:0;
+  color:var(--ink);
+}
+.space-modal-body>input:focus,
+.space-modal-body>select:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent);
+}
+.space-modal-body>textarea{
+  width:100%;
+  min-height:64px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:var(--canvas);
+  color:var(--ink);
+  padding:10px;
+  resize:vertical;
+  outline:0;
+}
+.space-modal-body>textarea:focus{border-color:var(--accent)}
+.space-modal .space-kind-picker{margin:14px 0}
+.space-modal .create-actions{
+  flex:0 0 auto;
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid var(--line);
+  background:var(--panel);
+}
+@media(max-height:820px){
+  .space-modal .space-kind-picker{margin:8px 0;gap:6px}
+  .space-modal .space-kind-picker>button{min-height:52px;padding:8px}
+  .space-modal .project-icon-picker{margin:4px 0 8px;gap:5px}
+  .space-modal .project-icon-picker button{min-height:44px;padding:5px}
+  .space-modal-body>label{margin:10px 0 5px}
+  .space-modal-body>textarea{min-height:48px}
+  .space-modal-body>input,.space-modal-body>select{height:38px}
+}
+@media(max-width:680px){
+  .create-modal.space-modal{width:calc(100vw - 20px);max-height:calc(100dvh - 20px)}
+  .modal-layer.space-modal-layer{padding:10px}
+}
