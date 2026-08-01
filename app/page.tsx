@@ -1680,7 +1680,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
                 <p>Use keyboard shortcuts for faster navigation. Hover over elements to learn more.</p>
               </div>
             </div>
-            <button className="onboarding-button" onClick={closeOnboarding}>Let's go!</button>
+            <button className="onboarding-button" onClick={closeOnboarding}>Let&apos;s go!</button>
           </div>
         </div>
       </div>
