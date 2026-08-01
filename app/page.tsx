@@ -1663,14 +1663,16 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           <input type="text" placeholder="Type / for commands" value={captureInput} onChange={(e) => { setCaptureInput(e.currentTarget.value); setSuggestedCommandIndex(-1); }} onKeyDown={handleCaptureKeyDown} />
           <span className="capture-hint">/t task • /proj project • /asg assignment</span>
         </section>
-        {filtered.length > 0 && (
+        {filtered.length > 0 ? (
           <div className="capture-suggestions">
-            {filtered.map((cmd, idx) => {
-              const isSelected = idx === suggestedCommandIndex;
-              return <button key={cmd.shortcut} className={isSelected ? ‘suggested’ : ‘’} onClick={() => { setCaptureInput(cmd.shortcut + ‘ ‘); setSuggestedCommandIndex(-1); }}><strong>{cmd.shortcut}</strong><span>{cmd.desc}</span></button>;
-            })}
+            {filtered.map((cmd, idx) => (
+              <button key={cmd.shortcut} className={idx === suggestedCommandIndex ? "suggested" : ""} onClick={() => { setCaptureInput(cmd.shortcut + " "); setSuggestedCommandIndex(-1); }}>
+                <strong>{cmd.shortcut}</strong>
+                <span>{cmd.desc}</span>
+              </button>
+            ))}
           </div>
-        )}
+        ) : null}
       </div>
     )}
     <div className="now-layout">
