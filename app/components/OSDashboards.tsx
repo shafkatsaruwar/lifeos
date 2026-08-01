@@ -68,7 +68,7 @@ export const emptyLifeHub: LifeHubState = {
 };
 export const emptySchoolHub: SchoolHubState = { profile: {}, topics: [], professors: [], goals: [] };
 
-type DashboardTask = { id: number; title: string; project: string; color: string; due?: string; priority: string; classId?: string; academicType?: string; gradeWeight?: number; done?: boolean; canceled?: boolean };
+type DashboardTask = { id: number; title: string; project: string; color: string; due?: string; priority: string; classId?: string; academicType?: string; gradeWeight?: number; done?: boolean; canceled?: boolean; status?: string };
 type DashboardProject = { name: string; desc: string; progress: number; color: string; kind: "maintenance" | "finishable" };
 type DashboardClass = { id: string; code: string; name: string; term: string; instructor: string; color: string; archived?: boolean };
 type DashboardNote = { id: string; title: string; body: string; classId?: string; updatedAt: string };
@@ -308,7 +308,7 @@ export function SchoolDashboard({ tasks, classes, notes, school, schoolView: con
                 <span className="work-deliverable-icon"><FileText size={15} /></span>
                 <div><strong>{task.title}</strong><small>{courseFor(task.classId)?.code ?? "School"} · {task.academicType ?? "Assignment"} · {dueLabel(task.due, today)}</small></div>
               </button>
-            )) : <Empty>Nothing due this week. You're in good shape.</Empty>}
+            )) : <Empty>Nothing due this week. You are in good shape.</Empty>}
           </Section>
 
           <Section icon={LayoutGrid} title="Progress board" action="Open board" onAction={() => setSchoolView("board")}>
@@ -461,7 +461,7 @@ export function SchoolDashboard({ tasks, classes, notes, school, schoolView: con
                         {column.key !== "Not started" && <button type="button" onClick={() => setBoardStatus(task.id, "Not started")}>Not started</button>}
                         {column.key !== "In progress" && <button type="button" onClick={() => setBoardStatus(task.id, "In progress")}>Progress</button>}
                         {column.key !== "Blocked" && <button type="button" onClick={() => setBoardStatus(task.id, "Blocked")}>Block</button>}
-                        {column.key !== "Done" && <button type="button" onClick={() => setBoardStatus(task.id, "Done")}>Done</button>}
+                        <button type="button" onClick={() => setBoardStatus(task.id, "Done")}>Done</button>
                       </div>
                     )}
                   </article>
