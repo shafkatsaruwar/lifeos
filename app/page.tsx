@@ -127,11 +127,11 @@ const projectIcons: Record<ProjectIcon, typeof Home> = { Zap, Aperture, Sparkles
 const nav: { category?: string; name: View; icon: typeof Home }[] = [
   { name: "Now", icon: TimerReset },
   { category: "ENVIRONMENTS", name: "Life", icon: Home },
-  { name: "Work", icon: BriefcaseBusiness },
-  { name: "School", icon: GraduationCap },
+  { category: "ENVIRONMENTS", name: "Work", icon: BriefcaseBusiness },
+  { category: "ENVIRONMENTS", name: "School", icon: GraduationCap },
   { category: "NAVIGATION", name: "Tasks", icon: CheckCircle2 },
-  { name: "Calendar", icon: CalendarDays },
-  { name: "Library", icon: Library },
+  { category: "NAVIGATION", name: "Calendar", icon: CalendarDays },
+  { category: "NAVIGATION", name: "Library", icon: Library },
 ];
 
 const initialTasks: Task[] = [
@@ -635,11 +635,19 @@ export default function LifeOS() {
     const lifeTaskId = bridgeWorkTaskToLife(workTaskId);
     if (lifeTaskId) openFocus(lifeTaskId);
   }, [bridgeWorkTaskToLife, openFocus]);
+  const isEnvironmentEnabled = useCallback((name: View) => {
+    if (name === "Life" || name === "Dashboard") return settingsState.enableLifeOS !== false;
+    if (name === "Work") return settingsState.enableWorkOS !== false;
+    if (name === "School") return settingsState.enableSchoolOS !== false;
+    return true;
+  }, [settingsState.enableLifeOS, settingsState.enableSchoolOS, settingsState.enableWorkOS]);
+
   const go = useCallback((next: View) => {
-    const destination: View = next === "Dashboard" ? "Life" : ["Notes", "Resources", "Brain", "Knowledge"].includes(next) ? "Library" : next;
+    let destination: View = next === "Dashboard" ? "Life" : ["Notes", "Resources", "Brain", "Knowledge"].includes(next) ? "Library" : next;
+    if (!isEnvironmentEnabled(destination)) destination = "Now";
     if (destination === "Spaces") { setSelectedProjectName(null); setSelectedClassId(null); }
     setView(destination); setSidebar(false); if (destination === "Focus") setFocus(true);
-  }, []);
+  }, [isEnvironmentEnabled]);
   const openProjectSpace = useCallback((projectName: string, workProject?: WorkProject) => {
     setProjectItems(items => {
       if (items.some(project => project.name === projectName)) return items;
@@ -1747,8 +1755,15 @@ export default function LifeOS() {
 
   const activeTasks = useMemo(() => tasks.filter(task => !task.done && !task.canceled), [tasks]);
   const floatingFocusTask = useMemo(() => activeTasks.find(task => Boolean(task.focusSessionStarted) && getTaskFocusSeconds(task) > 0), [activeTasks]);
-  const filtered = useMemo(() => [...nav.map(n => n.name), ...projectItems.map(p => p.name), ...classes.map(item => item.code), ...notes.map(note => note.title), ...activeTasks.map(t => t.title)]
-    .filter(x => x.toLowerCase().includes(query.toLowerCase())), [activeTasks, classes, notes, projectItems, query]);
+  const visibleNav = useMemo(
+    () => nav.filter(item => isEnvironmentEnabled(item.name)),
+    [isEnvironmentEnabled],
+  );
+  useEffect(() => {
+    if (!isEnvironmentEnabled(view)) go("Now");
+  }, [view, isEnvironmentEnabled, go]);
+  const filtered = useMemo(() => [...visibleNav.map(n => n.name), ...projectItems.map(p => p.name), ...classes.map(item => item.code), ...notes.map(note => note.title), ...activeTasks.map(t => t.title)]
+    .filter(x => x.toLowerCase().includes(query.toLowerCase())), [activeTasks, classes, notes, projectItems, query, visibleNav]);
 
   if (authLoading) {
     return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0a0a0a', color: '#fff' }}>
@@ -1814,9 +1829,9 @@ export default function LifeOS() {
         <div className="brand"><div className="brand-mark"><span /><span /><span /></div><span>LifeOS</span></div>
         <button className="search-trigger" onClick={() => setPalette(true)}><Search size={15} /><span>Search anything</span><kbd>/</kbd><kbd>⌘ K</kbd></button>
         <nav>
-          {nav.map((item, idx) => {
+          {visibleNav.map((item, idx) => {
             const Icon = item.icon;
-            const showCategory = item.category && (idx === 0 || nav[idx - 1].category !== item.category);
+            const showCategory = Boolean(item.category && (idx === 0 || visibleNav[idx - 1].category !== item.category));
             return (
               <div key={item.name}>
                 {showCategory && <p className="nav-label">{item.category}</p>}
