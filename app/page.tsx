@@ -1666,16 +1666,18 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           const projName = val.slice(7).trim() || 'New Project';
           const newProj: WorkProject = { id: `proj-${Date.now()}`, name: projName, color: '#625af6', icon: 'FolderKanban', status: 'active', createdAt: new Date().toISOString() };
           onSetWorkHub((current: any) => ({ ...current, projects: [...current.projects, newProj] }));
-          flash(`Created project: ${projName}`);
+          setCaptureInput('');
         } else if (val.startsWith('/w deliver ')) {
-          alert('Select project first, then create deliverable');
+          alert('Create deliverable via Work dashboard');
+          setCaptureInput('');
         } else if (val.startsWith('/w task ')) {
-          alert('Select deliverable first, then create task');
+          alert('Create task via Work dashboard');
+          setCaptureInput('');
         } else if (val.startsWith('/w meet ')) {
           const meetTitle = val.slice(7).trim() || 'New Meeting';
           const newMeet: WorkMeeting = { id: `meet-${Date.now()}`, title: meetTitle, start: new Date().toISOString(), type: 'other', createdAt: new Date().toISOString() };
           onSetWorkHub((current: any) => ({ ...current, meetings: [...current.meetings, newMeet] }));
-          flash(`Created meeting: ${meetTitle}`);
+          setCaptureInput('');
         } else {
           onStartAmbient();
         }
