@@ -1582,6 +1582,11 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   const [handoff, setHandoff] = useState("");
   const [captureInput, setCaptureInput] = useState("");
   const [suggestedCommandIndex, setSuggestedCommandIndex] = useState(-1);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const seen = localStorage.getItem('lifeos-onboarding-seen');
+    return !seen;
+  });
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
   const today = toDateKey(new Date());
@@ -1606,6 +1611,10 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     if (current && handoff.trim()) onUpdateTask(current.id, { handoffNote: handoff.trim() });
     setHandoff("");
     onChoose(task.id);
+  };
+  const closeOnboarding = () => {
+    setShowOnboarding(false);
+    if (typeof window !== 'undefined') localStorage.setItem('lifeos-onboarding-seen', 'true');
   };
   const commands = [
     { shortcut: '/t', label: 'Add task', desc: 'Create a new task' },
@@ -1646,6 +1655,36 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     }
   };
   return <div className="now-view">
+    {showOnboarding && (
+      <div className="onboarding-overlay">
+        <div className="onboarding-modal">
+          <button className="onboarding-close" onClick={closeOnboarding}>✕</button>
+          <div className="onboarding-content">
+            <h2>Welcome to LifeOS</h2>
+            <p className="onboarding-subtitle">Your life, in focus.</p>
+            <div className="onboarding-tips">
+              <div className="tip">
+                <strong>📝 Capture Commands</strong>
+                <p>Type <code>/t</code> to add tasks, <code>/proj</code> for projects, <code>/asg</code> for assignments</p>
+              </div>
+              <div className="tip">
+                <strong>🎯 Current Task</strong>
+                <p>Click any task to focus on it. Your active task shows here with focus features.</p>
+              </div>
+              <div className="tip">
+                <strong>✨ LifeOS Copilot</strong>
+                <p>Your AI assistant suggests what to do next based on your priorities and context.</p>
+              </div>
+              <div className="tip">
+                <strong>⌨️ Quick Actions</strong>
+                <p>Use keyboard shortcuts for faster navigation. Hover over elements to learn more.</p>
+              </div>
+            </div>
+            <button className="onboarding-button" onClick={closeOnboarding}>Let's go!</button>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="page-title">
       <div><p className="eyebrow">One thing, on purpose</p><h1>Now</h1><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
       <div className="now-header-actions"><button onClick={onCapture}><Inbox size={16} /> Capture thought</button><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
@@ -1657,9 +1696,9 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       </section>
     ) : (
       <div className="capture-bar-wrapper">
-        <section className="capture-bar-section">
+        <section className="capture-bar-section" title="Capture commands: /t for tasks, /proj for projects, /asg for assignments">
           <span className="section-icon blue"><Command size={16} /></span>
-          <input type="text" placeholder="Type / for commands" value={captureInput} onChange={(e) => { setCaptureInput(e.currentTarget.value); setSuggestedCommandIndex(-1); }} onKeyDown={handleCaptureKeyDown} />
+          <input type="text" placeholder="Type / for commands" value={captureInput} onChange={(e) => { setCaptureInput(e.currentTarget.value); setSuggestedCommandIndex(-1); }} onKeyDown={handleCaptureKeyDown} title="Start typing / to see command suggestions" />
           <span className="capture-hint">/t task • /proj project • /asg assignment</span>
         </section>
         {filtered.length > 0 ? (
@@ -1675,7 +1714,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       </div>
     )}
     <div className="now-layout">
-      <section className="card now-current-card">
+      <section className="card now-current-card" title="Your focused task. Click any task to focus on it here.">
         <div className="card-head"><div><span className="section-icon violet"><Focus size={14} /></span><h2>Current task</h2></div>{current && <button className="text-button" onClick={() => onChoose(null)}>Clear</button>}</div>
         {current ? <div className="now-current-content">
           <span className="task-dot" style={{ background: current.color }} />
