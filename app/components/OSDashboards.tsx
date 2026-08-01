@@ -5,7 +5,7 @@ import {
   Activity, Archive, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight,
   Clock3, Database, ExternalLink, FileText, FolderKanban, GraduationCap, Image,
   Library, Link2, ListTodo, Map, NotebookPen, Plus, Search,
-  Target, Trash2, UserRound, Users, Utensils, X, BriefcaseBusiness,
+  Target, Trash2, UserRound, Users, Utensils, X, BriefcaseBusiness, Zap,
 } from "lucide-react";
 import { getCountdownText, getUrgencyColor } from "@/lib/helpers";
 
@@ -171,24 +171,142 @@ export function SchoolDashboard({ tasks, classes, notes, school, onComplete, onO
   </div>;
 }
 
-export function WorkDashboard({ tasks, events, workHub, onOpenTask, onNewTask, onOpenEvent }: {
-  tasks: DashboardTask[]; events: DashboardEvent[]; workHub: { clients: Array<{ id: string; name: string; color: string; status: string }>; deliverables: Array<{ id: string; title: string; dueDate: string; status: string }>; meetings: Array<{ id: string; title: string; start: string }>; timeLogs: any[]; goals: any[] };
-  onOpenTask: (id: number) => void; onNewTask: () => void; onOpenEvent: (id: string) => void;
+type WorkProjectType = { id: string; name: string; description?: string; color: string; icon: any; status: "active" | "completed" | "paused"; createdAt: string; completedAt?: string };
+type WorkDeliverableType = { id: string; projectId: string; title: string; description?: string; type: string; status: "planned" | "in_progress" | "review" | "approved" | "delivered" | "canceled"; priority: "high" | "medium" | "low"; dueDate: string; createdAt: string; completedAt?: string; notes?: string };
+type WorkTaskType = { id: string; deliverableId: string; title: string; description?: string; status: "open" | "in_progress" | "blocked" | "done"; priority: "high" | "medium" | "low"; dueDate?: string; tags?: string[]; dependsOn?: string[]; notes?: string; checklist?: string[]; checklistProgress?: boolean[]; createdAt: string; completedAt?: string };
+type WorkMeetingType = { id: string; title: string; description?: string; start: string; end?: string; type: string; projectId?: string; attendees?: string[]; location?: string; notes?: string; actionItems?: { text: string; done: boolean }[]; recurring?: string; createdAt: string };
+
+export function WorkDashboard({ workHub, workView, onChangeView }: {
+  workHub: { projects: WorkProjectType[]; deliverables: WorkDeliverableType[]; tasks: WorkTaskType[]; meetings: WorkMeetingType[] };
+  workView: "dashboard" | "kanban" | "list" | "calendar" | "deliverables";
+  onChangeView: (view: "dashboard" | "kanban" | "list" | "calendar" | "deliverables") => void;
 }) {
   const { today, end } = weekWindow();
-  const workTasks = tasks.filter(task => task.project !== "Inbox" && openTask(task) && (!task.due || (task.due >= today && task.due <= end))).sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
-  const deliverables = workHub.deliverables.filter(d => d.status !== "delivered" && d.status !== "canceled").sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 5);
-  const meetings = workHub.meetings.filter(m => m.start >= today).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 3);
-  const activeClients = workHub.clients.filter(c => c.status === "active");
+  const activeProjects = workHub.projects.filter(p => p.status === "active");
+  const activeTasks = workHub.tasks.filter(t => t.status !== "done");
+  const blockedTasks = activeTasks.filter(t => t.status === "blocked");
+  const deliverablesDue = workHub.deliverables.filter(d => d.status !== "delivered" && d.status !== "canceled" && d.dueDate >= today && d.dueDate <= end).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const todayMeetings = workHub.meetings.filter(m => m.start.slice(0, 10) === today).sort((a, b) => a.start.localeCompare(b.start));
+
   return <div className="os-dashboard work-dashboard">
-    <div className="os-hero"><div><p className="eyebrow">Professional focus</p><h1>WorkOS</h1><p>{activeClients.length} active client{activeClients.length === 1 ? "" : "s"} · {deliverables.length} deliverable{deliverables.length === 1 ? "" : "s"} in progress</p></div></div>
-    <div className="os-quick-row"><QuickAction icon={ListTodo} label="Work task" onClick={onNewTask} /><QuickAction icon={BriefcaseBusiness} label="Add client" onClick={() => alert('Add client form coming soon')} /><QuickAction icon={FileText} label="Deliverable" onClick={() => alert('Deliverable tracking coming soon')} /><QuickAction icon={Clock3} label="Schedule meeting" onClick={() => alert('Meeting scheduler coming soon')} /></div>
-    <div className="os-work-layout"><div className="os-work-main">
-      <Section icon={FileText} title="This week's deliverables" action="Add" onAction={onNewTask}>{deliverables.length ? <div className="os-deliverables-strip">{deliverables.map(del => <div key={del.id} className="os-deliverable-card" style={{ borderLeftColor: "#625af6" }}><strong>{del.title}</strong><small>{friendlyDate(del.dueDate)} · {del.status}</small></div>)}</div> : <Empty>No deliverables tracked yet. Add work projects to start.</Empty>}</Section>
-      <div className="os-two-up"><Section icon={ListTodo} title="Work tasks" action="Add" onAction={onNewTask}>{workTasks.length ? workTasks.slice(0, 5).map(task => <Row key={task.id} icon={ListTodo} title={task.title} meta={`${friendlyDate(task.due)} · ${task.priority}`} onClick={() => onOpenTask(task.id)} onComplete={() => alert('Mark complete from Work view coming soon')} />) : <Empty>Work tasks appear here. Create one with /w task.</Empty>}</Section><Section icon={Clock3} title="Today's meetings" action="Add" onAction={onNewTask}>{meetings.length ? meetings.slice(0, 5).map(meet => <Row key={meet.id} icon={Clock3} title={meet.title} meta={friendlyDate(meet.start)} onClick={() => onOpenEvent(meet.id)} />) : <Empty>No meetings scheduled yet.</Empty>}</Section></div>
-    </div><aside>
-      <Section icon={Users} title="Active clients"><div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>{activeClients.length ? activeClients.slice(0, 5).map(client => <div key={client.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px", borderRadius: "6px", background: "rgba(255,255,255,0.05)" }}><div style={{ width: "24px", height: "24px", borderRadius: "4px", background: client.color, opacity: 0.7 }} /><span style={{ fontSize: "13px", fontWeight: "500" }}>{client.name}</span></div>) : <Empty>Add your first client with /w client.</Empty>}</div></Section>
-    </aside></div>
+    <div className="os-hero"><div><p className="eyebrow">Your work, in focus</p><h1>WorkOS</h1><p>{activeProjects.length} project{activeProjects.length === 1 ? "" : "s"} · {activeTasks.length} active task{activeTasks.length === 1 ? "" : "s"} · {blockedTasks.length} blocked</p></div></div>
+
+    <div className="os-quick-row">
+      <QuickAction icon={FolderKanban} label="New project" onClick={() => alert('Create project via /w proj')} />
+      <QuickAction icon={FileText} label="New deliverable" onClick={() => alert('Create deliverable via /w deliver')} />
+      <QuickAction icon={ListTodo} label="New task" onClick={() => alert('Create task via /w task')} />
+      <QuickAction icon={Clock3} label="Schedule meeting" onClick={() => alert('Schedule via /w meet')} />
+    </div>
+
+    {workView === "dashboard" && (
+      <div className="os-work-layout">
+        <div className="os-work-main">
+          <Section icon={Zap} title="Active tasks" action="View all" onAction={() => onChangeView("kanban")}>
+            {activeTasks.length ? activeTasks.slice(0, 5).map(task => {
+              const deliverable = workHub.deliverables.find(d => d.id === task.deliverableId);
+              const project = workHub.projects.find(p => p.id === deliverable?.projectId);
+              return <Row key={task.id} icon={ListTodo} title={task.title} meta={`${project?.name ?? 'Project'} · ${task.priority}`} />;
+            }) : <Empty>No active tasks. Create one with /w task.</Empty>}
+          </Section>
+          <div className="os-two-up">
+            <Section icon={FileText} title="Deliverables due" action="View" onAction={() => onChangeView("deliverables")}>
+              {deliverablesDue.length ? deliverablesDue.slice(0, 5).map(del => <Row key={del.id} icon={FileText} title={del.title} meta={`${friendlyDate(del.dueDate)} · ${del.status}`} />) : <Empty>No deliverables due this week.</Empty>}
+            </Section>
+            <Section icon={Clock3} title="Today's meetings" action="View" onAction={() => onChangeView("calendar")}>
+              {todayMeetings.length ? todayMeetings.slice(0, 5).map(meet => <Row key={meet.id} icon={Clock3} title={meet.title} meta={meet.start.slice(11, 16)} />) : <Empty>No meetings scheduled today.</Empty>}
+            </Section>
+          </div>
+        </div>
+        <aside>
+          <Section icon={FolderKanban} title="Active projects">
+            {activeProjects.length ? <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>{activeProjects.slice(0, 5).map(proj => <div key={proj.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px", borderRadius: "6px", background: "rgba(255,255,255,0.05)" }}><div style={{ width: "24px", height: "24px", borderRadius: "4px", background: proj.color, opacity: 0.7 }} /><span style={{ fontSize: "13px", fontWeight: "500" }}>{proj.name}</span></div>)}</div> : <Empty>Create your first project with /w proj.</Empty>}
+          </Section>
+          <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
+            {["dashboard", "kanban", "list", "calendar", "deliverables"].map(view => (
+              <button key={view} onClick={() => onChangeView(view as any)} style={{ padding: "6px 12px", fontSize: "12px", background: workView === view ? "#625af6" : "rgba(255,255,255,0.1)", border: "1px solid #625af6", borderRadius: "4px", color: "#fff", cursor: "pointer", textTransform: "capitalize" }}>
+                {view}
+              </button>
+            ))}
+          </div>
+        </aside>
+      </div>
+    )}
+
+    {workView === "kanban" && (
+      <div className="os-kanban-board" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", padding: "16px 0" }}>
+        {(["open", "in_progress", "blocked", "done"] as const).map(status => (
+          <div key={status} style={{ background: "rgba(255,255,255,0.05)", borderRadius: "8px", padding: "12px", minHeight: "400px" }}>
+            <h3 style={{ fontSize: "13px", fontWeight: "600", textTransform: "capitalize", marginBottom: "12px", opacity: 0.7 }}>{status.replace("_", " ")}</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {workHub.tasks.filter(t => t.status === status).map(task => (
+                <div key={task.id} style={{ background: "rgba(255,255,255,0.08)", padding: "10px", borderRadius: "6px", fontSize: "12px", cursor: "pointer", borderLeft: `3px solid ${task.priority === "high" ? "#ff6b6b" : task.priority === "medium" ? "#ffa500" : "#4a90e2"}` }}>
+                  <div style={{ fontWeight: "500" }}>{task.title}</div>
+                  <div style={{ fontSize: "11px", opacity: 0.6, marginTop: "4px" }}>{task.priority}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+
+    {workView === "list" && (
+      <div style={{ marginTop: "16px" }}>
+        <table style={{ width: "100%", fontSize: "13px", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+              <th style={{ textAlign: "left", padding: "8px", fontWeight: "600" }}>Task</th>
+              <th style={{ textAlign: "left", padding: "8px", fontWeight: "600" }}>Project</th>
+              <th style={{ textAlign: "left", padding: "8px", fontWeight: "600" }}>Status</th>
+              <th style={{ textAlign: "left", padding: "8px", fontWeight: "600" }}>Priority</th>
+              <th style={{ textAlign: "left", padding: "8px", fontWeight: "600" }}>Due</th>
+            </tr>
+          </thead>
+          <tbody>
+            {workHub.tasks.map(task => {
+              const deliverable = workHub.deliverables.find(d => d.id === task.deliverableId);
+              const project = workHub.projects.find(p => p.id === deliverable?.projectId);
+              return (
+                <tr key={task.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                  <td style={{ padding: "8px" }}>{task.title}</td>
+                  <td style={{ padding: "8px" }}>{project?.name}</td>
+                  <td style={{ padding: "8px", textTransform: "capitalize" }}>{task.status.replace("_", " ")}</td>
+                  <td style={{ padding: "8px", textTransform: "capitalize" }}>{task.priority}</td>
+                  <td style={{ padding: "8px" }}>{task.dueDate ? friendlyDate(task.dueDate) : "-"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    {workView === "calendar" && (
+      <div style={{ marginTop: "16px" }}>
+        <h3 style={{ marginBottom: "12px" }}>Meetings</h3>
+        {workHub.meetings.length ? workHub.meetings.sort((a, b) => a.start.localeCompare(b.start)).map(meet => (
+          <div key={meet.id} style={{ background: "rgba(255,255,255,0.05)", padding: "12px", borderRadius: "6px", marginBottom: "8px", fontSize: "13px" }}>
+            <div style={{ fontWeight: "500" }}>{meet.title}</div>
+            <div style={{ fontSize: "12px", opacity: 0.6", marginTop: "4px" }}>{meet.start} {meet.type ? `· ${meet.type}` : ""}</div>
+          </div>
+        )) : <Empty>No meetings scheduled.</Empty>}
+      </div>
+    )}
+
+    {workView === "deliverables" && (
+      <div style={{ marginTop: "16px" }}>
+        <h3 style={{ marginBottom: "12px" }}>Deliverables Timeline</h3>
+        {workHub.deliverables.length ? workHub.deliverables.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(del => {
+          const project = workHub.projects.find(p => p.id === del.projectId);
+          return (
+            <div key={del.id} style={{ background: "rgba(255,255,255,0.05)", padding: "12px", borderRadius: "6px", marginBottom: "8px", fontSize: "13px", borderLeft: `3px solid ${del.priority === "high" ? "#ff6b6b" : del.priority === "medium" ? "#ffa500" : "#4a90e2"}` }}>
+              <div style={{ fontWeight: "500" }}>{del.title}</div>
+              <div style={{ fontSize: "12px", opacity: 0.6, marginTop: "4px" }}>{project?.name} · {friendlyDate(del.dueDate)} · {del.status}</div>
+            </div>
+          );
+        }) : <Empty>No deliverables tracked.</Empty>}
+      </div>
+    )}
   </div>;
 }
 

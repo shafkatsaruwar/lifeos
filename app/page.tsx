@@ -75,13 +75,12 @@ type AmbientDraft = { title: string; spaceName?: string; sourceLabel?: string } 
 type WeeklyPlanItem = { id: string; text: string };
 type WeeklyPlan = { [dayOfWeek: number]: WeeklyPlanItem[] }; // 0=Sunday through 6=Saturday
 
-// Work OS Types
-type Client = { id: string; name: string; email: string; phone?: string; company?: string; rate?: number; currency?: string; color: string; status: "active" | "inactive" | "archived"; notes?: string; contactFrequency?: "weekly" | "biweekly" | "monthly" | "asNeeded"; lastInteraction?: string; preferredComm?: "email" | "phone" | "slack" | "meeting" };
-type Deliverable = { id: string; projectId: string; title: string; type: "document" | "code" | "design" | "presentation" | "analysis" | "other"; dueDate: string; status: "planned" | "in_progress" | "review" | "approved" | "delivered" | "canceled"; description?: string; assignee?: string; reviewedBy?: string; deliveredDate?: string; notes?: string };
-type WorkMeeting = { id: string; title: string; start: string; end?: string; clientId?: string; projectId?: string; attendees: string[]; agenda?: string; notes?: string; outcome?: string; meetingType: "standup" | "client" | "review" | "planning" | "retrospective" | "other" };
-type TimeLog = { id: string; taskId?: number; projectId?: string; deliverableId?: string; clientId?: string; date: string; duration: number; type: "work" | "meeting" | "admin" | "learning"; billable: boolean; notes?: string };
-type ProfessionalGoal = { id: string; title: string; category: "skill" | "career" | "financial" | "project" | "leadership"; timeframe: "3-month" | "6-month" | "1-year" | "3-year" | "5-year"; status: "active" | "completed" | "paused"; progress: number; keyResults?: string[]; notes?: string; createdAt: string; completedAt?: string };
-type WorkHubState = { clients: Client[]; deliverables: Deliverable[]; meetings: WorkMeeting[]; goals: ProfessionalGoal[]; timeLogs: TimeLog[] };
+// Work OS Types - Refactored Hierarchy: Project → Deliverable → Task
+type WorkProject = { id: string; name: string; description?: string; color: string; icon: ProjectIcon; status: "active" | "completed" | "paused"; createdAt: string; completedAt?: string };
+type WorkDeliverable = { id: string; projectId: string; title: string; description?: string; type: "document" | "code" | "design" | "presentation" | "analysis" | "other"; status: "planned" | "in_progress" | "review" | "approved" | "delivered" | "canceled"; priority: "high" | "medium" | "low"; dueDate: string; createdAt: string; completedAt?: string; notes?: string };
+type WorkTask = { id: string; deliverableId: string; title: string; description?: string; status: "open" | "in_progress" | "blocked" | "done"; priority: "high" | "medium" | "low"; dueDate?: string; tags?: string[]; dependsOn?: string[]; notes?: string; checklist?: string[]; checklistProgress?: boolean[]; createdAt: string; completedAt?: string };
+type WorkMeeting = { id: string; title: string; description?: string; start: string; end?: string; type: "standup" | "review" | "planning" | "retrospective" | "other"; projectId?: string; attendees?: string[]; location?: string; notes?: string; actionItems?: { text: string; done: boolean }[]; recurring?: "daily" | "weekly" | "biweekly" | "monthly"; createdAt: string };
+type WorkHubState = { projects: WorkProject[]; deliverables: WorkDeliverable[]; tasks: WorkTask[]; meetings: WorkMeeting[] };
 
 const routedViews: Record<string, View> = {
   life: "Life", school: "School", work: "Work",
@@ -410,8 +409,9 @@ export default function LifeOS() {
   const [lifeHubHydrated, setLifeHubHydrated] = useState(false);
   const [schoolHub, setSchoolHub] = useState<SchoolHubState>(emptySchoolHub);
   const [schoolHubHydrated, setSchoolHubHydrated] = useState(false);
-  const [workHub, setWorkHub] = useState<WorkHubState>({ clients: [], deliverables: [], meetings: [], goals: [], timeLogs: [] });
+  const [workHub, setWorkHub] = useState<WorkHubState>({ projects: [], deliverables: [], tasks: [], meetings: [] });
   const [workHubHydrated, setWorkHubHydrated] = useState(false);
+  const [workView, setWorkView] = useState<"dashboard" | "kanban" | "list" | "calendar" | "deliverables">("dashboard");
   const [hubCollection, setHubCollection] = useState<HubCollectionTarget | null>(null);
   const [schoolProfileOpen, setSchoolProfileOpen] = useState(false);
   const [schoolClassAction, setSchoolClassAction] = useState<"coursework" | "lecture" | null>(null);
@@ -1536,8 +1536,8 @@ export default function LifeOS() {
           <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Work" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
             {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarEvents} life={lifeHub} workspaceName={workspaceName} onComplete={complete} onOpenTask={setTaskPageId} onOpenProject={(name) => { setSpacesFilter("Projects"); setSelectedClassId(null); setSelectedProjectName(name); setView("Spaces"); }} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => { setSpacesFilter("Projects"); setSelectedClassId(null); setSelectedProjectName(null); setView("Spaces"); }} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} onOpenCollection={(key: LifeHubKey, startAdd) => setHubCollection({ scope: "life", key, startAdd })} onToggleHabit={(id) => { const today = toDateKey(new Date()); setLifeHub(current => ({ ...current, habits: current.habits.map(habit => { if (habit.id !== id) return habit; const dates = habit.completedDates ?? []; return { ...habit, completedDates: dates.includes(today) ? dates.filter(date => date !== today) : [...dates, today] }; }) })); }} />}
             {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} onComplete={complete} onOpenTask={setTaskPageId} onOpenClass={(id) => { setSelectedProjectName(null); setSelectedClassId(id); setView("Spaces"); }} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={openFocus} />}
-            {view === "Work" && <WorkDashboard tasks={tasks} events={calendarEvents} workHub={workHub} onOpenTask={setTaskPageId} onNewTask={() => setComposer("task")} onOpenEvent={(id) => setEditingCalendarEventId(id)} />}
-            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarEvents} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onSetEnergy={(currentEnergy) => setSettingsState(current => ({ ...current, currentEnergy }))} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={setTaskPageId} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onAddWorkClient={(name) => setWorkHub(current => ({ ...current, clients: [...current.clients, { id: `client-${Date.now()}`, name, email: '', color: '#625af6', status: 'active' }] }))} />}
+            {view === "Work" && <WorkDashboard workHub={workHub} workView={workView} onChangeView={setWorkView} />}
+            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarEvents} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onSetEnergy={(currentEnergy) => setSettingsState(current => ({ ...current, currentEnergy }))} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={setTaskPageId} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={(name) => { const context = settingsState.spaceContext?.[`project:${name}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`project:${name}`]: { ...current.spaceContext?.[`project:${name}`], updatedAt: new Date().toISOString() } } })); setSelectedClassId(null); setSelectedProjectName(name); }} onOpenClass={(id) => { const context = settingsState.spaceContext?.[`class:${id}`]; if (context?.lastTaskId) setActiveTaskId(context.lastTaskId); setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [`class:${id}`]: { ...current.spaceContext?.[`class:${id}`], updatedAt: new Date().toISOString() } } })); setSelectedProjectName(null); setSelectedClassId(id); }} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={(id) => { const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); setTaskPageId(id); }} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
             {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={setTaskPageId} />}
             {(view === "Today" || view === "Calendar") && <CalendarView events={[...calendarEvents, ...tasksToCalendarEvents(tasks)]} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => id.startsWith("task-") ? setTaskPageId(Number(id.slice(5))) : setEditingCalendarEventId(id)} onPlanTask={setEditingTaskId} />}
@@ -1589,7 +1589,7 @@ export default function LifeOS() {
   );
 }
 
-function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onSetEnergy, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onAddWorkClient }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onSetEnergy: (energy: EnergyLevel) => void; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onAddWorkClient: (name: string) => void }) {
+function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onSetEnergy, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onSetEnergy: (energy: EnergyLevel) => void; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void }) {
   const [handoff, setHandoff] = useState("");
   const [captureInput, setCaptureInput] = useState("");
   const [suggestedCommandIndex, setSuggestedCommandIndex] = useState(-1);
@@ -1632,10 +1632,10 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     { shortcut: '/proj', label: 'Add project', desc: 'Start a new project' },
     { shortcut: '/asg', label: 'Add assignment', desc: 'School mode only' },
     { shortcut: '/note', label: 'Add note', desc: 'Capture a quick note' },
+    { shortcut: '/w proj', label: 'Work project', desc: 'Start a work project' },
+    { shortcut: '/w deliver', label: 'Deliverable', desc: 'Add a work deliverable' },
     { shortcut: '/w task', label: 'Work task', desc: 'Add a work task' },
-    { shortcut: '/w client', label: 'Add client', desc: 'Register a new client' },
-    { shortcut: '/w deliver', label: 'Deliverable', desc: 'Track a work deliverable' },
-    { shortcut: '/w meet', label: 'Schedule meeting', desc: 'Add a work meeting' },
+    { shortcut: '/w meet', label: 'Schedule meeting', desc: 'Schedule a meeting' },
   ];
   const filtered = captureInput.startsWith('/') ? commands.filter(c => c.shortcut.includes(captureInput.split(' ')[0])) : [];
   const handleCaptureKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -1662,17 +1662,20 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           alert('Assignment creation coming soon (School mode)');
         } else if (val.startsWith('/note ')) {
           alert('Note creation coming soon');
-        } else if (val.startsWith('/w task ')) {
-          const taskTitle = val.slice(7);
-          const newId = Math.max(...tasks.map(t => t.id), 0) + 1;
-          onChoose(newId);
-        } else if (val.startsWith('/w client ')) {
-          const clientName = val.slice(9);
-          onAddWorkClient(clientName || 'New Client');
+        } else if (val.startsWith('/w proj ')) {
+          const projName = val.slice(7).trim() || 'New Project';
+          const newProj: WorkProject = { id: `proj-${Date.now()}`, name: projName, color: '#625af6', icon: 'FolderKanban', status: 'active', createdAt: new Date().toISOString() };
+          setWorkHub(current => ({ ...current, projects: [...current.projects, newProj] }));
+          flash(`Created project: ${projName}`);
         } else if (val.startsWith('/w deliver ')) {
-          alert('Deliverable tracking coming soon');
+          alert('Select project first, then create deliverable');
+        } else if (val.startsWith('/w task ')) {
+          alert('Select deliverable first, then create task');
         } else if (val.startsWith('/w meet ')) {
-          alert('Meeting scheduling coming soon');
+          const meetTitle = val.slice(7).trim() || 'New Meeting';
+          const newMeet: WorkMeeting = { id: `meet-${Date.now()}`, title: meetTitle, start: new Date().toISOString(), type: 'other', createdAt: new Date().toISOString() };
+          setWorkHub(current => ({ ...current, meetings: [...current.meetings, newMeet] }));
+          flash(`Created meeting: ${meetTitle}`);
         } else {
           onStartAmbient();
         }
