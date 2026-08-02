@@ -83,6 +83,11 @@ export const SettingsSchema = z.object({
     type: z.enum(['done', 'focus', 'capture']),
     title: z.string(),
   })).optional(),
+  showCaptureCommands: z.boolean().optional(),
+  enableLifeOS: z.boolean().optional(),
+  enableSchoolOS: z.boolean().optional(),
+  enableWorkOS: z.boolean().optional(),
+  preferredName: z.string().optional(),
 });
 
 export const ResourceSchema = z.object({
