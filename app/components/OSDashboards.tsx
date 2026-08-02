@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import {
-  Activity, Archive, ArrowLeft, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight,
+  Activity, Archive, ArrowLeft, Bell, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight,
   Clock3, Database, ExternalLink, FileText, FolderKanban, GraduationCap, Image,
-  Library, Link2, ListTodo, Map, NotebookPen, Plus, Search,
-  Target, Trash2, UserRound, Users, Utensils, X, BriefcaseBusiness, Zap, LayoutGrid,
+  Library, Link2, ListTodo, Map, MapPin, NotebookPen, Plus, Search,
+  Target, Trash2, UserRound, Users, Utensils, Video, X, BriefcaseBusiness, Zap, LayoutGrid,
 } from "lucide-react";
 import { getCountdownText, getUrgencyColor } from "@/lib/helpers";
 
@@ -521,8 +521,50 @@ export function SchoolDashboard({ tasks, classes, notes, school, schoolView: con
 export type WorkProject = { id: string; name: string; description?: string; color: string; icon?: string; status: "active" | "completed" | "paused"; createdAt: string; completedAt?: string };
 export type WorkDeliverable = { id: string; projectId: string; title: string; description?: string; type: "document" | "code" | "design" | "presentation" | "analysis" | "other"; status: "planned" | "in_progress" | "review" | "approved" | "delivered" | "canceled"; priority: "high" | "medium" | "low"; dueDate: string; createdAt: string; completedAt?: string; notes?: string };
 export type WorkTask = { id: string; deliverableId: string; title: string; description?: string; status: "open" | "in_progress" | "blocked" | "done"; priority: "high" | "medium" | "low"; dueDate?: string; tags?: string[]; dependsOn?: string[]; notes?: string; checklist?: string[]; checklistProgress?: boolean[]; createdAt: string; completedAt?: string; updatedAt?: string };
-export type WorkMeeting = { id: string; title: string; description?: string; start: string; end?: string; type: "standup" | "review" | "planning" | "retrospective" | "other"; projectId?: string; attendees?: string[]; location?: string; notes?: string; actionItems?: { text: string; done: boolean }[]; recurring?: "daily" | "weekly" | "biweekly" | "monthly"; createdAt: string };
+export type WorkMeetingFormat = "in_person" | "virtual" | "hybrid";
+/** Minutes before start — mirrors iOS Calendar alert presets. */
+export type WorkMeetingAlertMinutes = 0 | 5 | 10 | 15 | 30 | 60 | 120 | 1440 | 2880 | 10080;
+export type WorkMeeting = {
+  id: string;
+  title: string;
+  description?: string;
+  start: string;
+  end?: string;
+  allDay?: boolean;
+  type: "standup" | "review" | "planning" | "retrospective" | "other";
+  format?: WorkMeetingFormat;
+  location?: string;
+  virtualUrl?: string;
+  url?: string;
+  projectId?: string;
+  attendees?: string[];
+  notes?: string;
+  /** One or more alert offsets in minutes before the meeting starts. */
+  alerts?: WorkMeetingAlertMinutes[];
+  actionItems?: { text: string; done: boolean }[];
+  recurring?: "daily" | "weekly" | "biweekly" | "monthly";
+  createdAt: string;
+};
 export type WorkHubState = { projects: WorkProject[]; deliverables: WorkDeliverable[]; tasks: WorkTask[]; meetings: WorkMeeting[] };
+
+export const WORK_MEETING_ALERT_OPTIONS: { value: WorkMeetingAlertMinutes | "none"; label: string }[] = [
+  { value: "none", label: "None" },
+  { value: 0, label: "At time of event" },
+  { value: 5, label: "5 minutes before" },
+  { value: 10, label: "10 minutes before" },
+  { value: 15, label: "15 minutes before" },
+  { value: 30, label: "30 minutes before" },
+  { value: 60, label: "1 hour before" },
+  { value: 120, label: "2 hours before" },
+  { value: 1440, label: "1 day before" },
+  { value: 2880, label: "2 days before" },
+  { value: 10080, label: "1 week before" },
+];
+
+export function formatWorkMeetingWhere(meeting: Pick<WorkMeeting, "format" | "location" | "virtualUrl">) {
+  const formatLabel = meeting.format === "virtual" ? "Virtual" : meeting.format === "hybrid" ? "Hybrid" : meeting.format === "in_person" ? "In person" : null;
+  return [formatLabel, meeting.location, meeting.virtualUrl].filter(Boolean).join(" · ");
+}
 
 export const emptyWorkHub: WorkHubState = { projects: [], deliverables: [], tasks: [], meetings: [] };
 export type WorkView = "dashboard" | "tasks" | "projects" | "deliverables" | "kanban" | "calendar" | "activity";
@@ -595,7 +637,214 @@ const projectForTask = (hub: WorkHubState, task: WorkTask) => {
 
 type WorkCreateKind = "project" | "deliverable" | "task" | "meeting";
 
+const toLocalInputValue = (date: Date) => {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+function WorkMeetingModal({ hub, close, save }: { hub: WorkHubState; close: () => void; save: (hub: WorkHubState) => void }) {
+  const activeProjects = hub.projects.filter(item => item.status === "active");
+  const [title, setTitle] = useState("");
+  const [projectId, setProjectId] = useState(activeProjects[0]?.id ?? "");
+  const [type, setType] = useState<WorkMeeting["type"]>("other");
+  const [format, setFormat] = useState<WorkMeetingFormat>("in_person");
+  const [location, setLocation] = useState("");
+  const [virtualUrl, setVirtualUrl] = useState("");
+  const [url, setUrl] = useState("");
+  const [notes, setNotes] = useState("");
+  const [attendees, setAttendees] = useState("");
+  const [allDay, setAllDay] = useState(false);
+  const [alertPrimary, setAlertPrimary] = useState<WorkMeetingAlertMinutes | "none">(15);
+  const [alertSecondary, setAlertSecondary] = useState<WorkMeetingAlertMinutes | "none">("none");
+  const [start, setStart] = useState(() => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 30 - (now.getMinutes() % 30), 0, 0);
+    return toLocalInputValue(now);
+  });
+  const [end, setEnd] = useState(() => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 30 - (now.getMinutes() % 30) + 30, 0, 0);
+    return toLocalInputValue(now);
+  });
+
+  const rangeValid = allDay || !end || new Date(end).getTime() > new Date(start).getTime();
+  const needsLocation = format === "in_person" || format === "hybrid";
+  const needsLink = format === "virtual" || format === "hybrid";
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!title.trim() || !rangeValid) return;
+    const stamp = new Date().toISOString();
+    const alerts = [alertPrimary, alertSecondary]
+      .filter((value): value is WorkMeetingAlertMinutes => value !== "none")
+      .filter((value, index, list) => list.indexOf(value) === index);
+    const startIso = allDay ? `${start.slice(0, 10)}T09:00:00` : new Date(start).toISOString();
+    const endIso = allDay
+      ? `${(end || start).slice(0, 10)}T17:00:00`
+      : end ? new Date(end).toISOString() : undefined;
+    const meeting: WorkMeeting = {
+      id: `meet-${Date.now()}`,
+      title: title.trim(),
+      start: startIso,
+      end: endIso,
+      allDay,
+      type,
+      format,
+      location: needsLocation && location.trim() ? location.trim() : undefined,
+      virtualUrl: needsLink && virtualUrl.trim() ? virtualUrl.trim() : undefined,
+      url: url.trim() || undefined,
+      projectId: projectId || undefined,
+      attendees: attendees.split(",").map(item => item.trim()).filter(Boolean),
+      notes: notes.trim() || undefined,
+      alerts: alerts.length ? alerts : undefined,
+      createdAt: stamp,
+    };
+    save({ ...hub, meetings: [meeting, ...hub.meetings] });
+    close();
+  };
+
+  return (
+    <div className="modal-layer hub-modal-layer" onMouseDown={close}>
+      <form className="hub-profile-modal work-create-modal work-meeting-modal" onMouseDown={event => event.stopPropagation()} onSubmit={submit}>
+        <header>
+          <span><CalendarDays size={18} /></span>
+          <div>
+            <h2>New meeting</h2>
+            <p>Like an iOS Calendar event — time, place, and alerts.</p>
+          </div>
+          <button type="button" onClick={close} aria-label="Close"><X size={18} /></button>
+        </header>
+
+        <label>Title<input autoFocus value={title} onChange={event => setTitle(event.target.value)} placeholder="Q3 planning" /></label>
+
+        {activeProjects.length > 0 && (
+          <label>Project
+            <select value={projectId} onChange={event => setProjectId(event.target.value)}>
+              <option value="">No project</option>
+              {activeProjects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </label>
+        )}
+
+        <label className="work-meeting-toggle">
+          <input type="checkbox" checked={allDay} onChange={event => setAllDay(event.target.checked)} />
+          <span>All-day</span>
+        </label>
+
+        <div className="work-meeting-grid">
+          <label>Starts
+            <input
+              type={allDay ? "date" : "datetime-local"}
+              value={allDay ? start.slice(0, 10) : start}
+              onChange={event => {
+                const value = event.target.value;
+                setStart(allDay ? `${value}T09:00` : value);
+                if (!allDay && end <= value) {
+                  const next = new Date(value);
+                  next.setMinutes(next.getMinutes() + 30);
+                  setEnd(toLocalInputValue(next));
+                }
+              }}
+            />
+          </label>
+          <label>Ends
+            <input
+              type={allDay ? "date" : "datetime-local"}
+              value={allDay ? (end || start).slice(0, 10) : end}
+              min={allDay ? start.slice(0, 10) : start}
+              onChange={event => {
+                const value = event.target.value;
+                setEnd(allDay ? `${value}T17:00` : value);
+              }}
+            />
+          </label>
+        </div>
+        {!rangeValid && <p className="work-create-hint">End needs to be after the start.</p>}
+
+        <label>Meeting type
+          <select value={type} onChange={event => setType(event.target.value as WorkMeeting["type"])}>
+            <option value="other">Meeting</option>
+            <option value="standup">Standup</option>
+            <option value="planning">Planning</option>
+            <option value="review">Review</option>
+            <option value="retrospective">Retrospective</option>
+          </select>
+        </label>
+
+        <div className="work-meeting-format" role="group" aria-label="How you meet">
+          {([
+            { value: "in_person" as const, label: "In person", icon: MapPin },
+            { value: "virtual" as const, label: "Virtual", icon: Video },
+            { value: "hybrid" as const, label: "Hybrid", icon: Users },
+          ]).map(option => (
+            <button
+              key={option.value}
+              type="button"
+              className={format === option.value ? "selected" : ""}
+              onClick={() => setFormat(option.value)}
+            >
+              <option.icon size={15} />
+              <span>{option.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {needsLocation && (
+          <label>Location
+            <input value={location} onChange={event => setLocation(event.target.value)} placeholder="Office 4B, 123 Market St…" />
+          </label>
+        )}
+        {needsLink && (
+          <label>Video call URL
+            <input type="url" value={virtualUrl} onChange={event => setVirtualUrl(event.target.value)} placeholder="https://meet.google.com/…" />
+          </label>
+        )}
+
+        <div className="work-meeting-grid">
+          <label><span className="work-meeting-label-with-icon"><Bell size={12} /> Alert</span>
+            <select value={String(alertPrimary)} onChange={event => {
+              const value = event.target.value;
+              setAlertPrimary(value === "none" ? "none" : Number(value) as WorkMeetingAlertMinutes);
+            }}>
+              {WORK_MEETING_ALERT_OPTIONS.map(option => (
+                <option key={String(option.value)} value={String(option.value)}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <label>Second alert
+            <select value={String(alertSecondary)} onChange={event => {
+              const value = event.target.value;
+              setAlertSecondary(value === "none" ? "none" : Number(value) as WorkMeetingAlertMinutes);
+            }}>
+              {WORK_MEETING_ALERT_OPTIONS.map(option => (
+                <option key={`second-${String(option.value)}`} value={String(option.value)}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <label>Invitees
+          <input value={attendees} onChange={event => setAttendees(event.target.value)} placeholder="Alex, Sam, Jordan" />
+        </label>
+        <label>URL
+          <input type="url" value={url} onChange={event => setUrl(event.target.value)} placeholder="Optional agenda or doc link" />
+        </label>
+        <label>Notes
+          <textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="Agenda, dial-in details, what to bring…" />
+        </label>
+
+        <div>
+          <button type="button" onClick={close}>Cancel</button>
+          <button className="primary" disabled={!title.trim() || !rangeValid}>Add to Calendar</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function WorkCreateModal({ kind, hub, close, save }: { kind: WorkCreateKind; hub: WorkHubState; close: () => void; save: (hub: WorkHubState) => void }) {
+  if (kind === "meeting") return <WorkMeetingModal hub={hub} close={close} save={save} />;
+
   const activeProjects = hub.projects.filter(item => item.status === "active");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -603,12 +852,7 @@ function WorkCreateModal({ kind, hub, close, save }: { kind: WorkCreateKind; hub
   const [deliverableId, setDeliverableId] = useState(hub.deliverables.find(item => item.projectId === activeProjects[0]?.id)?.id ?? "");
   const [priority, setPriority] = useState<WorkTask["priority"]>("medium");
   const [dueDate, setDueDate] = useState(dateKey(new Date()));
-  const [start, setStart] = useState(() => {
-    const now = new Date();
-    now.setMinutes(now.getMinutes() + 30 - (now.getMinutes() % 30));
-    return now.toISOString().slice(0, 16);
-  });
-  const titles: Record<WorkCreateKind, string> = { project: "New project", deliverable: "New deliverable", task: "New task", meeting: "Schedule meeting" };
+  const titles: Record<Exclude<WorkCreateKind, "meeting">, string> = { project: "New project", deliverable: "New deliverable", task: "New task" };
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!name.trim()) return;
@@ -619,12 +863,10 @@ function WorkCreateModal({ kind, hub, close, save }: { kind: WorkCreateKind; hub
       save({ ...hub, deliverables: [{ id: `del-${Date.now()}`, projectId, title: name.trim(), type: "document", status: "planned", priority, dueDate, createdAt: stamp }, ...hub.deliverables] });
     } else if (kind === "task" && deliverableId) {
       save({ ...hub, tasks: [{ id: `task-${Date.now()}`, deliverableId, title: name.trim(), status: "open", priority, dueDate, createdAt: stamp, updatedAt: stamp }, ...hub.tasks] });
-    } else if (kind === "meeting") {
-      save({ ...hub, meetings: [{ id: `meet-${Date.now()}`, title: name.trim(), start: new Date(start).toISOString(), type: "other", projectId: projectId || undefined, createdAt: stamp }, ...hub.meetings] });
     }
     close();
   };
-  return <div className="modal-layer hub-modal-layer" onMouseDown={close}><form className="hub-profile-modal work-create-modal" onMouseDown={event => event.stopPropagation()} onSubmit={submit}><header><span><BriefcaseBusiness size={18} /></span><div><h2>{titles[kind]}</h2><p>Add it to WorkOS without leaving the dashboard.</p></div><button type="button" onClick={close}><X size={18} /></button></header><label>Title<input autoFocus value={name} onChange={event => setName(event.target.value)} placeholder={kind === "project" ? "WorkOS Redesign" : "Design landing page"} /></label>{kind === "project" && <label>Description<input value={description} onChange={event => setDescription(event.target.value)} placeholder="What is this project about?" /></label>}{(kind === "deliverable" || kind === "meeting") && activeProjects.length > 0 && <label>Project<select value={projectId} onChange={event => setProjectId(event.target.value)}>{activeProjects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}{kind === "task" && hub.deliverables.length > 0 && <label>Deliverable<select value={deliverableId} onChange={event => setDeliverableId(event.target.value)}>{hub.deliverables.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}{(kind === "deliverable" || kind === "task") && <><label>Priority<select value={priority} onChange={event => setPriority(event.target.value as WorkTask["priority"])}><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label><label>Due date<input type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} /></label></>}{kind === "meeting" && <label>Start<input type="datetime-local" value={start} onChange={event => setStart(event.target.value)} /></label>}{kind !== "project" && activeProjects.length === 0 && kind !== "meeting" && <p className="work-create-hint">Create a project first.</p>}{kind === "task" && hub.deliverables.length === 0 && <p className="work-create-hint">Create a deliverable first.</p>}<div><button type="button" onClick={close}>Cancel</button><button className="primary" disabled={!name.trim() || (kind === "deliverable" && !projectId) || (kind === "task" && !deliverableId)}>Save</button></div></form></div>;
+  return <div className="modal-layer hub-modal-layer" onMouseDown={close}><form className="hub-profile-modal work-create-modal" onMouseDown={event => event.stopPropagation()} onSubmit={submit}><header><span><BriefcaseBusiness size={18} /></span><div><h2>{titles[kind]}</h2><p>Add it to WorkOS without leaving the dashboard.</p></div><button type="button" onClick={close}><X size={18} /></button></header><label>Title<input autoFocus value={name} onChange={event => setName(event.target.value)} placeholder={kind === "project" ? "WorkOS Redesign" : "Design landing page"} /></label>{kind === "project" && <label>Description<input value={description} onChange={event => setDescription(event.target.value)} placeholder="What is this project about?" /></label>}{kind === "deliverable" && activeProjects.length > 0 && <label>Project<select value={projectId} onChange={event => setProjectId(event.target.value)}>{activeProjects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}{kind === "task" && hub.deliverables.length > 0 && <label>Deliverable<select value={deliverableId} onChange={event => setDeliverableId(event.target.value)}>{hub.deliverables.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}{(kind === "deliverable" || kind === "task") && <><label>Priority<select value={priority} onChange={event => setPriority(event.target.value as WorkTask["priority"])}><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label><label>Due date<input type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} /></label></>}{kind !== "project" && activeProjects.length === 0 && <p className="work-create-hint">Create a project first.</p>}{kind === "task" && hub.deliverables.length === 0 && <p className="work-create-hint">Create a deliverable first.</p>}<div><button type="button" onClick={close}>Cancel</button><button className="primary" disabled={!name.trim() || (kind === "deliverable" && !projectId) || (kind === "task" && !deliverableId)}>Save</button></div></form></div>;
 }
 
 function WorkTaskRow({ task, hub, today, onComplete, onOpen }: { task: WorkTask; hub: WorkHubState; today: string; onComplete: (id: string) => void; onOpen?: (id: string) => void }) {
@@ -811,12 +1053,15 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
         </Section>
 
         <Section icon={Clock3} title="Calendar & meetings" action="View calendar" onAction={() => setWorkView("calendar")}>
-          {todayMeetings.length ? todayMeetings.map(item => (
-            <button key={item.id} type="button" className="work-meeting-row" onClick={() => setWorkView("calendar")}>
-              <strong>{item.title}</strong>
-              <small>Today, {new Date(item.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small>
-            </button>
-          )) : <Empty>No meetings scheduled today.</Empty>}
+          {todayMeetings.length ? todayMeetings.map(item => {
+            const where = formatWorkMeetingWhere(item);
+            return (
+              <button key={item.id} type="button" className="work-meeting-row" onClick={() => setWorkView("calendar")}>
+                <strong>{item.title}</strong>
+                <small>Today, {new Date(item.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}{where ? ` · ${where}` : ""}</small>
+              </button>
+            );
+          }) : <Empty>No meetings scheduled today.</Empty>}
         </Section>
 
         <Section icon={Clock3} title="Recent activity" action="View all" onAction={() => setWorkView("activity")}>
@@ -920,12 +1165,21 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
         <WorkSubviewHeader title="Calendar & meetings" subtitle={`${upcomingMeetings.length} upcoming meeting${upcomingMeetings.length === 1 ? "" : "s"}`} />
         <div className="work-calendar-actions">{onOpenCalendar && <button type="button" onClick={onOpenCalendar}>Open full calendar</button>}</div>
         <Section icon={Clock3} title="Upcoming meetings">
-          {upcomingMeetings.length ? upcomingMeetings.map(item => (
-            <div key={item.id} className="work-meeting-row">
-              <strong>{item.title}</strong>
-              <small>{new Date(item.start).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}{item.start.slice(0, 10) === today ? " · Today" : ""}</small>
-            </div>
-          )) : <Empty>Schedule a meeting to keep work visible here.</Empty>}
+          {upcomingMeetings.length ? upcomingMeetings.map(item => {
+            const where = formatWorkMeetingWhere(item);
+            const project = workHub.projects.find(projectItem => projectItem.id === item.projectId);
+            return (
+              <div key={item.id} className="work-meeting-row">
+                <strong>{item.title}</strong>
+                <small>
+                  {new Date(item.start).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  {item.start.slice(0, 10) === today ? " · Today" : ""}
+                  {where ? ` · ${where}` : ""}
+                  {project ? ` · ${project.name}` : ""}
+                </small>
+              </div>
+            );
+          }) : <Empty>Schedule a meeting to keep work visible here.</Empty>}
         </Section>
       </>;
     }
