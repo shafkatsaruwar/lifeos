@@ -243,6 +243,97 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .work-kanban-task-main{display:grid;gap:4px;width:100%;border:0;background:transparent;padding:0;text-align:left;cursor:pointer;color:inherit;font:inherit}
 .work-kanban-task-main:hover strong{color:var(--accent)}
 
+/* WorkOS meeting composer — iOS Calendar-style fields */
+.work-meeting-modal{
+  width:min(520px,calc(100vw - 24px));
+  max-height:calc(100dvh - 24px);
+  overflow-y:auto;
+}
+.work-meeting-modal label{
+  display:grid;
+  gap:6px;
+  margin-top:10px;
+  color:var(--muted);
+  font-size:8px;
+  font-weight:750;
+  text-transform:uppercase;
+}
+.work-meeting-modal input,
+.work-meeting-modal select{
+  width:100%;
+  height:40px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:var(--panel);
+  padding:0 10px;
+  outline:0;
+  color:var(--ink);
+  font-size:11px;
+  text-transform:none;
+}
+.work-meeting-modal textarea{
+  width:100%;
+  min-height:72px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:var(--panel);
+  color:var(--ink);
+  padding:10px;
+  resize:vertical;
+  outline:0;
+  font:inherit;
+  font-size:11px;
+}
+.work-meeting-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-top:10px;
+}
+.work-meeting-grid>label{margin-top:0}
+.work-meeting-format{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:7px;
+  margin-top:12px;
+}
+.work-meeting-format>button{
+  min-height:54px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:var(--canvas);
+  color:var(--muted);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  font-size:9px;
+  font-weight:700;
+}
+.work-meeting-format>button.selected{
+  border-color:var(--accent);
+  color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 10%,var(--canvas));
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 10%,transparent);
+}
+.work-meeting-toggle{
+  margin-top:12px;
+  display:flex!important;
+  align-items:center;
+  gap:8px;
+  text-transform:none!important;
+  letter-spacing:0!important;
+  font-size:11px!important;
+  font-weight:600!important;
+  color:var(--ink)!important;
+}
+.work-meeting-toggle input{width:16px;height:16px;accent-color:var(--accent)}
+.work-meeting-label-with-icon{display:inline-flex;align-items:center;gap:5px}
+@media(max-width:520px){
+  .work-meeting-grid,.work-meeting-format{grid-template-columns:1fr}
+}
+
 /* Create-space modal: keep Create reachable on short / zoomed viewports */
 .modal-layer.space-modal-layer{
   align-items:center;

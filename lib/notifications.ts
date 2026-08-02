@@ -212,13 +212,17 @@ export function generateLifeOSNotifications(input: {
 
     input.workHub.meetings.forEach(meeting => {
       const startMs = atDateTime(meeting.start);
-      if (startMs < nowMs - 15 * 60_000 || startMs > soonLimit) return;
+      const alertMinutes = meeting.alerts?.length ? meeting.alerts : [120];
+      const earliestWindow = Math.max(...alertMinutes) * 60_000;
+      if (startMs < nowMs - 15 * 60_000 || startMs - earliestWindow > nowMs) return;
       const project = workProjectById(meeting.projectId);
+      const formatLabel = meeting.format === "virtual" ? "Virtual" : meeting.format === "hybrid" ? "Hybrid" : meeting.format === "in_person" ? "In person" : null;
+      const subtitle = [formatLabel, meeting.location, project?.name ?? "Meeting"].filter(Boolean).join(" · ");
 
       pushUnique(notifications, {
         id: `work-meeting-${meeting.id}`,
         title: meeting.title,
-        subtitle: project?.name ?? "Meeting",
+        subtitle,
         source: "work",
         kind: "meeting",
         urgency: startMs <= nowMs + 60 * 60_000 ? "today" : "soon",
