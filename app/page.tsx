@@ -50,7 +50,7 @@ import {
 import { NLTaskCreationModal } from "@/app/components/NLTaskCreationModal";
 import {
   HubCollectionModal, LifeDashboard, SchoolClassPickerModal, SchoolDashboard, SchoolProfileModal, WorkDashboard,
-  emptyLifeHub, emptySchoolHub, emptyWorkHub, createSampleWorkHub,
+  emptyLifeHub, emptySchoolHub, emptyWorkHub, isSampleWorkHub,
   type HubCollectionTarget, type LifeHubKey, type LifeHubState, type SchoolHubKey, type SchoolHubState,
   type WorkHubState, type WorkProject, type WorkDeliverable, type WorkTask, type WorkMeeting, type WorkView, type SchoolView,
 } from "@/app/components/OSDashboards";
@@ -489,19 +489,24 @@ export default function LifeOS() {
     const key = task.classId ? `class:${task.classId}` : `project:${task.project}`;
     setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [key]: { ...current.spaceContext?.[key], lastTaskId: task.id, updatedAt: new Date().toISOString() } } }));
   }, []);
-  const allNotifications = useMemo(() => generateLifeOSNotifications({
-    workHub,
-    tasks,
-    projects: projectItems,
-    classes,
-    events: calendarEvents,
-    settings: {
-      calendarAlerts: settingsState.calendarAlerts,
-      enableWorkOS: settingsState.enableWorkOS,
-      enableSchoolOS: settingsState.enableSchoolOS,
-      enableLifeOS: settingsState.enableLifeOS,
-    },
-  }), [workHub, tasks, projectItems, classes, calendarEvents, settingsState.calendarAlerts, settingsState.enableWorkOS, settingsState.enableSchoolOS, settingsState.enableLifeOS, notificationsTick]);
+  const allNotifications = useMemo(() => {
+    // Wait until cloud data has loaded so demo starter tasks / sample WorkOS
+    // never flash into the notification center.
+    if (!tasksHydrated || !workHubHydrated || !projectsHydrated) return [];
+    return generateLifeOSNotifications({
+      workHub: isSampleWorkHub(workHub) ? emptyWorkHub : workHub,
+      tasks: isStarterTaskSet(tasks) ? [] : tasks,
+      projects: projectItems,
+      classes,
+      events: calendarEvents,
+      settings: {
+        calendarAlerts: settingsState.calendarAlerts,
+        enableWorkOS: settingsState.enableWorkOS,
+        enableSchoolOS: settingsState.enableSchoolOS,
+        enableLifeOS: settingsState.enableLifeOS,
+      },
+    });
+  }, [workHub, workHubHydrated, tasks, tasksHydrated, projectItems, projectsHydrated, classes, calendarEvents, settingsState.calendarAlerts, settingsState.enableWorkOS, settingsState.enableSchoolOS, settingsState.enableLifeOS, notificationsTick]);
 
   const visibleNotifications = useMemo(
     () => allNotifications.filter(item => !dismissedNotificationIds.has(item.id)),
@@ -717,25 +722,49 @@ export default function LifeOS() {
         openWorkTask(action.itemId);
         return;
       }
+      if (action.view === "deliverables" && action.itemId) {
+        const deliverable = workHub.deliverables.find(item => item.id === action.itemId);
+        if (deliverable) {
+          openWorkProjectSpace(deliverable.projectId);
+          return;
+        }
+      }
+      if (action.view === "calendar" && action.itemId) {
+        const meeting = workHub.meetings.find(item => item.id === action.itemId);
+        if (meeting?.projectId) {
+          openWorkProjectSpace(meeting.projectId);
+          return;
+        }
+      }
       setWorkView(action.view);
       go("Work");
       return;
     }
     if (action.type === "life-project") {
-      openProjectSpace(action.projectName);
+      if (projectItems.some(project => project.name === action.projectName)) {
+        openProjectSpace(action.projectName);
+        return;
+      }
+      go("Spaces");
       return;
     }
     if (action.type === "life-task" || action.type === "school-task") {
-      openTaskPage(action.taskId);
+      if (tasks.some(task => task.id === action.taskId)) {
+        openTaskPage(action.taskId);
+        return;
+      }
+      go(action.type === "school-task" ? "School" : "Tasks");
       return;
     }
     if (action.type === "calendar") {
-      if (action.eventId) setEditingCalendarEventId(action.eventId);
+      if (action.eventId && calendarEvents.some(event => event.id === action.eventId)) {
+        setEditingCalendarEventId(action.eventId);
+      }
       go("Calendar");
       return;
     }
     if (action.type === "now") go("Now");
-  }, [go, openProjectSpace, openTaskPage, openWorkProjectSpace, openWorkTask]);
+  }, [calendarEvents, go, openProjectSpace, openTaskPage, openWorkProjectSpace, openWorkTask, projectItems, tasks, workHub.deliverables, workHub.meetings]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const writeCurrentView = () => {
@@ -932,11 +961,18 @@ export default function LifeOS() {
     (async () => {
       try {
         const firebaseTasks = await loadDataFromFirebase('tasks');
-        if (firebaseTasks && Array.isArray(firebaseTasks)) {
-          setTasks(firebaseTasks.map(task => normalizeTask(task)));
+        if (Array.isArray(firebaseTasks)) {
+          const normalized = firebaseTasks.map(task => normalizeTask(task));
+          // Drop the old demo starter set if it was ever synced — those items
+          // pointed at fake spaces (Synapse, Photography, …) and flooded notifications.
+          setTasks(isStarterTaskSet(normalized) ? [] : normalized);
+        } else {
+          // New cloud workspaces start blank instead of seeding overdue demo tasks.
+          setTasks([]);
         }
       } catch (error) {
         console.error('Failed to load tasks from Firebase:', error);
+        setTasks([]);
       } finally {
         setTasksHydrated(true);
       }
@@ -1163,13 +1199,16 @@ export default function LifeOS() {
       try {
         const data = await loadDataFromFirebase('work');
         if (data && typeof data === "object" && (data.projects?.length || data.tasks?.length || data.deliverables?.length || data.meetings?.length)) {
-          setWorkHub({ ...emptyWorkHub, ...data });
+          const hub = { ...emptyWorkHub, ...data };
+          // Older builds auto-seeded a demo WorkOS hub; clear it so notifications
+          // only reflect projects/tasks the user actually created.
+          setWorkHub(isSampleWorkHub(hub) ? emptyWorkHub : hub);
         } else {
-          setWorkHub(createSampleWorkHub());
+          setWorkHub(emptyWorkHub);
         }
       } catch (error) {
         console.error('Failed to load WorkOS data from Firebase:', error);
-        setWorkHub(createSampleWorkHub());
+        setWorkHub(emptyWorkHub);
       } finally {
         setWorkHubHydrated(true);
       }
