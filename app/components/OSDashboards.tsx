@@ -842,9 +842,7 @@ function WorkMeetingModal({ hub, close, save }: { hub: WorkHubState; close: () =
   );
 }
 
-function WorkCreateModal({ kind, hub, close, save }: { kind: WorkCreateKind; hub: WorkHubState; close: () => void; save: (hub: WorkHubState) => void }) {
-  if (kind === "meeting") return <WorkMeetingModal hub={hub} close={close} save={save} />;
-
+function WorkCreateModal({ kind, hub, close, save }: { kind: Exclude<WorkCreateKind, "meeting">; hub: WorkHubState; close: () => void; save: (hub: WorkHubState) => void }) {
   const activeProjects = hub.projects.filter(item => item.status === "active");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -1234,7 +1232,8 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
 
     {workView === "dashboard" ? dashboard : subview}
 
-    {createKind && <WorkCreateModal kind={createKind} hub={workHub} close={() => setCreateKind(null)} save={onChange} />}
+    {createKind === "meeting" && <WorkMeetingModal hub={workHub} close={() => setCreateKind(null)} save={onChange} />}
+    {createKind && createKind !== "meeting" && <WorkCreateModal kind={createKind} hub={workHub} close={() => setCreateKind(null)} save={onChange} />}
   </div>;
 }
 
