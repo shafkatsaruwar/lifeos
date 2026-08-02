@@ -2129,7 +2129,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       </div>
     )}
     <div className="page-title">
-      <div><h1><span className="now-heading-date">{new Date(now).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</span> Now</h1><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
+      <div><p className="eyebrow">{new Date(now).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p><h1>Now</h1><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
       <div className="now-header-actions"><button onClick={onCapture}><Inbox size={16} /> Capture thought</button><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button onClick={onDailyReset}>Daily reset</button><button onClick={onWeeklyReview}>Weekly review</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
     </div>
     {ambientActivity ? (
