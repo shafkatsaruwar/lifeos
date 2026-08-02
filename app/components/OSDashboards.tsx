@@ -561,6 +561,18 @@ export function createSampleWorkHub(now = new Date()): WorkHubState {
   };
 }
 
+/** Detect the auto-seeded demo WorkOS hub so we can stop surfacing fake notifications. */
+export function isSampleWorkHub(hub: WorkHubState): boolean {
+  if (!hub?.projects?.length) return false;
+  const projectIds = new Set(hub.projects.map(item => item.id));
+  const taskIds = new Set(hub.tasks.map(item => item.id));
+  return projectIds.has("proj-workos-redesign")
+    && projectIds.has("proj-partner-audit")
+    && taskIds.has("task-1")
+    && taskIds.has("task-4")
+    && hub.tasks.some(item => item.id === "task-1" && item.title === "Design landing page");
+}
+
 const priorityTone = (priority: WorkTask["priority"]) => priority === "high" ? "#e25555" : priority === "medium" ? "#e89b3a" : "#6b8fd4";
 const dueLabel = (value: string | undefined, today: string) => {
   if (!value) return "No date";

@@ -131,23 +131,29 @@ export function generateLifeOSNotifications(input: {
   const classes = input.classes ?? [];
   const classFor = (classId?: string) => classes.find(item => item.id === classId && !item.archived);
 
+  const knownProjectNames = new Set(projects.map(project => project.name));
+
   if (isWorkEnabled(settings)) {
-    const workProjectForDeliverable = (projectId: string) =>
-      input.workHub.projects.find(project => project.id === projectId);
+    const workProjectById = (projectId?: string) =>
+      projectId ? input.workHub.projects.find(project => project.id === projectId) : undefined;
+    const workDeliverableById = (deliverableId?: string) =>
+      deliverableId ? input.workHub.deliverables.find(item => item.id === deliverableId) : undefined;
 
     input.workHub.tasks.forEach(task => {
       if (task.status === "done" || !task.dueDate) return;
+      const deliverable = workDeliverableById(task.deliverableId);
+      const project = workProjectById(deliverable?.projectId);
+      // Skip orphaned sample/legacy rows that no longer resolve to a real project.
+      if (!deliverable || !project) return;
+
       const dueKey = dateOnly(task.dueDate);
       const dueMs = atLocalNoon(dueKey);
       if (!withinNotificationWindow(dueKey, dueMs, today, weekLimit)) return;
 
-      const deliverable = input.workHub.deliverables.find(item => item.id === task.deliverableId);
-      const project = deliverable ? workProjectForDeliverable(deliverable.projectId) : undefined;
-
       pushUnique(notifications, {
         id: `work-task-${task.id}`,
         title: task.title,
-        subtitle: project?.name ?? "Work task",
+        subtitle: project.name,
         source: "work",
         kind: "task",
         urgency: urgencyFrom(dueMs, nowMs, dueKey),
@@ -159,16 +165,17 @@ export function generateLifeOSNotifications(input: {
 
     input.workHub.deliverables.forEach(deliverable => {
       if (deliverable.status === "delivered" || deliverable.status === "canceled") return;
+      const project = workProjectById(deliverable.projectId);
+      if (!project) return;
+
       const dueKey = dateOnly(deliverable.dueDate);
       const dueMs = atLocalNoon(dueKey);
       if (!withinNotificationWindow(dueKey, dueMs, today, weekLimit)) return;
 
-      const project = workProjectForDeliverable(deliverable.projectId);
-
       pushUnique(notifications, {
         id: `work-deliverable-${deliverable.id}`,
         title: deliverable.title,
-        subtitle: project?.name ?? "Deliverable",
+        subtitle: project.name,
         source: "work",
         kind: "deliverable",
         urgency: urgencyFrom(dueMs, nowMs, dueKey),
@@ -206,11 +213,12 @@ export function generateLifeOSNotifications(input: {
     input.workHub.meetings.forEach(meeting => {
       const startMs = atDateTime(meeting.start);
       if (startMs < nowMs - 15 * 60_000 || startMs > soonLimit) return;
+      const project = workProjectById(meeting.projectId);
 
       pushUnique(notifications, {
         id: `work-meeting-${meeting.id}`,
         title: meeting.title,
-        subtitle: "Meeting",
+        subtitle: project?.name ?? "Meeting",
         source: "work",
         kind: "meeting",
         urgency: startMs <= nowMs + 60 * 60_000 ? "today" : "soon",
@@ -229,10 +237,17 @@ export function generateLifeOSNotifications(input: {
         const dueMs = atLocalNoon(dueKey);
         if (!withinNotificationWindow(dueKey, dueMs, today, weekLimit)) return;
 
+        const projectName = task.project?.trim() ?? "";
+        const isInbox = !projectName || projectName === "Inbox";
+        const linkedProject = !isInbox && knownProjectNames.has(projectName) ? projectName : "";
+        // Spaces reassign tasks to Inbox on delete, so a non-empty unknown
+        // project name is leftover demo/orphan data — don't notify for it.
+        if (!isInbox && !linkedProject) return;
+
         pushUnique(notifications, {
           id: `life-task-${task.id}`,
           title: task.title,
-          subtitle: task.project || "Personal task",
+          subtitle: linkedProject || "Inbox",
           source: "life",
           kind: "task",
           urgency: urgencyFrom(dueMs, nowMs, dueKey),
@@ -277,13 +292,14 @@ export function generateLifeOSNotifications(input: {
         if (!withinNotificationWindow(dueKey, dueMs, today, weekLimit)) return;
 
         const course = classFor(task.classId);
+        if (!course) return;
         const kind = schoolKind(task.academicType);
         const label = task.academicType ?? "Assignment";
 
         pushUnique(notifications, {
           id: `school-${kind}-${task.id}`,
           title: task.title,
-          subtitle: `${course?.code ?? "School"} · ${label}`,
+          subtitle: `${course.code} · ${label}`,
           source: "school",
           kind,
           urgency: urgencyFrom(dueMs, nowMs, dueKey),
@@ -296,6 +312,7 @@ export function generateLifeOSNotifications(input: {
 
   if (settings.calendarAlerts !== false) {
     input.events.forEach(event => {
+      if (!event.id || !event.title || !event.start) return;
       const startMs = atDateTime(event.start);
       if (startMs < nowMs - 15 * 60_000 || startMs > soonLimit) return;
 
