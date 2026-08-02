@@ -120,6 +120,8 @@ type SettingsState = {
   enableLifeOS?: boolean;
   enableSchoolOS?: boolean;
   enableWorkOS?: boolean;
+  /** When true (default), focusing the Now capture bar shows the /command cheatsheet. */
+  showCaptureCommands?: boolean;
 };
 
 const projectIcons: Record<ProjectIcon, typeof Home> = { Zap, Aperture, Sparkles, FileText, UserRound, FolderKanban, BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, BookOpen };
@@ -161,6 +163,7 @@ const initialSettings: SettingsState = {
   enableLifeOS: true,
   enableSchoolOS: true,
   enableWorkOS: true,
+  showCaptureCommands: true,
 };
 
 // New users start with three empty project templates to explore the product
@@ -799,11 +802,6 @@ export default function LifeOS() {
   }, []);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const typing = Boolean(target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName || ""));
-      // Fn is exposed by some browsers. Cmd/Ctrl + Shift is the reliable fallback
-      // because many desktop browsers do not report the physical Fn key to web apps.
-      const lifeOSShortcut = e.getModifierState("Fn") || ((e.metaKey || e.ctrlKey) && e.shiftKey);
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette(true); }
       if (e.key === "Escape") {
         setPalette(false);
@@ -835,28 +833,10 @@ export default function LifeOS() {
           setView("Dashboard");
         }
       }
-      if (!typing && lifeOSShortcut) {
-        if (e.key === "/") {
-          e.preventDefault();
-          setQuery("");
-          setPalette(true);
-        }
-        if (e.key.toLowerCase() === "b") { e.preventDefault(); setCapture(true); }
-        if (e.key.toLowerCase() === "f") { e.preventDefault(); openFocus(); }
-        if (e.key.toLowerCase() === "n") { e.preventDefault(); setComposer("task"); }
-        if (e.key.toLowerCase() === "a") { e.preventDefault(); setAiTaskComposer(true); }
-        if (e.key.toLowerCase() === "p") { e.preventDefault(); go("Spaces"); }
-        if (e.key.toLowerCase() === "r") { e.preventDefault(); setBreakOpen(true); }
-        if (e.key.toLowerCase() === "w") {
-          e.preventDefault();
-          if (settingsState.ambientActivity) setAmbientWrapupOpen(true);
-          else setAmbientStartOpen(true);
-        }
-      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [focus, go, openFocus, settingsState.ambientActivity]);
+  }, [focus]);
 
   useEffect(() => {
     const auth = getClientAuth();
@@ -1874,7 +1854,7 @@ export default function LifeOS() {
       <AnimatePresence>{sidebar && <motion.button aria-label="Close navigation" className="mobile-scrim" onClick={() => setSidebar(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />}</AnimatePresence>
       <aside className={`sidebar ${sidebar ? "sidebar-open" : ""}`}>
         <div className="brand"><div className="brand-mark"><span /><span /><span /></div><span>LifeOS</span></div>
-        <button className="search-trigger" onClick={() => setPalette(true)}><Search size={15} /><span>Search anything</span><kbd>/</kbd><kbd>⌘ K</kbd></button>
+        <button className="search-trigger" onClick={() => setPalette(true)}><Search size={15} /><span>Search anything</span><kbd>⌘ K</kbd></button>
         <nav>
           {visibleNav.map((item, idx) => {
             const Icon = item.icon;
@@ -1908,7 +1888,7 @@ export default function LifeOS() {
             {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarFeed} workspaceName={workspaceName} onComplete={complete} onOpenTask={openTaskPage} onOpenProject={openProjectSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => openSpacesList("Projects")} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} />}
             {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} schoolView={schoolView} onChangeView={setSchoolView} schoolFocusTaskId={schoolFocusTaskId} onSelectFocusTask={setSchoolFocusTaskId} onComplete={complete} onOpenTask={openTaskPage} onOpenClass={openClassSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={(id) => { setSchoolFocusTaskId(id); openFocus(id); }} onOpenCalendar={() => go("Calendar")} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} />}
             {view === "Work" && <WorkDashboard workHub={workHub} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => openSpacesList("Projects")} />}
-            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onAddTask={(title) => addTask(title)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} />}
+            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onAddTask={(title) => addTask(title)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
             {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} />}
             {(view === "Today" || view === "Calendar") && <CalendarView events={calendarFeed} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => { if (id.startsWith("task-")) openTaskPage(Number(id.slice(5))); else if (id.startsWith("work-meet-")) { setWorkView("calendar"); go("Work"); } else setEditingCalendarEventId(id); }} onPlanTask={setEditingTaskId} />}
@@ -1955,10 +1935,12 @@ export default function LifeOS() {
   );
 }
 
-function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onAddTask: (title: string) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void }) {
+function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onAddTask: (title: string) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void }) {
   const [handoff, setHandoff] = useState("");
   const [captureInput, setCaptureInput] = useState("");
+  const [captureFocused, setCaptureFocused] = useState(false);
   const [suggestedCommandIndex, setSuggestedCommandIndex] = useState(-1);
+  const captureBlurTimer = useRef<number | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false;
     const seen = localStorage.getItem('lifeos-onboarding-seen');
@@ -1966,6 +1948,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   });
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
+  useEffect(() => () => { if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current); }, []);
   const today = toDateKey(new Date());
   const allActive = tasks.filter(task => !task.done && !task.canceled);
   const active = allActive.filter(task => getTaskStatus(task) !== "Waiting" || !task.followUpDate || task.followUpDate <= today);
@@ -1998,15 +1981,44 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     { shortcut: '/proj', label: 'Add project', desc: 'Start a new project' },
     { shortcut: '/asg', label: 'Add assignment', desc: 'School mode only' },
     { shortcut: '/note', label: 'Add note', desc: 'Capture a quick note' },
+    { shortcut: '/capture', label: 'Quick capture', desc: 'Send a thought to Brain' },
+    { shortcut: '/focus', label: 'Start focus', desc: 'Enter a focus session' },
+    { shortcut: '/break', label: 'Break', desc: 'I need a break' },
+    { shortcut: '/spaces', label: 'Spaces', desc: 'Open your spaces' },
     { shortcut: '/w', label: 'I\'m doing something', desc: 'Start ambient activity' },
-    { shortcut: '/b', label: 'Break', desc: 'I need a break' },
     { shortcut: '/a', label: 'AI task', desc: 'Create with AI assistance' },
     { shortcut: '/w proj', label: 'Work project', desc: 'Start a work project' },
     { shortcut: '/w deliver', label: 'Deliverable', desc: 'Add a work deliverable' },
     { shortcut: '/w task', label: 'Work task', desc: 'Add a work task' },
     { shortcut: '/w meet', label: 'Schedule meeting', desc: 'Schedule a meeting' },
   ];
-  const filtered = captureInput.startsWith('/') ? commands.filter(c => c.shortcut.includes(captureInput.split(' ')[0])) : [];
+  const captureQuery = captureInput.startsWith('/') ? captureInput.trim().toLowerCase() : '';
+  const showCommandHelp = showCaptureCommands && captureFocused && (!captureInput || captureInput.startsWith('/'));
+  const filtered = captureQuery
+    ? commands.filter(c => c.shortcut.startsWith(captureQuery) || c.shortcut.includes(captureQuery) || c.label.toLowerCase().includes(captureQuery.slice(1)))
+    : (showCommandHelp ? commands : []);
+  const showSuggestions = filtered.length > 0 && (captureFocused || Boolean(captureQuery));
+  const runInstantCommand = (raw: string) => {
+    const val = raw.trim().toLowerCase();
+    if (val === '/w') { onStartAmbient(); return true; }
+    if (val === '/break') { onBreak(); return true; }
+    if (val === '/a') { onSmartCapture(); return true; }
+    if (val === '/capture') { onCapture(); return true; }
+    if (val === '/focus') {
+      const target = current ?? recommendations[0];
+      if (target) onFocus(target.id);
+      return true;
+    }
+    if (val === '/spaces') { onGo('Spaces'); return true; }
+    return false;
+  };
+  const handleCaptureFocus = () => {
+    if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current);
+    setCaptureFocused(true);
+  };
+  const handleCaptureBlur = () => {
+    captureBlurTimer.current = window.setTimeout(() => setCaptureFocused(false), 160);
+  };
   const handleCaptureKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -2014,34 +2026,42 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSuggestedCommandIndex(Math.max(suggestedCommandIndex - 1, -1));
+    } else if (e.key === 'Escape') {
+      setCaptureFocused(false);
+      e.currentTarget.blur();
     } else if (e.key === 'Enter') {
       const val = e.currentTarget.value.trim();
       if (suggestedCommandIndex >= 0) {
         const cmd = filtered[suggestedCommandIndex];
-        setCaptureInput(cmd.shortcut + ' ');
+        if (['/w', '/break', '/a', '/capture', '/focus', '/spaces'].includes(cmd.shortcut)) {
+          runInstantCommand(cmd.shortcut);
+          setCaptureInput('');
+        } else {
+          setCaptureInput(cmd.shortcut + ' ');
+        }
         setSuggestedCommandIndex(-1);
       } else if (val) {
-        if (val === '/w' || val === '/w ') {
-          onStartAmbient();
-        } else if (val === '/b' || val === '/b ') {
-          onBreak();
-        } else if (val === '/a' || val === '/a ') {
-          onSmartCapture();
+        if (runInstantCommand(val)) {
+          setCaptureInput('');
         } else if (val.startsWith('/t ')) {
           const taskTitle = val.slice(3).trim();
           if (taskTitle) {
             const id = onAddTask(taskTitle);
             if (id) onChoose(id);
           }
+          setCaptureInput('');
         } else if (val.startsWith('/proj ')) {
           const projectName = val.slice(6).trim();
           if (projectName) onAddProject(projectName);
+          setCaptureInput('');
         } else if (val.startsWith('/asg ')) {
           const assignmentTitle = val.slice(5).trim();
           if (assignmentTitle) onAddAssignment(assignmentTitle);
+          setCaptureInput('');
         } else if (val.startsWith('/note ')) {
           const noteTitle = val.slice(6).trim();
           if (noteTitle) onAddNote(noteTitle);
+          setCaptureInput('');
         } else if (val.startsWith('/w proj ')) {
           const projName = val.slice(8).trim() || 'New Project';
           const newProj: WorkProject = { id: `proj-${Date.now()}`, name: projName, color: '#625af6', status: 'active', createdAt: new Date().toISOString() };
@@ -2070,10 +2090,10 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           const newMeet: WorkMeeting = { id: `meet-${Date.now()}`, title: meetTitle, start: new Date().toISOString(), type: 'other', createdAt: new Date().toISOString() };
           onSetWorkHub((current: WorkHubState) => ({ ...current, meetings: [...current.meetings, newMeet] }));
           setCaptureInput('');
-        } else {
+        } else if (!val.startsWith('/')) {
           onStartAmbient();
+          setCaptureInput('');
         }
-        setCaptureInput('');
       }
     }
   };
@@ -2099,8 +2119,8 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
                 <p>Your AI assistant suggests what to do next based on your priorities and context.</p>
               </div>
               <div className="tip">
-                <strong>⌨️ Quick Actions</strong>
-                <p>Use keyboard shortcuts for faster navigation. Hover over elements to learn more.</p>
+                <strong>⌨️ Capture bar</strong>
+                <p>Click the capture bar on Now to see commands like <code>/t</code>, <code>/break</code>, and <code>/focus</code>.</p>
               </div>
             </div>
             <button className="onboarding-button" onClick={closeOnboarding}>Let&apos;s go!</button>
@@ -2119,19 +2139,52 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       </section>
     ) : (
       <div className="capture-bar-wrapper">
-        <section className="capture-bar-section" title="Capture commands: /t for tasks, /proj for projects, /asg for assignments">
+        <section className="capture-bar-section" title="Capture commands: /t, /break, /focus, /capture, and more">
           <span className="section-icon blue"><Command size={16} /></span>
-          <input type="text" placeholder="Type / for commands" value={captureInput} onChange={(e) => { setCaptureInput(e.currentTarget.value); setSuggestedCommandIndex(-1); }} onKeyDown={handleCaptureKeyDown} title="Start typing / to see command suggestions" />
-          <span className="capture-hint">/t task • /proj project • /asg assignment</span>
+          <input
+            type="text"
+            placeholder="Click for commands, or type /"
+            value={captureInput}
+            onChange={(e) => { setCaptureInput(e.currentTarget.value); setSuggestedCommandIndex(-1); }}
+            onFocus={handleCaptureFocus}
+            onClick={handleCaptureFocus}
+            onBlur={handleCaptureBlur}
+            onKeyDown={handleCaptureKeyDown}
+            title="Click to see capture commands"
+          />
+          <span className="capture-hint">/t · /break · /focus</span>
         </section>
-        {filtered.length > 0 ? (
-          <div className="capture-suggestions">
-            {filtered.map((cmd, idx) => (
-              <button key={cmd.shortcut} className={idx === suggestedCommandIndex ? "suggested" : ""} onClick={() => { setCaptureInput(cmd.shortcut + " "); setSuggestedCommandIndex(-1); }}>
-                <strong>{cmd.shortcut}</strong>
-                <span>{cmd.desc}</span>
-              </button>
-            ))}
+        {showSuggestions ? (
+          <div className="capture-suggestions" onMouseDown={(e) => e.preventDefault()}>
+            <div className="capture-suggestions-list">
+              {filtered.map((cmd, idx) => (
+                <button
+                  key={cmd.shortcut}
+                  type="button"
+                  className={idx === suggestedCommandIndex ? "suggested" : ""}
+                  onClick={() => {
+                    if (['/w', '/break', '/a', '/capture', '/focus', '/spaces'].includes(cmd.shortcut)) {
+                      runInstantCommand(cmd.shortcut);
+                      setCaptureInput('');
+                      setCaptureFocused(false);
+                    } else {
+                      setCaptureInput(cmd.shortcut + " ");
+                    }
+                    setSuggestedCommandIndex(-1);
+                  }}
+                >
+                  <strong>{cmd.shortcut}</strong>
+                  <span>{cmd.desc}</span>
+                </button>
+              ))}
+            </div>
+            {showCaptureCommands ? (
+              <div className="capture-suggestions-footer">
+                <button type="button" className="capture-dismiss" onClick={() => { onDismissCaptureCommands(); setCaptureFocused(false); }}>
+                  Don&apos;t show again
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -2331,7 +2384,7 @@ function Dashboard({ tasks, projects, classes, brainCount, user, onComplete, onF
         <div className="focus-glow" />
         <div className="card-head"><div><span className="section-icon dark-icon"><Focus size={14} /></span><h2>Next focus</h2></div><span className="ready"><i /> {nextTask ? "Ready" : "Clear"}</span></div>
         <div className="focus-content"><p>{nextTask ? taskSpaceLabel(nextTask) : "You're all caught up"}</p><h3>{nextTask?.title ?? "What should we work on next?"}</h3><div className="focus-meta">{nextTask && <><span><Clock3 size={14} /> {nextTask.focusMinutes} min</span><span><Flame size={14} /> {nextTask.energy} energy</span></>}</div></div>
-        <button className="start-focus" onClick={() => nextTask ? onFocus(nextTask.id) : onNewTask()}><Focus size={16} /> {nextTask ? "Start focus session" : "Add priority"} <span>{nextTask ? "F" : "N"}</span></button>
+        <button className="start-focus" onClick={() => nextTask ? onFocus(nextTask.id) : onNewTask()}><Focus size={16} /> {nextTask ? "Start focus session" : "Add priority"}</button>
       </section>
       <section className="card schedule">
         <div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>Today’s schedule</h2></div><button onClick={() => onGo("Calendar")}>View calendar</button></div>
@@ -2350,7 +2403,7 @@ function Dashboard({ tasks, projects, classes, brainCount, user, onComplete, onF
       </section>
       <section className="card inbox-card">
         <div className="card-head"><div><span className="section-icon green"><Brain size={14} /></span><h2>Brain inbox</h2></div><span className="count">{brainCount} uncategorized</span></div>
-        <button className="capture-zone" onClick={onCapture}><Plus size={18} /><div><strong>Capture what’s on your mind</strong><span>Idea, thought, link, anything…</span></div><kbd>Fn B</kbd></button>
+        <button className="capture-zone" onClick={onCapture}><Plus size={18} /><div><strong>Capture what’s on your mind</strong><span>Idea, thought, link, anything…</span></div></button>
       </section>
     </div>
     <p className="quote">“The main thing is to keep the main thing the main thing.” <span>— Stephen Covey</span></p>
@@ -3237,7 +3290,7 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
     const permission = await Notification.requestPermission();
     flash(permission === "granted" ? "Browser notifications enabled" : "Notifications not enabled");
   };
-  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Appearance</h2></div></div><div className="settings-body"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{["#625af6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b", "#cf625a"].map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><ToggleRow title="Compact mode" desc="Tighten spacing when you want more on screen." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions for lower sensory load." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Settings size={14} /></span><h2>Environments</h2></div></div><div className="settings-body"><ToggleRow title="LifeOS" desc="Personal task management and life organization." checked={settings.enableLifeOS !== false} onChange={(enableLifeOS) => update({ enableLifeOS })} /><ToggleRow title="SchoolOS" desc="Academic coursework, assignments, and learning." checked={settings.enableSchoolOS !== false} onChange={(enableSchoolOS) => update({ enableSchoolOS })} /><ToggleRow title="WorkOS" desc="Professional projects, tasks, and deliverables." checked={settings.enableWorkOS !== false} onChange={(enableWorkOS) => update({ enableWorkOS })} /></div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body shortcut-list"><div><kbd>/</kbd><span>Find anything</span></div><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>B</kbd><span>Quick capture</span></div><div><kbd>F</kbd><span>Start focus</span></div><div><kbd>N</kbd><span>New task</span></div><div><kbd>J / K</kbd><span>Switch focus task</span></div></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
+  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Appearance</h2></div></div><div className="settings-body"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{["#625af6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b", "#cf625a"].map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><ToggleRow title="Compact mode" desc="Tighten spacing when you want more on screen." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions for lower sensory load." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Settings size={14} /></span><h2>Environments</h2></div></div><div className="settings-body"><ToggleRow title="LifeOS" desc="Personal task management and life organization." checked={settings.enableLifeOS !== false} onChange={(enableLifeOS) => update({ enableLifeOS })} /><ToggleRow title="SchoolOS" desc="Academic coursework, assignments, and learning." checked={settings.enableSchoolOS !== false} onChange={(enableSchoolOS) => update({ enableSchoolOS })} /><ToggleRow title="WorkOS" desc="Professional projects, tasks, and deliverables." checked={settings.enableWorkOS !== false} onChange={(enableWorkOS) => update({ enableWorkOS })} /></div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body"><ToggleRow title="Show capture commands" desc="When you click the Now capture bar, show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} /><div className="shortcut-list" style={{ marginTop: 12 }}><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>/t</kbd><span>Add task (Now capture bar)</span></div><div><kbd>/break</kbd><span>Take a break</span></div><div><kbd>/focus</kbd><span>Start focus</span></div><div><kbd>/capture</kbd><span>Quick capture to Brain</span></div><div><kbd>/w</kbd><span>Start ambient activity</span></div><div><kbd>/a</kbd><span>AI task</span></div><div><kbd>/spaces</kbd><span>Open Spaces</span></div></div><p className="settings-note">Capture commands live in the Now capture bar. Type / to filter after you hide the cheatsheet.</p></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
 }
 
 function BrainView({ items, onCapture, onArchive }: { items: string[]; onCapture: () => void; onArchive: (index: number) => void }) {
@@ -3883,17 +3936,6 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
     const next = (current + offset + tasks.length) % tasks.length;
     switchTask(tasks[next].id);
   }, [switchTask, task.id, tasks]);
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName || "")) return;
-      if (!(event.getModifierState("Fn") || ((event.metaKey || event.ctrlKey) && event.shiftKey))) return;
-      if (event.key.toLowerCase() === "j") switchBy(1);
-      if (event.key.toLowerCase() === "k") switchBy(-1);
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [switchBy]);
   const time = formatFocusTime(seconds);
   const breakTime = `${String(Math.floor(breakSeconds / 60)).padStart(2, "0")}:${String(breakSeconds % 60).padStart(2, "0")}`;
   useEffect(() => {
@@ -3942,7 +3984,7 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
         <div className="notes"><span>NOTES</span><textarea value={focusNotes} onChange={event => setFocusNotes(event.target.value)} onBlur={() => onUpdateNotes(task.id, focusNotes.trim())} placeholder="Keep any thoughts here while you work…" /></div>
       </section>
       <aside className={`timer-panel ${hasStarted ? "running" : ""}`}><span>{running ? "FOCUS IN PROGRESS" : hasStarted ? "FOCUS PAUSED" : "YOUR TIME"}</span><div className="timer-ring" style={{ "--progress": `${(seconds / totalSeconds) * 360}deg` } as React.CSSProperties}><div><strong>{time}</strong><span>{running ? "Stay with this one thing" : `${task.focusMinutes} minute session`}</span></div></div><button className="timer-button" onClick={toggleTimer}>{running ? <><Circle size={15} fill="currentColor" /> Pause & save</> : <><Focus size={16} /> {hasStarted ? "Resume focus" : "Start focus"}</>}</button><button className="reset" onClick={resetTimer}><TimerReset size={15} /> Reset to {task.focusMinutes}:00</button>
-        <div className="focus-switcher"><div><span>SWITCH TASK</span><small><kbd>K</kbd><kbd>J</kbd></small></div><div className="switch-list">{tasks.filter(item => !item.done && !item.canceled).map(item => { const remaining = getTaskFocusSeconds(item); const hasProgress = Boolean(item.focusSessionStarted) || remaining < item.focusMinutes * 60; return <button key={item.id} className={item.id === task.id ? "active" : ""} onClick={() => switchTask(item.id)}><i style={{ background: item.color }} /><span><strong>{item.title}</strong>{hasProgress && <small>{formatFocusTime(remaining)} left</small>}</span>{item.id === task.id && <Check size={13} />}</button>; })}</div><div className="switch-arrows"><button onClick={() => switchBy(-1)}>← Previous</button><button onClick={() => switchBy(1)}>Next →</button></div></div>
+        <div className="focus-switcher"><div><span>SWITCH TASK</span></div><div className="switch-list">{tasks.filter(item => !item.done && !item.canceled).map(item => { const remaining = getTaskFocusSeconds(item); const hasProgress = Boolean(item.focusSessionStarted) || remaining < item.focusMinutes * 60; return <button key={item.id} className={item.id === task.id ? "active" : ""} onClick={() => switchTask(item.id)}><i style={{ background: item.color }} /><span><strong>{item.title}</strong>{hasProgress && <small>{formatFocusTime(remaining)} left</small>}</span>{item.id === task.id && <Check size={13} />}</button>; })}</div><div className="switch-arrows"><button onClick={() => switchBy(-1)}>← Previous</button><button onClick={() => switchBy(1)}>Next →</button></div></div>
         <div className="music"><Music2 size={17} /><div><strong>Focus sounds</strong><span>{!soundEffectsEnabled ? "Enable sound effects in Settings" : sounds ? "Brown noise on" : "Sounds are off"}</span></div><button aria-label="Toggle focus sounds" disabled={!soundEffectsEnabled} onClick={() => setSounds(value => !value)}>{sounds ? <Check size={15} /> : <Plus size={15} />}</button></div>
         <button className="mark-done-button" onClick={() => { if (soundEffectsEnabled) playFocusCue(660, 0.16); onComplete(task.id); setTimeout(() => onExit(), 300); }}><CheckCircle2 size={16} /> Mark as done</button>
       </aside>
@@ -3952,7 +3994,7 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
 }
 
 function CommandPalette({ query, setQuery, results, close, go, onFocus, onCapture, onNewTask, onResult }: { query: string; setQuery: (s: string) => void; results: string[]; close: () => void; go: (v: View) => void; onFocus: () => void; onCapture: () => void; onNewTask: () => void; onResult: (result: string) => void }) {
-  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="command-modal" onMouseDown={e => e.stopPropagation()} initial={{ scale: .98, y: -10 }} animate={{ scale: 1, y: 0 }}><div className="command-input"><Search size={20} /><input autoFocus placeholder="Find anything in LifeOS…" value={query} onChange={e => setQuery(e.target.value)} /><kbd>ESC</kbd></div><div className="command-results">{!query && <><p>QUICK ACTIONS</p><button onClick={onFocus}><span className="command-icon"><Focus size={16} /></span><span>Start focus session</span><kbd>F</kbd></button><button onClick={onCapture}><span className="command-icon"><Brain size={16} /></span><span>Capture a thought</span><kbd>B</kbd></button><button onClick={onNewTask}><span className="command-icon"><Plus size={16} /></span><span>Create new task</span><kbd>N</kbd></button></>}{query && <p>RESULTS</p>}{results.slice(0, 7).map(result => <button key={result} onClick={() => { if (nav.some(n => n.name === result)) { go(result as View); close(); } else onResult(result); }}><span className="command-icon">{nav.some(n => n.name === result) ? <Command size={16} /> : <Search size={16} />}</span><span>{result}</span><ArrowRight size={14} /></button>)}</div><footer><span><kbd>/</kbd> Find</span><span><kbd>↵</kbd> Open</span><span>LifeOS Search</span></footer></motion.div></motion.div>;
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="command-modal" onMouseDown={e => e.stopPropagation()} initial={{ scale: .98, y: -10 }} animate={{ scale: 1, y: 0 }}><div className="command-input"><Search size={20} /><input autoFocus placeholder="Find anything in LifeOS…" value={query} onChange={e => setQuery(e.target.value)} /><kbd>ESC</kbd></div><div className="command-results">{!query && <><p>QUICK ACTIONS</p><button onClick={onFocus}><span className="command-icon"><Focus size={16} /></span><span>Start focus session</span></button><button onClick={onCapture}><span className="command-icon"><Brain size={16} /></span><span>Capture a thought</span></button><button onClick={onNewTask}><span className="command-icon"><Plus size={16} /></span><span>Create new task</span></button></>}{query && <p>RESULTS</p>}{results.slice(0, 7).map(result => <button key={result} onClick={() => { if (nav.some(n => n.name === result)) { go(result as View); close(); } else onResult(result); }}><span className="command-icon">{nav.some(n => n.name === result) ? <Command size={16} /> : <Search size={16} />}</span><span>{result}</span><ArrowRight size={14} /></button>)}</div><footer><span><kbd>⌘ K</kbd> Find</span><span><kbd>↵</kbd> Open</span><span>LifeOS Search</span></footer></motion.div></motion.div>;
 }
 
 function AmbientStartModal({ close, start, spaces, draft }: { close: () => void; start: (title: string, space?: { name: string; color: string }) => void; spaces: { name: string; color: string }[]; draft: AmbientDraft }) {
