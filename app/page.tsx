@@ -1537,6 +1537,7 @@ export default function LifeOS() {
     setProjectItems(items => items.map(project => project.name === oldName ? { ...project, name: newName, desc, color, icon: projectIcons[icon], iconName: icon } : project));
     setTasks(items => items.map(task => task.project === oldName ? { ...task, project: newName, color } : task));
     setNotes(items => items.map(note => note.projectName === oldName ? { ...note, projectName: newName } : note));
+    setSelectedProjectName(current => current === oldName ? newName : current);
     setEditingProjectName(null);
     setActionProjectName(null);
     flash("Project updated");
