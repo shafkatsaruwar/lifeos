@@ -72,7 +72,7 @@ type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done"
 type AcademicItemType = "Assignment" | "Project" | "Exam" | "Quiz" | "Lab" | "Reading" | "Discussion";
 type TaskProperty = { id: string; name: string; value: string };
 type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; status?: TaskStatus; notes?: string; handoffNote?: string; nextAction?: string; followUpDate?: string; recurringDays?: number; completedAt?: string; customProperties?: TaskProperty[]; checklist?: string[]; checklistProgress?: boolean[]; focusRemainingSeconds?: number; focusSessionStarted?: boolean; focusSessionRunning?: boolean; focusHalfwayPrompted?: boolean; classId?: string; academicType?: AcademicItemType; gradeWeight?: number; pointsEarned?: number; pointsPossible?: number; submission?: string; calendarEventId?: string; done?: boolean; canceled?: boolean };
-type FocusSessionUpdate = { remainingSeconds: number; hasStarted: boolean; isRunning: boolean; halfwayPrompted: boolean };
+type FocusSessionUpdate = { remainingSeconds: number; hasStarted: boolean; isRunning: boolean; halfwayPrompted: boolean; focusMinutes?: number };
 type ProjectKind = "maintenance" | "finishable";
 type SpaceKind = "class" | "project" | "maintenance";
 type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban" | "BriefcaseBusiness" | "Camera" | "Code2" | "HeartPulse" | "Utensils" | "BookOpen";
@@ -1628,15 +1628,18 @@ export default function LifeOS() {
   const updateFocusSession = useCallback((id: number, session: FocusSessionUpdate) => {
     setTasks(items => items.map(task => {
       if (task.id !== id) return task;
-      const remainingSeconds = Math.max(0, Math.min(task.focusMinutes * 60, Math.round(session.remainingSeconds)));
+      const nextFocusMinutes = Math.max(5, Math.min(240, session.focusMinutes ?? task.focusMinutes));
+      const remainingSeconds = Math.max(0, Math.min(nextFocusMinutes * 60, Math.round(session.remainingSeconds)));
       if (
         task.focusRemainingSeconds === remainingSeconds
+        && task.focusMinutes === nextFocusMinutes
         && Boolean(task.focusSessionStarted) === session.hasStarted
         && Boolean(task.focusSessionRunning) === session.isRunning
         && Boolean(task.focusHalfwayPrompted) === session.halfwayPrompted
       ) return task;
       return {
         ...task,
+        focusMinutes: nextFocusMinutes,
         focusRemainingSeconds: remainingSeconds,
         focusSessionStarted: session.hasStarted,
         focusSessionRunning: session.isRunning,
@@ -4065,6 +4068,21 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
     setBreakSeconds(5 * 60);
     saveFocusSession(totalSeconds, false, false, false);
   };
+  const addTime = (minutes: number) => {
+    const nextFocusMinutes = Math.min(240, task.focusMinutes + minutes);
+    const addedSeconds = (nextFocusMinutes - task.focusMinutes) * 60;
+    if (addedSeconds <= 0) return;
+    const nextSeconds = seconds + addedSeconds;
+    setSeconds(nextSeconds);
+    secondsRef.current = nextSeconds;
+    onUpdateFocusSession(task.id, {
+      remainingSeconds: nextSeconds,
+      hasStarted,
+      isRunning: running,
+      halfwayPrompted,
+      focusMinutes: nextFocusMinutes,
+    });
+  };
   const exitFocus = (destination?: View) => {
     saveFocusSession();
     onExit(destination);
@@ -4079,7 +4097,7 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
         <div className="checklist"><div className="checklist-head"><span>SESSION CHECKLIST</span><div><label htmlFor="checklist-template">Switch checklist</label><select id="checklist-template" value={activeTemplateName} onChange={event => switchChecklist(event.target.value)}><option value="Custom" disabled>Custom checklist</option>{focusChecklistTemplates.map(template => <option key={template.name} value={template.name}>{template.name}</option>)}</select><button type="button" onClick={addChecklistItem}><Plus size={13} /> Add step</button></div></div>{checklist.length ? checklist.map((item, i) => <div className={`checklist-row ${checks[i] ? "checked" : ""}`} key={`${task.id}-${i}`}><button type="button" className="check-toggle" aria-label={`Toggle ${item}`} onClick={() => setChecks(current => current.map((value, index) => index === i ? !value : value))}>{checks[i] && <Check size={14} />}</button><input autoFocus={i === checklist.length - 1} value={item} placeholder="Write the next tiny step…" onChange={event => updateChecklistItem(i, event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); addChecklistItem(); } }} /><button type="button" className="delete-step" aria-label={`Delete ${item || "step"}`} onClick={() => deleteChecklistItem(i)}><Trash2 size={13} /></button></div>) : <div className="empty-checklist"><strong>No steps yet.</strong><button type="button" onClick={addChecklistItem}><Plus size={13} /> Add the first step</button></div>}</div>
         <div className="notes"><span>NOTES</span><textarea value={focusNotes} onChange={event => setFocusNotes(event.target.value)} onBlur={() => onUpdateNotes(task.id, focusNotes.trim())} placeholder="Keep any thoughts here while you work…" /></div>
       </section>
-      <aside className={`timer-panel ${hasStarted ? "running" : ""}`}><span>{running ? "FOCUS IN PROGRESS" : hasStarted ? "FOCUS PAUSED" : "YOUR TIME"}</span><div className="timer-ring" style={{ "--progress": `${(seconds / totalSeconds) * 360}deg` } as React.CSSProperties}><div><strong>{time}</strong><span>{running ? "Stay with this one thing" : `${task.focusMinutes} minute session`}</span></div></div><button className="timer-button" onClick={toggleTimer}>{running ? <><Circle size={15} fill="currentColor" /> Pause & save</> : <><Focus size={16} /> {hasStarted ? "Resume focus" : "Start focus"}</>}</button><button className="reset" onClick={resetTimer}><TimerReset size={15} /> Reset to {task.focusMinutes}:00</button>
+      <aside className={`timer-panel ${hasStarted ? "running" : ""}`}><span>{running ? "FOCUS IN PROGRESS" : hasStarted ? "FOCUS PAUSED" : "YOUR TIME"}</span><div className="timer-ring" style={{ "--progress": `${(seconds / totalSeconds) * 360}deg` } as React.CSSProperties}><div><strong>{time}</strong><span>{running ? "Stay with this one thing" : `${task.focusMinutes} minute session`}</span></div></div><button className="timer-button" onClick={toggleTimer}>{running ? <><Circle size={15} fill="currentColor" /> Pause & save</> : <><Focus size={16} /> {hasStarted ? "Resume focus" : "Start focus"}</>}</button><div className="focus-add-time" role="group" aria-label="Add more time"><button type="button" onClick={() => addTime(5)} disabled={task.focusMinutes >= 240}>+5 min</button><button type="button" onClick={() => addTime(10)} disabled={task.focusMinutes >= 240}>+10 min</button></div><button className="reset" onClick={resetTimer}><TimerReset size={15} /> Reset to {task.focusMinutes}:00</button>
         <div className="focus-switcher"><div><span>SWITCH TASK</span></div><div className="switch-list">{tasks.filter(item => !item.done && !item.canceled).map(item => { const remaining = getTaskFocusSeconds(item); const hasProgress = Boolean(item.focusSessionStarted) || remaining < item.focusMinutes * 60; return <button key={item.id} className={item.id === task.id ? "active" : ""} onClick={() => switchTask(item.id)}><i style={{ background: item.color }} /><span><strong>{item.title}</strong>{hasProgress && <small>{formatFocusTime(remaining)} left</small>}</span>{item.id === task.id && <Check size={13} />}</button>; })}</div><div className="switch-arrows"><button onClick={() => switchBy(-1)}>← Previous</button><button onClick={() => switchBy(1)}>Next →</button></div></div>
         <div className="music"><Music2 size={17} /><div><strong>Focus sounds</strong><span>{!soundEffectsEnabled ? "Enable sound effects in Settings" : sounds ? "Brown noise on" : "Sounds are off"}</span></div><button aria-label="Toggle focus sounds" disabled={!soundEffectsEnabled} onClick={() => setSounds(value => !value)}>{sounds ? <Check size={15} /> : <Plus size={15} />}</button></div>
         <button className="mark-done-button" onClick={() => { if (soundEffectsEnabled) playFocusCue(660, 0.16); onComplete(task.id); setTimeout(() => onExit(), 300); }}><CheckCircle2 size={16} /> Mark as done</button>
