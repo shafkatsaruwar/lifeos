@@ -90,9 +90,11 @@ const formatDueIn = (targetMs: number, nowMs: number, dateKeyValue?: string) => 
 
 const urgencyFrom = (targetMs: number, nowMs: number, dateKeyValue?: string): NotificationUrgency => {
   const today = toDateKey(new Date(nowMs));
+  // Date-only due dates (YYYY-MM-DD @ local noon) stay "today" all day —
+  // only mark overdue when the calendar day has passed, or a real datetime is past.
   if (dateKeyValue && dateKeyValue < today) return "overdue";
-  if (targetMs <= nowMs) return "overdue";
   if (dateKeyValue && dateKeyValue === today) return "today";
+  if (!dateKeyValue && targetMs <= nowMs) return "overdue";
   if (targetMs - nowMs <= 2 * 60 * 60 * 1000) return "soon";
   return "soon";
 };
@@ -418,10 +420,17 @@ export function formatGroupKindBreakdown(summary: NotificationGroupSummary) {
     .join(" · ");
 }
 
-export function isBannerCandidate(notification: LifeOSNotification) {
-  if (notification.kind === "meeting" || notification.kind === "event") return true;
-  if (notification.urgency === "overdue" || notification.urgency === "today") return true;
-  return notification.urgency === "soon";
+/** In-app banners / OS toasts: only immediate attention, not every due-today item. */
+export function isBannerCandidate(notification: LifeOSNotification, now = Date.now()) {
+  if (notification.kind === "meeting" || notification.kind === "event") {
+    return notification.sortAt - now <= 60 * 60 * 1000;
+  }
+  return notification.urgency === "overdue";
+}
+
+/** True when a system/browser notification should fire (not the full notification center list). */
+export function shouldPushSystemNotification(notification: LifeOSNotification, now = Date.now()) {
+  return isBannerCandidate(notification, now);
 }
 
 export function formatNotificationTime(sortAt: number, now = Date.now()) {

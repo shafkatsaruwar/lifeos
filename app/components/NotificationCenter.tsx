@@ -106,7 +106,16 @@ export function NotificationBanners({ notifications, onNavigate }: {
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [visible, setVisible] = useState<LifeOSNotification[]>([]);
 
+  const primedRef = useRef(false);
   useEffect(() => {
+    // First hydration after open: keep everything in the notification tab,
+    // don't stack banners for every existing item.
+    if (!primedRef.current) {
+      if (!notifications.length) return;
+      notifications.forEach(item => { seenRef.current.add(item.id); });
+      primedRef.current = true;
+      return;
+    }
     const incoming = notifications.filter(item => isBannerCandidate(item) && !seenRef.current.has(item.id) && !hiddenIds.has(item.id));
     if (!incoming.length) return;
     incoming.forEach(item => { seenRef.current.add(item.id); });
