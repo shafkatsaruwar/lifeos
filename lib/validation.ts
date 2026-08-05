@@ -84,6 +84,7 @@ export const SettingsSchema = z.object({
     title: z.string(),
   })).optional(),
   showCaptureCommands: z.boolean().optional(),
+  nowQueueIds: z.array(z.number()).optional(),
   enableLifeOS: z.boolean().optional(),
   enableSchoolOS: z.boolean().optional(),
   enableWorkOS: z.boolean().optional(),

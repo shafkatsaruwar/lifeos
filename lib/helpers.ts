@@ -60,6 +60,10 @@ export const checkDoubleBooking = (
 
 // Format date string to user-friendly format
 export const formatDueDate = (dateStr: string): string => {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+    return 'No due date';
+  }
+
   const today = new Date();
   const todayKey = toDateKey(today);
 
