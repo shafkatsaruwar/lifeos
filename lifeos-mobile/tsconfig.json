@@ -3,5 +3,12 @@
   "compilerOptions": {
     "strict": true
   },
-  "exclude": ["**/* 2.ts", "**/* 2.tsx"]
+  "include": ["App.tsx", "index.ts"],
+  "exclude": [
+    "App.native-legacy.tsx",
+    "src",
+    "node_modules",
+    "**/* 2.ts",
+    "**/* 2.tsx"
+  ]
 }

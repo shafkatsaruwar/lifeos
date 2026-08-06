@@ -3,13 +3,10 @@
     "name": "LifeOS",
     "slug": "lifeos-mobile",
     "version": "1.0.0",
-    "scheme": [
-      "lifeos",
-      "com.googleusercontent.apps.157166242804-1bu70birp840vq11oas4todp1eg826m2"
-    ],
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
+    "scheme": "lifeos",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.shafkatsaruwar.lifeos"
@@ -21,14 +18,10 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
       "package": "com.shafkatsaruwar.lifeos"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "plugins": [
-      "expo-web-browser"
-    ]
+    }
   }
 }

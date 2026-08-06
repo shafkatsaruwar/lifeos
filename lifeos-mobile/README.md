@@ -2,9 +2,9 @@
 
 This Expo app opens the **real web LifeOS** inside a native WebView so the UI matches the website (colors, fonts, features).
 
-We start here on purpose: try it in **Expo Go on iPhone**. If it feels stuck or awkward, we move to a new native UI that copies the web design system.
+**Important:** pinned to **Expo SDK 54** so it works with the **App Store Expo Go** (newer SDKs are not on the App Store yet).
 
-Legacy native screens are kept as `App.native-legacy.tsx` + `src/` for a later native rebuild.
+Legacy native screens remain in `App.native-legacy.tsx` + `src/` for a later native rebuild (they need their own SDK restore later).
 
 ## Run on iPhone (Expo Go)
 
@@ -15,9 +15,11 @@ npm install
 npx expo start
 ```
 
-1. Install **Expo Go** from the App Store.
-2. Scan the QR code with your iPhone Camera / Expo Go.
+1. Open **Expo Go** from the App Store (no update needed for SDK 54).
+2. Scan the QR code with your iPhone.
 3. Sign in with the same Google account you use on web LifeOS.
+
+If you still see an SDK mismatch, force-quit Expo Go and scan again after `npx expo start` finishes.
 
 ## Optional `.env`
 
@@ -26,17 +28,8 @@ npx expo start
 EXPO_PUBLIC_LIFEOS_URL=https://lifeos-mu-three.vercel.app
 ```
 
-Point this at a local tunnel / preview URL if you want to test unreleased web changes.
+## Plan
 
-## What this phase is / isn’t
-
-| Is | Isn’t |
-|---|---|
-| Same LifeOS UI as the website | Final App Store product |
-| Fast way to feel phone UX | Full native navigation/widgets |
-| iPhone-first | Android polish (later) |
-
-## Next
-
-If Expo Go feels good → polish the shell (safe areas, auth quirks, hide double chrome).  
-If it feels trapped → start the **new native** app using web colors/type, informed by what hurt.
+1. Try this web shell in Expo Go
+2. If it feels stuck → new native UI matching web design tokens
+3. Android after iPhone feels right
