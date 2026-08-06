@@ -1,37 +1,40 @@
-# LifeOS Mobile
+# LifeOS Mobile (Phase 1 — iPhone web shell)
 
-The native iPhone-first companion to LifeOS. It uses the **same Firebase account and Realtime Database** as the web app—there is no second account and no duplicate data store.
+Expo WebView that loads real web LifeOS so UI matches the site.
 
-## What is in this first build
+Pinned to **Expo SDK 54** for App Store Expo Go.
 
-- Google sign-in
-- Now, Today, Spaces, Library, and Settings tabs
-- Current-task picker and optional calendar-event-to-task flow
-- Native focus timer that continues when you leave the focus screen
-- Notes and spaces synced with the web LifeOS data
-- A first-login “What should we call you?” setup
+Google sign-in inside the WebView uses **native Expo Google auth**, then injects the session into the website (popup/redirect auth breaks in iOS WebViews).
 
-## One-time setup
-
-1. Copy `.env.example` to `.env`.
-2. Copy the existing LifeOS Firebase web values into the four `EXPO_PUBLIC_FIREBASE_*` fields.
-3. In Google Cloud, create **iOS** and **Android** OAuth client IDs in the same project as LifeOS Gmail. Add their client IDs to the matching `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` fields.
-4. For the iOS OAuth client use bundle ID: `com.shafkatsaruwar.lifeos`.
-5. For Android use package: `com.shafkatsaruwar.lifeos`.
-
-## Run it on your iPhone
+## Run on iPhone
 
 ```bash
-cd /Users/mohammed/Desktop/Cockpit/lifeos-mobile
+cd lifeos-mobile
+cp .env.example .env
+# fill Google client IDs (required for sign-in)
+npm install
 npx expo start
 ```
 
-Install **Expo Go** from the App Store, scan the QR code, and sign in. For a proper installable developer build later, run:
+1. Force-quit Expo Go, scan QR
+2. Tap **Home** if you land on a blank/auth error page
+3. Sign in with Google on the LifeOS login screen
+
+## Required `.env`
 
 ```bash
-npx eas-cli login
-npx eas-cli build:configure
-npx eas-cli build --platform ios --profile development
+EXPO_PUBLIC_LIFEOS_URL=https://lifeos-mu-three.vercel.app
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=....apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=....apps.googleusercontent.com
 ```
 
-Do not submit this to the App Store until you have tested sign-in and Firebase access on your actual iPhone.
+Create those OAuth clients in the same Google Cloud project as web LifeOS.  
+iOS bundle ID: `com.shafkatsaruwar.lifeos`
+
+**Note:** Web auth bridge changes must be deployed (merge this PR) before production sign-in works from the shell.
+
+## Plan
+
+1. Web shell in Expo Go (this)
+2. If UX feels stuck → new native UI
+3. Android later

@@ -3493,6 +3493,8 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
         setError("Your browser blocked the Google sign-in window. Allow popups for LifeOS, then try again.");
       } else if (code === "auth/unauthorized-domain") {
         setError("This LifeOS website is not authorized in Firebase yet.");
+      } else if (typeof err?.message === "string" && /timed out|iPhone app shell|warming up|Add EXPO_PUBLIC_GOOGLE/i.test(err.message)) {
+        setError(err.message);
       } else {
         setError(err?.message || "Google sign-in failed. Please try again.");
       }
