@@ -158,6 +158,14 @@ export default function App() {
         <View style={styles.toolbar}>
           <Text style={styles.brand}>LifeOS</Text>
           <View style={styles.toolbarActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Sign in with Google"
+              onPress={() => void startNativeGoogleSignIn()}
+              style={[styles.toolButton, styles.signInButton]}
+            >
+              <Text style={styles.signInButtonText}>Sign in</Text>
+            </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Go to LifeOS home" onPress={goHome} style={styles.toolButton}>
               <Text style={styles.toolButtonText}>Home</Text>
             </Pressable>
@@ -202,12 +210,39 @@ export default function App() {
               }}
               injectedJavaScriptBeforeContentLoaded={`
                 (function() {
+                  if (!window.ReactNativeWebView) {
+                    window.ReactNativeWebView = {
+                      postMessage: function(data) {
+                        try {
+                          window.webkit.messageHandlers.ReactNativeWebView.postMessage(String(data));
+                        } catch (error) {}
+                      }
+                    };
+                  }
                   window.addEventListener('DOMContentLoaded', function() {
                     if (window.__lifeosPendingGoogleIdToken && typeof window.__lifeosCompleteGoogleSignIn === 'function') {
                       window.__lifeosCompleteGoogleSignIn(window.__lifeosPendingGoogleIdToken);
                       delete window.__lifeosPendingGoogleIdToken;
                     }
                   });
+                  true;
+                })();
+              `}
+              injectedJavaScript={`
+                (function() {
+                  if (!window.ReactNativeWebView) {
+                    window.ReactNativeWebView = {
+                      postMessage: function(data) {
+                        try {
+                          window.webkit.messageHandlers.ReactNativeWebView.postMessage(String(data));
+                        } catch (error) {}
+                      }
+                    };
+                  }
+                  if (window.__lifeosPendingGoogleIdToken && typeof window.__lifeosCompleteGoogleSignIn === 'function') {
+                    window.__lifeosCompleteGoogleSignIn(window.__lifeosPendingGoogleIdToken);
+                    delete window.__lifeosPendingGoogleIdToken;
+                  }
                   true;
                 })();
               `}
@@ -268,6 +303,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#625af6",
+  },
+  signInButton: {
+    backgroundColor: "#202124",
+  },
+  signInButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#ffffff",
   },
   webWrap: {
     flex: 1,

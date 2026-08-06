@@ -64,9 +64,21 @@ export function isLifeOSIosShell() {
   return /LifeOS-iOS-Shell/i.test(window.navigator.userAgent);
 }
 
-function getReactNativeWebView() {
-  if (typeof window === 'undefined') return null;
-  return (window as any).ReactNativeWebView ?? null;
+function postToLifeOSShell(payload: Record<string, unknown>) {
+  if (typeof window === 'undefined') return false;
+  const data = JSON.stringify(payload);
+  const bridge = (window as any).ReactNativeWebView;
+  if (bridge?.postMessage) {
+    bridge.postMessage(data);
+    return true;
+  }
+  // Some WKWebView builds expose the handler before ReactNativeWebView is patched in.
+  try {
+    (window as any).webkit?.messageHandlers?.ReactNativeWebView?.postMessage(data);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function getClientDatabase() {
@@ -121,10 +133,6 @@ export async function signInWithGoogle() {
   // iOS WebView cannot keep Google redirect/popup sessionStorage. Ask the
   // native shell to run Expo Google auth, then finish with an ID token.
   if (isLifeOSIosShell()) {
-    const bridge = getReactNativeWebView();
-    if (!bridge?.postMessage) {
-      throw new Error('Open LifeOS in the iPhone app shell to sign in with Google.');
-    }
     if (shellSignInWaiter) {
       clearTimeout(shellSignInWaiter.timer);
       shellSignInWaiter.reject(new Error('Another Google sign-in is already in progress.'));
@@ -133,10 +141,15 @@ export async function signInWithGoogle() {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         shellSignInWaiter = null;
-        reject(new Error('Google sign-in timed out. Tap Sign in again.'));
+        reject(new Error('Google sign-in timed out. Tap Sign in on the top bar, or try again.'));
       }, 120000);
       shellSignInWaiter = { resolve, reject, timer };
-      bridge.postMessage(JSON.stringify({ type: 'LIFEOS_REQUEST_GOOGLE_SIGNIN' }));
+      const sent = postToLifeOSShell({ type: 'LIFEOS_REQUEST_GOOGLE_SIGNIN' });
+      if (!sent) {
+        clearTimeout(timer);
+        shellSignInWaiter = null;
+        reject(new Error('Tap “Sign in” in the LifeOS top bar to continue with Google.'));
+      }
     });
   }
 
