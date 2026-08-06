@@ -3,11 +3,13 @@ import { getDatabase, ref, set, get, remove, onValue } from 'firebase/database';
 import {
   browserLocalPersistence,
   getAuth,
+  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   setPersistence,
   signInWithCredential,
   signInWithPopup,
+  signInWithRedirect,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
@@ -122,6 +124,30 @@ export async function completeShellGoogleSignIn(idToken: string) {
     }
     throw error;
   }
+}
+
+/** Google blocks Expo Go's exp:// redirect URIs. Shell auth runs on HTTPS first. */
+export async function consumeShellBridgeGoogleRedirect() {
+  const auth = getClientAuth();
+  if (!auth) throw new Error('Firebase authentication is not configured.');
+  await persistenceReady;
+  return getRedirectResult(auth);
+}
+
+export async function beginShellBridgeGoogleSignIn() {
+  const auth = getClientAuth();
+  if (!auth) throw new Error('Firebase authentication is not configured.');
+  await persistenceReady;
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  return signInWithRedirect(auth, provider);
+}
+
+export async function getShellBridgeIdToken() {
+  const auth = getClientAuth();
+  if (!auth?.currentUser) return null;
+  await persistenceReady;
+  return auth.currentUser.getIdToken();
 }
 
 export async function signInWithGoogle() {

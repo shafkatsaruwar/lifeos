@@ -1,7 +1,7 @@
-import * as Google from "expo-auth-session/providers/google";
+import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -27,6 +27,28 @@ function resolveLifeOSUrl() {
     return url.toString();
   } catch {
     return DEFAULT_LIFEOS_URL;
+  }
+}
+
+function resolveLifeOSOrigin() {
+  const raw = process.env.EXPO_PUBLIC_LIFEOS_URL?.trim() || DEFAULT_LIFEOS_URL;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return "https://lifeos-mu-three.vercel.app";
+  }
+}
+
+function readIdTokenFromUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    const fromQuery = parsed.searchParams.get("id_token");
+    if (fromQuery) return fromQuery;
+    const hash = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
+    if (!hash) return null;
+    return new URLSearchParams(hash).get("id_token");
+  } catch {
+    return null;
   }
 }
 
@@ -63,21 +85,12 @@ function injectGoogleSignInError(message: string) {
 export default function App() {
   const webRef = useRef<WebView>(null);
   const lifeOSUrl = useMemo(() => resolveLifeOSUrl(), []);
+  const lifeOSOrigin = useMemo(() => resolveLifeOSOrigin(), []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [webKey, setWebKey] = useState(0);
-
-  const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
-  const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-  const androidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
-  const googleConfigured = Boolean(iosClientId && webClientId);
-
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    iosClientId,
-    androidClientId,
-    webClientId,
-  });
+  const [signingIn, setSigningIn] = useState(false);
 
   const goHome = useCallback(() => {
     setError(null);
@@ -94,62 +107,62 @@ export default function App() {
 
   const onNav = useCallback((nav: WebViewNavigation) => {
     setCanGoBack(nav.canGoBack);
-    // Recover from dead Firebase/Google auth handler pages inside the WebView.
-    const href = nav.url || "";
-    if (
-      href.includes("missing initial state") ||
-      href.includes("__/auth/handler") ||
-      href.includes("accounts.google.com/o/oauth2") && href.includes("error")
-    ) {
-      // Keep navigation state; user can tap Home. Auto-home on handler stall.
-    }
   }, []);
 
   const startNativeGoogleSignIn = useCallback(async () => {
-    if (!googleConfigured) {
-      const message = "Add EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID and EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to lifeos-mobile/.env, then restart Expo.";
-      webRef.current?.injectJavaScript(injectGoogleSignInError(message));
-      Alert.alert("Google sign-in needs setup", message);
-      return;
-    }
-    if (!request) {
-      webRef.current?.injectJavaScript(injectGoogleSignInError("Google sign-in is still warming up. Try again in a second."));
-      return;
-    }
+    if (signingIn) return;
+    setSigningIn(true);
     try {
-      await promptAsync();
+      // Google rejects Expo Go's exp:// redirect_uri. Run OAuth on HTTPS LifeOS,
+      // then deep-link the ID token back into the shell.
+      const redirectUri = AuthSession.makeRedirectUri({
+        scheme: "lifeos",
+        path: "shell-auth",
+      });
+      const authUrl = new URL("/shell-auth", lifeOSOrigin);
+      authUrl.searchParams.set("redirect", redirectUri);
+
+      const result = await WebBrowser.openAuthSessionAsync(authUrl.toString(), redirectUri);
+
+      if (result.type === "success" && "url" in result && result.url) {
+        const idToken = readIdTokenFromUrl(result.url);
+        if (!idToken) {
+          const message = "Google sign-in finished, but no ID token came back.";
+          webRef.current?.injectJavaScript(injectGoogleSignInError(message));
+          Alert.alert("Sign-in incomplete", message);
+          return;
+        }
+        webRef.current?.injectJavaScript(injectGoogleIdToken(idToken));
+        return;
+      }
+
+      if (result.type === "cancel" || result.type === "dismiss") {
+        webRef.current?.injectJavaScript(
+          injectGoogleSignInError("Google sign-in was closed before it finished."),
+        );
+      }
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "Could not open Google sign-in.";
       webRef.current?.injectJavaScript(injectGoogleSignInError(message));
+      Alert.alert("Google sign-in failed", message);
+    } finally {
+      setSigningIn(false);
     }
-  }, [googleConfigured, promptAsync, request]);
+  }, [lifeOSOrigin, signingIn]);
 
-  useEffect(() => {
-    if (!response) return;
-    if (response.type === "success") {
-      const idToken = response.params.id_token;
-      if (!idToken) {
-        webRef.current?.injectJavaScript(injectGoogleSignInError("Google did not return an ID token."));
-        return;
+  const onMessage = useCallback(
+    (event: WebViewMessageEvent) => {
+      try {
+        const payload = JSON.parse(event.nativeEvent.data);
+        if (payload?.type === "LIFEOS_REQUEST_GOOGLE_SIGNIN") {
+          void startNativeGoogleSignIn();
+        }
+      } catch {
+        // ignore non-JSON messages
       }
-      webRef.current?.injectJavaScript(injectGoogleIdToken(idToken));
-      return;
-    }
-    if (response.type === "dismiss" || response.type === "cancel") {
-      webRef.current?.injectJavaScript(injectGoogleSignInError("Google sign-in was closed before it finished."));
-    }
-  }, [response]);
-
-  const onMessage = useCallback((event: WebViewMessageEvent) => {
-    try {
-      const payload = JSON.parse(event.nativeEvent.data);
-      if (payload?.type === "LIFEOS_REQUEST_GOOGLE_SIGNIN") {
-        void startNativeGoogleSignIn();
-      }
-    } catch {
-      // ignore non-JSON messages
-    }
-  }, [startNativeGoogleSignIn]);
+    },
+    [startNativeGoogleSignIn],
+  );
 
   return (
     <SafeAreaProvider>
@@ -161,10 +174,11 @@ export default function App() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Sign in with Google"
+              disabled={signingIn}
               onPress={() => void startNativeGoogleSignIn()}
-              style={[styles.toolButton, styles.signInButton]}
+              style={[styles.toolButton, styles.signInButton, signingIn && styles.signInButtonDisabled]}
             >
-              <Text style={styles.signInButtonText}>Sign in</Text>
+              <Text style={styles.signInButtonText}>{signingIn ? "Signing in…" : "Sign in"}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Go to LifeOS home" onPress={goHome} style={styles.toolButton}>
               <Text style={styles.toolButtonText}>Home</Text>
@@ -306,6 +320,9 @@ const styles = StyleSheet.create({
   },
   signInButton: {
     backgroundColor: "#202124",
+  },
+  signInButtonDisabled: {
+    opacity: 0.7,
   },
   signInButtonText: {
     fontSize: 12,
