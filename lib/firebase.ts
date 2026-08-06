@@ -27,6 +27,30 @@ let shellSignInWaiter: {
   timer: ReturnType<typeof setTimeout>;
 } | null = null;
 
+/**
+ * Prefer the current LifeOS host as authDomain so Google OAuth stays on
+ * lifeos-mu-three.vercel.app via the /__/auth rewrite. Using firebaseapp.com
+ * inside Expo's in-app browser loses session state and loops the account picker.
+ */
+function resolveAuthDomain() {
+  const configured =
+    process.env.NEXT_PUBLIC_LIFEOS_AUTH_DOMAIN ||
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ||
+    '';
+  if (typeof window === 'undefined') return configured;
+  const host = window.location.hostname;
+  if (
+    host &&
+    host !== 'localhost' &&
+    host !== '127.0.0.1' &&
+    !host.endsWith('.firebaseapp.com') &&
+    !host.endsWith('.web.app')
+  ) {
+    return host;
+  }
+  return configured;
+}
+
 function initializeFirebase() {
   if (initialized || typeof window === 'undefined') return;
   try {
@@ -34,10 +58,8 @@ function initializeFirebase() {
     const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
     const firebaseConfig = {
       apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-      // When enabled, this keeps Firebase's OAuth helper under the LifeOS
-      // domain via the Next.js proxy above. Safari then retains its sign-in
-      // state instead of sending the user to firebaseapp.com.
-      authDomain: process.env.NEXT_PUBLIC_LIFEOS_AUTH_DOMAIN || process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+      // Keep Firebase's OAuth helper under the LifeOS domain via next.config rewrites.
+      authDomain: resolveAuthDomain(),
       databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DB_URL,
       projectId,
       ...(storageBucket ? { storageBucket } : {}),
