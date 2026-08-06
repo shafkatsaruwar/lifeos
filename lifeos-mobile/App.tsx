@@ -121,6 +121,11 @@ export default function App() {
       });
       const authUrl = new URL("/shell-auth", lifeOSOrigin);
       authUrl.searchParams.set("redirect", redirectUri);
+      // Lets /shell-auth use direct Google OAuth (no firebaseapp.com hop).
+      const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim();
+      if (googleWebClientId) {
+        authUrl.searchParams.set("google_client_id", googleWebClientId);
+      }
 
       const result = await WebBrowser.openAuthSessionAsync(authUrl.toString(), redirectUri);
 
