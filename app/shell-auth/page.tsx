@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import {
   beginShellBridgeGoogleSignIn,
   consumeShellBridgeGoogleRedirect,
-  getShellBridgeIdToken,
+  googleIdTokenFromAuthResult,
 } from "@/lib/firebase";
 
 const REDIRECT_KEY = "lifeos_shell_auth_redirect";
@@ -86,22 +86,19 @@ export default function ShellAuthPage() {
         if (cancelled) return;
 
         if (result?.user) {
+          const googleIdToken = googleIdTokenFromAuthResult(result);
+          if (!googleIdToken) {
+            setError("Google signed in, but did not return an ID token. Try again.");
+            setStatus("");
+            return;
+          }
           setStatus("Returning to LifeOS…");
-          const idToken = await result.user.getIdToken();
           clearRedirect();
-          returnToShell(redirect, idToken);
+          returnToShell(redirect, googleIdToken);
           return;
         }
 
-        const existingToken = await getShellBridgeIdToken();
-        if (cancelled) return;
-        if (existingToken) {
-          setStatus("Returning to LifeOS…");
-          clearRedirect();
-          returnToShell(redirect, existingToken);
-          return;
-        }
-
+        // Do not reuse Firebase user.getIdToken() — the shell needs a Google ID token.
         setStatus("Opening Google…");
         await beginShellBridgeGoogleSignIn();
       } catch (reason) {
