@@ -1,37 +1,42 @@
-# LifeOS Mobile
+# LifeOS Mobile (Phase 1 — iPhone web shell)
 
-The native iPhone-first companion to LifeOS. It uses the **same Firebase account and Realtime Database** as the web app—there is no second account and no duplicate data store.
+This Expo app opens the **real web LifeOS** inside a native WebView so the UI matches the website (colors, fonts, features).
 
-## What is in this first build
+We start here on purpose: try it in **Expo Go on iPhone**. If it feels stuck or awkward, we move to a new native UI that copies the web design system.
 
-- Google sign-in
-- Now, Today, Spaces, Library, and Settings tabs
-- Current-task picker and optional calendar-event-to-task flow
-- Native focus timer that continues when you leave the focus screen
-- Notes and spaces synced with the web LifeOS data
-- A first-login “What should we call you?” setup
+Legacy native screens are kept as `App.native-legacy.tsx` + `src/` for a later native rebuild.
 
-## One-time setup
-
-1. Copy `.env.example` to `.env`.
-2. Copy the existing LifeOS Firebase web values into the four `EXPO_PUBLIC_FIREBASE_*` fields.
-3. In Google Cloud, create **iOS** and **Android** OAuth client IDs in the same project as LifeOS Gmail. Add their client IDs to the matching `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` fields.
-4. For the iOS OAuth client use bundle ID: `com.shafkatsaruwar.lifeos`.
-5. For Android use package: `com.shafkatsaruwar.lifeos`.
-
-## Run it on your iPhone
+## Run on iPhone (Expo Go)
 
 ```bash
-cd /Users/mohammed/Desktop/Cockpit/lifeos-mobile
+cd lifeos-mobile
+cp .env.example .env   # optional — defaults to production LifeOS
+npm install
 npx expo start
 ```
 
-Install **Expo Go** from the App Store, scan the QR code, and sign in. For a proper installable developer build later, run:
+1. Install **Expo Go** from the App Store.
+2. Scan the QR code with your iPhone Camera / Expo Go.
+3. Sign in with the same Google account you use on web LifeOS.
+
+## Optional `.env`
 
 ```bash
-npx eas-cli login
-npx eas-cli build:configure
-npx eas-cli build --platform ios --profile development
+# Defaults to https://lifeos-mu-three.vercel.app
+EXPO_PUBLIC_LIFEOS_URL=https://lifeos-mu-three.vercel.app
 ```
 
-Do not submit this to the App Store until you have tested sign-in and Firebase access on your actual iPhone.
+Point this at a local tunnel / preview URL if you want to test unreleased web changes.
+
+## What this phase is / isn’t
+
+| Is | Isn’t |
+|---|---|
+| Same LifeOS UI as the website | Final App Store product |
+| Fast way to feel phone UX | Full native navigation/widgets |
+| iPhone-first | Android polish (later) |
+
+## Next
+
+If Expo Go feels good → polish the shell (safe areas, auth quirks, hide double chrome).  
+If it feels trapped → start the **new native** app using web colors/type, informed by what hurt.

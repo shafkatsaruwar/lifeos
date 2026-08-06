@@ -1,110 +1,207 @@
-import * as WebBrowser from "expo-web-browser";
-import { onAuthStateChanged, type User } from "firebase/auth";
-import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, StyleSheet, Text, useColorScheme } from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { auth, loadWorkspace, saveWorkspacePart } from "./src/lib/firebase";
-import type { Workspace } from "./src/types";
-import { LifeOSContext, type AppState } from "./src/lib/LifeOSContext";
-import { LIGHT, DARK } from "./src/lib/theme";
-import { SignIn } from "./src/components/Auth";
-import { RootNavigator } from "./src/navigation/RootNavigator";
+import { WebView, type WebViewNavigation } from "react-native-webview";
 
-// Required once at module load so the OAuth redirect from Google's web
-// sign-in flow can close the in-app browser and return control to the app.
-WebBrowser.maybeCompleteAuthSession();
+/** Production LifeOS. Override with EXPO_PUBLIC_LIFEOS_URL for local testing. */
+const DEFAULT_LIFEOS_URL = "https://lifeos-mu-three.vercel.app";
+
+function resolveLifeOSUrl() {
+  const raw = process.env.EXPO_PUBLIC_LIFEOS_URL?.trim() || DEFAULT_LIFEOS_URL;
+  try {
+    const url = new URL(raw);
+    // Hint the site that it's running inside the iPhone shell.
+    url.searchParams.set("app", "ios");
+    return url.toString();
+  } catch {
+    return DEFAULT_LIFEOS_URL;
+  }
+}
 
 export default function App() {
-  const systemDark = useColorScheme() === "dark";
-  const [user, setUser] = useState<User | null>(null);
-  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const webRef = useRef<WebView>(null);
+  const lifeOSUrl = useMemo(() => resolveLifeOSUrl(), []);
   const [loading, setLoading] = useState(true);
-  const themeMode = workspace?.settings.themeMode ?? "system";
-  const dark = themeMode === "system" ? systemDark : themeMode === "dark";
-  const theme = dark ? DARK : LIGHT;
+  const [error, setError] = useState<string | null>(null);
+  const [canGoBack, setCanGoBack] = useState(false);
 
-  useEffect(
-    () =>
-      onAuthStateChanged(auth, (nextUser) => {
-        setUser(nextUser);
-        setLoading(false);
-        if (!nextUser) setWorkspace(null);
-      }),
-    [],
-  );
+  const reload = useCallback(() => {
+    setError(null);
+    setLoading(true);
+    webRef.current?.reload();
+  }, []);
 
-  const sync = useCallback(async () => {
-    if (!user) return;
-    setWorkspace(await loadWorkspace(user.uid));
-  }, [user]);
-
-  useEffect(() => {
-    if (user) sync().catch((error) => Alert.alert("Could not load LifeOS", error.message));
-  }, [user, sync]);
-
-  // Optimistic-update + persist pattern: update local state immediately so
-  // the UI feels instant, then write through to Firebase in the background.
-  // Covers every top-level Workspace key, old and new (tasks, projects,
-  // notes, settings, classes, calendar, brain, resources).
-  const savePart = useCallback(
-    async <K extends keyof Workspace>(key: K, value: Workspace[K]) => {
-      if (!user || !workspace) return;
-      setWorkspace((current) => (current ? { ...current, [key]: value } : current));
-      try {
-        await saveWorkspacePart(user.uid, key, value);
-      } catch (error: any) {
-        Alert.alert("Could not save", error.message);
-      }
-    },
-    [user, workspace],
-  );
-
-  if (loading || (user && !workspace)) {
-    return (
-      <SafeAreaProvider>
-        <SafeAreaView style={[styles.loader, { backgroundColor: theme.bg }]}>
-          <ActivityIndicator color={theme.accent} />
-          <Text style={{ color: theme.muted, marginTop: 12, fontSize: 14 }}>Opening LifeOS…</Text>
-        </SafeAreaView>
-      </SafeAreaProvider>
-    );
-  }
-
-  if (!user) {
-    return (
-      <SafeAreaProvider>
-        <SignIn />
-      </SafeAreaProvider>
-    );
-  }
-
-  const state: AppState = {
-    user,
-    workspace: workspace!,
-    theme,
-    dark,
-    sync,
-    updateTasks: (value) => savePart("tasks", value),
-    updateProjects: (value) => savePart("projects", value),
-    updateNotes: (value) => savePart("notes", value),
-    updateSettings: (value) => savePart("settings", value),
-    updateClasses: (value) => savePart("classes", value),
-    updateCalendar: (value) => savePart("calendar", value),
-    updateBrain: (value) => savePart("brain", value),
-    updateResources: (value) => savePart("resources", value),
-    updateLife: (value) => savePart("life", value),
-    updateSchool: (value) => savePart("school", value),
-  };
+  const onNav = useCallback((nav: WebViewNavigation) => {
+    setCanGoBack(nav.canGoBack);
+  }, []);
 
   return (
     <SafeAreaProvider>
-      <LifeOSContext.Provider value={state}>
-        <RootNavigator />
-      </LifeOSContext.Provider>
+      <SafeAreaView style={styles.root} edges={["top", "left", "right"]}>
+        <StatusBar style="dark" />
+        <View style={styles.toolbar}>
+          <Text style={styles.brand}>LifeOS</Text>
+          <View style={styles.toolbarActions}>
+            {canGoBack && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+                onPress={() => webRef.current?.goBack()}
+                style={styles.toolButton}
+              >
+                <Text style={styles.toolButtonText}>Back</Text>
+              </Pressable>
+            )}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Reload LifeOS"
+              onPress={reload}
+              style={styles.toolButton}
+            >
+              <Text style={styles.toolButtonText}>Reload</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.webWrap}>
+          {error ? (
+            <View style={styles.errorPane}>
+              <Text style={styles.errorTitle}>Couldn’t open LifeOS</Text>
+              <Text style={styles.errorBody}>{error}</Text>
+              <Pressable onPress={reload} style={styles.primaryButton}>
+                <Text style={styles.primaryButtonText}>Try again</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <WebView
+              ref={webRef}
+              source={{ uri: lifeOSUrl }}
+              style={styles.webview}
+              onLoadStart={() => setLoading(true)}
+              onLoadEnd={() => setLoading(false)}
+              onNavigationStateChange={onNav}
+              onError={(event) => {
+                setLoading(false);
+                setError(event.nativeEvent.description || "Network error");
+              }}
+              onHttpError={(event) => {
+                if (event.nativeEvent.statusCode >= 500) {
+                  setError(`LifeOS returned ${event.nativeEvent.statusCode}`);
+                }
+              }}
+              allowsBackForwardNavigationGestures
+              sharedCookiesEnabled
+              thirdPartyCookiesEnabled
+              setSupportMultipleWindows={false}
+              pullToRefreshEnabled={Platform.OS === "android"}
+              applicationNameForUserAgent="LifeOS-iOS-Shell"
+              startInLoadingState
+            />
+          )}
+
+          {loading && !error && (
+            <View style={styles.loadingOverlay} pointerEvents="none">
+              <ActivityIndicator color="#625af6" size="large" />
+              <Text style={styles.loadingText}>Opening LifeOS…</Text>
+            </View>
+          )}
+        </View>
+      </SafeAreaView>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  loader: { flex: 1, alignItems: "center", justifyContent: "center" },
+  root: {
+    flex: 1,
+    backgroundColor: "#f6f7f9",
+  },
+  toolbar: {
+    height: 44,
+    paddingHorizontal: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e8e9ed",
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  brand: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#202124",
+    letterSpacing: -0.3,
+  },
+  toolbarActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  toolButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#f6f7f9",
+  },
+  toolButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#625af6",
+  },
+  webWrap: {
+    flex: 1,
+    backgroundColor: "#f6f7f9",
+  },
+  webview: {
+    flex: 1,
+    backgroundColor: "#f6f7f9",
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(246,247,249,0.88)",
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 13,
+    color: "#777b84",
+  },
+  errorPane: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+    gap: 10,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#202124",
+  },
+  errorBody: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#777b84",
+    textAlign: "center",
+  },
+  primaryButton: {
+    marginTop: 8,
+    backgroundColor: "#202124",
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  primaryButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 13,
+  },
 });
