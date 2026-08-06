@@ -11,6 +11,7 @@ import {
   signInWithPopup,
   signInWithRedirect,
   signOut as firebaseSignOut,
+  type UserCredential,
 } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 
@@ -134,20 +135,25 @@ export async function consumeShellBridgeGoogleRedirect() {
   return getRedirectResult(auth);
 }
 
+/**
+ * The WebView must sign in with a Google ID token (iss=accounts.google.com).
+ * user.getIdToken() is a Firebase token and will fail with auth/invalid-credential.
+ */
+export function googleIdTokenFromAuthResult(result: UserCredential | null) {
+  if (!result) return null;
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  return credential?.idToken || null;
+}
+
 export async function beginShellBridgeGoogleSignIn() {
   const auth = getClientAuth();
   if (!auth) throw new Error('Firebase authentication is not configured.');
   await persistenceReady;
   const provider = new GoogleAuthProvider();
+  // Ask Google for an ID token the WebView can pass to signInWithCredential.
+  provider.addScope('openid');
   provider.setCustomParameters({ prompt: 'select_account' });
   return signInWithRedirect(auth, provider);
-}
-
-export async function getShellBridgeIdToken() {
-  const auth = getClientAuth();
-  if (!auth?.currentUser) return null;
-  await persistenceReady;
-  return auth.currentUser.getIdToken();
 }
 
 export async function signInWithGoogle() {
