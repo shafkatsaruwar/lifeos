@@ -6,6 +6,7 @@ import {
   GoogleAuthProvider,
   onAuthStateChanged,
   setPersistence,
+  signInWithCredential,
   signInWithPopup,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
@@ -17,6 +18,11 @@ let auth: any;
 let storage: any;
 let initialized = false;
 let persistenceReady: Promise<void> | null = null;
+let shellSignInWaiter: {
+  resolve: (value: unknown) => void;
+  reject: (reason?: unknown) => void;
+  timer: ReturnType<typeof setTimeout>;
+} | null = null;
 
 function initializeFirebase() {
   if (initialized || typeof window === 'undefined') return;
@@ -50,6 +56,19 @@ function initializeFirebase() {
   }
 }
 
+/** True inside the Expo iPhone web shell (WebView). Popup/redirect Google auth breaks there. */
+export function isLifeOSIosShell() {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('app') === 'ios') return true;
+  return /LifeOS-iOS-Shell/i.test(window.navigator.userAgent);
+}
+
+function getReactNativeWebView() {
+  if (typeof window === 'undefined') return null;
+  return (window as any).ReactNativeWebView ?? null;
+}
+
 export function getClientDatabase() {
   initializeFirebase();
   return database;
@@ -65,11 +84,62 @@ export function getClientStorage() {
   return storage;
 }
 
+export async function signInWithGoogleIdToken(idToken: string) {
+  const auth = getClientAuth();
+  if (!auth) throw new Error('Firebase authentication is not configured.');
+  if (!idToken) throw new Error('Missing Google ID token.');
+
+  await persistenceReady;
+  return signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+}
+
+export async function completeShellGoogleSignIn(idToken: string) {
+  try {
+    const result = await signInWithGoogleIdToken(idToken);
+    if (shellSignInWaiter) {
+      clearTimeout(shellSignInWaiter.timer);
+      shellSignInWaiter.resolve(result);
+      shellSignInWaiter = null;
+    }
+    return result;
+  } catch (error) {
+    if (shellSignInWaiter) {
+      clearTimeout(shellSignInWaiter.timer);
+      shellSignInWaiter.reject(error);
+      shellSignInWaiter = null;
+    }
+    throw error;
+  }
+}
+
 export async function signInWithGoogle() {
   const auth = getClientAuth();
   if (!auth) throw new Error('Firebase authentication is not configured.');
 
   await persistenceReady;
+
+  // iOS WebView cannot keep Google redirect/popup sessionStorage. Ask the
+  // native shell to run Expo Google auth, then finish with an ID token.
+  if (isLifeOSIosShell()) {
+    const bridge = getReactNativeWebView();
+    if (!bridge?.postMessage) {
+      throw new Error('Open LifeOS in the iPhone app shell to sign in with Google.');
+    }
+    if (shellSignInWaiter) {
+      clearTimeout(shellSignInWaiter.timer);
+      shellSignInWaiter.reject(new Error('Another Google sign-in is already in progress.'));
+      shellSignInWaiter = null;
+    }
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        shellSignInWaiter = null;
+        reject(new Error('Google sign-in timed out. Tap Sign in again.'));
+      }, 120000);
+      shellSignInWaiter = { resolve, reject, timer };
+      bridge.postMessage(JSON.stringify({ type: 'LIFEOS_REQUEST_GOOGLE_SIGNIN' }));
+    });
+  }
+
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
@@ -84,3 +154,13 @@ export async function signOut() {
 }
 
 export { ref, set, get, remove, onValue, onAuthStateChanged };
+
+if (typeof window !== 'undefined') {
+  (window as any).__lifeosCompleteGoogleSignIn = (idToken: string) => completeShellGoogleSignIn(idToken);
+  (window as any).__lifeosRejectGoogleSignIn = (message: string) => {
+    if (!shellSignInWaiter) return;
+    clearTimeout(shellSignInWaiter.timer);
+    shellSignInWaiter.reject(new Error(message || 'Google sign-in was cancelled.'));
+    shellSignInWaiter = null;
+  };
+}

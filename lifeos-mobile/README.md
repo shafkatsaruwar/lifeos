@@ -1,35 +1,40 @@
 # LifeOS Mobile (Phase 1 — iPhone web shell)
 
-This Expo app opens the **real web LifeOS** inside a native WebView so the UI matches the website (colors, fonts, features).
+Expo WebView that loads real web LifeOS so UI matches the site.
 
-**Important:** pinned to **Expo SDK 54** so it works with the **App Store Expo Go** (newer SDKs are not on the App Store yet).
+Pinned to **Expo SDK 54** for App Store Expo Go.
 
-Legacy native screens remain in `App.native-legacy.tsx` + `src/` for a later native rebuild (they need their own SDK restore later).
+Google sign-in inside the WebView uses **native Expo Google auth**, then injects the session into the website (popup/redirect auth breaks in iOS WebViews).
 
-## Run on iPhone (Expo Go)
+## Run on iPhone
 
 ```bash
 cd lifeos-mobile
-cp .env.example .env   # optional — defaults to production LifeOS
+cp .env.example .env
+# fill Google client IDs (required for sign-in)
 npm install
 npx expo start
 ```
 
-1. Open **Expo Go** from the App Store (no update needed for SDK 54).
-2. Scan the QR code with your iPhone.
-3. Sign in with the same Google account you use on web LifeOS.
+1. Force-quit Expo Go, scan QR
+2. Tap **Home** if you land on a blank/auth error page
+3. Sign in with Google on the LifeOS login screen
 
-If you still see an SDK mismatch, force-quit Expo Go and scan again after `npx expo start` finishes.
-
-## Optional `.env`
+## Required `.env`
 
 ```bash
-# Defaults to https://lifeos-mu-three.vercel.app
 EXPO_PUBLIC_LIFEOS_URL=https://lifeos-mu-three.vercel.app
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=....apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=....apps.googleusercontent.com
 ```
+
+Create those OAuth clients in the same Google Cloud project as web LifeOS.  
+iOS bundle ID: `com.shafkatsaruwar.lifeos`
+
+**Note:** Web auth bridge changes must be deployed (merge this PR) before production sign-in works from the shell.
 
 ## Plan
 
-1. Try this web shell in Expo Go
-2. If it feels stuck → new native UI matching web design tokens
-3. Android after iPhone feels right
+1. Web shell in Expo Go (this)
+2. If UX feels stuck → new native UI
+3. Android later
