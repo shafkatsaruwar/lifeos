@@ -285,7 +285,7 @@ export function upcomingStudyAbroadItems(hub: StudyAbroadHub, limit = 5) {
       return {
         id: `prog-${program.id}`,
         title: program.name,
-        detail: `${programUniversity(hub, program)?.name || "University"} · Application deadline`,
+        detail: `${programUniversity(hub, program)?.name || "University"} · ${programCountry(hub, program)?.name || "Country"}`,
         date: program.deadline!.slice(0, 10),
         days,
         programId: program.id,
@@ -320,6 +320,32 @@ export function programNextActionLabel(hub: StudyAbroadHub, program: StudyAbroad
   if (missing) return `Complete ${missing.title}`;
   if (!hub.applications.some((item) => item.programId === program.id)) return "Start application";
   return programStatusLabel(program.status);
+}
+
+/** Next upcoming deadline among programs in a country. */
+export function nextDeadlineForCountry(hub: StudyAbroadHub, countryId: string) {
+  const programs = programsForCountry(hub, countryId);
+  const candidates = programs
+    .map((program) => {
+      const days = daysUntil(program.deadline);
+      if (days === null || days < 0) return null;
+      if (["rejected", "withdrawn", "accepted"].includes(program.status)) return null;
+      return { program, deadline: program.deadline!, days };
+    })
+    .filter(Boolean) as Array<{ program: StudyAbroadProgram; deadline: string; days: number }>;
+  candidates.sort((a, b) => a.days - b.days);
+  return candidates[0] ?? null;
+}
+
+export function formatStudyDate(date?: string) {
+  if (!date) return null;
+  const parsed = new Date(date.slice(0, 10) + "T12:00:00");
+  if (Number.isNaN(parsed.getTime())) return null;
+  return {
+    month: parsed.toLocaleDateString(undefined, { month: "short" }).toUpperCase(),
+    day: String(parsed.getDate()),
+    label: parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+  };
 }
 
 export function parentLabel(hub: StudyAbroadHub, task: StudyAbroadTask) {
