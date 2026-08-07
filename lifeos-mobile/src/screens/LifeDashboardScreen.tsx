@@ -101,7 +101,7 @@ export function LifeDashboardScreen() {
           </View>
           <Pressable
             accessibilityLabel="Open focus and ambient tools"
-            onPress={() => navigation.navigate("Now")}
+            onPress={() => navigation.navigate("NowTab")}
             style={[styles.nowButton, { backgroundColor: theme.text }]}
           >
             <Feather name="zap" size={18} color={theme.surface} />

@@ -48,7 +48,7 @@ export function DashboardScreen() {
             <Text style={[styles.greeting, { color: theme.text }]}>{getGreeting(now, workspace.settings.preferredName || "there")}</Text>
             <Text style={[styles.sub, { color: theme.muted }]}>Here's what deserves your attention today.</Text>
           </View>
-          <IconButton icon="zap" label="Now / ambient tracking" onPress={() => navigation.navigate("Now")} />
+          <IconButton icon="zap" label="Now / ambient tracking" onPress={() => navigation.navigate("NowTab")} />
           <IconButton icon="search" label="Search LifeOS" onPress={() => setSearchOpen(true)} />
           <View style={[styles.dayScore, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Text style={[styles.dayScoreLabel, { color: theme.muted }]}>TODAY</Text>

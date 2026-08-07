@@ -28,6 +28,7 @@ import { ResourcesScreen } from "../screens/ResourcesScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
 
 const Tab = createBottomTabNavigator();
+const NowStack = createNativeStackNavigator();
 const LifeStack = createNativeStackNavigator();
 const TasksStack = createNativeStackNavigator();
 const CalendarStack = createNativeStackNavigator();
@@ -35,12 +36,12 @@ const LibraryStack = createNativeStackNavigator();
 const SchoolStack = createNativeStackNavigator();
 
 const TAB_ICONS: Record<string, { idle: keyof typeof Ionicons.glyphMap; active: keyof typeof Ionicons.glyphMap }> = {
-  LifeTab: { idle: "sparkles-outline", active: "sparkles" },
+  NowTab: { idle: "flash-outline", active: "flash" },
   TasksTab: { idle: "checkbox-outline", active: "checkbox" },
   CalendarTab: { idle: "calendar-outline", active: "calendar" },
+  LifeTab: { idle: "sparkles-outline", active: "sparkles" },
   SchoolTab: { idle: "school-outline", active: "school" },
   LibraryTab: { idle: "book-outline", active: "book" },
-  SettingsTab: { idle: "options-outline", active: "options" },
 };
 
 function GlassTabBarBackground({ dark }: { dark: boolean }) {
@@ -52,11 +53,20 @@ function GlassTabBarBackground({ dark }: { dark: boolean }) {
   );
 }
 
+function NowStackNavigator() {
+  return (
+    <NowStack.Navigator screenOptions={{ headerShown: false }}>
+      <NowStack.Screen name="NowHome" component={NowScreen} />
+      <NowStack.Screen name="TaskDetail" component={TaskDetailScreen} />
+      <NowStack.Screen name="Settings" component={SettingsScreen} />
+    </NowStack.Navigator>
+  );
+}
+
 function LifeStackNavigator() {
   return (
     <LifeStack.Navigator screenOptions={{ headerShown: false }}>
       <LifeStack.Screen name="LifeDashboard" component={LifeDashboardScreen} />
-      <LifeStack.Screen name="Now" component={NowScreen} />
       <LifeStack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
       <LifeStack.Screen name="ProjectsDirectory" component={ProjectsDirectoryScreen} />
       <LifeStack.Screen name="HubCollection" component={HubCollectionScreen} />
@@ -95,8 +105,6 @@ function CalendarStackNavigator() {
   );
 }
 
-// Library tab hosts Notes, Brain, and Resources — the three "knowledge
-// library" views from the web app — plus the note editor drill-in.
 function LibraryStackNavigator() {
   return (
     <LibraryStack.Navigator screenOptions={{ headerShown: false }}>
@@ -111,10 +119,6 @@ function LibraryStackNavigator() {
 export function RootNavigator() {
   const { theme, dark } = useLifeOS();
   const insets = useSafeAreaInsets();
-  // Clone (don't mutate) the base navigation theme — DarkTheme/DefaultTheme
-  // are shared singleton objects from @react-navigation/native, so writing
-  // into their .colors directly would leak across every screen/app that
-  // imports them.
   const base = dark ? DarkTheme : DefaultTheme;
   const navTheme = {
     ...base,
@@ -139,10 +143,10 @@ export function RootNavigator() {
           tabBarBackground: () => <GlassTabBarBackground dark={dark} />,
           tabBarStyle: {
             position: "absolute",
-            left: 20,
-            right: 20,
-            bottom: insets.bottom + 16,
-            height: 70,
+            left: 16,
+            right: 16,
+            bottom: insets.bottom + 12,
+            height: 68,
             borderRadius: 28,
             backgroundColor: "transparent",
             borderTopWidth: 0,
@@ -151,12 +155,12 @@ export function RootNavigator() {
             shadowOpacity: dark ? 0.4 : 0.2,
             shadowRadius: 22,
             elevation: 12,
-            paddingHorizontal: 8,
+            paddingHorizontal: 4,
             paddingTop: 4,
             paddingBottom: 4,
           },
           tabBarItemStyle: {
-            height: 62,
+            height: 60,
             minWidth: 44,
             paddingVertical: 0,
             justifyContent: "center",
@@ -166,8 +170,8 @@ export function RootNavigator() {
             marginTop: 4,
           },
           tabBarLabelStyle: {
-            fontSize: 10,
-            lineHeight: 12,
+            fontSize: 9,
+            lineHeight: 11,
             fontWeight: "600",
             marginTop: 2,
             marginBottom: 5,
@@ -180,12 +184,12 @@ export function RootNavigator() {
           },
         })}
       >
-        <Tab.Screen name="LifeTab" component={LifeStackNavigator} options={{ title: "Life" }} />
+        <Tab.Screen name="NowTab" component={NowStackNavigator} options={{ title: "Now" }} />
         <Tab.Screen name="TasksTab" component={TasksStackNavigator} options={{ title: "Tasks" }} />
         <Tab.Screen name="CalendarTab" component={CalendarStackNavigator} options={{ title: "Calendar" }} />
+        <Tab.Screen name="LifeTab" component={LifeStackNavigator} options={{ title: "Life" }} />
         <Tab.Screen name="SchoolTab" component={SchoolStackNavigator} options={{ title: "School" }} />
         <Tab.Screen name="LibraryTab" component={LibraryStackNavigator} options={{ title: "Library" }} />
-        <Tab.Screen name="SettingsTab" component={SettingsScreen} options={{ title: "Settings" }} />
       </Tab.Navigator>
       <OnboardingName />
     </NavigationContainer>

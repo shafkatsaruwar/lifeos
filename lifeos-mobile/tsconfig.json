@@ -3,12 +3,12 @@
   "compilerOptions": {
     "strict": true
   },
-  "include": ["App.tsx", "index.ts"],
+  "include": ["App.tsx", "index.ts", "src/**/*.ts", "src/**/*.tsx"],
   "exclude": [
-    "App.native-legacy.tsx",
-    "src",
+    "App.webview.tsx",
     "node_modules",
     "**/* 2.ts",
-    "**/* 2.tsx"
+    "**/* 2.tsx",
+    "**/* 2.json"
   ]
 }

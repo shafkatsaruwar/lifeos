@@ -13,7 +13,7 @@ import { PRIORITY_RANK } from "../lib/helpers";
 import { FocusModal } from "../components/FocusModal";
 
 export function NowScreen() {
-  const { workspace, theme, updateSettings } = useLifeOS();
+  const { workspace, theme, updateSettings, updateTasks } = useLifeOS();
   const navigation = useNavigation<any>();
   const [focusOpen, setFocusOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
@@ -50,6 +50,7 @@ export function NowScreen() {
             <Title>{greeting}</Title>
           </View>
           <IconButton icon="search" label="Search LifeOS" onPress={() => setSearchOpen(true)} />
+          <IconButton icon="settings" label="Settings" onPress={() => navigation.navigate("Settings")} />
         </View>
         <Subtitle>LifeOS can suggest the next move. You still choose what gets your attention.</Subtitle>
 
@@ -105,7 +106,22 @@ export function NowScreen() {
                   label="Open"
                   icon="external-link"
                   quiet
-                  onPress={() => navigation.navigate("TasksTab", { screen: "TaskDetail", params: { taskId: current.id } })}
+                  onPress={() => navigation.navigate("TaskDetail", { taskId: current.id })}
+                />
+                <ActionButton
+                  label="Done"
+                  icon="check"
+                  quiet
+                  onPress={() => {
+                    updateTasks(
+                      workspace.tasks.map((task) =>
+                        task.id === current.id
+                          ? { ...task, done: true, completedAt: new Date().toISOString(), status: "Done" }
+                          : task,
+                      ),
+                    );
+                    updateSettings({ ...workspace.settings, nowTaskId: null });
+                  }}
                 />
               </View>
             </>
