@@ -213,15 +213,24 @@ export function whatMattersNow(hub: StudyAbroadHub): {
   title: string;
   detail: string;
   actionLabel: string;
-  actionView: "documents" | "applications" | "programs" | "funding" | "explore" | "dashboard";
+  actionView: "documents" | "applications" | "programs" | "funding" | "explore" | "dashboard" | "create-country";
   focusId?: string;
 } {
+  if (!hub.countries.length) {
+    return {
+      title: "Where are you thinking about studying?",
+      detail: "Search or add a country. Universities and programs grow from there.",
+      actionLabel: "Add a country",
+      actionView: "create-country",
+    };
+  }
+
   const blocker = blockingDocumentInsight(hub);
   if (blocker && blocker.applicationCount > 0) {
     return {
-      title: `Complete your ${blocker.document.category.toLowerCase()} set.`,
-      detail: `${blocker.document.name} is blocking ${blocker.applicationCount} application${blocker.applicationCount === 1 ? "" : "s"}.`,
-      actionLabel: "Open Documents",
+      title: `Complete your ${blocker.document.category.toLowerCase()}.`,
+      detail: `${blocker.document.name} is currently blocking ${blocker.applicationCount} application${blocker.applicationCount === 1 ? "" : "s"}.`,
+      actionLabel: "View documents",
       actionView: "documents",
       focusId: blocker.document.id,
     };
@@ -231,8 +240,8 @@ export function whatMattersNow(hub: StudyAbroadHub): {
   if (open) {
     return {
       title: open.title,
-      detail: "Next open Study Abroad task with context from its parent object.",
-      actionLabel: "View applications",
+      detail: parentLabel(hub, open),
+      actionLabel: "Open task",
       actionView: "applications",
       focusId: open.id,
     };
@@ -251,8 +260,8 @@ export function whatMattersNow(hub: StudyAbroadHub): {
 
   if (!hub.programs.length) {
     return {
-      title: "Start exploring programs.",
-      detail: "Add a country, then universities and programs. Your shortlist will form here.",
+      title: "Add a program on a path you’re considering.",
+      detail: "Open a country, save a university, then add the degrees you’re comparing.",
       actionLabel: "Explore",
       actionView: "explore",
     };
@@ -260,10 +269,57 @@ export function whatMattersNow(hub: StudyAbroadHub): {
 
   return {
     title: "Review your shortlist.",
-    detail: "Pick the strongest options and turn them into applications when ready.",
-    actionLabel: "Open programs",
-    actionView: "programs",
+    detail: "Keep only the strongest options, then start an application when ready.",
+    actionLabel: "View shortlist",
+    actionView: "dashboard",
   };
+}
+
+/** Compact upcoming deadlines + timeline events for the landing page. */
+export function upcomingStudyAbroadItems(hub: StudyAbroadHub, limit = 5) {
+  const programItems = hub.programs
+    .map((program) => {
+      const days = daysUntil(program.deadline);
+      if (days === null || days < 0) return null;
+      if (["rejected", "withdrawn", "accepted"].includes(program.status)) return null;
+      return {
+        id: `prog-${program.id}`,
+        title: program.name,
+        detail: `${programUniversity(hub, program)?.name || "University"} · Application deadline`,
+        date: program.deadline!.slice(0, 10),
+        days,
+        programId: program.id,
+      };
+    })
+    .filter(Boolean) as Array<{ id: string; title: string; detail: string; date: string; days: number; programId?: string }>;
+
+  const timelineItems = hub.timelineEvents
+    .map((event) => {
+      const days = daysUntil(event.date);
+      if (days === null || days < 0) return null;
+      return {
+        id: event.id,
+        title: event.title,
+        detail: event.kind.replace(/_/g, " "),
+        date: event.date.slice(0, 10),
+        days,
+        programId: event.contextType === "program" ? event.contextId : undefined,
+      };
+    })
+    .filter(Boolean) as Array<{ id: string; title: string; detail: string; date: string; days: number; programId?: string }>;
+
+  return [...programItems, ...timelineItems]
+    .sort((a, b) => a.days - b.days || a.date.localeCompare(b.date))
+    .slice(0, limit);
+}
+
+export function programNextActionLabel(hub: StudyAbroadHub, program: StudyAbroadProgram) {
+  const task = tasksForParent(hub, "program", program.id).find((item) => !item.done);
+  if (task) return task.title;
+  const missing = requirementReadiness(requirementsForProgram(hub, program.id)).missing[0];
+  if (missing) return `Complete ${missing.title}`;
+  if (!hub.applications.some((item) => item.programId === program.id)) return "Start application";
+  return programStatusLabel(program.status);
 }
 
 export function parentLabel(hub: StudyAbroadHub, task: StudyAbroadTask) {

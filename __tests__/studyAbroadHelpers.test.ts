@@ -11,13 +11,14 @@ import {
   linkFundingToProgram,
   normalizeStudyAbroadHub,
   requirementReadiness,
+  upcomingStudyAbroadItems,
   whatMattersNow,
 } from "@/lib/studyAbroadHelpers";
 
 describe("studyAbroadHelpers", () => {
-  it("returns explore guidance when the hub is empty", () => {
+  it("returns add-country guidance when the hub is empty", () => {
     const insight = whatMattersNow(emptyStudyAbroadHub);
-    expect(insight.actionView).toBe("explore");
+    expect(insight.actionView).toBe("create-country");
   });
 
   it("computes requirement readiness from real requirement rows", () => {
@@ -61,7 +62,7 @@ describe("studyAbroadHelpers", () => {
 
   it("buildStudyAbroadCopilotContext summarizes what matters", () => {
     const ctx = buildStudyAbroadCopilotContext(emptyStudyAbroadHub);
-    expect(ctx.whatMattersNow.actionView).toBe("explore");
+    expect(ctx.whatMattersNow.actionView).toBe("create-country");
     expect(ctx.counts.programs).toBe(0);
   });
 
@@ -96,5 +97,34 @@ describe("studyAbroadHelpers", () => {
     const twice = linkFundingToProgram(once, "p1", "f1");
     expect(once.programFunding).toHaveLength(1);
     expect(twice.programFunding).toHaveLength(1);
+  });
+
+  it("upcomingStudyAbroadItems merges program deadlines and timeline", () => {
+    const stamp = new Date().toISOString();
+    const soon = new Date();
+    soon.setDate(soon.getDate() + 3);
+    const key = soon.toISOString().slice(0, 10);
+    const hub: StudyAbroadHub = {
+      ...emptyStudyAbroadHub,
+      programs: [{
+        id: "p1",
+        universityId: "u1",
+        name: "MSc UX",
+        status: "shortlisted",
+        deadline: key,
+        createdAt: stamp,
+        updatedAt: stamp,
+      }],
+      timelineEvents: [{
+        id: "tl1",
+        title: "Visa appointment",
+        date: key,
+        kind: "visa_appointment",
+        createdAt: stamp,
+      }],
+    };
+    const items = upcomingStudyAbroadItems(hub, 5);
+    expect(items.length).toBeGreaterThanOrEqual(2);
+    expect(items.every((item) => item.days >= 0)).toBe(true);
   });
 });

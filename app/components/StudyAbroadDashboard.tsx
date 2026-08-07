@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft, BookOpen, CheckCircle2, ChevronRight, Clock3, Database, FileText,
-  FolderKanban, Globe2, GraduationCap, LayoutGrid, ListTodo, MapPin, NotebookPen,
+  BookOpen, CheckCircle2, ChevronRight, Clock3, FileText,
+  FolderKanban, Globe2, GraduationCap, LayoutGrid, MapPin, NotebookPen,
   Plus, Search, Target, Wallet, X,
 } from "lucide-react";
 import {
@@ -13,23 +13,19 @@ import {
   applicationStageLabel,
   createDocumentVariant,
   daysUntil,
-  documentsReadyPercent,
   ensureCountriesFromUniversities,
   fundingForProgram,
   getCountry,
   getDocument,
-  getFunding,
   getProgram,
   getUniversity,
   linkDocumentToApplication,
   linkFundingToProgram,
   newId,
-  nextDeadline,
   normalizeStudyAbroadHub,
   nowIso,
-  openTasks,
-  parentLabel,
   programCountry,
+  programNextActionLabel,
   programStatusLabel,
   programUniversity,
   programsForCountry,
@@ -40,6 +36,7 @@ import {
   shortlistedPrograms,
   tasksForParent,
   universitiesForCountry,
+  upcomingStudyAbroadItems,
   whatMattersNow,
 } from "@/lib/studyAbroadHelpers";
 import {
@@ -88,30 +85,41 @@ function Section({
 function Empty({ children }: { children: React.ReactNode }) {
   return (
     <div className="os-empty">
-      <Database size={18} />
+      <Globe2 size={18} />
       <p>{children}</p>
     </div>
   );
 }
 
-function SubHeader({
+function CrumbHeader({
+  crumbs,
   title,
   subtitle,
-  onBack,
 }: {
+  crumbs: { label: string; onClick?: () => void }[];
   title: string;
   subtitle?: string;
-  onBack?: () => void;
 }) {
   return (
-    <div className="work-subview-header">
-      {onBack ? (
-        <button type="button" className="os-profile-button" onClick={onBack}>
-          <ArrowLeft size={16} /> Back
-        </button>
-      ) : <span />}
+    <div className="work-subview-header no-back" style={{ marginBottom: 16 }}>
       <div>
-        <h2>{title}</h2>
+        {crumbs.length > 0 && (
+          <p className="eyebrow" style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+            {crumbs.map((crumb, index) => (
+              <span key={`${crumb.label}-${index}`} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {index > 0 ? <span style={{ opacity: 0.45 }}>/</span> : null}
+                {crumb.onClick ? (
+                  <button type="button" onClick={crumb.onClick} style={{ border: 0, background: "transparent", color: "inherit", padding: 0, cursor: "pointer", font: "inherit" }}>
+                    {crumb.label}
+                  </button>
+                ) : (
+                  <span>{crumb.label}</span>
+                )}
+              </span>
+            ))}
+          </p>
+        )}
+        <h2 style={{ marginTop: crumbs.length ? 4 : 0 }}>{title}</h2>
         {subtitle ? <p>{subtitle}</p> : null}
       </div>
     </div>
@@ -362,6 +370,7 @@ function CreateModal({
   );
 }
 
+
 function ProgramCard({
   hub,
   program,
@@ -373,7 +382,7 @@ function ProgramCard({
 }) {
   const university = programUniversity(hub, program);
   const country = programCountry(hub, program);
-  const days = daysUntil(program.deadline);
+  const nextAction = programNextActionLabel(hub, program);
   return (
     <button type="button" className="work-project-card" onClick={onOpen} style={{ textAlign: "left", width: "100%" }}>
       <div className="card-head" style={{ marginBottom: 8 }}>
@@ -385,11 +394,9 @@ function ProgramCard({
         </div>
         <span className="work-priority-tag">{programStatusLabel(program.status)}</span>
       </div>
-      <div className="work-stat-grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+      <div className="work-stat-grid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
         <div><small style={{ color: "var(--muted)" }}>Fit</small><div>{program.fitScore ? `${program.fitScore}/10` : "—"}</div></div>
-        <div><small style={{ color: "var(--muted)" }}>Deadline</small><div>{days === null ? "—" : days < 0 ? "Passed" : `${days}d`}</div></div>
-        <div><small style={{ color: "var(--muted)" }}>Priority</small><div>{program.priority || "—"}</div></div>
-        <div><small style={{ color: "var(--muted)" }}>Intake</small><div>{program.intake || "—"}</div></div>
+        <div><small style={{ color: "var(--muted)" }}>Next</small><div>{nextAction}</div></div>
       </div>
     </button>
   );
@@ -399,6 +406,10 @@ export type StudyAbroadFocusEntity = {
   kind: "program" | "university" | "country" | "application";
   id: string;
 };
+
+type CountryTab = "overview" | "programs" | "universities" | "funding" | "visa";
+type ProgramTab = "overview" | "requirements" | "application" | "funding" | "documents" | "notes";
+type ExploreSegment = "countries" | "programs";
 
 export function StudyAbroadDashboard({
   hub: rawHub,
@@ -435,8 +446,9 @@ export function StudyAbroadDashboard({
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [query, setQuery] = useState("");
-  const [programTab, setProgramTab] = useState<"overview" | "requirements" | "application" | "funding" | "documents" | "notes" | "tasks" | "history">("overview");
-  const [countryTab, setCountryTab] = useState<"overview" | "universities" | "programs" | "funding" | "visa" | "costs" | "notes" | "tasks">("overview");
+  const [programTab, setProgramTab] = useState<ProgramTab>("overview");
+  const [countryTab, setCountryTab] = useState<CountryTab>("overview");
+  const [exploreSegment, setExploreSegment] = useState<ExploreSegment>("countries");
 
   useEffect(() => {
     if (!focusEntity) return;
@@ -458,22 +470,19 @@ export function StudyAbroadDashboard({
     onFocusEntityConsumed?.();
   }, [focusEntity]);
 
-  const firstName = workspaceName.split(" ")[0] || "there";
+  void workspaceName;
   const matter = whatMattersNow(hub);
-  const deadline = nextDeadline(hub);
-  const shortlist = shortlistedPrograms(hub).slice(0, 4);
-  const preparingApps = hub.applications.filter((item) => item.stage === "preparing" || item.stage === "ready").length;
-  const open = openTasks(hub);
+  const shortlist = shortlistedPrograms(hub).slice(0, 5);
+  const upcoming = upcomingStudyAbroadItems(hub, 5);
+  const pathCountries = hub.countries.filter((item) => item.active !== false);
 
-  const navItems: { id: StudyAbroadView; label: string }[] = [
-    { id: "explore", label: "Explore" },
-    { id: "applications", label: "Applications" },
-    { id: "funding", label: "Funding" },
-    { id: "documents", label: "Documents" },
-    { id: "knowledge", label: "Knowledge" },
-    { id: "history", label: "History" },
-    { id: "database", label: "Database" },
-  ];
+  const goHome = () => {
+    setSelectedCountryId(null);
+    setSelectedUniversityId(null);
+    setSelectedProgramId(null);
+    setSelectedApplicationId(null);
+    setStudyView("dashboard");
+  };
 
   const openProgram = (id: string) => {
     setSelectedProgramId(id);
@@ -500,6 +509,31 @@ export function StudyAbroadDashboard({
     setCompareIds((current) =>
       current.includes(countryId) ? current.filter((id) => id !== countryId) : current.length >= 4 ? current : [...current, countryId],
     );
+  };
+
+  const runMatterAction = () => {
+    if (matter.actionView === "create-country") {
+      setCreateKind("country");
+      return;
+    }
+    if (matter.actionView === "programs" && matter.focusId) {
+      openProgram(matter.focusId);
+      return;
+    }
+    if (matter.actionView === "applications" && matter.focusId) {
+      const task = hub.tasks.find((item) => item.id === matter.focusId);
+      if (task && onFocusStudyTask) {
+        onFocusStudyTask(task.id);
+        return;
+      }
+      setStudyView("applications");
+      return;
+    }
+    if (matter.actionView === "dashboard") {
+      goHome();
+      return;
+    }
+    setStudyView(matter.actionView);
   };
 
   const updateProgram = (id: string, patch: Partial<StudyAbroadProgram>) => {
@@ -540,50 +574,52 @@ export function StudyAbroadDashboard({
     return [item.name, uni?.name, country?.name, item.field, item.status].some((value) => value?.toLowerCase().includes(q));
   });
 
-  const dashboard = (
-    <div className="work-layout">
+  const homeCrumb = { label: "Study Abroad", onClick: goHome };
+
+  const dashboard = !pathCountries.length ? (
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+      <div className="work-main">
+        <Section icon={Globe2} title="Get started">
+          <div className="soft-card" style={{ padding: 20 }}>
+            <strong style={{ display: "block", fontSize: 18 }}>Where are you thinking about studying?</strong>
+            <p style={{ margin: "8px 0 16px", color: "var(--muted)", fontSize: 14, lineHeight: 1.5 }}>
+              Add a country to open your first path. Universities, programs, and applications stay one level deeper until you need them.
+            </p>
+            <button type="button" className="primary" onClick={() => setCreateKind("country")}>Add a country</button>
+          </div>
+        </Section>
+      </div>
+    </div>
+  ) : (
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
       <div className="work-main">
         <Section icon={Target} title="What matters now">
           <div className="soft-card" style={{ padding: 16 }}>
             <strong style={{ display: "block", fontSize: 16 }}>{matter.title}</strong>
             <p style={{ margin: "6px 0 12px", color: "var(--muted)", fontSize: 13 }}>{matter.detail}</p>
-            <button type="button" className="primary" onClick={() => {
-              if (matter.actionView === "programs" && matter.focusId) openProgram(matter.focusId);
-              else setStudyView(matter.actionView === "dashboard" ? "dashboard" : matter.actionView);
-            }}>{matter.actionLabel}</button>
+            <button type="button" className="primary" onClick={runMatterAction}>{matter.actionLabel}</button>
           </div>
         </Section>
 
-        {deadline && (
-          <Section icon={Clock3} title="Next deadline">
-            <button type="button" className="work-deliverable-row" onClick={() => openProgram(deadline.program.id)}>
-              <div>
-                <strong>{deadline.university?.name || "University"}</strong>
-                <span>{deadline.program.name}</span>
-                <small>Application deadline</small>
-              </div>
-              <em>{deadline.days} day{deadline.days === 1 ? "" : "s"}</em>
-            </button>
-          </Section>
-        )}
-
-        <Section icon={LayoutGrid} title="Status">
-          <div className="work-stat-grid">
-            {[
-              { label: "Countries exploring", count: hub.countries.length, view: "countries" as StudyAbroadView },
-              { label: "Programs shortlisted", count: shortlistedPrograms(hub).length, view: "programs" as StudyAbroadView },
-              { label: "Applications preparing", count: preparingApps, view: "applications" as StudyAbroadView },
-              { label: "Documents ready", count: `${documentsReadyPercent(hub)}%`, view: "documents" as StudyAbroadView },
-            ].map((stat) => (
-              <button key={stat.label} type="button" className="work-stat-card" onClick={() => setStudyView(stat.view)}>
-                <strong>{stat.count}</strong>
-                <span>{stat.label}</span>
-              </button>
-            ))}
+        <Section icon={Globe2} title="Your paths" action="+ Explore country" onAction={() => { setExploreSegment("countries"); setStudyView("explore"); }}>
+          <div style={{ display: "grid", gap: 10 }}>
+            {pathCountries.map((country) => {
+              const programs = programsForCountry(hub, country.id);
+              const shortlisted = programs.filter((item) => item.shortlisted || item.status === "shortlisted" || item.status === "preparing").length;
+              return (
+                <button key={country.id} type="button" className="work-deliverable-row" onClick={() => openCountry(country.id)}>
+                  <div>
+                    <strong>{country.name}</strong>
+                    <span>{programs.length} program{programs.length === 1 ? "" : "s"} · {shortlisted} shortlisted</span>
+                  </div>
+                  <ChevronRight size={16} />
+                </button>
+              );
+            })}
           </div>
         </Section>
 
-        <Section icon={GraduationCap} title="Your shortlist" action={shortlist.length ? "View all" : undefined} onAction={() => setStudyView("programs")}>
+        <Section icon={GraduationCap} title="Shortlist">
           {shortlist.length ? (
             <div style={{ display: "grid", gap: 10 }}>
               {shortlist.map((program) => (
@@ -592,92 +628,113 @@ export function StudyAbroadDashboard({
             </div>
           ) : (
             <Empty>
-              No programs shortlisted yet. Save programs while exploring and your strongest options will appear here.
+              Shortlist stays empty until you save your strongest programs.
               <div style={{ marginTop: 12 }}>
-                <button type="button" className="primary" onClick={() => setStudyView("explore")}>Explore programs</button>
+                <button type="button" className="os-profile-button" onClick={() => { setExploreSegment("programs"); setStudyView("explore"); }}>Browse programs</button>
               </div>
             </Empty>
           )}
         </Section>
-      </div>
 
-      <aside className="work-sidebar">
-        <Section icon={ListTodo} title="Open tasks" action={open.length ? "All apps" : undefined} onAction={() => setStudyView("applications")}>
-          {open.length ? open.slice(0, 5).map((task) => (
-            <div key={task.id} className="work-task-row" style={{ display: "flex", gap: 8 }}>
-              <button type="button" style={{ flex: 1, border: 0, background: "transparent", textAlign: "left" }} onClick={() => onFocusStudyTask?.(task.id)}>
-                <strong style={{ display: "block" }}>{task.title}</strong>
-                <span style={{ color: "var(--muted)", fontSize: 12 }}>{parentLabel(hub, task)} · Focus</span>
-              </button>
-              <button type="button" className="os-profile-button" aria-label="Complete task" onClick={() => completeTask(task.id)}>
-                <CheckCircle2 size={16} />
-              </button>
-            </div>
-          )) : <Empty>Tasks stay attached to countries, programs, documents, and funding — none open yet.</Empty>}
-        </Section>
-
-        {hub.sessionMemory?.lastProgramId && getProgram(hub, hub.sessionMemory.lastProgramId) && (
-          <Section icon={NotebookPen} title="Continue">
-            <button type="button" className="work-task-row" onClick={() => openProgram(hub.sessionMemory.lastProgramId!)}>
+        <Section icon={Clock3} title="Upcoming" action={onOpenCalendar ? "Calendar" : undefined} onAction={onOpenCalendar}>
+          {upcoming.length ? upcoming.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="work-task-row"
+              onClick={() => item.programId ? openProgram(item.programId) : onOpenCalendar?.()}
+            >
               <div>
-                <strong>{getProgram(hub, hub.sessionMemory.lastProgramId)?.name}</strong>
-                <span>{hub.sessionMemory.lastNote || "Pick up where you left off"}</span>
+                <strong>{item.title}</strong>
+                <span>{item.detail}</span>
               </div>
-              <ChevronRight size={16} />
+              <em>{item.days === 0 ? "Today" : `${item.days}d`}</em>
             </button>
-          </Section>
-        )}
-      </aside>
+          )) : (
+            <Empty>Deadlines and timeline events appear here when you add them on programs or History.</Empty>
+          )}
+        </Section>
+      </div>
     </div>
   );
 
   const exploreView = (
-    <div className="work-layout">
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
       <div className="work-main">
-        <SubHeader title="Explore" subtitle="Countries → universities → programs. Nothing permanent in the sidebar." onBack={() => setStudyView("dashboard")} />
-        <div className="os-quick-row work-quick-row" style={{ marginBottom: 16 }}>
-          <button type="button" className="os-quick-action" onClick={() => setStudyView("countries")}><Globe2 size={16} /> Countries</button>
-          <button type="button" className="os-quick-action" onClick={() => setStudyView("universities")}><MapPin size={16} /> Universities</button>
-          <button type="button" className="os-quick-action" onClick={() => setStudyView("programs")}><GraduationCap size={16} /> Programs</button>
-          <button type="button" className="os-quick-action" onClick={() => setStudyView("compare")}><LayoutGrid size={16} /> Compare countries</button>
+        <CrumbHeader crumbs={[homeCrumb]} title="Explore" subtitle="Discover countries and programs without a second dashboard." />
+        <div className="work-view-tabs" style={{ marginBottom: 14 }}>
+          <button type="button" className={exploreSegment === "countries" ? "selected" : ""} onClick={() => setExploreSegment("countries")}>Countries</button>
+          <button type="button" className={exploreSegment === "programs" ? "selected" : ""} onClick={() => setExploreSegment("programs")}>Programs</button>
         </div>
-        <Section icon={Globe2} title="Countries">
-          {hub.countries.length ? hub.countries.map((country) => {
-            const unis = universitiesForCountry(hub, country.id).length;
-            const programs = programsForCountry(hub, country.id);
-            const shortlisted = programs.filter((item) => item.shortlisted || item.status === "shortlisted").length;
-            const preparing = programs.filter((item) => item.status === "preparing").length;
-            return (
-              <button key={country.id} type="button" className="work-deliverable-row" onClick={() => openCountry(country.id)}>
-                <div>
-                  <strong>{country.name}</strong>
-                  <span>{unis} universities · {programs.length} programs · {shortlisted} shortlisted · {preparing} preparing</span>
-                </div>
-                <ChevronRight size={16} />
-              </button>
-            );
-          }) : (
-            <Empty>
-              No countries yet. Add the places you’re considering — architecture stays multi-country.
-              <div style={{ marginTop: 12 }}><button type="button" className="primary" onClick={() => setCreateKind("country")}>Add country</button></div>
-            </Empty>
-          )}
-        </Section>
+
+        {exploreSegment === "countries" ? (
+          <Section icon={Globe2} title="Countries" action="+ Country" onAction={() => setCreateKind("country")}>
+            {hub.countries.length ? (
+              <>
+                {hub.countries.map((country) => {
+                  const programs = programsForCountry(hub, country.id);
+                  const shortlisted = programs.filter((item) => item.shortlisted || item.status === "shortlisted" || item.status === "preparing").length;
+                  return (
+                    <div key={country.id} className="work-deliverable-row" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <button type="button" style={{ flex: 1, border: 0, background: "transparent", textAlign: "left" }} onClick={() => openCountry(country.id)}>
+                        <strong style={{ display: "block" }}>{country.name}</strong>
+                        <span style={{ color: "var(--muted)", fontSize: 12 }}>{programs.length} programs · {shortlisted} shortlisted</span>
+                      </button>
+                      <button type="button" className="os-profile-button" onClick={() => toggleCompare(country.id)}>
+                        {compareIds.includes(country.id) ? "Selected" : "Compare"}
+                      </button>
+                    </div>
+                  );
+                })}
+                {compareIds.length >= 2 ? (
+                  <div style={{ marginTop: 12 }}>
+                    <button type="button" className="primary" onClick={() => setStudyView("compare")}>Compare {compareIds.length} countries</button>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <Empty>
+                Where are you thinking about studying?
+                <div style={{ marginTop: 12 }}><button type="button" className="primary" onClick={() => setCreateKind("country")}>Add a country</button></div>
+              </Empty>
+            )}
+          </Section>
+        ) : (
+          <Section icon={GraduationCap} title="Programs" action="+ Program" onAction={() => setCreateKind("program")}>
+            <div className="hub-modal-toolbar" style={{ marginBottom: 12 }}>
+              <Search size={16} />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search programs…" />
+            </div>
+            {filteredPrograms.length ? filteredPrograms.map((program) => (
+              <ProgramCard key={program.id} hub={hub} program={program} onOpen={() => openProgram(program.id)} />
+            )) : (
+              <Empty>
+                Programs usually appear after you open a country and add a university.
+                <div style={{ marginTop: 12 }}><button type="button" className="os-profile-button" onClick={() => setExploreSegment("countries")}>Browse countries</button></div>
+              </Empty>
+            )}
+          </Section>
+        )}
       </div>
     </div>
   );
 
   const countriesView = selectedCountry ? (
-    <div className="work-layout">
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
       <div className="work-main">
-        <SubHeader title={selectedCountry.name} subtitle="Country workspace" onBack={() => { setSelectedCountryId(null); setStudyView("explore"); }} />
+        <CrumbHeader crumbs={[homeCrumb, { label: "Explore", onClick: () => { setSelectedCountryId(null); setExploreSegment("countries"); setStudyView("explore"); } }]} title={selectedCountry.name} subtitle="Country path" />
         <div className="work-view-tabs" style={{ marginBottom: 14 }}>
-          {(["overview", "universities", "programs", "funding", "visa", "costs", "notes", "tasks"] as const).map((tab) => (
-            <button key={tab} type="button" className={countryTab === tab ? "selected" : ""} onClick={() => setCountryTab(tab)}>
-              {tab === "visa" ? "Visa / residence" : tab === "costs" ? "Cost of living" : tab[0].toUpperCase() + tab.slice(1)}
-            </button>
+          {([
+            ["overview", "Overview"],
+            ["programs", "Programs"],
+            ["universities", "Universities"],
+            ["funding", "Funding"],
+            ["visa", "Visa & Living"],
+          ] as const).map(([id, label]) => (
+            <button key={id} type="button" className={countryTab === id ? "selected" : ""} onClick={() => setCountryTab(id)}>{label}</button>
           ))}
         </div>
+
         {countryTab === "overview" && (
           <Section icon={LayoutGrid} title="Overview">
             <div className="work-stat-grid">
@@ -686,11 +743,14 @@ export function StudyAbroadDashboard({
               <div className="work-stat-card"><strong>{selectedCountry.tuitionLevel || "—"}</strong><span>Tuition</span></div>
               <div className="work-stat-card"><strong>{selectedCountry.livingCostLevel || "—"}</strong><span>Living cost</span></div>
             </div>
-            <p style={{ marginTop: 12, color: "var(--muted)", fontSize: 13 }}>{selectedCountry.notes || "Add notes as you research this destination."}</p>
+            <label style={{ display: "grid", gap: 6, marginTop: 12 }}>Notes
+              <textarea value={selectedCountry.notes || ""} onChange={(event) => onChange({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, notes: event.target.value, updatedAt: nowIso() } : item) })} rows={4} />
+            </label>
           </Section>
         )}
+
         {countryTab === "universities" && (
-          <Section icon={MapPin} title="Universities" action="Add" onAction={() => setCreateKind("university")}>
+          <Section icon={MapPin} title="Universities" action="+ University" onAction={() => setCreateKind("university")}>
             {universitiesForCountry(hub, selectedCountry.id).length ? universitiesForCountry(hub, selectedCountry.id).map((uni) => (
               <button key={uni.id} type="button" className="work-deliverable-row" onClick={() => openUniversity(uni.id)}>
                 <div><strong>{uni.name}</strong><span>{uni.city || "City TBD"} · {programsForUniversity(hub, uni.id).length} programs</span></div>
@@ -699,81 +759,66 @@ export function StudyAbroadDashboard({
             )) : <Empty>No universities saved in {selectedCountry.name} yet.</Empty>}
           </Section>
         )}
+
         {countryTab === "programs" && (
           <Section icon={GraduationCap} title="Programs">
             {programsForCountry(hub, selectedCountry.id).length ? programsForCountry(hub, selectedCountry.id).map((program) => (
               <ProgramCard key={program.id} hub={hub} program={program} onOpen={() => openProgram(program.id)} />
-            )) : <Empty>No programs yet for this country.</Empty>}
+            )) : <Empty>Add a university first, then attach programs there.</Empty>}
           </Section>
         )}
+
         {countryTab === "funding" && (
-          <Section icon={Wallet} title="Funding">
+          <Section icon={Wallet} title="Funding" action="+ Funding opportunity" onAction={() => setCreateKind("funding")}>
             {hub.funding.filter((item) => item.countryId === selectedCountry.id).length ? hub.funding.filter((item) => item.countryId === selectedCountry.id).map((item) => (
               <div key={item.id} className="work-task-row"><div><strong>{item.name}</strong><span>{item.status}{item.deadline ? ` · ${item.deadline}` : ""}</span></div></div>
             )) : <Empty>No funding opportunities tagged to this country yet.</Empty>}
           </Section>
         )}
+
         {countryTab === "visa" && (
-          <Section icon={FileText} title="Visa / residence research">
+          <Section icon={FileText} title="Visa & living">
             <div className="soft-card" style={{ padding: 14, display: "grid", gap: 10 }}>
               <label>Student visa notes<textarea value={selectedCountry.visaNotes || ""} onChange={(event) => onChange({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, visaNotes: event.target.value, updatedAt: nowIso() } : item) })} rows={3} /></label>
               <label>Financial proof<textarea value={selectedCountry.financialProofNotes || ""} onChange={(event) => onChange({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, financialProofNotes: event.target.value, updatedAt: nowIso() } : item) })} rows={2} /></label>
               <label>Residence / post-study<textarea value={selectedCountry.postStudyNotes || ""} onChange={(event) => onChange({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, postStudyNotes: event.target.value, updatedAt: nowIso() } : item) })} rows={2} /></label>
+              <label>Cost of living<textarea value={selectedCountry.costOfLivingNotes || ""} onChange={(event) => onChange({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, costOfLivingNotes: event.target.value, updatedAt: nowIso() } : item) })} rows={3} /></label>
             </div>
-          </Section>
-        )}
-        {countryTab === "costs" && (
-          <Section icon={Wallet} title="Cost of living">
-            <label style={{ display: "grid", gap: 6 }}>Notes
-              <textarea value={selectedCountry.costOfLivingNotes || ""} onChange={(event) => onChange({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, costOfLivingNotes: event.target.value, updatedAt: nowIso() } : item) })} rows={4} />
-            </label>
             {hub.costs.filter((item) => item.countryId === selectedCountry.id).map((cost) => (
               <div key={cost.id} className="work-task-row"><div><strong>{cost.title}</strong><span>{cost.amount || "—"} {cost.currency || ""}</span></div></div>
             ))}
           </Section>
         )}
-        {countryTab === "notes" && (
-          <Section icon={NotebookPen} title="Notes">
-            <textarea value={selectedCountry.notes || ""} onChange={(event) => onChange({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, notes: event.target.value, updatedAt: nowIso() } : item) })} rows={6} />
-          </Section>
-        )}
-        {countryTab === "tasks" && (
-          <Section icon={ListTodo} title="Tasks" action="Add" onAction={() => setCreateKind("task")}>
-            {tasksForParent(hub, "country", selectedCountry.id).length ? tasksForParent(hub, "country", selectedCountry.id).map((task) => (
-              <button key={task.id} type="button" className="work-task-row" onClick={() => completeTask(task.id)}><div><strong>{task.title}</strong></div><CheckCircle2 size={16} /></button>
-            )) : <Empty>No country-specific tasks yet.</Empty>}
-          </Section>
-        )}
       </div>
     </div>
   ) : (
-    <div className="work-layout"><div className="work-main">
-      <SubHeader title="Countries" onBack={() => setStudyView("explore")} />
-      <Section icon={Globe2} title="All countries" action="Add country" onAction={() => setCreateKind("country")}>
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}><div className="work-main">
+      <CrumbHeader crumbs={[homeCrumb]} title="Countries" />
+      <Section icon={Globe2} title="All countries" action="+ Country" onAction={() => setCreateKind("country")}>
         {hub.countries.length ? hub.countries.map((country) => (
           <button key={country.id} type="button" className="work-deliverable-row" onClick={() => openCountry(country.id)}>
             <div><strong>{country.name}</strong><span>{programsForCountry(hub, country.id).length} programs</span></div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <span className="os-profile-button" onClick={(event) => { event.stopPropagation(); toggleCompare(country.id); }}>{compareIds.includes(country.id) ? "Selected" : "Compare"}</span>
-              <ChevronRight size={16} />
-            </div>
+            <ChevronRight size={16} />
           </button>
-        )) : <Empty>Add countries as you explore — Germany is not assumed.</Empty>}
+        )) : <Empty>Add countries as you explore.</Empty>}
       </Section>
     </div></div>
   );
 
   const universitiesView = selectedUniversity ? (
-    <div className="work-layout"><div className="work-main">
-      <SubHeader
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}><div className="work-main">
+      <CrumbHeader
+        crumbs={[
+          homeCrumb,
+          { label: getCountry(hub, selectedUniversity.countryId)?.name || "Country", onClick: () => openCountry(selectedUniversity.countryId) },
+        ]}
         title={selectedUniversity.name}
-        subtitle={`${getCountry(hub, selectedUniversity.countryId)?.name || "Country"}${selectedUniversity.city ? ` · ${selectedUniversity.city}` : ""}`}
-        onBack={() => { setSelectedUniversityId(null); setStudyView("universities"); }}
+        subtitle={selectedUniversity.city || undefined}
       />
-      <Section icon={GraduationCap} title="Programs" action="Add program" onAction={() => setCreateKind("program")}>
+      <Section icon={GraduationCap} title="Programs" action="+ Program" onAction={() => setCreateKind("program")}>
         {programsForUniversity(hub, selectedUniversity.id).length ? programsForUniversity(hub, selectedUniversity.id).map((program) => (
           <ProgramCard key={program.id} hub={hub} program={program} onOpen={() => openProgram(program.id)} />
-        )) : <Empty>Programs are the application center. Add the degrees you’re considering at this university.</Empty>}
+        )) : <Empty>Programs are the application center. Add the degrees you’re considering here.</Empty>}
       </Section>
       <Section icon={NotebookPen} title="University notes">
         <textarea value={selectedUniversity.notes || ""} onChange={(event) => onChange({ ...hub, universities: hub.universities.map((item) => item.id === selectedUniversity.id ? { ...item, notes: event.target.value, updatedAt: nowIso() } : item) })} rows={4} />
@@ -785,19 +830,15 @@ export function StudyAbroadDashboard({
       </Section>
     </div></div>
   ) : (
-    <div className="work-layout"><div className="work-main">
-      <SubHeader title="Universities" onBack={() => setStudyView("explore")} />
-      <div className="hub-modal-toolbar" style={{ marginBottom: 12 }}>
-        <Search size={16} />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search universities…" />
-      </div>
-      <Section icon={MapPin} title="Saved universities" action="Add" onAction={() => setCreateKind("university")}>
-        {hub.universities.filter((item) => !query || item.name.toLowerCase().includes(query.toLowerCase())).length ? hub.universities.filter((item) => !query || item.name.toLowerCase().includes(query.toLowerCase())).map((uni) => (
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}><div className="work-main">
+      <CrumbHeader crumbs={[homeCrumb]} title="Universities" subtitle="Usually opened from a country path or search." />
+      <Section icon={MapPin} title="Saved universities">
+        {hub.universities.length ? hub.universities.map((uni) => (
           <button key={uni.id} type="button" className="work-deliverable-row" onClick={() => openUniversity(uni.id)}>
             <div><strong>{uni.name}</strong><span>{getCountry(hub, uni.countryId)?.name || "Country"} · {programsForUniversity(hub, uni.id).length} programs</span></div>
             <ChevronRight size={16} />
           </button>
-        )) : <Empty>Universities hold programs — they are not applications themselves.</Empty>}
+        )) : <Empty>Open a country and add a university there.</Empty>}
       </Section>
     </div></div>
   );
@@ -809,22 +850,37 @@ export function StudyAbroadDashboard({
     const reqs = requirementsForProgram(hub, selectedProgram.id);
     const readiness = requirementReadiness(reqs);
     const linkedFunding = fundingForProgram(hub, selectedProgram.id);
-    const nextTask = tasksForParent(hub, "program", selectedProgram.id)[0];
+    const nextTask = tasksForParent(hub, "program", selectedProgram.id).find((item) => !item.done);
     return (
       <div className="work-layout">
         <div className="work-main">
-          <SubHeader
+          <CrumbHeader
+            crumbs={[
+              homeCrumb,
+              ...(country ? [{ label: country.name, onClick: () => openCountry(country.id) }] : []),
+              ...(university ? [{ label: university.name, onClick: () => openUniversity(university.id) }] : []),
+            ]}
             title={selectedProgram.name}
             subtitle={`${university?.name || "University"}${country ? ` · ${country.name}` : ""}`}
-            onBack={() => { setSelectedProgramId(null); setStudyView("programs"); }}
           />
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-            <span className="work-priority-tag">{programStatusLabel(selectedProgram.status)}</span>
-            <span className="project-pill">{selectedProgram.fitScore ? `${selectedProgram.fitScore}/10 fit` : "Fit unset"}</span>
-            {selectedProgram.shortlisted ? <span className="project-pill">Shortlisted</span> : null}
+
+          <div className="soft-card" style={{ padding: 14, marginBottom: 14, display: "grid", gap: 10 }}>
+            <div>
+              <small style={{ color: "var(--muted)" }}>Next action</small>
+              <strong style={{ display: "block", marginTop: 4 }}>{programNextActionLabel(hub, selectedProgram)}</strong>
+            </div>
+            <div className="work-stat-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+              <div className="work-stat-card"><strong>{readiness.percent}%</strong><span>Readiness</span></div>
+              <div className="work-stat-card"><strong>{daysUntil(selectedProgram.deadline) ?? "—"}</strong><span>Days to deadline</span></div>
+              <div className="work-stat-card"><strong>{selectedProgram.fitScore ? `${selectedProgram.fitScore}/10` : "—"}</strong><span>Fit</span></div>
+            </div>
+            {!apps.length ? (
+              <button type="button" className="primary" onClick={() => setCreateKind("application")}>Start application</button>
+            ) : null}
           </div>
+
           <div className="work-view-tabs" style={{ marginBottom: 14 }}>
-            {(["overview", "requirements", "application", "funding", "documents", "notes", "tasks", "history"] as const).map((tab) => (
+            {(["overview", "requirements", "application", "funding", "documents", "notes"] as const).map((tab) => (
               <button key={tab} type="button" className={programTab === tab ? "selected" : ""} onClick={() => setProgramTab(tab)}>{tab[0].toUpperCase() + tab.slice(1)}</button>
             ))}
           </div>
@@ -833,23 +889,32 @@ export function StudyAbroadDashboard({
             <>
               <Section icon={Target} title="Next action">
                 {nextTask ? (
-                  <button type="button" className="work-task-row" onClick={() => completeTask(nextTask.id)}>
-                    <div><strong>{nextTask.title}</strong><span>Program task</span></div>
-                    <CheckCircle2 size={16} />
-                  </button>
-                ) : <Empty>No open tasks on this program. Add one when you know the next move.</Empty>}
-              </Section>
-              <Section icon={CheckCircle2} title="Application readiness">
-                <div className="work-stat-grid">
-                  <div className="work-stat-card"><strong>{readiness.percent}%</strong><span>Ready</span></div>
-                  <div className="work-stat-card"><strong>{readiness.missing.length}</strong><span>Missing / draft</span></div>
-                  <div className="work-stat-card"><strong>{daysUntil(selectedProgram.deadline) ?? "—"}</strong><span>Days to deadline</span></div>
-                </div>
-                {readiness.missing.length ? (
-                  <div style={{ marginTop: 10 }}>
-                    {readiness.missing.map((item) => <div key={item.id} className="work-task-row"><div><strong>{item.title}</strong><span>{item.status}</span></div></div>)}
+                  <div className="work-task-row" style={{ display: "flex", gap: 8 }}>
+                    <button type="button" style={{ flex: 1, border: 0, background: "transparent", textAlign: "left" }} onClick={() => onFocusStudyTask?.(nextTask.id)}>
+                      <strong style={{ display: "block" }}>{nextTask.title}</strong>
+                      <span style={{ color: "var(--muted)", fontSize: 12 }}>Focus</span>
+                    </button>
+                    <button type="button" className="os-profile-button" aria-label="Complete task" onClick={() => completeTask(nextTask.id)}><CheckCircle2 size={16} /></button>
                   </div>
-                ) : null}
+                ) : <Empty>No open task on this program yet.</Empty>}
+              </Section>
+              <Section icon={LayoutGrid} title="Status">
+                <div style={{ display: "grid", gap: 8 }}>
+                  <label>Status
+                    <select value={selectedProgram.status} onChange={(event) => updateProgram(selectedProgram.id, { status: event.target.value as StudyAbroadProgram["status"], shortlisted: ["shortlisted", "preparing", "applied", "interview"].includes(event.target.value) || selectedProgram.shortlisted })}>
+                      {PROGRAM_STATUSES.map((status) => <option key={status} value={status}>{programStatusLabel(status)}</option>)}
+                    </select>
+                  </label>
+                  <label>Fit (1–10)
+                    <input type="number" min={1} max={10} value={selectedProgram.fitScore ?? ""} onChange={(event) => updateProgram(selectedProgram.id, { fitScore: event.target.value ? Number(event.target.value) : undefined })} />
+                  </label>
+                  <label>Deadline
+                    <input type="date" value={selectedProgram.deadline?.slice(0, 10) || ""} onChange={(event) => updateProgram(selectedProgram.id, { deadline: event.target.value || undefined })} />
+                  </label>
+                  <button type="button" className="os-profile-button" onClick={() => updateProgram(selectedProgram.id, { shortlisted: !selectedProgram.shortlisted, status: !selectedProgram.shortlisted ? "shortlisted" : selectedProgram.status })}>
+                    {selectedProgram.shortlisted ? "Remove from shortlist" : "Add to shortlist"}
+                  </button>
+                </div>
               </Section>
             </>
           )}
@@ -887,7 +952,7 @@ export function StudyAbroadDashboard({
                   <div><strong>{item.title}</strong><span>{item.category || "Requirement"}</span></div>
                   <em>{item.status}</em>
                 </button>
-              )) : <Empty>Requirements belong to this program — don’t invent a global checklist.</Empty>}
+              )) : <Empty>Requirements belong to this program.</Empty>}
             </Section>
           )}
 
@@ -915,7 +980,7 @@ export function StudyAbroadDashboard({
               )) : <Empty>No funding linked yet.</Empty>}
               {hub.funding.length ? (
                 <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-                  <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>Link an opportunity (eligibility stays manual):</p>
+                  <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>Link an opportunity:</p>
                   {hub.funding.filter((item) => !linkedFunding.some((linked) => linked.id === item.id)).slice(0, 6).map((item) => (
                     <button key={item.id} type="button" className="work-task-row" onClick={() => onChange(linkFundingToProgram(hub, selectedProgram.id, item.id))}>
                       <div><strong>{item.name}</strong><span>{item.status}</span></div>
@@ -926,22 +991,6 @@ export function StudyAbroadDashboard({
               ) : (
                 <div style={{ marginTop: 12 }}><button type="button" className="primary" onClick={() => setStudyView("funding")}>Add funding</button></div>
               )}
-            </Section>
-          )}
-
-          {programTab === "notes" && (
-            <Section icon={NotebookPen} title="Notes">
-              <label>Why I like this<textarea value={selectedProgram.whyLike || ""} onChange={(event) => updateProgram(selectedProgram.id, { whyLike: event.target.value })} rows={3} /></label>
-              <label style={{ display: "block", marginTop: 10 }}>Concerns<textarea value={selectedProgram.concerns || ""} onChange={(event) => updateProgram(selectedProgram.id, { concerns: event.target.value })} rows={3} /></label>
-              <label style={{ display: "block", marginTop: 10 }}>Notes<textarea value={selectedProgram.notes || ""} onChange={(event) => updateProgram(selectedProgram.id, { notes: event.target.value })} rows={4} /></label>
-            </Section>
-          )}
-
-          {programTab === "tasks" && (
-            <Section icon={ListTodo} title="Tasks" action="Add" onAction={() => setCreateKind("task")}>
-              {tasksForParent(hub, "program", selectedProgram.id).length ? tasksForParent(hub, "program", selectedProgram.id).map((task) => (
-                <button key={task.id} type="button" className="work-task-row" onClick={() => completeTask(task.id)}><div><strong>{task.title}</strong></div><CheckCircle2 size={16} /></button>
-              )) : <Empty>Keep tasks on this program so context never floats free.</Empty>}
             </Section>
           )}
 
@@ -971,70 +1020,30 @@ export function StudyAbroadDashboard({
             </Section>
           )}
 
-          {programTab === "history" && (
-            <Section icon={Clock3} title="History">
-              {(hub.history || []).filter((item) => item.contextId === selectedProgram.id || item.contextId && hub.applications.some((app) => app.programId === selectedProgram.id && app.id === item.contextId)).length
-                ? (hub.history || []).filter((item) => item.contextId === selectedProgram.id || item.contextId && hub.applications.some((app) => app.programId === selectedProgram.id && app.id === item.contextId)).slice(0, 12).map((item) => (
-                  <div key={item.id} className="work-task-row"><div><strong>{item.title}</strong><span>{item.at.slice(0, 10)}{item.detail ? ` · ${item.detail}` : ""}</span></div></div>
-                ))
-                : <Empty>Status changes and links for this program will appear here.</Empty>}
+          {programTab === "notes" && (
+            <Section icon={NotebookPen} title="Notes">
+              <label>Why I like this<textarea value={selectedProgram.whyLike || ""} onChange={(event) => updateProgram(selectedProgram.id, { whyLike: event.target.value })} rows={3} /></label>
+              <label style={{ display: "block", marginTop: 10 }}>Concerns<textarea value={selectedProgram.concerns || ""} onChange={(event) => updateProgram(selectedProgram.id, { concerns: event.target.value })} rows={3} /></label>
+              <label style={{ display: "block", marginTop: 10 }}>Notes<textarea value={selectedProgram.notes || ""} onChange={(event) => updateProgram(selectedProgram.id, { notes: event.target.value })} rows={4} /></label>
             </Section>
           )}
         </div>
-        <aside className="work-sidebar">
-          <Section icon={LayoutGrid} title="Program fields">
-            <div style={{ display: "grid", gap: 8 }}>
-              <label>Status
-                <select value={selectedProgram.status} onChange={(event) => updateProgram(selectedProgram.id, { status: event.target.value as StudyAbroadProgram["status"], shortlisted: ["shortlisted", "preparing", "applied", "interview"].includes(event.target.value) || selectedProgram.shortlisted })}>
-                  {PROGRAM_STATUSES.map((status) => <option key={status} value={status}>{programStatusLabel(status)}</option>)}
-                </select>
-              </label>
-              <label>Fit (1–10)
-                <input type="number" min={1} max={10} value={selectedProgram.fitScore ?? ""} onChange={(event) => updateProgram(selectedProgram.id, { fitScore: event.target.value ? Number(event.target.value) : undefined })} />
-              </label>
-              <label>Deadline
-                <input type="date" value={selectedProgram.deadline?.slice(0, 10) || ""} onChange={(event) => updateProgram(selectedProgram.id, { deadline: event.target.value || undefined })} />
-              </label>
-              <label>Intake
-                <input value={selectedProgram.intake || ""} onChange={(event) => updateProgram(selectedProgram.id, { intake: event.target.value })} />
-              </label>
-              <label>Tuition
-                <input value={selectedProgram.tuition || ""} onChange={(event) => updateProgram(selectedProgram.id, { tuition: event.target.value })} />
-              </label>
-              <label>Language
-                <input value={selectedProgram.language || ""} onChange={(event) => updateProgram(selectedProgram.id, { language: event.target.value })} />
-              </label>
-              <button type="button" className="primary" onClick={() => updateProgram(selectedProgram.id, { shortlisted: !selectedProgram.shortlisted, status: !selectedProgram.shortlisted ? "shortlisted" : selectedProgram.status })}>
-                {selectedProgram.shortlisted ? "Remove from shortlist" : "Add to shortlist"}
-              </button>
-            </div>
-          </Section>
-        </aside>
       </div>
     );
   })() : (
-    <div className="work-layout"><div className="work-main">
-      <SubHeader title="Programs" subtitle="The center of Study Abroad" onBack={() => setStudyView("explore")} />
-      <div className="hub-modal-toolbar" style={{ marginBottom: 12 }}>
-        <Search size={16} />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search programs…" />
-      </div>
-      <Section icon={GraduationCap} title="All programs" action="Add program" onAction={() => setCreateKind("program")}>
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}><div className="work-main">
+      <CrumbHeader crumbs={[homeCrumb]} title="Programs" />
+      <Section icon={GraduationCap} title="All programs" action="+ Program" onAction={() => setCreateKind("program")}>
         {filteredPrograms.length ? filteredPrograms.map((program) => (
           <ProgramCard key={program.id} hub={hub} program={program} onOpen={() => openProgram(program.id)} />
-        )) : (
-          <Empty>
-            No programs yet. Add programs under universities — applications attach to programs, not universities alone.
-            <div style={{ marginTop: 12 }}><button type="button" className="primary" onClick={() => setCreateKind("program")}>Add program</button></div>
-          </Empty>
-        )}
+        )) : <Empty>Add programs under a university.</Empty>}
       </Section>
     </div></div>
   );
 
   const applicationsView = (
-    <div className="work-layout"><div className="work-main">
-      <SubHeader title="Applications" subtitle="Pipeline by stage — linked to programs" onBack={() => setStudyView("dashboard")} />
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}><div className="work-main">
+      <CrumbHeader crumbs={[homeCrumb]} title="Applications" subtitle="Pipeline by stage — opened when you need it." />
       {selectedApplication ? (
         <Section icon={FolderKanban} title={applicationProgram(hub, selectedApplication)?.name || "Application"}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
@@ -1083,19 +1092,16 @@ export function StudyAbroadDashboard({
       )}
       {!hub.applications.length && !selectedApplication ? (
         <Section icon={FolderKanban} title="Get started">
-          <Empty>
-            No applications yet. Shortlist a program first, then start an application for a specific intake.
-            <div style={{ marginTop: 12 }}><button type="button" className="primary" onClick={() => setCreateKind("application")}>Start application</button></div>
-          </Empty>
+          <Empty>Shortlist a program first, then start an application for a specific intake.</Empty>
         </Section>
       ) : null}
     </div></div>
   );
 
   const documentsView = (
-    <div className="work-layout"><div className="work-main">
-      <SubHeader title="Documents" subtitle="One reusable library — SOP/CV variants, not duplicates" onBack={() => setStudyView("dashboard")} />
-      <Section icon={FileText} title="Library" action="Add document" onAction={() => setCreateKind("document")}>
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}><div className="work-main">
+      <CrumbHeader crumbs={[homeCrumb]} title="Documents" subtitle="Reusable library — opened when something is blocking you." />
+      <Section icon={FileText} title="Library" action="+ Document" onAction={() => setCreateKind("document")}>
         {hub.documents.length ? hub.documents.map((doc) => {
           const used = hub.applicationDocuments.filter((item) => item.documentId === doc.id).length;
           const isBase = !doc.variantOf && (doc.category === "SOP" || doc.category === "CV");
@@ -1103,7 +1109,7 @@ export function StudyAbroadDashboard({
             <div key={doc.id} className="work-task-row" style={{ alignItems: "flex-start" }}>
               <div style={{ flex: 1 }}>
                 <strong>{doc.name}{doc.variantLabel ? ` · ${doc.variantLabel}` : ""}</strong>
-                <span>{doc.category} · {doc.status}{used ? ` · used by ${used} application${used === 1 ? "" : "s"}` : ""}{doc.variantOf ? ` · variant of ${getDocument(hub, doc.variantOf)?.name || "base"}` : ""}</span>
+                <span>{doc.category} · {doc.status}{used ? ` · used by ${used} application${used === 1 ? "" : "s"}` : ""}</span>
                 {isBase ? (
                   <button
                     type="button"
@@ -1132,37 +1138,18 @@ export function StudyAbroadDashboard({
           );
         }) : (
           <Empty>
-            Passport, diploma, transcript, CV, SOP, portfolio — store once, reuse across applications.
+            Passport, diploma, transcript, CV, SOP — store once, reuse across applications.
             <div style={{ marginTop: 12 }}><button type="button" className="primary" onClick={() => setCreateKind("document")}>Add document</button></div>
           </Empty>
-        )}
-      </Section>
-      <Section icon={NotebookPen} title="SOP / CV versions">
-        {hub.documents.filter((item) => item.category === "SOP" || item.category === "CV").length ? (
-          <div style={{ display: "grid", gap: 8 }}>
-            {hub.documents.filter((item) => !item.variantOf && (item.category === "SOP" || item.category === "CV")).map((base) => (
-              <div key={base.id} className="soft-card" style={{ padding: 12 }}>
-                <strong>{base.category} base · {base.name}</strong>
-                <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
-                  {hub.documents.filter((item) => item.variantOf === base.id).map((variant) => (
-                    <div key={variant.id} className="work-task-row"><div><strong>{variant.variantLabel || variant.name}</strong><span>{variant.status}</span></div></div>
-                  ))}
-                  {!hub.documents.some((item) => item.variantOf === base.id) && <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>No variants yet — create one from the library row.</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <Empty>Add a base SOP or CV in the library, then create program-specific variants from it.</Empty>
         )}
       </Section>
     </div></div>
   );
 
   const fundingView = (
-    <div className="work-layout"><div className="work-main">
-      <SubHeader title="Funding" subtitle="Scholarships and aid — first-class" onBack={() => setStudyView("dashboard")} />
-      <Section icon={Wallet} title="Opportunities" action="Add" onAction={() => setCreateKind("funding")}>
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}><div className="work-main">
+      <CrumbHeader crumbs={[homeCrumb]} title="Funding" />
+      <Section icon={Wallet} title="Opportunities" action="+ Funding opportunity" onAction={() => setCreateKind("funding")}>
         {hub.funding.length ? hub.funding.map((item) => (
           <div key={item.id} className="work-task-row">
             <div>
@@ -1181,7 +1168,7 @@ export function StudyAbroadDashboard({
           </div>
         )) : (
           <Empty>
-            Track scholarships, waivers, and assistantships here. Eligibility stays manual — no invented matches.
+            Track scholarships and aid here. Eligibility stays manual.
             <div style={{ marginTop: 12 }}><button type="button" className="primary" onClick={() => setCreateKind("funding")}>Add funding</button></div>
           </Empty>
         )}
@@ -1190,19 +1177,19 @@ export function StudyAbroadDashboard({
   );
 
   const knowledgeView = (
-    <div className="work-layout"><div className="work-main">
-      <SubHeader title="Knowledge" subtitle="Owned by Study Abroad, linkable to context" onBack={() => setStudyView("dashboard")} />
-      <Section icon={BookOpen} title="Notes" action="Add" onAction={() => setCreateKind("knowledge")}>
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}><div className="work-main">
+      <CrumbHeader crumbs={[homeCrumb]} title="Knowledge" />
+      <Section icon={BookOpen} title="Notes" action="+ Note" onAction={() => setCreateKind("knowledge")}>
         {hub.knowledge.length ? hub.knowledge.map((item) => (
           <div key={item.id} className="work-task-row"><div><strong>{item.title}</strong><span>{item.contextType}{item.body ? ` · ${item.body.slice(0, 80)}` : ""}</span></div></div>
-        )) : <Empty>Visa research, housing notes, admissions emails — keep them here.</Empty>}
+        )) : <Empty>Visa research and admissions notes live here when you need them.</Empty>}
       </Section>
     </div></div>
   );
 
   const historyView = (
-    <div className="work-layout"><div className="work-main">
-      <SubHeader title="History" onBack={() => setStudyView("dashboard")} />
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}><div className="work-main">
+      <CrumbHeader crumbs={[homeCrumb]} title="History" />
       <Section icon={Clock3} title="Activity" action="Add timeline event" onAction={() => {
         const title = window.prompt("Timeline event title");
         if (!title?.trim()) return;
@@ -1221,20 +1208,20 @@ export function StudyAbroadDashboard({
       }}>
         {(hub.history || []).length ? (hub.history || []).slice(0, 30).map((item) => (
           <div key={item.id} className="work-task-row"><div><strong>{item.title}</strong><span>{item.at.slice(0, 16).replace("T", " ")}{item.detail ? ` · ${item.detail}` : ""}</span></div></div>
-        )) : <Empty>Application stage changes, document links, and funding links will land here.</Empty>}
+        )) : <Empty>Stage changes and links land here quietly.</Empty>}
       </Section>
       <Section icon={Clock3} title="Timeline events" action="Open calendar" onAction={onOpenCalendar}>
         {hub.timelineEvents.length ? hub.timelineEvents.map((item) => (
           <div key={item.id} className="work-task-row"><div><strong>{item.title}</strong><span>{item.date} · {item.kind}</span></div></div>
-        )) : <Empty>Deadlines and interviews sync into the existing LifeOS Calendar when you add timeline events.</Empty>}
+        )) : <Empty>Deadlines sync into the LifeOS Calendar.</Empty>}
       </Section>
     </div></div>
   );
 
   const databaseView = (
-    <div className="work-layout"><div className="work-main">
-      <SubHeader title="Database" subtitle="Calm inventory — not a spreadsheet product" onBack={() => setStudyView("dashboard")} />
-      <Section icon={Database} title="Counts">
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}><div className="work-main">
+      <CrumbHeader crumbs={[homeCrumb]} title="Database" subtitle="Inventory when you need counts — not a primary surface." />
+      <Section icon={LayoutGrid} title="Counts">
         <div className="work-stat-grid">
           {[
             ["Countries", hub.countries.length],
@@ -1243,8 +1230,6 @@ export function StudyAbroadDashboard({
             ["Applications", hub.applications.length],
             ["Documents", hub.documents.length],
             ["Funding", hub.funding.length],
-            ["Tasks", hub.tasks.filter((item) => !item.done).length],
-            ["Knowledge", hub.knowledge.length],
           ].map(([label, count]) => (
             <div key={String(label)} className="work-stat-card"><strong>{count}</strong><span>{label}</span></div>
           ))}
@@ -1254,11 +1239,11 @@ export function StudyAbroadDashboard({
   );
 
   const compareView = (
-    <div className="work-layout"><div className="work-main">
-      <SubHeader title="Compare countries" subtitle="Only fields you entered — no fake rankings" onBack={() => setStudyView("explore")} />
+    <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}><div className="work-main">
+      <CrumbHeader crumbs={[homeCrumb, { label: "Explore", onClick: () => { setExploreSegment("countries"); setStudyView("explore"); } }]} title="Compare countries" subtitle="Only fields you entered." />
       <Section icon={LayoutGrid} title="Selected">
         {!compareIds.length ? (
-          <Empty>Select up to 4 countries from the Countries list, then return here.</Empty>
+          <Empty>Select countries from Explore, then compare.</Empty>
         ) : (
           <div className="work-stat-grid" style={{ gridTemplateColumns: `repeat(${Math.min(compareIds.length, 4)}, minmax(0, 1fr))` }}>
             {compareIds.map((id) => {
@@ -1271,10 +1256,8 @@ export function StudyAbroadDashboard({
                     Tuition: {country.tuitionLevel || "—"}<br />
                     Living: {country.livingCostLevel || "—"}<br />
                     Language: {country.languageNotes || "—"}<br />
-                    Complexity: {country.applicationComplexity || "—"}<br />
                     Universities: {universitiesForCountry(hub, id).length}<br />
-                    Programs: {programsForCountry(hub, id).length}<br />
-                    Funding saved: {hub.funding.filter((item) => item.countryId === id).length}
+                    Programs: {programsForCountry(hub, id).length}
                   </p>
                 </div>
               );
@@ -1298,36 +1281,19 @@ export function StudyAbroadDashboard({
   else if (studyView === "database") body = databaseView;
   else if (studyView === "compare") body = compareView;
 
+  const showHero = studyView === "dashboard";
+
   return (
     <div className="os-dashboard work-dashboard study-abroad-dashboard">
-      <div className="os-hero">
-        <div>
-          <p className="eyebrow">{new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
-          <h1>Study Abroad</h1>
-          <p>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {firstName}. What do you need to do next to study abroad?</p>
+      {showHero ? (
+        <div className="os-hero">
+          <div>
+            <p className="eyebrow">{new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
+            <h1>Study Abroad</h1>
+            <p>Plan, compare, apply.</p>
+          </div>
         </div>
-        <button type="button" className="os-now-button" onClick={() => setStudyView("dashboard")}><Target size={18} /> Overview</button>
-      </div>
-
-      <div className="os-quick-row work-quick-row">
-        <button type="button" className="os-quick-action" onClick={() => setCreateKind("country")}><Plus size={16} /> Country</button>
-        <button type="button" className="os-quick-action" onClick={() => setCreateKind("university")}><Plus size={16} /> University</button>
-        <button type="button" className="os-quick-action" onClick={() => setCreateKind("program")}><Plus size={16} /> Program</button>
-        <button type="button" className="os-quick-action" onClick={() => setCreateKind("application")}><Plus size={16} /> Application</button>
-        <button type="button" className="os-quick-action" onClick={() => setCreateKind("document")}><Plus size={16} /> Document</button>
-        <button type="button" className="os-quick-action" onClick={() => setCreateKind("funding")}><Plus size={16} /> Funding</button>
-      </div>
-
-      {studyView !== "dashboard" && (
-        <div className="work-view-nav">
-          <button type="button" onClick={() => setStudyView("dashboard")}>Overview</button>
-          {navItems.map((item) => (
-            <button key={item.id} type="button" className={studyView === item.id || (item.id === "explore" && ["countries", "universities", "programs", "compare"].includes(studyView)) ? "selected" : ""} onClick={() => setStudyView(item.id)}>
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
+      ) : null}
 
       {body}
 

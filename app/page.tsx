@@ -2238,11 +2238,13 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     ] : []),
     ...(enableStudyAbroad ? [
       { shortcut: '/sa', label: 'Study Abroad', desc: 'Open Study Abroad' },
-      { shortcut: '/sa country', label: 'SA country', desc: 'Add a country' },
-      { shortcut: '/sa uni', label: 'SA university', desc: 'Add a university' },
-      { shortcut: '/sa prog', label: 'SA program', desc: 'Add a program' },
+      { shortcut: '/sa country', label: 'Country', desc: 'Add a country path' },
+      { shortcut: '/sa uni', label: 'University', desc: 'Add a university' },
+      { shortcut: '/sa prog', label: 'Program', desc: 'Add a program' },
+      { shortcut: '/sa app', label: 'Application', desc: 'Start an application' },
+      { shortcut: '/sa fund', label: 'Scholarship', desc: 'Add funding / scholarship' },
+      { shortcut: '/sa note', label: 'Note', desc: 'Add study-abroad knowledge' },
       { shortcut: '/sa task', label: 'SA task', desc: 'Add a study-abroad task' },
-      { shortcut: '/sa note', label: 'SA note', desc: 'Add study-abroad knowledge' },
     ] : []),
   ];
   const captureQuery = captureInput.startsWith('/') ? captureInput.trim().toLowerCase() : '';
@@ -2385,6 +2387,33 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               }, 'Added program', name, 'program'));
               flash(`Program added: ${name}`);
             }
+          }
+          setCaptureInput('');
+        } else if (enableStudyAbroad && val.startsWith('/sa app ')) {
+          const name = val.slice(8).trim();
+          const program = name
+            ? studyAbroadHub.programs.find(item => item.name.toLowerCase() === name.toLowerCase()) || studyAbroadHub.programs[0]
+            : studyAbroadHub.programs[0];
+          if (!program) flash('Add a program first with /sa prog');
+          else {
+            const stamp = nowIso();
+            onSetStudyAbroadHub(current => appendHistory({
+              ...current,
+              applications: [...current.applications, { id: newId('app'), programId: program.id, stage: 'preparing', createdAt: stamp, updatedAt: stamp }],
+              programs: current.programs.map(item => item.id === program.id ? { ...item, status: 'preparing', shortlisted: true, updatedAt: stamp } : item),
+            }, 'Started application', program.name, 'application'));
+            flash(`Application started: ${program.name}`);
+          }
+          setCaptureInput('');
+        } else if (enableStudyAbroad && (val.startsWith('/sa fund ') || val.startsWith('/sa scholarship '))) {
+          const name = val.startsWith('/sa scholarship ') ? val.slice(16).trim() : val.slice(9).trim();
+          if (name) {
+            const stamp = nowIso();
+            onSetStudyAbroadHub(current => appendHistory({
+              ...current,
+              funding: [...current.funding, { id: newId('fund'), name, kind: 'scholarship', countryId: current.countries[0]?.id, status: 'researching', createdAt: stamp, updatedAt: stamp }],
+            }, 'Added funding', name, 'funding'));
+            flash(`Scholarship added: ${name}`);
           }
           setCaptureInput('');
         } else if (enableStudyAbroad && val.startsWith('/sa task ')) {
