@@ -20,6 +20,7 @@ import {
   createDocumentVariant,
   daysUntil,
   ensureCountriesFromUniversities,
+  formatStudyDate,
   fundingForProgram,
   getCountry,
   getDocument,
@@ -28,6 +29,7 @@ import {
   linkDocumentToApplication,
   linkFundingToProgram,
   newId,
+  nextDeadlineForCountry,
   normalizeStudyAbroadHub,
   nowIso,
   programCountry,
@@ -76,23 +78,38 @@ function Section({
 }) {
   return (
     <section className="os-module">
-      <div className="card-head">
+      <header>
         <div>
-          <span className="section-icon violet"><Icon size={14} /></span>
+          <Icon size={17} />
           <h2>{title}</h2>
         </div>
-        {action && onAction ? <button type="button" onClick={onAction}>{action}</button> : null}
-      </div>
+        {action && onAction ? (
+          <button type="button" onClick={onAction}>{action}<ChevronRight size={14} /></button>
+        ) : null}
+      </header>
       <div className="os-module-body">{children}</div>
     </section>
   );
 }
 
-function Empty({ children }: { children: React.ReactNode }) {
+function Empty({
+  children,
+  action,
+  onAction,
+}: {
+  children: React.ReactNode;
+  action?: string;
+  onAction?: () => void;
+}) {
   return (
     <div className="os-empty">
-      <Globe2 size={18} />
-      <p>{children}</p>
+      <Globe2 size={19} />
+      <div>
+        <p>{children}</p>
+        {action && onAction ? (
+          <button type="button" className="os-profile-button" style={{ marginTop: 12 }} onClick={onAction}>{action}</button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -676,21 +693,63 @@ function ProgramCard({
   const university = programUniversity(hub, program);
   const country = programCountry(hub, program);
   const nextAction = programNextActionLabel(hub, program);
+  const deadline = formatStudyDate(program.deadline);
   return (
-    <button type="button" className="work-project-card" onClick={onOpen} style={{ textAlign: "left", width: "100%" }}>
-      <div className="card-head" style={{ marginBottom: 8 }}>
+    <button type="button" className="work-project-card" onClick={onOpen}>
+      <div className="work-project-head">
+        <span className="work-project-icon" aria-hidden>{countryFlagEmoji(country?.code)}</span>
         <div>
           <strong>{program.name}</strong>
-          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 13 }}>
-            {university?.name || "University"}{country ? ` · ${country.name}` : ""}
+          <p>{university?.name || "University"}{country ? ` · ${countryFlagEmoji(country.code)} ${country.name}` : ""}</p>
+        </div>
+        <span className="work-priority-tag" style={{ marginLeft: "auto" }}>{programStatusLabel(program.status)}</span>
+      </div>
+      <div className="work-deliverable-row" style={{ borderTop: "1px solid var(--line)", marginTop: 8, paddingLeft: 0, paddingRight: 0 }}>
+        <span className="work-deliverable-icon"><Target size={15} /></span>
+        <div>
+          <strong>Next</strong>
+          <small>{nextAction}</small>
+        </div>
+      </div>
+      <small>
+        {program.fitScore ? `Fit ${program.fitScore}/10` : "Fit unset"}
+        {deadline ? ` · Deadline ${deadline.label}` : ""}
+      </small>
+    </button>
+  );
+}
+
+function CountryPathCard({
+  hub,
+  countryId,
+  onOpen,
+}: {
+  hub: StudyAbroadHub;
+  countryId: string;
+  onOpen: () => void;
+}) {
+  const country = getCountry(hub, countryId);
+  if (!country) return null;
+  const programs = programsForCountry(hub, countryId);
+  const shortlisted = programs.filter((item) => item.shortlisted || item.status === "shortlisted" || item.status === "preparing").length;
+  const next = nextDeadlineForCountry(hub, countryId);
+  const deadline = formatStudyDate(next?.deadline);
+  const empty = programs.length === 0;
+
+  return (
+    <button type="button" className="work-project-card" onClick={onOpen}>
+      <div className="work-project-head">
+        <span className="work-project-icon" aria-hidden>{countryFlagEmoji(country.code)}</span>
+        <div>
+          <strong>{country.name}</strong>
+          <p>
+            {empty
+              ? "No programs saved yet"
+              : `${programs.length} program${programs.length === 1 ? "" : "s"} · ${shortlisted} shortlisted`}
           </p>
         </div>
-        <span className="work-priority-tag">{programStatusLabel(program.status)}</span>
       </div>
-      <div className="work-stat-grid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
-        <div><small style={{ color: "var(--muted)" }}>Fit</small><div>{program.fitScore ? `${program.fitScore}/10` : "—"}</div></div>
-        <div><small style={{ color: "var(--muted)" }}>Next</small><div>{nextAction}</div></div>
-      </div>
+      {deadline ? <small>Next deadline · {deadline.label}</small> : <small>{empty ? "Explore programs →" : "Open →"}</small>}
     </button>
   );
 }
@@ -765,7 +824,8 @@ export function StudyAbroadDashboard({
 
   void workspaceName;
   const matter = whatMattersNow(hub);
-  const shortlist = shortlistedPrograms(hub).slice(0, 5);
+  const shortlistAll = shortlistedPrograms(hub);
+  const shortlist = shortlistAll.slice(0, 5);
   const upcoming = upcomingStudyAbroadItems(hub, 5);
   const pathCountries = hub.countries.filter((item) => item.active !== false);
 
@@ -787,9 +847,9 @@ export function StudyAbroadDashboard({
     });
   };
 
-  const openCountry = (id: string) => {
+  const openCountry = (id: string, tab: CountryTab = "overview") => {
     setSelectedCountryId(id);
-    setCountryTab("overview");
+    setCountryTab(tab);
     setStudyView("countries");
   };
 
@@ -873,9 +933,9 @@ export function StudyAbroadDashboard({
     <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
       <div className="work-main">
         <Section icon={Globe2} title="Get started">
-          <div className="soft-card" style={{ padding: 20 }}>
-            <strong style={{ display: "block", fontSize: 18 }}>Where are you thinking about studying?</strong>
-            <p style={{ margin: "8px 0 16px", color: "var(--muted)", fontSize: 14, lineHeight: 1.5 }}>
+          <div className="soft-card">
+            <strong style={{ display: "block", fontSize: 18, marginTop: 0 }}>Where are you thinking about studying?</strong>
+            <p style={{ margin: "8px 0 16px", color: "var(--muted)", fontSize: 13, lineHeight: 1.55 }}>
               Add a country to open your first path. Universities, programs, and applications stay one level deeper until you need them.
             </p>
             <button type="button" className="primary" onClick={() => setCreateKind("country")}>Add a country</button>
@@ -887,64 +947,74 @@ export function StudyAbroadDashboard({
     <div className="work-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
       <div className="work-main">
         <Section icon={Target} title="What matters now">
-          <div className="soft-card" style={{ padding: 16 }}>
-            <strong style={{ display: "block", fontSize: 16 }}>{matter.title}</strong>
-            <p style={{ margin: "6px 0 12px", color: "var(--muted)", fontSize: 13 }}>{matter.detail}</p>
+          <div className="soft-card sa-matter-card">
+            <strong style={{ display: "block", fontSize: 18, marginTop: 0 }}>{matter.title}</strong>
+            <p style={{ margin: "8px 0 16px", color: "var(--muted)", fontSize: 13, lineHeight: 1.55 }}>{matter.detail}</p>
             <button type="button" className="primary" onClick={runMatterAction}>{matter.actionLabel}</button>
           </div>
         </Section>
 
-        <Section icon={Globe2} title="Your paths" action="+ Explore country" onAction={() => { setExploreSegment("countries"); setStudyView("explore"); }}>
-          <div style={{ display: "grid", gap: 10 }}>
-            {pathCountries.map((country) => {
-              const programs = programsForCountry(hub, country.id);
-              const shortlisted = programs.filter((item) => item.shortlisted || item.status === "shortlisted" || item.status === "preparing").length;
-              return (
-                <button key={country.id} type="button" className="work-deliverable-row" onClick={() => openCountry(country.id)}>
-                  <div>
-                    <strong>{country.name}</strong>
-                    <span>{programs.length} program{programs.length === 1 ? "" : "s"} · {shortlisted} shortlisted</span>
-                  </div>
-                  <ChevronRight size={16} />
-                </button>
-              );
-            })}
+        <Section icon={Globe2} title="Your paths" action="+ Add country" onAction={() => setCreateKind("country")}>
+          <div className="sa-path-grid">
+            {pathCountries.map((country) => (
+              <CountryPathCard
+                key={country.id}
+                hub={hub}
+                countryId={country.id}
+                onOpen={() => openCountry(country.id, "programs")}
+              />
+            ))}
           </div>
         </Section>
 
-        <Section icon={GraduationCap} title="Shortlist">
+        <Section
+          icon={GraduationCap}
+          title="Shortlist"
+          action={shortlistAll.length > shortlist.length ? "View shortlist" : undefined}
+          onAction={shortlistAll.length > shortlist.length ? () => { setExploreSegment("programs"); setStudyView("explore"); } : undefined}
+        >
           {shortlist.length ? (
-            <div style={{ display: "grid", gap: 10 }}>
+            <div className="sa-shortlist-stack">
               {shortlist.map((program) => (
                 <ProgramCard key={program.id} hub={hub} program={program} onOpen={() => openProgram(program.id)} />
               ))}
             </div>
           ) : (
-            <Empty>
-              Shortlist stays empty until you save your strongest programs.
-              <div style={{ marginTop: 12 }}>
-                <button type="button" className="os-profile-button" onClick={() => { setExploreSegment("programs"); setStudyView("explore"); }}>Browse programs</button>
-              </div>
+            <Empty
+              action="Browse programs"
+              onAction={() => { setExploreSegment("programs"); setStudyView("explore"); }}
+            >
+              <strong style={{ display: "block", color: "var(--ink)", marginBottom: 6 }}>Your shortlist is empty</strong>
+              Save programs you’re seriously considering and they’ll appear here.
             </Empty>
           )}
         </Section>
 
         <Section icon={Clock3} title="Upcoming" action={onOpenCalendar ? "Calendar" : undefined} onAction={onOpenCalendar}>
-          {upcoming.length ? upcoming.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="work-task-row"
-              onClick={() => item.programId ? openProgram(item.programId) : onOpenCalendar?.()}
-            >
-              <div>
-                <strong>{item.title}</strong>
-                <span>{item.detail}</span>
-              </div>
-              <em>{item.days === 0 ? "Today" : `${item.days}d`}</em>
-            </button>
-          )) : (
-            <Empty>Deadlines and timeline events appear here when you add them on programs or History.</Empty>
+          {upcoming.length ? upcoming.map((item) => {
+            const when = formatStudyDate(item.date);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className="work-deliverable-row"
+                onClick={() => item.programId ? openProgram(item.programId) : onOpenCalendar?.()}
+              >
+                <span className="work-deliverable-icon sa-upcoming-date" aria-hidden>
+                  <em>{when?.month || "—"}</em>
+                  <strong>{when?.day || "—"}</strong>
+                </span>
+                <div>
+                  <strong>{item.title}</strong>
+                  <small>{item.detail}{item.days === 0 ? " · Today" : item.days === 1 ? " · Tomorrow" : ""}</small>
+                </div>
+              </button>
+            );
+          }) : (
+            <Empty action={onOpenCalendar ? "Open calendar" : undefined} onAction={onOpenCalendar}>
+              <strong style={{ display: "block", color: "var(--ink)", marginBottom: 6 }}>Nothing upcoming yet</strong>
+              Deadlines and timeline events will show up here once you add them.
+            </Empty>
           )}
         </Section>
       </div>
