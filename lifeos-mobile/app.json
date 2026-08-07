@@ -12,11 +12,6 @@
       "requireFullScreen": false,
       "bundleIdentifier": "com.shafkatsaruwar.lifeos",
       "infoPlist": {
-        "UIDeviceFamily": [1, 2],
-        "UISupportedInterfaceOrientations": [
-          "UIInterfaceOrientationPortrait",
-          "UIInterfaceOrientationPortraitUpsideDown"
-        ],
         "UISupportedInterfaceOrientations~ipad": [
           "UIInterfaceOrientationPortrait",
           "UIInterfaceOrientationPortraitUpsideDown",
