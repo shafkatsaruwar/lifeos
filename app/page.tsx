@@ -1500,7 +1500,12 @@ export default function LifeOS() {
     setSettingsState(current => ({ ...current, ...updates }));
     flash("Settings updated");
   };
-  const addTask = (title: string, _projectKind?: ProjectKind, spaceValue = "") => {
+  const addTask = (
+    title: string,
+    _projectKind?: ProjectKind,
+    spaceValue = "",
+    options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string },
+  ) => {
     const trimmed = title.trim();
     if (!trimmed) return 0;
     const id = Date.now();
@@ -1508,9 +1513,28 @@ export default function LifeOS() {
     const projectName = spaceValue.startsWith("project:") ? spaceValue.slice(8) : spaceValue && spaceValue !== "Inbox" ? spaceValue : "Inbox";
     const linkedClass = classes.find(item => item.id === classId);
     const linkedProject = classId ? undefined : projectItems.find(project => project.name === projectName);
-    setTasks(items => [...items, normalizeTask({ id, title: trimmed, project: linkedProject?.name ?? "Inbox", classId, academicType: classId ? "Assignment" : undefined, color: linkedClass?.color ?? linkedProject?.color ?? "#625af6", due: "", priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, status: "Not started", notes: "", customProperties: [], checklist: [], checklistProgress: [] })]);
+    setTasks(items => [...items, normalizeTask({
+      id,
+      title: trimmed,
+      project: linkedProject?.name ?? "Inbox",
+      classId,
+      academicType: classId ? "Assignment" : undefined,
+      color: linkedClass?.color ?? linkedProject?.color ?? "#625af6",
+      due: "",
+      priority: options?.priority ?? "Medium",
+      focusMinutes: options?.focusMinutes ?? settingsState.defaultFocusMinutes,
+      energy: options?.energy ?? settingsState.defaultEnergy,
+      status: "Not started",
+      notes: "",
+      customProperties: [],
+      checklist: [],
+      checklistProgress: [],
+    })]);
     setComposer(null);
-    flash(linkedClass ? `Task linked to ${linkedClass.code}` : linkedProject ? `Task linked to ${linkedProject.name}` : "Task added");
+    flash(
+      options?.flashLabel
+        || (linkedClass ? `Task linked to ${linkedClass.code}` : linkedProject ? `Task linked to ${linkedProject.name}` : "Task added"),
+    );
     return id;
   };
   const addAiTask = (task: ParsedTask) => {
@@ -2067,7 +2091,7 @@ export default function LifeOS() {
             {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} schoolView={schoolView} onChangeView={setSchoolView} schoolFocusTaskId={schoolFocusTaskId} onSelectFocusTask={setSchoolFocusTaskId} onComplete={complete} onOpenTask={openTaskPage} onOpenClass={openClassSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={(id) => { setSchoolFocusTaskId(id); openFocus(id); }} onOpenCalendar={() => go("Calendar")} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} />}
             {view === "Work" && <WorkDashboard workHub={workHub} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => openSpacesList("Projects")} />}
             {view === "Study Abroad" && <StudyAbroadDashboard hub={studyAbroadHub} studyView={studyAbroadView} onChangeView={setStudyAbroadView} onChange={setStudyAbroadHub} workspaceName={workspaceName} onOpenCalendar={() => go("Calendar")} onFocusStudyTask={focusStudyAbroadTask} focusEntity={studyAbroadFocusEntity} onFocusEntityConsumed={() => setStudyAbroadFocusEntity(null)} />}
-            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} onAddTask={(title) => addTask(title)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} flash={flash} />}
+            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} flash={flash} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
             {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} />}
             {(view === "Today" || view === "Calendar") && <CalendarView events={calendarFeed} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => { if (id.startsWith("task-")) openTaskPage(Number(id.slice(5))); else if (id.startsWith("work-meet-")) { setWorkView("calendar"); go("Work"); } else setEditingCalendarEventId(id); }} onPlanTask={setEditingTaskId} />}
@@ -2158,7 +2182,7 @@ export default function LifeOS() {
   );
 }
 
-function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableWorkOS, enableStudyAbroad, flash }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; onAddTask: (title: string) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableWorkOS: boolean; enableStudyAbroad: boolean; flash: (message: string) => void }) {
+function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableWorkOS, enableStudyAbroad, flash }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableWorkOS: boolean; enableStudyAbroad: boolean; flash: (message: string) => void }) {
   const [handoff, setHandoff] = useState("");
   const [captureInput, setCaptureInput] = useState("");
   const [captureFocused, setCaptureFocused] = useState(false);
@@ -2222,6 +2246,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   };
   const commands = [
     { shortcut: '/t', label: 'Add task', desc: 'Create a new task' },
+    { shortcut: '/tm', label: 'Minor task', desc: 'Low-energy errand — water, charge, quick chore' },
     { shortcut: '/proj', label: 'Add project', desc: 'Start a new project' },
     { shortcut: '/asg', label: 'Add assignment', desc: 'School mode only' },
     { shortcut: '/note', label: 'Add note', desc: 'Capture a quick note' },
@@ -2302,6 +2327,21 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           const taskTitle = val.slice(3).trim();
           if (taskTitle) {
             const id = onAddTask(taskTitle);
+            if (id) {
+              if (nowTaskId) onEnqueue(id);
+              else onChoose(id);
+            }
+          }
+          setCaptureInput('');
+        } else if (val.startsWith('/tm ')) {
+          const taskTitle = val.slice(4).trim();
+          if (taskTitle) {
+            const id = onAddTask(taskTitle, {
+              energy: 'Low',
+              priority: 'Low',
+              focusMinutes: 5,
+              flashLabel: 'Minor task added',
+            });
             if (id) {
               if (nowTaskId) onEnqueue(id);
               else onChoose(id);
@@ -2508,7 +2548,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             onKeyDown={handleCaptureKeyDown}
             title="Click to see capture commands"
           />
-          <span className="capture-hint">/t · /break · /focus</span>
+          <span className="capture-hint">/t · /tm · /break · /focus</span>
         </section>
         {showSuggestions ? (
           <div className="capture-suggestions" onMouseDown={(e) => e.preventDefault()}>
