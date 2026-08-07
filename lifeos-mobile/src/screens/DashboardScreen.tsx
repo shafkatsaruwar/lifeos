@@ -210,7 +210,7 @@ export function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { padding: 20, paddingBottom: 110, gap: 16 },
+  screen: { padding: 20, paddingBottom: 28, gap: 16 },
   welcomeRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   grow: { flex: 1 },
   greeting: { fontSize: 26, fontWeight: "700", marginTop: 4 },

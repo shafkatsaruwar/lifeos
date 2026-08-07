@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
   grow: { flex: 1, minWidth: 0 },
   eyebrow: { fontSize: 10, fontWeight: "800" },
   title: { fontSize: 24, fontWeight: "800", marginTop: 2 },
-  list: { padding: 16, paddingBottom: 120, gap: 10 },
+  list: { padding: 16, paddingBottom: 28, gap: 10 },
   row: { minHeight: 72, borderWidth: 1, borderRadius: 8, padding: 12, flexDirection: "row", alignItems: "center", gap: 12 },
   rowIcon: { width: 40, height: 40, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   rowTitle: { fontSize: 15, fontWeight: "800" },

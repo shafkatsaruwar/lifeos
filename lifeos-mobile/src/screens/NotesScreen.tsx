@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
   subNavPill: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   subNavPillActive: { borderWidth: 1.5 },
   subNavText: { fontSize: 12, fontWeight: "800" },
-  list: { padding: 20, paddingBottom: 110, gap: 10 },
+  list: { padding: 20, paddingBottom: 28, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 13 },
   iconWrap: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   title: { fontSize: 15, fontWeight: "800" },

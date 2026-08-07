@@ -169,7 +169,7 @@ export function TaskDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { padding: 20, paddingTop: 4, paddingBottom: 110, gap: 14 },
+  screen: { padding: 20, paddingTop: 4, paddingBottom: 28, gap: 14 },
   missing: { flex: 1, alignItems: "center", justifyContent: "center" },
   headRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 12, paddingTop: 4 },
   backButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },

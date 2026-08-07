@@ -61,7 +61,7 @@ export function ConnectWebScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { padding: 20, paddingBottom: 110, gap: 14 },
+  screen: { padding: 20, paddingBottom: 28, gap: 14 },
   backButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginLeft: -8 },
   grow: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },

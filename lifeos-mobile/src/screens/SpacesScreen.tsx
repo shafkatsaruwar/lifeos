@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, gap: 12 },
   grow: { flex: 1 },
   addButton: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  list: { padding: 20, paddingBottom: 110, gap: 12 },
+  list: { padding: 20, paddingBottom: 28, gap: 12 },
   columnWrap: { gap: 12 },
   card: { flex: 1, borderWidth: 1, borderRadius: 16, padding: 14, gap: 6, minHeight: 128 },
   iconWrap: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },

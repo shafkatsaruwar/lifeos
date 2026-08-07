@@ -168,7 +168,7 @@ export function NowScreen() {
 
 const styles = StyleSheet.create({
   grow: { flex: 1 },
-  screen: { padding: 20, paddingBottom: 110, gap: 16 },
+  screen: { padding: 20, paddingBottom: 28, gap: 16 },
   headerRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   quickRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   quickAction: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 9 },

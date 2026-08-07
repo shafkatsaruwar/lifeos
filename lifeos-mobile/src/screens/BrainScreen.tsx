@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
   subNav: { flexDirection: "row", gap: 8, paddingHorizontal: 20, marginTop: 14 },
   subNavPill: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   subNavText: { fontSize: 12, fontWeight: "800" },
-  list: { padding: 20, paddingBottom: 110, gap: 10 },
+  list: { padding: 20, paddingBottom: 28, gap: 10 },
   row: { borderWidth: 1, borderRadius: 14, padding: 14, gap: 10 },
   text: { fontSize: 15, lineHeight: 21 },
   actions: { flexDirection: "row", gap: 8, justifyContent: "flex-end" },

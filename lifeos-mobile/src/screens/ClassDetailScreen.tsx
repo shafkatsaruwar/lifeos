@@ -130,7 +130,7 @@ function MetaBlock({ label, value, theme }: { label: string; value: string; them
 
 const styles = StyleSheet.create({
   missing: { flex: 1, alignItems: "center", justifyContent: "center" },
-  screen: { padding: 20, paddingTop: 4, paddingBottom: 110, gap: 12 },
+  screen: { padding: 20, paddingTop: 4, paddingBottom: 28, gap: 12 },
   backButton: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 12, marginTop: 12, marginBottom: 4 },
   hero: { borderWidth: 1.5, borderRadius: 20, padding: 18, gap: 4 },
   heroIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 4 },

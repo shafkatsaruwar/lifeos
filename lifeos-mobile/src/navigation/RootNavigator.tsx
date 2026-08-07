@@ -3,7 +3,6 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
-import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { OnboardingName } from "../components/Auth";
@@ -43,15 +42,6 @@ const TAB_ICONS: Record<string, { idle: keyof typeof Ionicons.glyphMap; active: 
   SchoolTab: { idle: "school-outline", active: "school" },
   LibraryTab: { idle: "book-outline", active: "book" },
 };
-
-function GlassTabBarBackground({ dark }: { dark: boolean }) {
-  return (
-    <View style={styles.glassClip}>
-      <View style={[styles.glassFill, dark && styles.glassFillDark]} />
-      <View style={[styles.glassEdge, dark && styles.glassEdgeDark]} />
-    </View>
-  );
-}
 
 function NowStackNavigator() {
   return (
@@ -140,41 +130,38 @@ export function RootNavigator() {
           headerShown: false,
           tabBarShowLabel: true,
           tabBarHideOnKeyboard: true,
-          tabBarBackground: () => <GlassTabBarBackground dark={dark} />,
           tabBarStyle: {
-            position: "absolute",
-            left: 16,
-            right: 16,
-            bottom: insets.bottom + 12,
-            height: 68,
-            borderRadius: 28,
-            backgroundColor: "transparent",
-            borderTopWidth: 0,
-            shadowColor: "#6F766C",
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: dark ? 0.4 : 0.2,
-            shadowRadius: 22,
-            elevation: 12,
+            position: "relative",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 56 + insets.bottom,
+            backgroundColor: theme.surface,
+            borderTopWidth: 1,
+            borderTopColor: theme.border,
+            borderRadius: 0,
+            elevation: 0,
+            shadowOpacity: 0,
+            paddingTop: 6,
+            paddingBottom: Math.max(insets.bottom, 8),
             paddingHorizontal: 4,
-            paddingTop: 4,
-            paddingBottom: 4,
           },
           tabBarItemStyle: {
-            height: 60,
+            height: 48,
             minWidth: 44,
             paddingVertical: 0,
             justifyContent: "center",
             alignItems: "center",
           },
           tabBarIconStyle: {
-            marginTop: 4,
+            marginTop: 0,
           },
           tabBarLabelStyle: {
-            fontSize: 9,
-            lineHeight: 11,
+            fontSize: 10,
+            lineHeight: 12,
             fontWeight: "600",
             marginTop: 2,
-            marginBottom: 5,
+            marginBottom: 0,
           },
           tabBarActiveTintColor: theme.accent,
           tabBarInactiveTintColor: "#8E8E93",
@@ -195,30 +182,3 @@ export function RootNavigator() {
     </NavigationContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  glassClip: {
-    position: "absolute",
-    inset: 0,
-    borderRadius: 28,
-    overflow: "hidden",
-  },
-  glassFill: {
-    position: "absolute",
-    inset: 0,
-    backgroundColor: "rgba(255,255,255,0.88)",
-  },
-  glassFillDark: {
-    backgroundColor: "rgba(28,28,30,0.9)",
-  },
-  glassEdge: {
-    position: "absolute",
-    inset: 0,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.92)",
-  },
-  glassEdgeDark: {
-    borderColor: "rgba(255,255,255,0.14)",
-  },
-});

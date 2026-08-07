@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, paddingTop: 8, gap: 12 },
   grow: { flex: 1 },
   segmentWrap: { paddingHorizontal: 20, marginTop: 14 },
-  list: { padding: 20, paddingBottom: 110, gap: 10 },
+  list: { padding: 20, paddingBottom: 28, gap: 10 },
   upcomingRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 12 },
   dateBlock: { width: 44, alignItems: "center" },
   dateDay: { fontSize: 18, fontWeight: "800" },

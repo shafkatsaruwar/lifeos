@@ -124,5 +124,5 @@ const styles = StyleSheet.create({
     minHeight: 42,
   },
   sortLabel: { fontSize: 13, fontWeight: "700" },
-  list: { padding: 20, paddingTop: 14, paddingBottom: 110, gap: 10 },
+  list: { padding: 20, paddingTop: 14, paddingBottom: 28, gap: 10 },
 });

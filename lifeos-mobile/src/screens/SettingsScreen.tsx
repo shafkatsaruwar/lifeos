@@ -108,7 +108,7 @@ export function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { padding: 20, paddingBottom: 110, gap: 16 },
+  screen: { padding: 20, paddingBottom: 28, gap: 16 },
   cardLabel: { fontSize: 16, fontWeight: "800" },
   input: { minHeight: 46, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, fontSize: 15 },
   settingRow: { flexDirection: "row", alignItems: "center", gap: 12 },

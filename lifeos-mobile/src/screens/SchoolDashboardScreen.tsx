@@ -220,7 +220,7 @@ function DatabaseButton({ icon, label, onPress }: { icon: keyof typeof Feather.g
 }
 
 const styles = StyleSheet.create({
-  screen: { padding: 16, paddingBottom: 124, gap: 18 },
+  screen: { padding: 16, paddingBottom: 28, gap: 18 },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   grow: { flex: 1, minWidth: 0 },
   title: { fontSize: 29, fontWeight: "800", marginTop: 2 },

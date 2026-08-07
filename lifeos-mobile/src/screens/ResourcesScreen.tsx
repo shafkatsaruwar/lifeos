@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
   subNav: { flexDirection: "row", gap: 8, paddingHorizontal: 20, marginTop: 14 },
   subNavPill: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   subNavText: { fontSize: 12, fontWeight: "800" },
-  list: { padding: 20, paddingBottom: 110, gap: 18 },
+  list: { padding: 20, paddingBottom: 28, gap: 18 },
   groupBlock: { gap: 8 },
   groupLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase" },
   row: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 12 },

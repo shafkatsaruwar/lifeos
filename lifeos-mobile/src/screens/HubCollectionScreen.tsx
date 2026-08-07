@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 10, fontWeight: "800" },
   title: { fontSize: 24, fontWeight: "800", marginTop: 2 },
   subtitle: { fontSize: 12, lineHeight: 17, marginTop: 3 },
-  screen: { padding: 16, paddingBottom: 120, gap: 14 },
+  screen: { padding: 16, paddingBottom: 28, gap: 14 },
   composer: { borderWidth: 1, borderRadius: 8, padding: 16, gap: 8 },
   composerTitle: { fontSize: 16, fontWeight: "800", marginBottom: 2 },
   fieldLabel: { fontSize: 11, fontWeight: "700", marginTop: 3 },
