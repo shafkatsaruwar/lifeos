@@ -80,6 +80,26 @@ export type CalendarEvent = {
 
 export type NoteTemplate = "blank" | "lined" | "dotted" | "cornell" | "meeting";
 
+/** Freehand ink stroke for iPad / Apple Pencil handwriting. */
+export type InkPoint = { x: number; y: number; t?: number };
+
+export type InkStroke = {
+  id: string;
+  color: string;
+  width: number;
+  /** pen/highlighter draw; eraser paints over with paper color */
+  tool: "pen" | "highlighter" | "eraser";
+  points: InkPoint[];
+};
+
+export type NoteInk = {
+  version?: 1;
+  strokes: InkStroke[];
+  /** Logical canvas height so ink scrolls with the page */
+  height?: number;
+  updatedAt?: number;
+};
+
 export type Note = {
   id: string;
   title: string;
@@ -87,6 +107,8 @@ export type Note = {
   projectName?: string;
   classId?: string;
   template?: NoteTemplate;
+  /** Handwriting layer (mobile). Preserved by web if present. */
+  ink?: NoteInk;
   updatedAt: string;
 };
 

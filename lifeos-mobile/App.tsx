@@ -2,6 +2,7 @@ import * as WebBrowser from "expo-web-browser";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, useColorScheme } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { auth, loadWorkspace, saveWorkspacePart } from "./src/lib/firebase";
 import type { Workspace } from "./src/types";
@@ -61,20 +62,24 @@ export default function App() {
 
   if (loading || (user && !workspace)) {
     return (
-      <SafeAreaProvider>
-        <SafeAreaView style={[styles.loader, { backgroundColor: theme.bg }]}>
-          <ActivityIndicator color={theme.accent} />
-          <Text style={{ color: theme.muted, marginTop: 12, fontSize: 14 }}>Opening LifeOS…</Text>
-        </SafeAreaView>
-      </SafeAreaProvider>
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaProvider>
+          <SafeAreaView style={[styles.loader, { backgroundColor: theme.bg }]}>
+            <ActivityIndicator color={theme.accent} />
+            <Text style={{ color: theme.muted, marginTop: 12, fontSize: 14 }}>Opening LifeOS…</Text>
+          </SafeAreaView>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
     );
   }
 
   if (!user) {
     return (
-      <SafeAreaProvider>
-        <SignIn />
-      </SafeAreaProvider>
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaProvider>
+          <SignIn />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
     );
   }
 
@@ -97,14 +102,17 @@ export default function App() {
   };
 
   return (
-    <SafeAreaProvider>
-      <LifeOSContext.Provider value={state}>
-        <RootNavigator />
-      </LifeOSContext.Provider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <LifeOSContext.Provider value={state}>
+          <RootNavigator />
+        </LifeOSContext.Provider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   loader: { flex: 1, alignItems: "center", justifyContent: "center" },
 });
