@@ -62,14 +62,24 @@ export const HandwritingCanvas = React.forwardRef<PencilKitViewRef | null, Props
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useImperativeHandle(ref, () => ({
-    setupToolPicker: async () => canvasRef.current?.setupToolPicker(),
-    clearDrawing: async () => canvasRef.current?.clearDrawing(),
-    undo: async () => canvasRef.current?.undo(),
-    redo: async () => canvasRef.current?.redo(),
+    setupToolPicker: async () => {
+      await canvasRef.current?.setupToolPicker();
+    },
+    clearDrawing: async () => {
+      await canvasRef.current?.clearDrawing();
+    },
+    undo: async () => {
+      await canvasRef.current?.undo();
+    },
+    redo: async () => {
+      await canvasRef.current?.redo();
+    },
     getCanvasDataAsBase64: async () => (await canvasRef.current?.getCanvasDataAsBase64()) ?? "",
     setCanvasDataFromBase64: async (data: string) =>
       (await canvasRef.current?.setCanvasDataFromBase64(data)) ?? false,
-    setCanvasBackgroundColor: async (color: string) => canvasRef.current?.setCanvasBackgroundColor(color),
+    setCanvasBackgroundColor: async (color: string) => {
+      await canvasRef.current?.setCanvasBackgroundColor(color);
+    },
   }), []);
 
   const persistData = useCallback(

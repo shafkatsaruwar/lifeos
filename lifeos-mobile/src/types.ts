@@ -215,6 +215,84 @@ export type SettingsState = {
   spaceContext?: Record<string, { lastTaskId?: number; lastFilter?: string; updatedAt?: string }>;
 };
 
+/** Digital paper style for notebook pages (PencilKit draws on top). */
+export type PaperStyle = "blank" | "ruled" | "narrowRuled" | "grid" | "dotted" | "cornell";
+
+/** Optional LifeOS context — notebooks can also stay personal/unfiled. */
+export type NotebookContextLink = {
+  type: "class" | "project" | "personal";
+  classId?: string;
+  projectName?: string;
+  label?: string;
+};
+
+export type NotebookFolder = {
+  id: string;
+  name: string;
+  color?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Notebook = {
+  id: string;
+  name: string;
+  folderId?: string;
+  color?: string;
+  cover?: "solid" | "linen" | "slate";
+  context?: NotebookContextLink;
+  pageCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Typed text box on a page (MVP: insert later; shape reserved). */
+export type PageTextElement = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text: string;
+  fontSize: number;
+  bold?: boolean;
+  italic?: boolean;
+};
+
+/** Image on a page (MVP: insert later; shape reserved). */
+export type PageImageElement = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  uri: string;
+};
+
+/**
+ * One sheet in a notebook. Ink is PencilKit PKDrawing (editable), not a flat image.
+ * Stored at users/{uid}/notebookPages/{pageId} so stroke saves don't rewrite the library.
+ */
+export type NotebookPage = {
+  id: string;
+  notebookId: string;
+  index: number;
+  title?: string;
+  paper: PaperStyle;
+  ink?: NoteInk;
+  textElements?: PageTextElement[];
+  imageElements?: PageImageElement[];
+  /** Reserved for future PDF page backing */
+  pdfRef?: { storagePath: string; pageIndex: number };
+  updatedAt: string;
+};
+
+/** Folders + notebook metadata (pages live separately). */
+export type NotebookHub = {
+  folders: NotebookFolder[];
+  notebooks: Notebook[];
+};
+
 export type Workspace = {
   tasks: Task[];
   projects: Project[];
@@ -226,4 +304,11 @@ export type Workspace = {
   resources: Resource[];
   life: LifeHubState;
   school: SchoolHubState;
+  /** Notebook library metadata */
+  notebookHub: NotebookHub;
+  /**
+   * Page documents keyed by page id. Synced as a map in RTDB
+   * (users/{uid}/notebookPages/{pageId}) for per-page writes.
+   */
+  notebookPages: Record<string, NotebookPage>;
 };

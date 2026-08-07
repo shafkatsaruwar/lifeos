@@ -3,8 +3,8 @@ import * as DocumentPicker from "expo-document-picker";
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
-import { useNavigation } from "@react-navigation/native";
 import { Empty, Eyebrow, Page, Subtitle, Title } from "../components/UI";
+import { LibrarySubNav } from "../components/LibrarySubNav";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatResourceSize, uid } from "../lib/helpers";
 import type { Resource } from "../types";
@@ -20,7 +20,6 @@ import type { Resource } from "../types";
 // URI so a future pass can wire the actual upload.
 export function ResourcesScreen() {
   const { theme, workspace, updateResources } = useLifeOS();
-  const navigation = useNavigation<any>();
   const [uploading, setUploading] = useState(false);
 
   const grouped = groupByClassOrProject(workspace.resources, workspace);
@@ -76,20 +75,7 @@ export function ResourcesScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.subNav}>
-        <Pressable onPress={() => navigation.navigate("NotesList")} style={[styles.subNavPill, { borderColor: theme.border }]}>
-          <Feather name="file-text" size={13} color={theme.muted} />
-          <Text style={[styles.subNavText, { color: theme.text }]}>Notes</Text>
-        </Pressable>
-        <Pressable onPress={() => navigation.navigate("Brain")} style={[styles.subNavPill, { borderColor: theme.border }]}>
-          <Feather name="zap" size={13} color={theme.muted} />
-          <Text style={[styles.subNavText, { color: theme.text }]}>Brain</Text>
-        </Pressable>
-        <View style={[styles.subNavPill, { borderColor: theme.accent, backgroundColor: theme.soft, borderWidth: 1.5 }]}>
-          <Feather name="paperclip" size={13} color={theme.accent} />
-          <Text style={[styles.subNavText, { color: theme.accent }]}>Resources</Text>
-        </View>
-      </View>
+      <LibrarySubNav active="resources" />
 
       <FlatList
         data={grouped}
@@ -136,9 +122,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, gap: 12 },
   grow: { flex: 1 },
   addButton: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  subNav: { flexDirection: "row", gap: 8, paddingHorizontal: 20, marginTop: 14 },
-  subNavPill: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
-  subNavText: { fontSize: 12, fontWeight: "800" },
   list: { padding: 20, paddingBottom: 28, gap: 18 },
   groupBlock: { gap: 8 },
   groupLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase" },
