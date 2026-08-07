@@ -803,14 +803,15 @@ export function StudyAbroadDashboard({
   focusEntity?: StudyAbroadFocusEntity | null;
   onFocusEntityConsumed?: () => void;
 }) {
-  // Display-only preview via ?saPreview=1 — never written to Firebase.
-  const [previewMode, setPreviewMode] = useState(false);
+  // Display-only preview via ?saPreview=1|full|sparse — never written to Firebase.
+  const [previewMode, setPreviewMode] = useState<string | null>(null);
   useEffect(() => {
-    setPreviewMode(new URLSearchParams(window.location.search).get("saPreview") === "1");
+    const value = new URLSearchParams(window.location.search).get("saPreview");
+    setPreviewMode(value && value !== "0" && value !== "false" ? value : null);
   }, []);
   const liveHub = useMemo(() => ensureCountriesFromUniversities(normalizeStudyAbroadHub(rawHub)), [rawHub]);
   const previewHub = useMemo(
-    () => (previewMode ? ensureCountriesFromUniversities(normalizeStudyAbroadHub(buildStudyAbroadPreviewHub())) : null),
+    () => (previewMode ? ensureCountriesFromUniversities(normalizeStudyAbroadHub(buildStudyAbroadPreviewHub(previewMode === "sparse" ? "sparse" : "full"))) : null),
     [previewMode],
   );
   const hub = previewHub ?? liveHub;

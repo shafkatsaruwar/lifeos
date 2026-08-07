@@ -1,7 +1,18 @@
 import { emptyStudyAbroadHub, type StudyAbroadHub } from "@/lib/studyAbroadTypes";
 
-/** Visual-only sample hub. Enabled with ?saPreview=1 — never persisted. */
-export function buildStudyAbroadPreviewHub(): StudyAbroadHub {
+/** Visual-only sample hub. Enabled with ?saPreview=1|full|sparse — never persisted. */
+export function buildStudyAbroadPreviewHub(mode: string = "full"): StudyAbroadHub {
+  if (mode === "sparse") {
+    const stamp = new Date().toISOString();
+    return {
+      ...emptyStudyAbroadHub,
+      countries: [
+        { id: "preview-de", name: "Germany", code: "DE", active: true, createdAt: stamp, updatedAt: stamp },
+      ],
+      sessionMemory: { lastView: "dashboard", updatedAt: stamp },
+    };
+  }
+
   const stamp = new Date().toISOString();
   const inDays = (days: number) => {
     const date = new Date();
