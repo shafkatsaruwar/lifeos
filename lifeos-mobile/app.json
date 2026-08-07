@@ -34,7 +34,8 @@
     },
     "plugins": [
       "expo-web-browser",
-      "expo-font"
+      "expo-font",
+      "expo-dev-client"
     ]
   }
 }

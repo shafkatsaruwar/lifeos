@@ -80,22 +80,30 @@ export type CalendarEvent = {
 
 export type NoteTemplate = "blank" | "lined" | "dotted" | "cornell" | "meeting";
 
-/** Freehand ink stroke for iPad / Apple Pencil handwriting. */
+/** Legacy freehand stroke (Skia v1). Kept so old notes don't break types. */
 export type InkPoint = { x: number; y: number; t?: number };
 
 export type InkStroke = {
   id: string;
   color: string;
   width: number;
-  /** pen/highlighter draw; eraser paints over with paper color */
   tool: "pen" | "highlighter" | "eraser";
   points: InkPoint[];
 };
 
+/**
+ * Handwriting payload. v2 uses Apple PencilKit (`PKDrawing` base64) via the
+ * system tool picker. Legacy v1 stored polyline `strokes` from a custom canvas.
+ */
 export type NoteInk = {
-  version?: 1;
-  strokes: InkStroke[];
-  /** Logical canvas height so ink scrolls with the page */
+  version?: 1 | 2;
+  format?: "pencilkit";
+  /** Base64-encoded PKDrawing (PencilKit) */
+  data?: string;
+  /** Alias used by some PencilKit bridges */
+  pencilKitData?: string;
+  /** Legacy Skia strokes */
+  strokes?: InkStroke[];
   height?: number;
   updatedAt?: number;
 };

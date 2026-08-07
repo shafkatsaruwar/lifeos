@@ -1,194 +1,180 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LayoutChangeEvent, StyleSheet, View } from "react-native";
-import { Canvas, Circle, Group, Path, Skia } from "@shopify/react-native-skia";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { runOnJS } from "react-native-reanimated";
-import type { InkPoint, InkStroke, NoteInk } from "../types";
+import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { Platform, StyleSheet, Text, View } from "react-native";
+import { requireOptionalNativeModule } from "expo-modules-core";
+import type { NoteInk } from "../types";
 
-export type InkTool = "pen" | "highlighter" | "eraser";
+export type PencilKitViewRef = {
+  setupToolPicker(): Promise<void>;
+  clearDrawing(): Promise<void>;
+  undo(): Promise<void>;
+  redo(): Promise<void>;
+  getCanvasDataAsBase64(): Promise<string>;
+  setCanvasDataFromBase64(base64String: string): Promise<boolean>;
+  setCanvasBackgroundColor(colorString: string): Promise<void>;
+};
+
+type PencilKitViewProps = {
+  style?: object;
+  onDrawEnd?: (event: { nativeEvent: { data: string } }) => void;
+  onDrawChange?: (event: { nativeEvent: { data: string } }) => void;
+};
+
+type PencilKitModule = {
+  PencilKitView: React.ForwardRefExoticComponent<
+    PencilKitViewProps & React.RefAttributes<PencilKitViewRef>
+  >;
+};
+
+/** True when Apple PencilKit native module is linked (dev/production build, not Expo Go). */
+export function isPencilKitAvailable(): boolean {
+  if (Platform.OS !== "ios") return false;
+  return requireOptionalNativeModule("ExpoPencilKitModule") != null;
+}
+
+function loadPencilKit(): PencilKitModule | null {
+  if (!isPencilKitAvailable()) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require("expo-pencilkit-ui") as PencilKitModule;
+  } catch {
+    return null;
+  }
+}
 
 type Props = {
   ink: NoteInk | undefined;
-  tool: InkTool;
-  color: string;
-  width: number;
   onChange: (ink: NoteInk) => void;
   backgroundColor?: string;
 };
 
-function strokeToPath(stroke: InkStroke) {
-  const path = Skia.Path.Make();
-  if (!stroke.points.length) return path;
-  path.moveTo(stroke.points[0].x, stroke.points[0].y);
-  for (let i = 1; i < stroke.points.length; i++) {
-    path.lineTo(stroke.points[i].x, stroke.points[i].y);
-  }
-  return path;
-}
+/**
+ * Apple PencilKit canvas + system PKToolPicker (pen, pencil, marker, eraser, colors…).
+ * Requires a native iOS build with expo-pencilkit-ui (EAS development/production client).
+ */
+export const HandwritingCanvas = React.forwardRef<PencilKitViewRef | null, Props>(function HandwritingCanvas(
+  { ink, onChange, backgroundColor = "#FFFFFF" },
+  ref,
+) {
+  const pencilKit = useRef(loadPencilKit()).current;
+  const canvasRef = useRef<PencilKitViewRef | null>(null);
+  const [ready, setReady] = useState(false);
+  const loadedKey = useRef<string | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-export function HandwritingCanvas({
-  ink,
-  tool,
-  color,
-  width,
-  onChange,
-  backgroundColor = "#FFFFFF",
-}: Props) {
-  const [size, setSize] = useState({ w: 0, h: 0 });
-  const [strokes, setStrokes] = useState<InkStroke[]>(() => ink?.strokes ?? []);
-  const [draft, setDraft] = useState<InkPoint[] | null>(null);
+  useImperativeHandle(ref, () => ({
+    setupToolPicker: async () => canvasRef.current?.setupToolPicker(),
+    clearDrawing: async () => canvasRef.current?.clearDrawing(),
+    undo: async () => canvasRef.current?.undo(),
+    redo: async () => canvasRef.current?.redo(),
+    getCanvasDataAsBase64: async () => (await canvasRef.current?.getCanvasDataAsBase64()) ?? "",
+    setCanvasDataFromBase64: async (data: string) =>
+      (await canvasRef.current?.setCanvasDataFromBase64(data)) ?? false,
+    setCanvasBackgroundColor: async (color: string) => canvasRef.current?.setCanvasBackgroundColor(color),
+  }), []);
 
-  const toolRef = useRef(tool);
-  const colorRef = useRef(color);
-  const widthRef = useRef(width);
-  const onChangeRef = useRef(onChange);
-  const strokesRef = useRef(strokes);
-  const drawingRef = useRef(false);
-  toolRef.current = tool;
-  colorRef.current = color;
-  widthRef.current = width;
-  onChangeRef.current = onChange;
-  strokesRef.current = strokes;
-
-  const hydratedKey = useRef<string | null>(null);
-  useEffect(() => {
-    const key = `${ink?.updatedAt ?? 0}:${ink?.strokes?.length ?? 0}`;
-    if (hydratedKey.current === key) return;
-    // Only hydrate from external ink when we don't have local drafts in flight
-    if (draft) return;
-    hydratedKey.current = key;
-    setStrokes(ink?.strokes ?? []);
-  }, [ink, draft]);
-
-  const emit = useCallback((next: InkStroke[]) => {
-    onChangeRef.current({
-      version: 1,
-      strokes: next,
-      updatedAt: Date.now(),
-    });
-  }, []);
-
-  const beginStroke = useCallback((x: number, y: number) => {
-    drawingRef.current = true;
-    setDraft([{ x, y, t: Date.now() }]);
-  }, []);
-
-  const moveStroke = useCallback((x: number, y: number) => {
-    if (!drawingRef.current) return;
-    setDraft((prev) => (prev ? [...prev, { x, y, t: Date.now() }] : prev));
-  }, []);
-
-  const endStroke = useCallback(() => {
-    if (!drawingRef.current) return;
-    drawingRef.current = false;
-    setDraft((points) => {
-      if (!points || points.length < 1) return null;
-      const stroke: InkStroke = {
-        id: `ink_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
-        tool: toolRef.current,
-        color: colorRef.current,
-        width: widthRef.current,
-        points,
-      };
-      const next = [...strokesRef.current, stroke];
-      setStrokes(next);
-      emit(next);
-      return null;
-    });
-  }, [emit]);
-
-  const gesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .minDistance(0)
-        .averageTouches(false)
-        .onBegin((e) => {
-          runOnJS(beginStroke)(e.x, e.y);
-        })
-        .onUpdate((e) => {
-          runOnJS(moveStroke)(e.x, e.y);
-        })
-        .onFinalize(() => {
-          runOnJS(endStroke)();
-        }),
-    [beginStroke, moveStroke, endStroke]
+  const persistData = useCallback(
+    (data: string) => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        onChange({
+          version: 2,
+          format: "pencilkit",
+          data,
+          updatedAt: Date.now(),
+        });
+      }, 350);
+    },
+    [onChange],
   );
 
-  const onLayout = (e: LayoutChangeEvent) => {
-    const { width: w, height: h } = e.nativeEvent.layout;
-    setSize({ w, h });
-  };
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, []);
 
-  const draftPath = useMemo(() => {
-    if (!draft?.length) return null;
-    return strokeToPath({
-      id: "draft",
-      tool,
-      color,
-      width,
-      points: draft,
+  useEffect(() => {
+    if (!pencilKit || !ready || !canvasRef.current) return;
+    let cancelled = false;
+
+    (async () => {
+      const native = canvasRef.current;
+      if (!native) return;
+      await native.setupToolPicker();
+      await native.setCanvasBackgroundColor(backgroundColor.replace("#", ""));
+
+      const data = ink?.format === "pencilkit" ? ink.data : ink?.pencilKitData ?? (ink?.data && !ink.strokes?.length ? ink.data : undefined);
+      const key = `${ink?.updatedAt ?? 0}:${data?.length ?? 0}`;
+      if (data && loadedKey.current !== key) {
+        loadedKey.current = key;
+        await native.setCanvasDataFromBase64(data);
+      } else if (!data) {
+        loadedKey.current = key;
+      }
+      if (cancelled) return;
+    })().catch(() => {
+      /* tool picker / hydrate can race on unmount */
     });
-  }, [draft, tool, color, width]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pencilKit, ready, backgroundColor, ink?.updatedAt, ink?.format, ink?.data, ink?.pencilKitData, ink?.strokes?.length]);
+
+  if (Platform.OS !== "ios") {
+    return (
+      <View style={[styles.fallback, { backgroundColor }]}>
+        <Text style={styles.fallbackTitle}>Handwriting is iPad / iPhone only</Text>
+        <Text style={styles.fallbackBody}>Apple PencilKit is not available on this platform.</Text>
+      </View>
+    );
+  }
+
+  if (!pencilKit) {
+    return (
+      <View style={[styles.fallback, { backgroundColor }]}>
+        <Text style={styles.fallbackTitle}>Apple PencilKit needs a native build</Text>
+        <Text style={styles.fallbackBody}>
+          Expo Go can’t load Apple’s writing tools. Install a LifeOS development build
+          (`npx expo run:ios` or EAS development), then open Draw again for the system
+          pen, pencil, marker, and eraser picker.
+        </Text>
+      </View>
+    );
+  }
+
+  const PencilKitView = pencilKit.PencilKitView;
+  const hasLegacyStrokes =
+    (ink?.strokes?.length ?? 0) > 0 &&
+    ink?.format !== "pencilkit" &&
+    !ink?.pencilKitData &&
+    !(ink?.data && !ink.strokes?.length);
 
   return (
-    <View style={[styles.root, { backgroundColor }]} onLayout={onLayout}>
-      {size.w > 0 && size.h > 0 ? (
-        <GestureDetector gesture={gesture}>
-          <View style={styles.fill} collapsable={false}>
-            <Canvas style={{ width: size.w, height: size.h }}>
-              <Group>
-                {strokes.map((stroke) => {
-                  const path = strokeToPath(stroke);
-                  const isHL = stroke.tool === "highlighter";
-                  const isEraser = stroke.tool === "eraser";
-                  return (
-                    <Path
-                      key={stroke.id}
-                      path={path}
-                      color={isEraser ? backgroundColor : stroke.color}
-                      style="stroke"
-                      strokeWidth={stroke.width}
-                      strokeCap="round"
-                      strokeJoin="round"
-                      opacity={isHL ? 0.35 : 1}
-                      blendMode={isEraser ? "srcOver" : isHL ? "multiply" : "srcOver"}
-                    />
-                  );
-                })}
-                {draftPath ? (
-                  <Path
-                    path={draftPath}
-                    color={tool === "eraser" ? backgroundColor : color}
-                    style="stroke"
-                    strokeWidth={width}
-                    strokeCap="round"
-                    strokeJoin="round"
-                    opacity={tool === "highlighter" ? 0.35 : 1}
-                  />
-                ) : null}
-                {/* Tiny anchor so empty canvas still mounts */}
-                <Circle cx={-10} cy={-10} r={1} color="transparent" />
-              </Group>
-            </Canvas>
-          </View>
-        </GestureDetector>
+    <View style={styles.root}>
+      {hasLegacyStrokes ? (
+        <Text style={styles.legacyHint}>
+          An older sketch is stored on this note. New strokes use Apple PencilKit and replace that format when you draw.
+        </Text>
       ) : null}
+      <PencilKitView
+        ref={(node) => {
+          canvasRef.current = node;
+          if (node && !ready) setReady(true);
+        }}
+        style={[styles.canvas, { backgroundColor }]}
+        onDrawEnd={(event) => {
+          const data = event.nativeEvent?.data;
+          if (typeof data === "string" && data.length) persistData(data);
+        }}
+        onDrawChange={(event) => {
+          const data = event.nativeEvent?.data;
+          if (typeof data === "string" && data.length) persistData(data);
+        }}
+      />
     </View>
   );
-}
-
-export function undoInk(ink: NoteInk | undefined): NoteInk {
-  const strokes = ink?.strokes ?? [];
-  return {
-    version: 1,
-    strokes: strokes.slice(0, -1),
-    updatedAt: Date.now(),
-  };
-}
-
-export function clearInk(): NoteInk {
-  return { version: 1, strokes: [], updatedAt: Date.now() };
-}
+});
 
 const styles = StyleSheet.create({
   root: {
@@ -199,5 +185,25 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(15,23,42,0.12)",
   },
-  fill: { flex: 1 },
+  canvas: { flex: 1, minHeight: 420 },
+  legacyHint: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748B",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#F8FAFC",
+  },
+  fallback: {
+    flex: 1,
+    minHeight: 280,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15,23,42,0.12)",
+    padding: 20,
+    justifyContent: "center",
+    gap: 8,
+  },
+  fallbackTitle: { fontSize: 16, fontWeight: "800", color: "#0F172A" },
+  fallbackBody: { fontSize: 13, lineHeight: 19, fontWeight: "500", color: "#64748B" },
 });
