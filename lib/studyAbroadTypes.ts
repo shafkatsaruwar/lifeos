@@ -308,6 +308,15 @@ export type StudyAbroadSessionMemory = {
   updatedAt?: string;
 };
 
+export type StudyAbroadHistoryEvent = {
+  id: string;
+  at: string;
+  title: string;
+  detail?: string;
+  contextType?: string;
+  contextId?: string;
+};
+
 export type StudyAbroadHub = {
   countries: StudyAbroadCountry[];
   universities: StudyAbroadUniversity[];
@@ -322,6 +331,7 @@ export type StudyAbroadHub = {
   knowledge: StudyAbroadKnowledge[];
   costs: StudyAbroadCost[];
   timelineEvents: StudyAbroadTimelineEvent[];
+  history: StudyAbroadHistoryEvent[];
   sessionMemory: StudyAbroadSessionMemory;
 };
 
@@ -339,6 +349,7 @@ export const emptyStudyAbroadHub: StudyAbroadHub = {
   knowledge: [],
   costs: [],
   timelineEvents: [],
+  history: [],
   sessionMemory: {},
 };
 

@@ -343,6 +343,7 @@ export function normalizeStudyAbroadHub(raw: unknown): StudyAbroadHub {
           : [],
       costs: Array.isArray(data.costs) ? data.costs : [],
       timelineEvents: Array.isArray(data.timelineEvents) ? data.timelineEvents : [],
+      history: Array.isArray(data.history) ? data.history : [],
       sessionMemory: data.sessionMemory && typeof data.sessionMemory === "object" ? data.sessionMemory : {},
     };
   }
@@ -397,6 +398,133 @@ function migrateObservations(list: any[]) {
     createdAt: item.createdAt || nowIso(),
     updatedAt: item.updatedAt || nowIso(),
   }));
+}
+
+export function appendHistory(
+  hub: StudyAbroadHub,
+  title: string,
+  detail?: string,
+  contextType?: string,
+  contextId?: string,
+): StudyAbroadHub {
+  return {
+    ...hub,
+    history: [
+      {
+        id: newId("hist"),
+        at: nowIso(),
+        title,
+        detail,
+        contextType,
+        contextId,
+      },
+      ...(hub.history || []),
+    ].slice(0, 200),
+  };
+}
+
+/** Compact context for LifeOS Copilot when Study Abroad is relevant. */
+export function buildStudyAbroadCopilotContext(hub: StudyAbroadHub) {
+  const matter = whatMattersNow(hub);
+  const deadline = nextDeadline(hub);
+  const open = openTasks(hub).slice(0, 6).map((task) => ({
+    id: task.id,
+    title: task.title,
+    parent: parentLabel(hub, task),
+    due: task.due,
+  }));
+  return {
+    whatMattersNow: matter,
+    nextDeadline: deadline
+      ? {
+          program: deadline.program.name,
+          university: deadline.university?.name,
+          country: deadline.country?.name,
+          deadline: deadline.deadline,
+          days: deadline.days,
+        }
+      : null,
+    counts: {
+      countries: hub.countries.length,
+      programs: hub.programs.length,
+      shortlisted: shortlistedPrograms(hub).length,
+      applications: hub.applications.length,
+      documentsReadyPercent: documentsReadyPercent(hub),
+      openTasks: openTasks(hub).length,
+    },
+    openTasks: open,
+    shortlist: shortlistedPrograms(hub).slice(0, 5).map((program) => ({
+      id: program.id,
+      name: program.name,
+      university: programUniversity(hub, program)?.name,
+      country: programCountry(hub, program)?.name,
+      status: program.status,
+      fitScore: program.fitScore,
+      deadline: program.deadline,
+    })),
+    lastProgramId: hub.sessionMemory?.lastProgramId,
+    lastNote: hub.sessionMemory?.lastNote,
+  };
+}
+
+export function linkFundingToProgram(hub: StudyAbroadHub, programId: string, fundingId: string) {
+  if (hub.programFunding.some((item) => item.programId === programId && item.fundingId === fundingId)) return hub;
+  const funding = getFunding(hub, fundingId);
+  const program = getProgram(hub, programId);
+  return appendHistory(
+    {
+      ...hub,
+      programFunding: [...hub.programFunding, { id: newId("pf"), programId, fundingId }],
+    },
+    `Linked funding to program`,
+    `${funding?.name || "Funding"} → ${program?.name || "Program"}`,
+    "program",
+    programId,
+  );
+}
+
+export function createDocumentVariant(hub: StudyAbroadHub, baseId: string, variantLabel: string) {
+  const base = getDocument(hub, baseId);
+  if (!base) return hub;
+  const stamp = nowIso();
+  const variant = {
+    ...base,
+    id: newId("doc"),
+    name: base.name,
+    variantOf: base.id,
+    variantLabel,
+    status: "draft" as const,
+    createdAt: stamp,
+    updatedAt: stamp,
+  };
+  return appendHistory(
+    { ...hub, documents: [...hub.documents, variant] },
+    `Created ${base.category} variant`,
+    variantLabel,
+    "document",
+    variant.id,
+  );
+}
+
+export function linkDocumentToApplication(hub: StudyAbroadHub, applicationId: string, documentId: string, requirementId?: string) {
+  if (hub.applicationDocuments.some((item) => item.applicationId === applicationId && item.documentId === documentId)) {
+    return hub;
+  }
+  const doc = getDocument(hub, documentId);
+  const program = applicationProgram(hub, getApplication(hub, applicationId));
+  return appendHistory(
+    {
+      ...hub,
+      applicationDocuments: [
+        ...hub.applicationDocuments,
+        { id: newId("ad"), applicationId, documentId, requirementId },
+      ],
+    },
+    `Linked document to application`,
+    `${doc?.name || "Document"} → ${program?.name || "Application"}`,
+    "application",
+    applicationId,
+  );
 }
 
 /** Ensure country records exist for legacy universities that only stored country as a string. */

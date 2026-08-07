@@ -4,7 +4,11 @@ import {
 } from "@/lib/studyAbroadTypes";
 import {
   applicationReadiness,
+  appendHistory,
+  buildStudyAbroadCopilotContext,
+  createDocumentVariant,
   daysUntil,
+  linkFundingToProgram,
   normalizeStudyAbroadHub,
   requirementReadiness,
   whatMattersNow,
@@ -47,5 +51,50 @@ describe("studyAbroadHelpers", () => {
     tomorrow.setDate(tomorrow.getDate() + 2);
     const key = tomorrow.toISOString().slice(0, 10);
     expect(daysUntil(key)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("appendHistory prepends and caps activity", () => {
+    const hub = appendHistory(emptyStudyAbroadHub, "Linked funding", "DAAD", "program", "p1");
+    expect(hub.history[0].title).toBe("Linked funding");
+    expect(hub.history[0].contextId).toBe("p1");
+  });
+
+  it("buildStudyAbroadCopilotContext summarizes what matters", () => {
+    const ctx = buildStudyAbroadCopilotContext(emptyStudyAbroadHub);
+    expect(ctx.whatMattersNow.actionView).toBe("explore");
+    expect(ctx.counts.programs).toBe(0);
+  });
+
+  it("createDocumentVariant clones SOP/CV bases", () => {
+    const stamp = new Date().toISOString();
+    const baseHub: StudyAbroadHub = {
+      ...emptyStudyAbroadHub,
+      documents: [{
+        id: "doc-1",
+        name: "Master SOP",
+        category: "SOP",
+        status: "ready",
+        createdAt: stamp,
+        updatedAt: stamp,
+      }],
+    };
+    const next = createDocumentVariant(baseHub, "doc-1", "TU Munich");
+    expect(next.documents).toHaveLength(2);
+    expect(next.documents[1].variantOf).toBe("doc-1");
+    expect(next.documents[1].variantLabel).toBe("TU Munich");
+    expect(next.documents[1].status).toBe("draft");
+  });
+
+  it("linkFundingToProgram is idempotent", () => {
+    const stamp = new Date().toISOString();
+    const hub: StudyAbroadHub = {
+      ...emptyStudyAbroadHub,
+      programs: [{ id: "p1", universityId: "u1", name: "MSc", status: "shortlisted", createdAt: stamp, updatedAt: stamp }],
+      funding: [{ id: "f1", name: "DAAD", kind: "scholarship", status: "eligible", createdAt: stamp, updatedAt: stamp }],
+    };
+    const once = linkFundingToProgram(hub, "p1", "f1");
+    const twice = linkFundingToProgram(once, "p1", "f1");
+    expect(once.programFunding).toHaveLength(1);
+    expect(twice.programFunding).toHaveLength(1);
   });
 });
