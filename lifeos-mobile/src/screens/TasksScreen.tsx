@@ -1,6 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useMemo, useState } from "react";
-import { FlatList, Pressable, StyleSheet, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Empty, Eyebrow, Page, SegmentedControl, Subtitle, Title } from "../components/UI";
 import { TaskRow } from "../components/TaskRow";
@@ -9,6 +9,12 @@ import { PRIORITY_RANK, dueRank, taskIsOpen } from "../lib/helpers";
 
 type Filter = "All" | "Open" | "Done";
 type Sort = "Due" | "Priority" | "Space";
+
+const SORT_OPTIONS: { key: Sort; label: string; icon: keyof typeof Feather.glyphMap }[] = [
+  { key: "Due", label: "Due", icon: "calendar" },
+  { key: "Priority", label: "Priority", icon: "flag" },
+  { key: "Space", label: "Space", icon: "folder" },
+];
 
 export function TasksScreen() {
   const { workspace, theme, updateTasks } = useLifeOS();
@@ -26,6 +32,13 @@ export function TasksScreen() {
     if (sort === "Space") sorted.sort((a, b) => (a.project ?? "").localeCompare(b.project ?? ""));
     return sorted;
   }, [workspace.tasks, filter, sort]);
+
+  const activeSort = SORT_OPTIONS.find((option) => option.key === sort) ?? SORT_OPTIONS[0];
+
+  const cycleSort = () => {
+    const index = SORT_OPTIONS.findIndex((option) => option.key === sort);
+    setSort(SORT_OPTIONS[(index + 1) % SORT_OPTIONS.length].key);
+  };
 
   const toggleDone = (id: number) => {
     updateTasks(
@@ -60,18 +73,26 @@ export function TasksScreen() {
       </View>
 
       <View style={styles.controlsRow}>
-        <SegmentedControl
-          value={filter}
-          onChange={setFilter}
-          options={[{ key: "Open", label: "Open" }, { key: "Done", label: "Done" }, { key: "All", label: "All" }]}
-        />
-      </View>
-      <View style={styles.controlsRow}>
-        <SegmentedControl
-          value={sort}
-          onChange={setSort}
-          options={[{ key: "Due", label: "Due", icon: "calendar" }, { key: "Priority", label: "Priority", icon: "flag" }, { key: "Space", label: "Space", icon: "folder" }]}
-        />
+        <View style={styles.filterGrow}>
+          <SegmentedControl
+            value={filter}
+            onChange={setFilter}
+            options={[{ key: "Open", label: "Open" }, { key: "Done", label: "Done" }, { key: "All", label: "All" }]}
+          />
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Sort by ${activeSort.label}. Tap to change.`}
+          onPress={cycleSort}
+          style={({ pressed }) => [
+            styles.sortChip,
+            { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.75 : 1 },
+          ]}
+        >
+          <Feather name={activeSort.icon} size={14} color={theme.text} />
+          <Text style={[styles.sortLabel, { color: theme.text }]}>{activeSort.label}</Text>
+          <Feather name="chevron-down" size={14} color={theme.muted} />
+        </Pressable>
       </View>
 
       <FlatList
@@ -91,6 +112,17 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, paddingTop: 12, gap: 12 },
   grow: { flex: 1 },
   addButton: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  controlsRow: { paddingHorizontal: 20, marginTop: 10 },
+  controlsRow: { paddingHorizontal: 20, marginTop: 12, flexDirection: "row", alignItems: "center", gap: 10 },
+  filterGrow: { flex: 1, minWidth: 0 },
+  sortChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    minHeight: 42,
+  },
+  sortLabel: { fontSize: 13, fontWeight: "700" },
   list: { padding: 20, paddingTop: 14, paddingBottom: 110, gap: 10 },
 });
