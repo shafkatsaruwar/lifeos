@@ -8,13 +8,22 @@ const config = getDefaultConfig(__dirname);
 config.projectRoot = __dirname;
 config.watchFolders = [__dirname];
 
+// Firebase Auth's React Native entry (getReactNativePersistence) only resolves
+// correctly when Metro does not prefer package.json "exports" browser builds.
+// See: https://docs.expo.dev/guides/using-firebase/
+if (!config.resolver.sourceExts.includes("cjs")) {
+  config.resolver.sourceExts.push("cjs");
+}
+config.resolver.unstable_enablePackageExports = false;
+
 // Ignore the monorepo's Next.js `app/` directory if resolution ever walks up.
 const parentApp = path.resolve(__dirname, "../app");
 const previousBlockList = config.resolver.blockList;
+const parentAppBlock = new RegExp(`${parentApp.replace(/[/\\]/g, "[/\\\\]")}(/|$)`);
 config.resolver.blockList = previousBlockList
   ? Array.isArray(previousBlockList)
-    ? [...previousBlockList, new RegExp(`${parentApp.replace(/[/\\]/g, "[/\\\\]")}(/|$)`)]
-    : [previousBlockList, new RegExp(`${parentApp.replace(/[/\\]/g, "[/\\\\]")}(/|$)`)]
-  : [new RegExp(`${parentApp.replace(/[/\\]/g, "[/\\\\]")}(/|$)`)];
+    ? [...previousBlockList, parentAppBlock]
+    : [previousBlockList, parentAppBlock]
+  : [parentAppBlock];
 
 module.exports = config;
