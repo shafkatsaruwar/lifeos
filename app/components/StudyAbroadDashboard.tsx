@@ -1,22 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, BookOpen, CheckCircle2, ChevronRight, Clock3, Database, FileText,
   FolderKanban, Globe2, GraduationCap, LayoutGrid, ListTodo, MapPin, NotebookPen,
   Plus, Search, Target, Wallet, X,
 } from "lucide-react";
 import {
+  appendHistory,
   applicationProgram,
   applicationReadiness,
   applicationStageLabel,
+  createDocumentVariant,
   daysUntil,
   documentsReadyPercent,
   ensureCountriesFromUniversities,
   fundingForProgram,
   getCountry,
+  getDocument,
+  getFunding,
   getProgram,
   getUniversity,
+  linkDocumentToApplication,
+  linkFundingToProgram,
   newId,
   nextDeadline,
   normalizeStudyAbroadHub,
@@ -389,6 +395,11 @@ function ProgramCard({
   );
 }
 
+export type StudyAbroadFocusEntity = {
+  kind: "program" | "university" | "country" | "application";
+  id: string;
+};
+
 export function StudyAbroadDashboard({
   hub: rawHub,
   studyView: controlledView,
@@ -397,6 +408,8 @@ export function StudyAbroadDashboard({
   workspaceName,
   onOpenCalendar,
   onFocusStudyTask,
+  focusEntity,
+  onFocusEntityConsumed,
 }: {
   hub: StudyAbroadHub;
   studyView?: StudyAbroadView;
@@ -405,6 +418,8 @@ export function StudyAbroadDashboard({
   workspaceName: string;
   onOpenCalendar?: () => void;
   onFocusStudyTask?: (taskId: string) => void;
+  focusEntity?: StudyAbroadFocusEntity | null;
+  onFocusEntityConsumed?: () => void;
 }) {
   const hub = useMemo(() => ensureCountriesFromUniversities(normalizeStudyAbroadHub(rawHub)), [rawHub]);
   const [internalView, setInternalView] = useState<StudyAbroadView>("dashboard");
@@ -422,6 +437,26 @@ export function StudyAbroadDashboard({
   const [query, setQuery] = useState("");
   const [programTab, setProgramTab] = useState<"overview" | "requirements" | "application" | "funding" | "documents" | "notes" | "tasks" | "history">("overview");
   const [countryTab, setCountryTab] = useState<"overview" | "universities" | "programs" | "funding" | "visa" | "costs" | "notes" | "tasks">("overview");
+
+  useEffect(() => {
+    if (!focusEntity) return;
+    if (focusEntity.kind === "program") {
+      setSelectedProgramId(focusEntity.id);
+      setProgramTab("overview");
+      setStudyView("programs");
+    } else if (focusEntity.kind === "university") {
+      setSelectedUniversityId(focusEntity.id);
+      setStudyView("universities");
+    } else if (focusEntity.kind === "country") {
+      setSelectedCountryId(focusEntity.id);
+      setCountryTab("overview");
+      setStudyView("countries");
+    } else if (focusEntity.kind === "application") {
+      setSelectedApplicationId(focusEntity.id);
+      setStudyView("applications");
+    }
+    onFocusEntityConsumed?.();
+  }, [focusEntity]);
 
   const firstName = workspaceName.split(" ")[0] || "there";
   const matter = whatMattersNow(hub);
@@ -475,10 +510,14 @@ export function StudyAbroadDashboard({
   };
 
   const updateApplicationStage = (id: string, stage: ApplicationStage) => {
-    onChange({
+    const previous = hub.applications.find((item) => item.id === id);
+    const program = applicationProgram(hub, previous);
+    let next = {
       ...hub,
       applications: hub.applications.map((item) => item.id === id ? { ...item, stage, updatedAt: nowIso(), submittedAt: stage === "submitted" ? nowIso() : item.submittedAt } : item),
-    });
+    };
+    next = appendHistory(next, `Application → ${applicationStageLabel(stage)}`, program?.name, "application", id);
+    onChange(next);
   };
 
   const completeTask = (id: string) => {
@@ -565,16 +604,15 @@ export function StudyAbroadDashboard({
       <aside className="work-sidebar">
         <Section icon={ListTodo} title="Open tasks" action={open.length ? "All apps" : undefined} onAction={() => setStudyView("applications")}>
           {open.length ? open.slice(0, 5).map((task) => (
-            <button key={task.id} type="button" className="work-task-row" onClick={() => {
-              completeTask(task.id);
-              onFocusStudyTask?.(task.id);
-            }}>
-              <div>
-                <strong>{task.title}</strong>
-                <span>{parentLabel(hub, task)}</span>
-              </div>
-              <CheckCircle2 size={16} />
-            </button>
+            <div key={task.id} className="work-task-row" style={{ display: "flex", gap: 8 }}>
+              <button type="button" style={{ flex: 1, border: 0, background: "transparent", textAlign: "left" }} onClick={() => onFocusStudyTask?.(task.id)}>
+                <strong style={{ display: "block" }}>{task.title}</strong>
+                <span style={{ color: "var(--muted)", fontSize: 12 }}>{parentLabel(hub, task)} · Focus</span>
+              </button>
+              <button type="button" className="os-profile-button" aria-label="Complete task" onClick={() => completeTask(task.id)}>
+                <CheckCircle2 size={16} />
+              </button>
+            </div>
           )) : <Empty>Tasks stay attached to countries, programs, documents, and funding — none open yet.</Empty>}
         </Section>
 
@@ -874,7 +912,20 @@ export function StudyAbroadDashboard({
             <Section icon={Wallet} title="Linked funding">
               {linkedFunding.length ? linkedFunding.map((item) => (
                 <div key={item.id} className="work-task-row"><div><strong>{item.name}</strong><span>{item.status}</span></div></div>
-              )) : <Empty>Link funding from the Funding view — no fake eligibility.</Empty>}
+              )) : <Empty>No funding linked yet.</Empty>}
+              {hub.funding.length ? (
+                <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+                  <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>Link an opportunity (eligibility stays manual):</p>
+                  {hub.funding.filter((item) => !linkedFunding.some((linked) => linked.id === item.id)).slice(0, 6).map((item) => (
+                    <button key={item.id} type="button" className="work-task-row" onClick={() => onChange(linkFundingToProgram(hub, selectedProgram.id, item.id))}>
+                      <div><strong>{item.name}</strong><span>{item.status}</span></div>
+                      <Plus size={16} />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ marginTop: 12 }}><button type="button" className="primary" onClick={() => setStudyView("funding")}>Add funding</button></div>
+              )}
             </Section>
           )}
 
@@ -896,13 +947,37 @@ export function StudyAbroadDashboard({
 
           {programTab === "documents" && (
             <Section icon={BookOpen} title="Documents" action="Library" onAction={() => setStudyView("documents")}>
-              <Empty>Reuse the shared Study Abroad document library — link documents to requirements as you prepare.</Empty>
+              {(() => {
+                const app = hub.applications.find((item) => item.programId === selectedProgram.id);
+                const linked = app
+                  ? hub.applicationDocuments.filter((item) => item.applicationId === app.id).map((item) => getDocument(hub, item.documentId)).filter(Boolean)
+                  : [];
+                return linked.length ? linked.map((doc) => (
+                  <div key={doc!.id} className="work-task-row"><div><strong>{doc!.name}</strong><span>{doc!.category} · {doc!.status}</span></div></div>
+                )) : <Empty>Link documents from the library to this program’s application.</Empty>;
+              })()}
+              {hub.applications.some((item) => item.programId === selectedProgram.id) && hub.documents.length > 0 && (
+                <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+                  {hub.documents.slice(0, 5).map((doc) => {
+                    const app = hub.applications.find((item) => item.programId === selectedProgram.id)!;
+                    return (
+                      <button key={doc.id} type="button" className="os-profile-button" onClick={() => onChange(linkDocumentToApplication(hub, app.id, doc.id))}>
+                        Link {doc.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </Section>
           )}
 
           {programTab === "history" && (
             <Section icon={Clock3} title="History">
-              <Empty>Status changes and decisions will collect here as you work applications.</Empty>
+              {(hub.history || []).filter((item) => item.contextId === selectedProgram.id || item.contextId && hub.applications.some((app) => app.programId === selectedProgram.id && app.id === item.contextId)).length
+                ? (hub.history || []).filter((item) => item.contextId === selectedProgram.id || item.contextId && hub.applications.some((app) => app.programId === selectedProgram.id && app.id === item.contextId)).slice(0, 12).map((item) => (
+                  <div key={item.id} className="work-task-row"><div><strong>{item.title}</strong><span>{item.at.slice(0, 10)}{item.detail ? ` · ${item.detail}` : ""}</span></div></div>
+                ))
+                : <Empty>Status changes and links for this program will appear here.</Empty>}
             </Section>
           )}
         </div>
@@ -1023,18 +1098,33 @@ export function StudyAbroadDashboard({
       <Section icon={FileText} title="Library" action="Add document" onAction={() => setCreateKind("document")}>
         {hub.documents.length ? hub.documents.map((doc) => {
           const used = hub.applicationDocuments.filter((item) => item.documentId === doc.id).length;
+          const isBase = !doc.variantOf && (doc.category === "SOP" || doc.category === "CV");
           return (
-            <div key={doc.id} className="work-task-row">
-              <div>
+            <div key={doc.id} className="work-task-row" style={{ alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
                 <strong>{doc.name}{doc.variantLabel ? ` · ${doc.variantLabel}` : ""}</strong>
-                <span>{doc.category} · {doc.status}{used ? ` · used by ${used} application${used === 1 ? "" : "s"}` : ""}</span>
+                <span>{doc.category} · {doc.status}{used ? ` · used by ${used} application${used === 1 ? "" : "s"}` : ""}{doc.variantOf ? ` · variant of ${getDocument(hub, doc.variantOf)?.name || "base"}` : ""}</span>
+                {isBase ? (
+                  <button
+                    type="button"
+                    className="os-profile-button"
+                    style={{ marginTop: 8 }}
+                    onClick={() => {
+                      const label = window.prompt("Variant label (e.g. THI UX Design Version)");
+                      if (!label?.trim()) return;
+                      onChange(createDocumentVariant(hub, doc.id, label.trim()));
+                    }}
+                  >
+                    Create program variant
+                  </button>
+                ) : null}
               </div>
               <select
                 value={doc.status}
-                onChange={(event) => onChange({
+                onChange={(event) => onChange(appendHistory({
                   ...hub,
                   documents: hub.documents.map((item) => item.id === doc.id ? { ...item, status: event.target.value as typeof doc.status, updatedAt: nowIso() } : item),
-                })}
+                }, `Document → ${event.target.value.replace(/_/g, " ")}`, doc.name, "document", doc.id))}
               >
                 {DOCUMENT_STATUSES.map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}
               </select>
@@ -1048,7 +1138,23 @@ export function StudyAbroadDashboard({
         )}
       </Section>
       <Section icon={NotebookPen} title="SOP / CV versions">
-        <Empty>Create a base SOP or CV, then add program-specific variants with “variant of” in notes for now. Keep this as version management, not a resume builder.</Empty>
+        {hub.documents.filter((item) => item.category === "SOP" || item.category === "CV").length ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            {hub.documents.filter((item) => !item.variantOf && (item.category === "SOP" || item.category === "CV")).map((base) => (
+              <div key={base.id} className="soft-card" style={{ padding: 12 }}>
+                <strong>{base.category} base · {base.name}</strong>
+                <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                  {hub.documents.filter((item) => item.variantOf === base.id).map((variant) => (
+                    <div key={variant.id} className="work-task-row"><div><strong>{variant.variantLabel || variant.name}</strong><span>{variant.status}</span></div></div>
+                  ))}
+                  {!hub.documents.some((item) => item.variantOf === base.id) && <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>No variants yet — create one from the library row.</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty>Add a base SOP or CV in the library, then create program-specific variants from it.</Empty>
+        )}
       </Section>
     </div></div>
   );
@@ -1097,10 +1203,30 @@ export function StudyAbroadDashboard({
   const historyView = (
     <div className="work-layout"><div className="work-main">
       <SubHeader title="History" onBack={() => setStudyView("dashboard")} />
+      <Section icon={Clock3} title="Activity" action="Add timeline event" onAction={() => {
+        const title = window.prompt("Timeline event title");
+        if (!title?.trim()) return;
+        const date = window.prompt("Date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10)) || new Date().toISOString().slice(0, 10);
+        const stamp = nowIso();
+        onChange(appendHistory({
+          ...hub,
+          timelineEvents: [...hub.timelineEvents, {
+            id: newId("tl"),
+            title: title.trim(),
+            date,
+            kind: "deadline",
+            createdAt: stamp,
+          }],
+        }, "Added timeline event", title.trim(), "general"));
+      }}>
+        {(hub.history || []).length ? (hub.history || []).slice(0, 30).map((item) => (
+          <div key={item.id} className="work-task-row"><div><strong>{item.title}</strong><span>{item.at.slice(0, 16).replace("T", " ")}{item.detail ? ` · ${item.detail}` : ""}</span></div></div>
+        )) : <Empty>Application stage changes, document links, and funding links will land here.</Empty>}
+      </Section>
       <Section icon={Clock3} title="Timeline events" action="Open calendar" onAction={onOpenCalendar}>
         {hub.timelineEvents.length ? hub.timelineEvents.map((item) => (
           <div key={item.id} className="work-task-row"><div><strong>{item.title}</strong><span>{item.date} · {item.kind}</span></div></div>
-        )) : <Empty>Deadlines and interviews sync into the existing LifeOS Timeline/Calendar — add events as you plan.</Empty>}
+        )) : <Empty>Deadlines and interviews sync into the existing LifeOS Calendar when you add timeline events.</Empty>}
       </Section>
     </div></div>
   );
