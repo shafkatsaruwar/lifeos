@@ -7,6 +7,12 @@ import {
   Plus, Search, Target, Wallet, X,
 } from "lucide-react";
 import {
+  countryFlagEmoji,
+  findWorldCountry,
+  searchWorldCountries,
+  type WorldCountry,
+} from "@/lib/worldCountries";
+import {
   appendHistory,
   applicationProgram,
   applicationReadiness,
@@ -128,6 +134,101 @@ function CrumbHeader({
 
 type CreateKind = "country" | "university" | "program" | "application" | "document" | "funding" | "task" | "knowledge";
 
+type CreatedEntity = { kind: "country" | "university" | "program" | "application" | "document" | "funding" | "task" | "knowledge"; id: string };
+
+function OptionalHint() {
+  return <span className="sa-optional-hint">(optional)</span>;
+}
+
+function CountryPickerField({
+  id,
+  value,
+  query,
+  onQueryChange,
+  onSelect,
+  placeholder = "Search countries…",
+  autoFocus,
+}: {
+  id: string;
+  value: WorldCountry | null;
+  query: string;
+  onQueryChange: (value: string) => void;
+  onSelect: (country: WorldCountry) => void;
+  placeholder?: string;
+  autoFocus?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const results = useMemo(() => searchWorldCountries(query || value?.name || "", 8), [query, value?.name]);
+
+  return (
+    <div className="sa-country-picker">
+      <input
+        id={id}
+        autoFocus={autoFocus}
+        value={open || !value ? query : `${countryFlagEmoji(value.code)} ${value.name}`}
+        onChange={(event) => {
+          onQueryChange(event.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => {
+          setOpen(true);
+          if (value && !query) onQueryChange(value.name);
+        }}
+        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        placeholder={placeholder}
+        autoComplete="off"
+        aria-autocomplete="list"
+        aria-expanded={open}
+      />
+      {open && results.length > 0 && (
+        <div className="sa-country-results" role="listbox">
+          {results.map((item) => (
+            <button
+              key={item.code}
+              type="button"
+              role="option"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                onSelect(item);
+                onQueryChange(item.name);
+                setOpen(false);
+              }}
+            >
+              <span aria-hidden>{countryFlagEmoji(item.code)}</span>
+              <strong>{item.name}</strong>
+              <em>{item.code}</em>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ensureHubCountry(hub: StudyAbroadHub, world: WorldCountry, stamp: string) {
+  const existing = hub.countries.find((item) =>
+    item.code?.toUpperCase() === world.code
+    || item.name.trim().toLowerCase() === world.name.toLowerCase(),
+  );
+  if (existing) return { hub, countryId: existing.id, created: false as const };
+  const countryId = newId("country");
+  return {
+    hub: {
+      ...hub,
+      countries: [...hub.countries, {
+        id: countryId,
+        name: world.name,
+        code: world.code,
+        active: true,
+        createdAt: stamp,
+        updatedAt: stamp,
+      }],
+    },
+    countryId,
+    created: true as const,
+  };
+}
+
 function CreateModal({
   kind,
   hub,
@@ -138,18 +239,37 @@ function CreateModal({
   kind: CreateKind;
   hub: StudyAbroadHub;
   close: () => void;
-  save: (hub: StudyAbroadHub) => void;
+  save: (hub: StudyAbroadHub, created: CreatedEntity) => void;
   defaults?: { countryId?: string; universityId?: string; programId?: string };
 }) {
   const stamp = nowIso();
+  const defaultWorld = useMemo(() => {
+    const existing = defaults?.countryId ? getCountry(hub, defaults.countryId) : undefined;
+    if (!existing) return null;
+    return findWorldCountry(existing.code || existing.name) || { name: existing.name, code: existing.code || "" };
+  }, [defaults?.countryId, hub]);
+
   const [name, setName] = useState("");
-  const [countryId, setCountryId] = useState(defaults?.countryId || hub.countries[0]?.id || "");
-  const [universityId, setUniversityId] = useState(defaults?.universityId || "");
-  const [programId, setProgramId] = useState(defaults?.programId || "");
-  const [extra, setExtra] = useState("");
+  const [notes, setNotes] = useState("");
+  const [countryQuery, setCountryQuery] = useState(defaultWorld?.name || "");
+  const [selectedWorld, setSelectedWorld] = useState<WorldCountry | null>(
+    defaultWorld && defaultWorld.code ? defaultWorld as WorldCountry : null,
+  );
+  const [universityId, setUniversityId] = useState(defaults?.universityId || hub.universities[0]?.id || "");
+  const [programId, setProgramId] = useState(defaults?.programId || hub.programs[0]?.id || "");
   const [category, setCategory] = useState<DocumentCategory>("Other");
   const [parentType, setParentType] = useState<"program" | "application" | "document" | "funding" | "country">("program");
   const [parentId, setParentId] = useState("");
+  const [intake, setIntake] = useState("");
+  const [deadline, setDeadline] = useState("");
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [close]);
 
   const title =
     kind === "country" ? "Add country"
@@ -158,63 +278,117 @@ function CreateModal({
           : kind === "application" ? "Start application"
             : kind === "document" ? "Add document"
               : kind === "funding" ? "Add funding"
-                : kind === "knowledge" ? "Add knowledge note"
+                : kind === "knowledge" ? "Add note"
                   : "Add task";
 
-  const submit = () => {
-    const trimmed = name.trim();
-    if (!trimmed && kind !== "application") return;
+  const primaryLabel =
+    kind === "country" ? "Add country"
+      : kind === "university" ? "Add university"
+        : kind === "program" ? "Add program"
+          : kind === "application" ? "Start application"
+            : kind === "document" ? "Save document"
+              : kind === "funding" ? "Add funding"
+                : kind === "knowledge" ? "Add note"
+                  : "Add task";
 
-    if (kind === "country") {
-      save({
-        ...hub,
-        countries: [...hub.countries, {
-          id: newId("country"),
-          name: trimmed,
-          active: true,
-          createdAt: stamp,
-          updatedAt: stamp,
-          notes: extra || undefined,
-        }],
-      });
-    } else if (kind === "university") {
-      if (!countryId) return;
-      save({
-        ...hub,
-        universities: [...hub.universities, {
-          id: newId("uni"),
-          countryId,
-          name: trimmed,
-          city: extra || undefined,
+  const subtitle =
+    kind === "country" ? "Where are you considering studying?"
+      : kind === "university" ? "Create the university, then fill details in its workspace."
+        : kind === "program" ? "Create the program, then develop it in the workspace."
+          : kind === "application" ? "Link an application to a program and intake."
+            : kind === "document" ? "Store once, reuse across applications."
+              : kind === "funding" ? "Track scholarships and aid without inventing matches."
+                : kind === "knowledge" ? "Keep research notes close to Study Abroad."
+                  : "Attach a next step to the right object.";
+
+  const selectedUniversity = universityId ? getUniversity(hub, universityId) : undefined;
+  const selectedUniversityCountry = selectedUniversity ? getCountry(hub, selectedUniversity.countryId) : undefined;
+
+  const resolvedWorld = selectedWorld || findWorldCountry(countryQuery) || null;
+
+  const canSubmit = (() => {
+    if (kind === "country") return Boolean(resolvedWorld?.code && resolvedWorld.name);
+    if (kind === "university") return Boolean(name.trim() && resolvedWorld?.code);
+    if (kind === "program") return Boolean(name.trim() && universityId);
+    if (kind === "application") return Boolean(programId);
+    if (kind === "document") return Boolean(name.trim());
+    if (kind === "funding") return Boolean(name.trim());
+    if (kind === "knowledge") return Boolean(name.trim());
+    if (kind === "task") return Boolean(name.trim() && parentId);
+    return false;
+  })();
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canSubmit) return;
+    const world = resolvedWorld;
+
+    if (kind === "country" && world) {
+      const ensured = ensureHubCountry(hub, world, stamp);
+      let next = ensured.hub;
+      if (notes.trim()) {
+        next = {
+          ...next,
+          countries: next.countries.map((item) =>
+            item.id === ensured.countryId ? { ...item, notes: notes.trim(), updatedAt: stamp } : item,
+          ),
+        };
+      }
+      if (ensured.created) next = appendHistory(next, "Added country", world.name, "country", ensured.countryId);
+      save(next, { kind: "country", id: ensured.countryId });
+      close();
+      return;
+    }
+
+    if (kind === "university" && world) {
+      const ensured = ensureHubCountry(hub, world, stamp);
+      const universityIdNew = newId("uni");
+      let next = {
+        ...ensured.hub,
+        universities: [...ensured.hub.universities, {
+          id: universityIdNew,
+          countryId: ensured.countryId,
+          name: name.trim(),
           createdAt: stamp,
           updatedAt: stamp,
           saved: true,
         }],
-      });
-    } else if (kind === "program") {
-      if (!universityId) return;
-      save({
+      };
+      next = appendHistory(next, "Added university", name.trim(), "university", universityIdNew);
+      save(next, { kind: "university", id: universityIdNew });
+      close();
+      return;
+    }
+
+    if (kind === "program") {
+      const programIdNew = newId("prog");
+      let next = {
         ...hub,
         programs: [...hub.programs, {
-          id: newId("prog"),
+          id: programIdNew,
           universityId,
-          name: trimmed,
-          intake: extra || undefined,
-          status: "discovering",
+          name: name.trim(),
+          status: "discovering" as const,
           createdAt: stamp,
           updatedAt: stamp,
         }],
-      });
-    } else if (kind === "application") {
-      if (!programId) return;
+      };
+      next = appendHistory(next, "Added program", name.trim(), "program", programIdNew);
+      save(next, { kind: "program", id: programIdNew });
+      close();
+      return;
+    }
+
+    if (kind === "application") {
       const program = getProgram(hub, programId);
-      save({
+      const applicationId = newId("app");
+      let next = {
         ...hub,
         applications: [...hub.applications, {
-          id: newId("app"),
+          id: applicationId,
           programId,
-          intake: program?.intake || extra || undefined,
-          stage: "preparing",
+          intake: intake.trim() || program?.intake || undefined,
+          stage: "preparing" as const,
           createdAt: stamp,
           updatedAt: stamp,
         }],
@@ -223,149 +397,268 @@ function CreateModal({
             ? { ...item, status: "preparing" as const, shortlisted: true, updatedAt: stamp }
             : item,
         ),
-      });
-    } else if (kind === "document") {
-      save({
+      };
+      next = appendHistory(next, "Started application", program?.name, "application", applicationId);
+      save(next, { kind: "application", id: applicationId });
+      close();
+      return;
+    }
+
+    if (kind === "document") {
+      const documentId = newId("doc");
+      let next = {
         ...hub,
         documents: [...hub.documents, {
-          id: newId("doc"),
-          name: trimmed,
+          id: documentId,
+          name: name.trim(),
           category,
-          status: "draft",
-          notes: extra || undefined,
+          status: "draft" as const,
+          notes: notes.trim() || undefined,
           createdAt: stamp,
           updatedAt: stamp,
         }],
-      });
-    } else if (kind === "funding") {
-      save({
-        ...hub,
-        funding: [...hub.funding, {
-          id: newId("fund"),
-          name: trimmed,
-          kind: "scholarship",
-          countryId: countryId || undefined,
-          deadline: extra || undefined,
-          status: "researching",
+      };
+      next = appendHistory(next, "Added document", name.trim(), "document", documentId);
+      save(next, { kind: "document", id: documentId });
+      close();
+      return;
+    }
+
+    if (kind === "funding") {
+      const fundingId = newId("fund");
+      let nextHub = hub;
+      let countryId: string | undefined;
+      if (world?.code) {
+        const ensured = ensureHubCountry(hub, world, stamp);
+        nextHub = ensured.hub;
+        countryId = ensured.countryId;
+      }
+      let next = {
+        ...nextHub,
+        funding: [...nextHub.funding, {
+          id: fundingId,
+          name: name.trim(),
+          kind: "scholarship" as const,
+          countryId,
+          deadline: deadline || undefined,
+          status: "researching" as const,
           createdAt: stamp,
           updatedAt: stamp,
         }],
-      });
-    } else if (kind === "knowledge") {
-      save({
+      };
+      next = appendHistory(next, "Added funding", name.trim(), "funding", fundingId);
+      save(next, { kind: "funding", id: fundingId });
+      close();
+      return;
+    }
+
+    if (kind === "knowledge") {
+      const knowledgeId = newId("know");
+      let next = {
         ...hub,
         knowledge: [...hub.knowledge, {
-          id: newId("know"),
-          title: trimmed,
-          body: extra || undefined,
-          contextType: "general",
+          id: knowledgeId,
+          title: name.trim(),
+          body: notes.trim() || undefined,
+          contextType: "general" as const,
           createdAt: stamp,
           updatedAt: stamp,
         }],
-      });
-    } else if (kind === "task") {
-      if (!parentId) return;
-      save({
+      };
+      next = appendHistory(next, "Added knowledge note", name.trim(), "general");
+      save(next, { kind: "knowledge", id: knowledgeId });
+      close();
+      return;
+    }
+
+    if (kind === "task") {
+      const taskId = newId("task");
+      let next = {
         ...hub,
         tasks: [...hub.tasks, {
-          id: newId("task"),
-          title: trimmed,
+          id: taskId,
+          title: name.trim(),
           parentType,
           parentId,
-          due: extra || undefined,
+          due: deadline || undefined,
           createdAt: stamp,
           updatedAt: stamp,
         }],
-      });
+      };
+      next = appendHistory(next, "Added study-abroad task", name.trim(), parentType, parentId);
+      save(next, { kind: "task", id: taskId });
+      close();
     }
-    close();
   };
+
+  const parentOptions = parentType === "program"
+    ? hub.programs
+    : parentType === "application"
+      ? hub.applications.map((app) => ({ id: app.id, name: getProgram(hub, app.programId)?.name || app.id }))
+      : parentType === "document"
+        ? hub.documents
+        : parentType === "funding"
+          ? hub.funding
+          : hub.countries;
 
   return (
     <div className="modal-layer hub-modal-layer" onMouseDown={close}>
-      <div className="create-modal work-create-modal" onMouseDown={(event) => event.stopPropagation()}>
+      <form className="create-modal sa-create-modal" onMouseDown={(event) => event.stopPropagation()} onSubmit={submit}>
         <div className="capture-head">
           <div>
             <p className="eyebrow">Study Abroad</p>
             <h3>{title}</h3>
+            <p className="sa-create-subtitle">{subtitle}</p>
           </div>
           <button type="button" onClick={close} aria-label="Close"><X size={18} /></button>
         </div>
-        <div className="settings-body" style={{ gap: 12, display: "grid" }}>
-          {kind !== "application" && (
-            <label>Name
-              <input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder={kind === "task" ? "What needs doing?" : "Name"} />
-            </label>
-          )}
-          {(kind === "university" || kind === "funding") && (
-            <label>Country
-              <select value={countryId} onChange={(event) => setCountryId(event.target.value)}>
-                <option value="">Select…</option>
-                {hub.countries.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
-            </label>
-          )}
-          {kind === "program" && (
-            <label>University
-              <select value={universityId} onChange={(event) => setUniversityId(event.target.value)}>
-                <option value="">Select…</option>
-                {hub.universities.map((item) => {
-                  const country = getCountry(hub, item.countryId);
-                  return <option key={item.id} value={item.id}>{item.name}{country ? ` · ${country.name}` : ""}</option>;
-                })}
-              </select>
-            </label>
-          )}
-          {kind === "application" && (
-            <label>Program
-              <select autoFocus value={programId} onChange={(event) => setProgramId(event.target.value)}>
-                <option value="">Select…</option>
-                {hub.programs.map((item) => {
-                  const uni = programUniversity(hub, item);
-                  return <option key={item.id} value={item.id}>{item.name}{uni ? ` · ${uni.name}` : ""}</option>;
-                })}
-              </select>
-            </label>
-          )}
-          {kind === "document" && (
-            <label>Category
-              <select value={category} onChange={(event) => setCategory(event.target.value as DocumentCategory)}>
-                {["Passport", "Diploma", "Transcript", "English proficiency", "CV", "SOP", "Recommendation", "Certificate", "Portfolio", "Financial proof", "Other"].map((item) => (
-                  <option key={item} value={item}>{item}</option>
-                ))}
-              </select>
-            </label>
-          )}
-          {kind === "task" && (
-            <>
-              <label>Attached to
-                <select value={parentType} onChange={(event) => { setParentType(event.target.value as typeof parentType); setParentId(""); }}>
-                  <option value="program">Program</option>
-                  <option value="application">Application</option>
-                  <option value="document">Document</option>
-                  <option value="funding">Funding</option>
-                  <option value="country">Country</option>
-                </select>
-              </label>
-              <label>Parent
-                <select value={parentId} onChange={(event) => setParentId(event.target.value)}>
-                  <option value="">Select…</option>
-                  {(parentType === "program" ? hub.programs : parentType === "application" ? hub.applications.map((app) => ({ id: app.id, name: getProgram(hub, app.programId)?.name || app.id })) : parentType === "document" ? hub.documents : parentType === "funding" ? hub.funding : hub.countries).map((item: any) => (
-                    <option key={item.id} value={item.id}>{item.name || item.title || item.id}</option>
-                  ))}
-                </select>
-              </label>
-            </>
-          )}
-          <label>{kind === "university" ? "City" : kind === "program" || kind === "application" ? "Intake" : kind === "funding" || kind === "task" ? "Deadline / due" : kind === "knowledge" ? "Notes" : "Notes"}
-            <input value={extra} onChange={(event) => setExtra(event.target.value)} placeholder="Optional" />
-          </label>
-        </div>
+
+        {kind === "country" && (
+          <>
+            <label htmlFor="sa-create-country">Country</label>
+            <CountryPickerField
+              id="sa-create-country"
+              value={selectedWorld}
+              query={countryQuery}
+              onQueryChange={(value) => {
+                setCountryQuery(value);
+                setSelectedWorld(null);
+              }}
+              onSelect={setSelectedWorld}
+              placeholder="Search countries…"
+              autoFocus
+            />
+            <label htmlFor="sa-create-country-notes">Notes <OptionalHint /></label>
+            <textarea id="sa-create-country-notes" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Add any useful notes…" rows={3} />
+          </>
+        )}
+
+        {kind === "university" && (
+          <>
+            <label htmlFor="sa-create-uni-name">University</label>
+            <input id="sa-create-uni-name" autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Technical University of Munich" />
+            <label htmlFor="sa-create-uni-country">Country</label>
+            <CountryPickerField
+              id="sa-create-uni-country"
+              value={selectedWorld}
+              query={countryQuery}
+              onQueryChange={(value) => {
+                setCountryQuery(value);
+                setSelectedWorld(null);
+              }}
+              onSelect={setSelectedWorld}
+              placeholder="Search countries…"
+            />
+          </>
+        )}
+
+        {kind === "program" && (
+          <>
+            <label htmlFor="sa-create-program-name">Program</label>
+            <input id="sa-create-program-name" autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="MSc User Experience Design" />
+            <label htmlFor="sa-create-program-uni">University</label>
+            <select id="sa-create-program-uni" value={universityId} onChange={(event) => setUniversityId(event.target.value)}>
+              <option value="">Select…</option>
+              {hub.universities.map((item) => {
+                const country = getCountry(hub, item.countryId);
+                return <option key={item.id} value={item.id}>{item.name}{country ? ` · ${country.name}` : ""}</option>;
+              })}
+            </select>
+            {selectedUniversityCountry ? (
+              <p className="sa-create-hint">Country: {countryFlagEmoji(selectedUniversityCountry.code)} {selectedUniversityCountry.name}</p>
+            ) : null}
+          </>
+        )}
+
+        {kind === "application" && (
+          <>
+            <label htmlFor="sa-create-app-program">Program</label>
+            <select id="sa-create-app-program" autoFocus value={programId} onChange={(event) => setProgramId(event.target.value)}>
+              <option value="">Select…</option>
+              {hub.programs.map((item) => {
+                const uni = programUniversity(hub, item);
+                return <option key={item.id} value={item.id}>{item.name}{uni ? ` · ${uni.name}` : ""}</option>;
+              })}
+            </select>
+            <label htmlFor="sa-create-app-intake">Intake <OptionalHint /></label>
+            <input id="sa-create-app-intake" value={intake} onChange={(event) => setIntake(event.target.value)} placeholder="Winter 2027" />
+          </>
+        )}
+
+        {kind === "document" && (
+          <>
+            <label htmlFor="sa-create-doc-name">Document</label>
+            <input id="sa-create-doc-name" autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Bachelor diploma" />
+            <label htmlFor="sa-create-doc-category">Category</label>
+            <select id="sa-create-doc-category" value={category} onChange={(event) => setCategory(event.target.value as DocumentCategory)}>
+              {["Passport", "Diploma", "Transcript", "English proficiency", "CV", "SOP", "Recommendation", "Certificate", "Portfolio", "Financial proof", "Other"].map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+            <label htmlFor="sa-create-doc-notes">Notes <OptionalHint /></label>
+            <textarea id="sa-create-doc-notes" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Where it is, what still needs doing…" rows={3} />
+          </>
+        )}
+
+        {kind === "funding" && (
+          <>
+            <label htmlFor="sa-create-fund-name">Opportunity</label>
+            <input id="sa-create-fund-name" autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="DAAD Study Scholarship" />
+            <label htmlFor="sa-create-fund-country">Country <OptionalHint /></label>
+            <CountryPickerField
+              id="sa-create-fund-country"
+              value={selectedWorld}
+              query={countryQuery}
+              onQueryChange={(value) => {
+                setCountryQuery(value);
+                setSelectedWorld(null);
+              }}
+              onSelect={setSelectedWorld}
+              placeholder="Search countries…"
+            />
+            <label htmlFor="sa-create-fund-deadline">Deadline <OptionalHint /></label>
+            <input id="sa-create-fund-deadline" type="date" value={deadline} onChange={(event) => setDeadline(event.target.value)} />
+          </>
+        )}
+
+        {kind === "knowledge" && (
+          <>
+            <label htmlFor="sa-create-note-title">Note</label>
+            <input id="sa-create-note-title" autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Visa checklist for Germany" />
+            <label htmlFor="sa-create-note-body">Details <OptionalHint /></label>
+            <textarea id="sa-create-note-body" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Keep the useful bits…" rows={4} />
+          </>
+        )}
+
+        {kind === "task" && (
+          <>
+            <label htmlFor="sa-create-task-title">Task</label>
+            <input id="sa-create-task-title" autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="What needs doing?" />
+            <label htmlFor="sa-create-task-parent-type">Attached to</label>
+            <select id="sa-create-task-parent-type" value={parentType} onChange={(event) => { setParentType(event.target.value as typeof parentType); setParentId(""); }}>
+              <option value="program">Program</option>
+              <option value="application">Application</option>
+              <option value="document">Document</option>
+              <option value="funding">Funding</option>
+              <option value="country">Country</option>
+            </select>
+            <label htmlFor="sa-create-task-parent">Parent</label>
+            <select id="sa-create-task-parent" value={parentId} onChange={(event) => setParentId(event.target.value)}>
+              <option value="">Select…</option>
+              {parentOptions.map((item: { id: string; name?: string; title?: string }) => (
+                <option key={item.id} value={item.id}>{item.name || item.title || item.id}</option>
+              ))}
+            </select>
+            <label htmlFor="sa-create-task-due">Due <OptionalHint /></label>
+            <input id="sa-create-task-due" type="date" value={deadline} onChange={(event) => setDeadline(event.target.value)} />
+          </>
+        )}
+
         <div className="create-actions">
           <button type="button" onClick={close}>Cancel</button>
-          <button type="button" className="primary" onClick={submit}>Save</button>
+          <button type="submit" className="primary" disabled={!canSubmit}>{primaryLabel}</button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
@@ -1302,7 +1595,18 @@ export function StudyAbroadDashboard({
           kind={createKind}
           hub={hub}
           close={() => setCreateKind(null)}
-          save={onChange}
+          save={(nextHub, created) => {
+            onChange(nextHub);
+            if (created.kind === "country") openCountry(created.id);
+            else if (created.kind === "university") openUniversity(created.id);
+            else if (created.kind === "program") openProgram(created.id);
+            else if (created.kind === "application") {
+              setSelectedApplicationId(created.id);
+              setStudyView("applications");
+            } else if (created.kind === "document") setStudyView("documents");
+            else if (created.kind === "funding") setStudyView("funding");
+            else if (created.kind === "knowledge") setStudyView("knowledge");
+          }}
           defaults={{
             countryId: selectedCountryId || undefined,
             universityId: selectedUniversityId || undefined,
