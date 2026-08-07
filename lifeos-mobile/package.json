@@ -22,6 +22,7 @@
     "expo-dev-client": "~6.0.21",
     "expo-document-picker": "~14.0.8",
     "expo-font": "~14.0.12",
+    "expo-image-picker": "~17.0.11",
     "expo-pencilkit-ui": "^1.0.4",
     "expo-status-bar": "~3.0.9",
     "expo-web-browser": "~15.0.11",

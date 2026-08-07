@@ -10,6 +10,10 @@ Read versioned docs: https://docs.expo.dev/versions/v54.0.0/
 - Data: `src/lib/firebase.ts` RTDB under `users/{uid}/…`
 - Auth: HTTPS `/shell-auth` bridge → Google ID token → `signInWithCredential`
 - Parked WebView shell: `App.webview.tsx`
-- **Notebooks (primary handwriting):** Library → **Notebooks** → notebook → page → `PageCanvasScreen` (PencilKit). Metadata: `users/{uid}/notebookHub`. Pages: `users/{uid}/notebookPages/{pageId}` (per-page writes). Types in `src/types.ts` (`Notebook`, `NotebookPage`, …). Helpers: `src/lib/notebooks.ts`.
-- Legacy single-note Draw mode still exists on `NoteEditorScreen` / `note.ink`.
-- PencilKit **does not work in Expo Go** — needs a native iOS build (`npx expo run:ios` or EAS `development-device` / `preview` / `production`).
+- **Notebooks:** Library → **Notebooks** → notebook → page → `PageCanvasScreen`.
+  - Ink: Apple PencilKit. Overlays: typed text + images (`PageElementsLayer`). Modes: Ink / Text / Image / Paper.
+  - Data: `notebookHub` + per-page `notebookPages/{pageId}`.
+  - Search: notebook names + page titles + typed text (+ recognition only if `status === "ready"`).
+  - Architecture stubs (not faked): `notebookPdf.ts`, `handwritingRecognition.ts`, `notebookAi.ts`.
+  - PencilKit **requires a native iOS build**, not Expo Go.
+- Legacy single-note Draw mode still on `NoteEditorScreen` / `note.ink`.

@@ -246,7 +246,7 @@ export type Notebook = {
   updatedAt: string;
 };
 
-/** Typed text box on a page (MVP: insert later; shape reserved). */
+/** Typed text box on a page (overlay above PencilKit). */
 export type PageTextElement = {
   id: string;
   x: number;
@@ -257,9 +257,12 @@ export type PageTextElement = {
   fontSize: number;
   bold?: boolean;
   italic?: boolean;
+  /** Simple list marker — not a full word processor */
+  list?: "none" | "bullet" | "number";
+  opacity?: number;
 };
 
-/** Image on a page (MVP: insert later; shape reserved). */
+/** Image on a page (overlay above PencilKit). */
 export type PageImageElement = {
   id: string;
   x: number;
@@ -267,6 +270,21 @@ export type PageImageElement = {
   width: number;
   height: number;
   uri: string;
+  /** local | cloud — cloud reserved for Storage upload later */
+  storage?: "local" | "cloud";
+  opacity?: number;
+};
+
+/**
+ * Future: indexed text from handwriting recognition (Vision / PKDrawing).
+ * Do not invent OCR results — only populate when a real recognizer runs.
+ */
+export type PageRecognitionIndex = {
+  status: "idle" | "pending" | "ready" | "unavailable";
+  /** Plain text extracted from ink, if any */
+  transcript?: string;
+  updatedAt?: string;
+  engine?: "apple-vision" | "none";
 };
 
 /**
@@ -282,10 +300,24 @@ export type NotebookPage = {
   ink?: NoteInk;
   textElements?: PageTextElement[];
   imageElements?: PageImageElement[];
-  /** Reserved for future PDF page backing */
-  pdfRef?: { storagePath: string; pageIndex: number };
+  /**
+   * PDF page backing (Phase 6 architecture).
+   * When set, the page is an annotation layer over an imported PDF page.
+   * Do not fake PDF rendering until a real PDF pipeline exists.
+   */
+  pdfRef?: {
+    storagePath: string;
+    pageIndex: number;
+    pageCount?: number;
+    fileName?: string;
+  };
+  /** Handwriting recognition index — empty until a real engine is wired */
+  recognition?: PageRecognitionIndex;
   updatedAt: string;
 };
+
+/** Canvas interaction mode for PageCanvasScreen */
+export type PageCanvasMode = "ink" | "text" | "image" | "select";
 
 /** Folders + notebook metadata (pages live separately). */
 export type NotebookHub = {

@@ -35,7 +35,13 @@
     "plugins": [
       "expo-web-browser",
       "expo-font",
-      "expo-dev-client"
+      "expo-dev-client",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow LifeOS to place photos on notebook pages."
+        }
+      ]
     ]
   }
 }

@@ -14,6 +14,7 @@ import { useNavigation } from "@react-navigation/native";
 import { Empty, Eyebrow, Page, Subtitle, Title } from "../components/UI";
 import { LibrarySubNav } from "../components/LibrarySubNav";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { useLayout } from "../lib/layout";
 import {
   createFolder,
   createNotebook,
@@ -21,16 +22,20 @@ import {
   NOTEBOOK_COLORS,
   pagesForNotebook,
 } from "../lib/notebooks";
+import type { NotebookContextLink } from "../types";
 
 export function NotebooksScreen() {
   const { theme, workspace, updateNotebookHub, upsertNotebookPage, deleteNotebookPage } = useLifeOS();
   const navigation = useNavigation<any>();
+  const { isTablet } = useLayout();
   const hub = workspace.notebookHub;
+  const columns = isTablet ? 3 : 2;
   const [folderFilter, setFolderFilter] = useState<string | "all" | "unfiled">("all");
   const [composer, setComposer] = useState<null | "notebook" | "folder">(null);
   const [name, setName] = useState("");
   const [color, setColor] = useState<string>(NOTEBOOK_COLORS[0]);
   const [folderId, setFolderId] = useState<string | undefined>(undefined);
+  const [contextKey, setContextKey] = useState<string>("personal");
 
   const notebooks = useMemo(() => {
     let list = [...hub.notebooks];
@@ -44,6 +49,22 @@ export function NotebooksScreen() {
     setName("");
     setColor(NOTEBOOK_COLORS[0]);
     setFolderId(inFolderId);
+    setContextKey("personal");
+  };
+
+  const resolveContext = (): NotebookContextLink | undefined => {
+    if (contextKey === "personal") return { type: "personal", label: "Personal" };
+    if (contextKey.startsWith("class:")) {
+      const classId = contextKey.slice(6);
+      const cls = workspace.classes.find((c) => c.id === classId);
+      if (!cls) return undefined;
+      return { type: "class", classId, label: cls.code };
+    }
+    if (contextKey.startsWith("project:")) {
+      const projectName = contextKey.slice(8);
+      return { type: "project", projectName, label: projectName };
+    }
+    return undefined;
   };
 
   const submit = async () => {
@@ -55,7 +76,7 @@ export function NotebooksScreen() {
       return;
     }
     if (composer === "notebook") {
-      const notebook = createNotebook(name, { folderId, color });
+      const notebook = createNotebook(name, { folderId, color, context: resolveContext() });
       const page = createPage(notebook.id, 0, "ruled");
       await updateNotebookHub({ ...hub, notebooks: [notebook, ...hub.notebooks] });
       await upsertNotebookPage(page);
@@ -131,7 +152,8 @@ export function NotebooksScreen() {
       <FlatList
         data={notebooks}
         keyExtractor={(item) => item.id}
-        numColumns={2}
+        numColumns={columns}
+        key={`cols-${columns}`}
         columnWrapperStyle={styles.gridRow}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => {
@@ -148,9 +170,10 @@ export function NotebooksScreen() {
                 <Text style={[styles.coverTitle, { color: theme.text }]} numberOfLines={2}>
                   {item.name}
                 </Text>
-                <Text style={[styles.coverMeta, { color: theme.muted }]} numberOfLines={3}>
-                  {folder ? `${folder.name} · ` : ""}
-                  {pageCount} {pageCount === 1 ? "page" : "pages"}
+                <Text style={[styles.coverMeta, { color: theme.muted }]} numberOfLines={4}>
+                  {[folder?.name, item.context?.label, `${pageCount} ${pageCount === 1 ? "page" : "pages"}`]
+                    .filter(Boolean)
+                    .join(" · ")}
                   {"\n"}
                   Edited {new Date(item.updatedAt).toLocaleDateString()}
                 </Text>
@@ -194,6 +217,30 @@ export function NotebooksScreen() {
                 <Chip label="No folder" active={!folderId} onPress={() => setFolderId(undefined)} />
                 {hub.folders.map((f) => (
                   <Chip key={f.id} label={f.name} active={folderId === f.id} onPress={() => setFolderId(f.id)} />
+                ))}
+              </View>
+            ) : null}
+            {composer === "notebook" ? (
+              <View style={styles.folderPick}>
+                <Text style={{ width: "100%", color: theme.muted, fontSize: 11, fontWeight: "800" }}>
+                  LIFEOS CONTEXT (OPTIONAL)
+                </Text>
+                <Chip label="Personal" active={contextKey === "personal"} onPress={() => setContextKey("personal")} />
+                {workspace.classes.slice(0, 8).map((cls) => (
+                  <Chip
+                    key={cls.id}
+                    label={cls.code}
+                    active={contextKey === `class:${cls.id}`}
+                    onPress={() => setContextKey(`class:${cls.id}`)}
+                  />
+                ))}
+                {workspace.projects.slice(0, 8).map((project) => (
+                  <Chip
+                    key={project.name}
+                    label={project.name}
+                    active={contextKey === `project:${project.name}`}
+                    onPress={() => setContextKey(`project:${project.name}`)}
+                  />
                 ))}
               </View>
             ) : null}

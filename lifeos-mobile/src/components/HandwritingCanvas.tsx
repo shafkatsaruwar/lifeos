@@ -189,13 +189,10 @@ export const HandwritingCanvas = React.forwardRef<PencilKitViewRef | null, Props
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    minHeight: 420,
-    borderRadius: 14,
+    minHeight: 0,
     overflow: "hidden",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(15,23,42,0.12)",
   },
-  canvas: { flex: 1, minHeight: 420 },
+  canvas: { flex: 1, minHeight: 0 },
   legacyHint: {
     fontSize: 11,
     fontWeight: "600",
