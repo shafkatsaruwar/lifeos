@@ -3,13 +3,27 @@
     "name": "LifeOS",
     "slug": "lifeos-mobile",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "lifeos",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.shafkatsaruwar.lifeos"
+      "requireFullScreen": false,
+      "bundleIdentifier": "com.shafkatsaruwar.lifeos",
+      "infoPlist": {
+        "UIDeviceFamily": [1, 2],
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown"
+        ],
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {

@@ -4,7 +4,13 @@ Native Expo app for LifeOS. Same Firebase cloud data as the web app — not a We
 
 Pinned to **Expo SDK 54** for App Store Expo Go.
 
-## Run on iPhone / Simulator
+## Devices
+
+- **iPhone** — portrait (and system rotation where allowed)
+- **iPad** — full tablet target (`supportsTablet`), landscape + portrait, Split View friendly (`requireFullScreen: false`)
+- Wide layouts cap content around ~820pt so screens don’t stretch edge-to-edge on large iPads
+
+## Run on iPhone / iPad / Simulator
 
 Always start from **`lifeos-mobile/`** (not the repo root — that Next.js `app/` folder will confuse Metro).
 

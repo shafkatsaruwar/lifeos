@@ -2,10 +2,18 @@ import Feather from "@expo/vector-icons/Feather";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { useLayout } from "../lib/layout";
 
 export function Page({ children, edges = ["top"] as ("top" | "bottom" | "left" | "right")[] }: { children: React.ReactNode; edges?: ("top" | "bottom" | "left" | "right")[] }) {
   const { theme } = useLifeOS();
-  return <SafeAreaView style={[styles.page, { backgroundColor: theme.bg }]} edges={edges}>{children}</SafeAreaView>;
+  const { contentMaxWidth } = useLayout();
+  return (
+    <SafeAreaView style={[styles.page, { backgroundColor: theme.bg }]} edges={edges}>
+      <View style={[styles.pageInner, contentMaxWidth ? { maxWidth: contentMaxWidth, width: "100%", alignSelf: "center" } : null]}>
+        {children}
+      </View>
+    </SafeAreaView>
+  );
 }
 
 export function Card({ children, style }: { children: React.ReactNode; style?: object }) {
@@ -115,6 +123,7 @@ export function SegmentedControl<T extends string>({ value, options, onChange }:
 
 const styles = StyleSheet.create({
   page: { flex: 1 },
+  pageInner: { flex: 1, width: "100%" },
   card: { borderWidth: 1, borderRadius: 20, padding: 18, gap: 12 },
   action: { minHeight: 44, paddingHorizontal: 15, borderRadius: 12, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   actionText: { fontSize: 14, fontWeight: "800" },

@@ -102,7 +102,7 @@ export function SignIn() {
           <Feather name="activity" size={26} color="#FFF" />
         </View>
         <Text style={styles.signInTitle}>LifeOS</Text>
-        <Text style={styles.signInCopy}>Your life, in focus. Native iPhone app — same private cloud data as the web.</Text>
+        <Text style={styles.signInCopy}>Your life, in focus. Native iPhone & iPad app — same private cloud data as the web.</Text>
         {firebaseConfigured && googleConfigured ? (
           <GoogleSignInButton />
         ) : (
@@ -155,7 +155,7 @@ export function OnboardingName() {
 
 const styles = StyleSheet.create({
   signIn: { flex: 1 },
-  signInInner: { flex: 1, justifyContent: "center", padding: 28, gap: 14 },
+  signInInner: { flex: 1, justifyContent: "center", padding: 28, gap: 14, width: "100%", maxWidth: 480, alignSelf: "center" },
   logo: { width: 56, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center", marginBottom: 8 },
   signInTitle: { color: "#FFF", fontSize: 40, fontWeight: "800", letterSpacing: -1 },
   signInCopy: { color: "#A1A1AA", fontSize: 16, lineHeight: 24, marginBottom: 12, maxWidth: 320 },

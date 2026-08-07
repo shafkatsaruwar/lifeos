@@ -5,6 +5,7 @@ import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { useLayout } from "../lib/layout";
 import { OnboardingName } from "../components/Auth";
 
 import { LifeDashboardScreen } from "../screens/LifeDashboardScreen";
@@ -109,6 +110,8 @@ function LibraryStackNavigator() {
 export function RootNavigator() {
   const { theme, dark } = useLifeOS();
   const insets = useSafeAreaInsets();
+  const { isTablet } = useLayout();
+  const tabHeight = isTablet ? 64 : 56;
   const base = dark ? DarkTheme : DefaultTheme;
   const navTheme = {
     ...base,
@@ -135,20 +138,20 @@ export function RootNavigator() {
             left: 0,
             right: 0,
             bottom: 0,
-            height: 56 + insets.bottom,
+            height: tabHeight + insets.bottom,
             backgroundColor: theme.surface,
             borderTopWidth: 1,
             borderTopColor: theme.border,
             borderRadius: 0,
             elevation: 0,
             shadowOpacity: 0,
-            paddingTop: 6,
+            paddingTop: isTablet ? 8 : 6,
             paddingBottom: Math.max(insets.bottom, 8),
-            paddingHorizontal: 4,
+            paddingHorizontal: isTablet ? 24 : 4,
           },
           tabBarItemStyle: {
-            height: 48,
-            minWidth: 44,
+            height: isTablet ? 52 : 48,
+            minWidth: isTablet ? 72 : 44,
             paddingVertical: 0,
             justifyContent: "center",
             alignItems: "center",
@@ -157,7 +160,7 @@ export function RootNavigator() {
             marginTop: 0,
           },
           tabBarLabelStyle: {
-            fontSize: 10,
+            fontSize: isTablet ? 11 : 10,
             lineHeight: 12,
             fontWeight: "600",
             marginTop: 2,
@@ -167,7 +170,7 @@ export function RootNavigator() {
           tabBarInactiveTintColor: "#8E8E93",
           tabBarIcon: ({ color, focused }) => {
             const icon = TAB_ICONS[route.name];
-            return <Ionicons name={focused ? icon.active : icon.idle} size={22} color={color} />;
+            return <Ionicons name={focused ? icon.active : icon.idle} size={isTablet ? 24 : 22} color={color} />;
           },
         })}
       >
