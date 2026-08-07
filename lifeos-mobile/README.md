@@ -6,18 +6,35 @@ Pinned to **Expo SDK 54** for App Store Expo Go.
 
 ## Run on iPhone / Simulator
 
+Always start from **`lifeos-mobile/`** (not the repo root — that Next.js `app/` folder will confuse Metro).
+
 ```bash
 cd lifeos-mobile
 cp .env.example .env
 # fill Firebase + Google web client ID
+rm -rf node_modules .expo
 npm install
-npx expo start
+npx expo start -c
 ```
 
-1. Force-quit Expo Go, scan QR (or press `i` for Simulator)
-2. Sign in with Google
-3. Land on **Now** — Tasks, Calendar, Life, School, Library in the tab bar
-4. Settings is the gear on Now
+1. Use **Expo Go compatible with SDK 54** (same major as this project)
+2. Force-quit Expo Go, then scan QR (or press `i` for Simulator)
+3. Sign in with Google
+4. Land on **Now** — Tasks, Calendar, Life, School, Library in the tab bar
+5. Settings is the gear on Now
+
+### If you see `PlatformConstants` / TurboModuleRegistry errors
+
+That almost always means a bad install or Expo Go SDK mismatch:
+
+```bash
+cd lifeos-mobile
+rm -rf node_modules .expo
+npm install
+npx expo start -c
+```
+
+Confirm Expo Go is the SDK 54 build. Do **not** run `expo start` from the monorepo root.
 
 ## Required `.env`
 
