@@ -182,7 +182,7 @@ export function stopListeningToFirebaseChanges(key: string) {
   }
 }
 
-export async function syncAllData(tasks: any, projects: any, events: any, brainItems: any, settings: any, dark: boolean, classes: any[] = [], notes: any[] = [], resources: any[] = [], life: any = null, school: any = null, work: any = null) {
+export async function syncAllData(tasks: any, projects: any, events: any, brainItems: any, settings: any, dark: boolean, classes: any[] = [], notes: any[] = [], resources: any[] = [], life: any = null, school: any = null, work: any = null, studyAbroad: any = null) {
   await Promise.all([
     syncDataToFirebase('tasks', tasks),
     syncDataToFirebase('projects', projects),
@@ -196,6 +196,7 @@ export async function syncAllData(tasks: any, projects: any, events: any, brainI
     ...(life ? [syncDataToFirebase('life', life)] : []),
     ...(school ? [syncDataToFirebase('school', school)] : []),
     ...(work ? [syncDataToFirebase('work', work)] : []),
+    ...(studyAbroad ? [syncDataToFirebase('studyAbroad', studyAbroad)] : []),
   ]);
 }
 
@@ -204,7 +205,7 @@ export async function pullAllDataFromFirebase() {
   if (typeof window === 'undefined') return null;
 
   try {
-    const [tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school, work] = await Promise.all([
+    const [tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school, work, studyAbroad] = await Promise.all([
       loadDataFromFirebase('tasks'),
       loadDataFromFirebase('projects'),
       loadDataFromFirebase('calendar'),
@@ -217,9 +218,10 @@ export async function pullAllDataFromFirebase() {
       loadDataFromFirebase('life'),
       loadDataFromFirebase('school'),
       loadDataFromFirebase('work'),
+      loadDataFromFirebase('studyAbroad'),
     ]);
 
-    return { tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school, work };
+    return { tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school, work, studyAbroad };
   } catch (error) {
     console.error('Failed to pull data from Firebase:', error);
     return null;
