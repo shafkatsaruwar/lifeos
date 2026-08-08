@@ -24,15 +24,27 @@ export default function App() {
   const dark = themeMode === "system" ? systemDark : themeMode === "dark";
   const theme = dark ? DARK : LIGHT;
 
-  useEffect(
-    () =>
-      onAuthStateChanged(auth, (nextUser) => {
-        setUser(nextUser);
-        setLoading(false);
-        if (!nextUser) setWorkspace(null);
-      }),
-    [],
-  );
+  useEffect(() => {
+    let cancelled = false;
+    // Wait until AsyncStorage persistence has restored (or confirmed null)
+    // before showing SignIn — avoids a false logged-out flash on cold start.
+    void auth.authStateReady().then(() => {
+      if (cancelled) return;
+      setUser(auth.currentUser);
+      setLoading(false);
+      if (!auth.currentUser) setWorkspace(null);
+    });
+    const unsub = onAuthStateChanged(auth, (nextUser) => {
+      if (cancelled) return;
+      setUser(nextUser);
+      setLoading(false);
+      if (!nextUser) setWorkspace(null);
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
 
   const sync = useCallback(async () => {
     if (!user) return;
