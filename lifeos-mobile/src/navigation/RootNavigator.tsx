@@ -1,4 +1,4 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
+import Feather from "@expo/vector-icons/Feather";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
@@ -38,13 +38,14 @@ const CalendarStack = createNativeStackNavigator();
 const LibraryStack = createNativeStackNavigator();
 const SchoolStack = createNativeStackNavigator();
 
-const TAB_ICONS: Record<string, { idle: keyof typeof Ionicons.glyphMap; active: keyof typeof Ionicons.glyphMap }> = {
-  NowTab: { idle: "flash-outline", active: "flash" },
-  TasksTab: { idle: "checkbox-outline", active: "checkbox" },
-  CalendarTab: { idle: "calendar-outline", active: "calendar" },
-  LifeTab: { idle: "sparkles-outline", active: "sparkles" },
-  SchoolTab: { idle: "school-outline", active: "school" },
-  LibraryTab: { idle: "book-outline", active: "book" },
+/** Feather stroke icons — lighter and less boxy than filled Ionicons squares. */
+const TAB_ICONS: Record<string, keyof typeof Feather.glyphMap> = {
+  NowTab: "zap",
+  TasksTab: "check-circle",
+  CalendarTab: "calendar",
+  LifeTab: "heart",
+  SchoolTab: "award",
+  LibraryTab: "book-open",
 };
 
 function NowStackNavigator() {
@@ -179,8 +180,15 @@ export function RootNavigator() {
           tabBarActiveTintColor: theme.accent,
           tabBarInactiveTintColor: "#8E8E93",
           tabBarIcon: ({ color, focused }) => {
-            const icon = TAB_ICONS[route.name];
-            return <Ionicons name={focused ? icon.active : icon.idle} size={isTablet ? 24 : 22} color={color} />;
+            const name = TAB_ICONS[route.name];
+            return (
+              <Feather
+                name={name}
+                size={isTablet ? 23 : 21}
+                color={color}
+                style={{ opacity: focused ? 1 : 0.85 }}
+              />
+            );
           },
         })}
       >
