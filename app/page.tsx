@@ -70,7 +70,7 @@ import {
   nowIso,
   studyAbroadToCalendarEvents,
 } from "@/lib/studyAbroadHelpers";
-import { mergeSynapseCalendarEvents, parseSynapseDayPlan } from "@/lib/synapseImport";
+import { mergeSynapseCalendarEvents, parseSynapseDayPlan, type SynapseCalendarEvent } from "@/lib/synapseImport";
 import type { ParsedTask } from "@/lib/useNLTaskCreation";
 import { useTaskBreakdown } from "@/lib/useTaskBreakdown";
 import {
@@ -921,7 +921,7 @@ export default function LifeOS() {
   }, []);
   useEffect(() => {
     const importSynapseEvents = (event: Event) => {
-      const incoming = (event as CustomEvent<CalendarEvent[]>).detail;
+      const incoming = (event as CustomEvent<SynapseCalendarEvent[]>).detail;
       if (!Array.isArray(incoming)) return;
       setCalendarEvents((current) => mergeSynapseCalendarEvents(current, incoming) as CalendarEvent[]);
     };
