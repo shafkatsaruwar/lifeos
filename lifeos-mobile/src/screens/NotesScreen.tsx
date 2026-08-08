@@ -2,6 +2,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Empty, Eyebrow, Page, Subtitle, Title } from "../components/UI";
+import { LibrarySubNav } from "../components/LibrarySubNav";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { uid } from "../lib/helpers";
 
@@ -38,23 +39,7 @@ export function NotesScreen() {
         </Pressable>
       </View>
 
-      {/* Library sub-nav: Notes is this screen's default, Brain and
-          Resources are sibling stack screens reachable from here since the
-          Library tab only exposes one bottom-tab slot. */}
-      <View style={styles.subNav}>
-        <View style={[styles.subNavPill, styles.subNavPillActive, { borderColor: theme.accent, backgroundColor: theme.soft }]}>
-          <Feather name="file-text" size={13} color={theme.accent} />
-          <Text style={[styles.subNavText, { color: theme.accent }]}>Notes</Text>
-        </View>
-        <Pressable onPress={() => navigation.navigate("Brain")} style={[styles.subNavPill, { borderColor: theme.border }]}>
-          <Feather name="zap" size={13} color={theme.muted} />
-          <Text style={[styles.subNavText, { color: theme.text }]}>Brain</Text>
-        </Pressable>
-        <Pressable onPress={() => navigation.navigate("Resources")} style={[styles.subNavPill, { borderColor: theme.border }]}>
-          <Feather name="paperclip" size={13} color={theme.muted} />
-          <Text style={[styles.subNavText, { color: theme.text }]}>Resources</Text>
-        </Pressable>
-      </View>
+      <LibrarySubNav active="notes" />
 
       <FlatList
         data={sorted}
@@ -84,10 +69,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, gap: 12 },
   grow: { flex: 1 },
   addButton: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  subNav: { flexDirection: "row", gap: 8, paddingHorizontal: 20, marginTop: 14 },
-  subNavPill: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
-  subNavPillActive: { borderWidth: 1.5 },
-  subNavText: { fontSize: 12, fontWeight: "800" },
   list: { padding: 20, paddingBottom: 28, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 13 },
   iconWrap: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },

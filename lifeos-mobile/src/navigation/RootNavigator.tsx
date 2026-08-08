@@ -23,6 +23,9 @@ import { SchoolProfileScreen } from "../screens/SchoolProfileScreen";
 import { CoursesDirectoryScreen, ProjectsDirectoryScreen } from "../screens/DirectoriesScreen";
 import { NotesScreen } from "../screens/NotesScreen";
 import { NoteEditorScreen } from "../screens/NoteEditorScreen";
+import { NotebooksScreen } from "../screens/NotebooksScreen";
+import { NotebookDetailScreen } from "../screens/NotebookDetailScreen";
+import { PageCanvasScreen } from "../screens/PageCanvasScreen";
 import { BrainScreen } from "../screens/BrainScreen";
 import { ResourcesScreen } from "../screens/ResourcesScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
@@ -99,6 +102,13 @@ function CalendarStackNavigator() {
 function LibraryStackNavigator() {
   return (
     <LibraryStack.Navigator screenOptions={{ headerShown: false }}>
+      <LibraryStack.Screen name="NotebooksList" component={NotebooksScreen} />
+      <LibraryStack.Screen name="NotebookDetail" component={NotebookDetailScreen} />
+      <LibraryStack.Screen
+        name="PageCanvas"
+        component={PageCanvasScreen}
+        options={{ presentation: "fullScreenModal", animation: "slide_from_bottom" }}
+      />
       <LibraryStack.Screen name="NotesList" component={NotesScreen} />
       <LibraryStack.Screen name="NoteEditor" component={NoteEditorScreen} />
       <LibraryStack.Screen name="Brain" component={BrainScreen} />

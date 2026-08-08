@@ -63,6 +63,25 @@ export function ProjectDetailScreen() {
           </>
         ) : null}
 
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>Notebooks</Text>
+        {workspace.notebookHub.notebooks.filter((n) => n.context?.projectName === projectName).length ? (
+          workspace.notebookHub.notebooks
+            .filter((n) => n.context?.projectName === projectName)
+            .map((nb) => (
+              <Pressable
+                key={nb.id}
+                onPress={() => navigation.navigate("LibraryTab", { screen: "NotebookDetail", params: { notebookId: nb.id } })}
+                style={[styles.simpleRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              >
+                <Feather name="book" size={15} color={theme.accent} />
+                <Text style={{ color: theme.text, fontWeight: "700", flex: 1 }} numberOfLines={1}>{nb.name}</Text>
+                <Feather name="chevron-right" size={16} color={theme.muted} />
+              </Pressable>
+            ))
+        ) : (
+          <Card><Empty title="No notebooks linked." body="Create one in Library → Notebooks and link this space." /></Card>
+        )}
+
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Notes</Text>
         {notes.length ? (
           notes.map((note) => (

@@ -87,6 +87,25 @@ export function ClassDetailScreen() {
           </>
         ) : null}
 
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>Notebooks</Text>
+        {workspace.notebookHub.notebooks.filter((n) => n.context?.classId === cls.id).length ? (
+          workspace.notebookHub.notebooks
+            .filter((n) => n.context?.classId === cls.id)
+            .map((nb) => (
+              <Pressable
+                key={nb.id}
+                onPress={() => navigation.navigate("LibraryTab", { screen: "NotebookDetail", params: { notebookId: nb.id } })}
+                style={[styles.simpleRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              >
+                <Feather name="book" size={15} color={theme.accent} />
+                <Text style={{ color: theme.text, fontWeight: "700", flex: 1 }} numberOfLines={1}>{nb.name}</Text>
+                <Feather name="chevron-right" size={16} color={theme.muted} />
+              </Pressable>
+            ))
+        ) : (
+          <Card><Empty title="No class notebooks." body="Create one in Library → Notebooks and link it to this class." /></Card>
+        )}
+
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Class notes</Text>
         {classNotes.length ? (
           classNotes.map((note) => (

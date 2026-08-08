@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Empty, Eyebrow, Page, Subtitle, Title } from "../components/UI";
+import { LibrarySubNav } from "../components/LibrarySubNav";
 import { QuickCaptureModal } from "../components/QuickCaptureModal";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { uid } from "../lib/helpers";
@@ -49,20 +50,7 @@ export function BrainScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.subNav}>
-        <Pressable onPress={() => navigation.navigate("NotesList")} style={[styles.subNavPill, { borderColor: theme.border }]}>
-          <Feather name="file-text" size={13} color={theme.muted} />
-          <Text style={[styles.subNavText, { color: theme.text }]}>Notes</Text>
-        </Pressable>
-        <View style={[styles.subNavPill, { borderColor: theme.accent, backgroundColor: theme.soft, borderWidth: 1.5 }]}>
-          <Feather name="zap" size={13} color={theme.accent} />
-          <Text style={[styles.subNavText, { color: theme.accent }]}>Brain</Text>
-        </View>
-        <Pressable onPress={() => navigation.navigate("Resources")} style={[styles.subNavPill, { borderColor: theme.border }]}>
-          <Feather name="paperclip" size={13} color={theme.muted} />
-          <Text style={[styles.subNavText, { color: theme.text }]}>Resources</Text>
-        </Pressable>
-      </View>
+      <LibrarySubNav active="brain" />
 
       <FlatList
         data={workspace.brain}
@@ -95,9 +83,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, gap: 12 },
   grow: { flex: 1 },
   addButton: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  subNav: { flexDirection: "row", gap: 8, paddingHorizontal: 20, marginTop: 14 },
-  subNavPill: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
-  subNavText: { fontSize: 12, fontWeight: "800" },
   list: { padding: 20, paddingBottom: 28, gap: 10 },
   row: { borderWidth: 1, borderRadius: 14, padding: 14, gap: 10 },
   text: { fontSize: 15, lineHeight: 21 },
