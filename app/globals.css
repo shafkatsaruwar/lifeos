@@ -60,20 +60,45 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .sa-country-results button:hover,.sa-country-results button:focus{background:color-mix(in srgb,var(--accent) 10%,var(--canvas))}
 .sa-country-results strong{font-size:13px;font-weight:650}
 .sa-country-results em{font-style:normal;color:var(--muted);font-size:11px}
-.study-abroad-dashboard .sa-path-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:10px 12px 14px}
-.study-abroad-dashboard .sa-path-grid .work-project-card{margin:0;text-align:left;width:100%}
-.study-abroad-dashboard .sa-shortlist-stack{display:grid;gap:0;padding:4px 0 10px}
-.study-abroad-dashboard .sa-shortlist-stack .work-project-card{margin:8px 12px;text-align:left;width:auto}
-.study-abroad-dashboard .sa-matter-card{margin:12px;padding:20px}
-.study-abroad-dashboard .sa-matter-card>strong{margin:0!important;font-size:18px!important;color:var(--ink)}
-.study-abroad-dashboard .sa-matter-card>p{font-size:13px!important;line-height:1.55!important;max-width:52ch}
-.study-abroad-dashboard .sa-upcoming-date{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:1px;line-height:1.05}
-.study-abroad-dashboard .sa-upcoming-date em{font-style:normal;color:var(--muted);font-size:7px;font-weight:700;letter-spacing:.06em}
-.study-abroad-dashboard .sa-upcoming-date strong{font-size:14px;color:var(--ink);font-weight:750}
+.study-abroad-dashboard.os-dashboard{gap:24px;width:100%;max-width:100%}
+.study-abroad-dashboard .work-main{gap:22px}
+.study-abroad-dashboard .os-module>header{min-height:58px;padding:0 18px}
+.study-abroad-dashboard .os-module>header h2{font-size:13px;font-weight:700;letter-spacing:-.01em}
+.study-abroad-dashboard .os-module>header svg{width:18px;height:18px}
+.study-abroad-dashboard .sa-path-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:18px 18px 22px}
+.study-abroad-dashboard .sa-path-card{margin:0;text-align:left;width:100%;min-height:176px;padding:18px;display:flex;flex-direction:column;align-items:stretch;gap:0}
+.study-abroad-dashboard .sa-path-flag{width:40px;height:40px;font-size:22px;border-radius:10px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;flex-shrink:0}
+.study-abroad-dashboard .sa-path-card .work-project-head{margin-bottom:14px;gap:12px;align-items:center}
+.study-abroad-dashboard .sa-path-card .work-project-head strong{font-size:17px;letter-spacing:-.02em;line-height:1.2}
+.study-abroad-dashboard .sa-path-meta{display:grid;gap:2px;margin:0 0 14px;color:var(--muted);font-size:12px;line-height:1.45}
+.study-abroad-dashboard .sa-path-meta>p,.study-abroad-dashboard p.sa-path-meta{margin:0 0 14px;color:var(--muted);font-size:12px;line-height:1.45}
+.study-abroad-dashboard .sa-path-next{display:grid;gap:3px;margin:0 0 16px}
+.study-abroad-dashboard .sa-path-next span{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.study-abroad-dashboard .sa-path-next strong{font-size:13px;color:var(--ink);font-weight:650;line-height:1.35}
+.study-abroad-dashboard .sa-path-cta{margin-top:auto;font-size:12px;font-weight:700;color:var(--accent)}
+.study-abroad-dashboard .sa-shortlist-stack{display:grid;gap:0;padding:10px 0 16px}
+.study-abroad-dashboard .sa-shortlist-card{margin:10px 18px;padding:18px;text-align:left;width:auto}
+.study-abroad-dashboard .sa-shortlist-card .work-project-head{margin-bottom:4px}
+.study-abroad-dashboard .sa-shortlist-card .work-project-head strong{font-size:15px;letter-spacing:-.015em}
+.study-abroad-dashboard .sa-shortlist-card .work-project-head p{font-size:12px;margin-top:3px}
+.study-abroad-dashboard .sa-shortlist-meta{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(2,minmax(0,.8fr));gap:12px;margin:14px 0 12px;padding-top:14px;border-top:1px solid var(--line)}
+.study-abroad-dashboard .sa-shortlist-meta span{display:block;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px}
+.study-abroad-dashboard .sa-shortlist-meta strong{display:block;font-size:13px;font-weight:650;color:var(--ink);line-height:1.35}
+.study-abroad-dashboard .sa-matter-card{margin:16px 18px 20px;padding:28px}
+.study-abroad-dashboard .sa-matter-card>strong{margin:0!important;font-size:24px!important;letter-spacing:-.025em;color:var(--ink);line-height:1.2}
+.study-abroad-dashboard .sa-matter-card>p{font-size:14px!important;line-height:1.55!important;max-width:56ch;margin:10px 0 18px!important}
+.study-abroad-dashboard .sa-upcoming-date{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:1px;line-height:1.05;width:40px;height:40px;border-radius:10px}
+.study-abroad-dashboard .sa-upcoming-date em{font-style:normal;color:var(--muted);font-size:8px;font-weight:700;letter-spacing:.06em}
+.study-abroad-dashboard .sa-upcoming-date strong{font-size:16px;color:var(--ink);font-weight:750}
+.study-abroad-dashboard .os-module .work-deliverable-row{min-height:68px;padding:16px 18px}
+.study-abroad-dashboard .os-module .work-deliverable-row strong{font-size:13px}
+.study-abroad-dashboard .os-module .work-deliverable-row small{font-size:11px}
+.study-abroad-dashboard .sa-empty{min-height:168px;padding:44px 32px;flex-direction:column;gap:14px}
+.study-abroad-dashboard .sa-empty p{font-size:13px;line-height:1.55;max-width:400px;margin:0}
+.study-abroad-dashboard .sa-empty strong{font-size:15px;line-height:1.35}
 .study-abroad-dashboard .os-empty>div{display:grid;justify-items:center}
-.study-abroad-dashboard .os-empty strong{font-size:12px;line-height:1.35}
-@media(max-width:900px){.study-abroad-dashboard .sa-path-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:520px){.study-abroad-dashboard .sa-path-grid{grid-template-columns:1fr;padding:10px}}
+@media(max-width:900px){.study-abroad-dashboard .sa-path-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.study-abroad-dashboard .sa-shortlist-meta{grid-template-columns:1fr}}
+@media(max-width:520px){.study-abroad-dashboard .sa-path-grid{grid-template-columns:1fr;padding:14px}.study-abroad-dashboard .sa-matter-card{margin:12px 14px 16px;padding:20px}.study-abroad-dashboard .sa-matter-card>strong{font-size:18px!important}.study-abroad-dashboard .sa-empty{min-height:140px;padding:32px 20px}}
 
 .toast{position:fixed;right:24px;bottom:24px;z-index:150;display:flex;align-items:center;gap:8px;background:#252529;color:white;border:1px solid #ffffff18;border-radius:10px;padding:11px 14px;font-size:10px;box-shadow:0 14px 45px rgba(0,0,0,.22)}.table-view-label{padding:10px 18px 0;color:var(--muted);font-size:8px;text-transform:uppercase;letter-spacing:.09em}.layout-board .table-row{border-left:3px solid var(--accent);margin:8px 12px;border-radius:8px;background:var(--canvas)}.layout-calendar .table-row{background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 7%,transparent),transparent)}
 .task-actions-modal{width:min(390px,calc(100vw - 30px));background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 25px 90px rgba(0,0,0,.25);padding:18px}.task-action-list{display:grid;gap:6px;margin:18px 0 12px}.task-action-list>button{border:1px solid transparent;background:transparent;border-radius:9px;padding:10px;display:flex;align-items:center;gap:11px;text-align:left}.task-action-list>button:hover{background:var(--canvas);border-color:var(--line)}.task-action-list>button>span{flex:1}.task-action-list strong,.task-action-list small{display:block}.task-action-list strong{font-size:10px}.task-action-list small{color:var(--muted);font-size:8px;margin-top:3px}.task-action-list .danger{color:#d45f5f}.action-cancel{width:100%;height:34px;border:1px solid var(--line);background:transparent;border-radius:8px;font-size:10px}.task-row.canceled,.table-row.canceled{opacity:.5}.task-row.canceled strong,.table-row.canceled>strong{text-decoration:line-through}.task-row button:disabled,.table-row button:disabled{cursor:not-allowed}
