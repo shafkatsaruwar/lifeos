@@ -73,7 +73,7 @@ export type CalendarEvent = {
   title: string;
   start: string;
   end?: string;
-  source?: "LifeOS" | "iCal" | "Google" | "Outlook";
+  source?: "LifeOS" | "iCal" | "Google" | "Outlook" | "Synapse";
   color?: string;
   notes?: string;
 };
