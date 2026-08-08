@@ -4,18 +4,18 @@ import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "r
 import { useNavigation } from "@react-navigation/native";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { taskIsOpen } from "../lib/helpers";
+import { pageSearchBlob, pagesForNotebook } from "../lib/notebooks";
 
 type Result = {
   key: string;
-  kind: "Task" | "Project" | "Class" | "Note";
+  kind: "Task" | "Project" | "Class" | "Note" | "Notebook" | "Page";
   title: string;
   subtitle: string;
   onSelect: () => void;
 };
 
-// Mirrors web's CommandPalette: search across tasks/projects/classes/notes
-// and jump straight to the relevant screen. Triggered from a header icon on
-// mobile rather than a keyboard shortcut.
+// Search across LifeOS + notebook metadata / typed page text.
+// Handwriting OCR is only matched when recognition.status === "ready" (never faked).
 export function SearchModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { theme, workspace } = useLifeOS();
   const navigation = useNavigation<any>();
@@ -24,7 +24,6 @@ export function SearchModal({ visible, onClose }: { visible: boolean; onClose: (
   const go = (screen: string, params?: any) => {
     onClose();
     setQuery("");
-    // Navigate at the root level so this works regardless of which tab/stack is focused.
     navigation.navigate(screen, params);
   };
 
@@ -32,6 +31,7 @@ export function SearchModal({ visible, onClose }: { visible: boolean; onClose: (
     const q = query.trim().toLowerCase();
     if (!q) return [];
     const out: Result[] = [];
+
     workspace.tasks.forEach((task) => {
       if (task.title.toLowerCase().includes(q)) {
         out.push({
@@ -43,6 +43,7 @@ export function SearchModal({ visible, onClose }: { visible: boolean; onClose: (
         });
       }
     });
+
     workspace.projects.forEach((project) => {
       if (project.name.toLowerCase().includes(q)) {
         out.push({
@@ -54,6 +55,7 @@ export function SearchModal({ visible, onClose }: { visible: boolean; onClose: (
         });
       }
     });
+
     workspace.classes.forEach((cls) => {
       if (`${cls.code} ${cls.name}`.toLowerCase().includes(q)) {
         out.push({
@@ -65,24 +67,58 @@ export function SearchModal({ visible, onClose }: { visible: boolean; onClose: (
         });
       }
     });
+
     workspace.notes.forEach((note) => {
       if (`${note.title} ${note.body}`.toLowerCase().includes(q)) {
         out.push({
           key: `note-${note.id}`,
           kind: "Note",
           title: note.title || "Untitled note",
-          subtitle: note.body.slice(0, 60) || "Empty note",
+          subtitle: note.body.replace(/<[^>]+>/g, " ").slice(0, 60) || "Empty note",
           onSelect: () => go("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } }),
         });
       }
     });
-    return out.slice(0, 30);
+
+    const hub = workspace.notebookHub;
+    hub.notebooks.forEach((nb) => {
+      const folder = hub.folders.find((f) => f.id === nb.folderId);
+      const hay = `${nb.name} ${nb.context?.label ?? ""} ${folder?.name ?? ""}`.toLowerCase();
+      if (hay.includes(q)) {
+        out.push({
+          key: `notebook-${nb.id}`,
+          kind: "Notebook",
+          title: nb.name,
+          subtitle: [folder?.name, nb.context?.label, "Notebook"].filter(Boolean).join(" · "),
+          onSelect: () => go("LibraryTab", { screen: "NotebookDetail", params: { notebookId: nb.id } }),
+        });
+      }
+
+      pagesForNotebook(workspace.notebookPages, nb.id).forEach((page) => {
+        if (!pageSearchBlob(page).includes(q)) return;
+        out.push({
+          key: `page-${page.id}`,
+          kind: "Page",
+          title: page.title?.trim() || `Page ${page.index + 1}`,
+          subtitle: `${nb.name} · typed text${page.recognition?.status === "ready" ? " · recognized ink" : ""}`,
+          onSelect: () =>
+            go("LibraryTab", {
+              screen: "PageCanvas",
+              params: { notebookId: nb.id, pageId: page.id },
+            }),
+        });
+      });
+    });
+
+    return out.slice(0, 40);
   }, [query, workspace]);
 
   const iconFor = (kind: Result["kind"]): keyof typeof Feather.glyphMap => {
     if (kind === "Task") return "check-square";
     if (kind === "Project") return "folder";
     if (kind === "Class") return "book-open";
+    if (kind === "Notebook") return "book";
+    if (kind === "Page") return "file";
     return "file-text";
   };
 
@@ -99,7 +135,9 @@ export function SearchModal({ visible, onClose }: { visible: boolean; onClose: (
             placeholderTextColor={theme.muted}
             style={[styles.input, { color: theme.text }]}
           />
-          <Pressable onPress={onClose}><Text style={{ color: theme.accent, fontWeight: "800" }}>Cancel</Text></Pressable>
+          <Pressable onPress={onClose}>
+            <Text style={{ color: theme.accent, fontWeight: "800" }}>Cancel</Text>
+          </Pressable>
         </View>
         <FlatList
           data={results}
@@ -111,8 +149,12 @@ export function SearchModal({ visible, onClose }: { visible: boolean; onClose: (
                 <Feather name={iconFor(item.kind)} size={16} color={theme.accent} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: theme.text, fontWeight: "800", fontSize: 15 }} numberOfLines={1}>{item.title}</Text>
-                <Text style={{ color: theme.muted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>{item.kind} · {item.subtitle}</Text>
+                <Text style={{ color: theme.text, fontWeight: "800", fontSize: 15 }} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <Text style={{ color: theme.muted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+                  {item.kind} · {item.subtitle}
+                </Text>
               </View>
               <Feather name="arrow-right" size={16} color={theme.muted} />
             </Pressable>
@@ -121,7 +163,9 @@ export function SearchModal({ visible, onClose }: { visible: boolean; onClose: (
             query.trim() ? (
               <Text style={{ color: theme.muted, textAlign: "center", marginTop: 40 }}>No matches for “{query}”.</Text>
             ) : (
-              <Text style={{ color: theme.muted, textAlign: "center", marginTop: 40 }}>Search tasks, spaces, classes, and notes.</Text>
+              <Text style={{ color: theme.muted, textAlign: "center", marginTop: 40 }}>
+                Search tasks, notebooks, pages, typed text, spaces, and notes.
+              </Text>
             )
           }
         />
@@ -132,7 +176,16 @@ export function SearchModal({ visible, onClose }: { visible: boolean; onClose: (
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 16 },
-  searchBar: { flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: 16, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, height: 48 },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginHorizontal: 16,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    height: 48,
+  },
   input: { flex: 1, fontSize: 16 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 14 },
   iconWrap: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },

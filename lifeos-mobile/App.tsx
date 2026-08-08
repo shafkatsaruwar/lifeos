@@ -2,9 +2,10 @@ import * as WebBrowser from "expo-web-browser";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, useColorScheme } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { auth, loadWorkspace, saveWorkspacePart } from "./src/lib/firebase";
-import type { Workspace } from "./src/types";
+import { auth, deleteNotebookPageRemote, loadWorkspace, saveNotebookPage, saveWorkspacePart } from "./src/lib/firebase";
+import type { NotebookPage, Workspace } from "./src/types";
 import { LifeOSContext, type AppState } from "./src/lib/LifeOSContext";
 import { LIGHT, DARK } from "./src/lib/theme";
 import { SignIn } from "./src/components/Auth";
@@ -59,22 +60,61 @@ export default function App() {
     [user, workspace],
   );
 
+  const upsertNotebookPage = useCallback(
+    async (page: NotebookPage) => {
+      if (!user) return;
+      setWorkspace((current) =>
+        current
+          ? { ...current, notebookPages: { ...current.notebookPages, [page.id]: page } }
+          : current,
+      );
+      try {
+        await saveNotebookPage(user.uid, page);
+      } catch (error: any) {
+        Alert.alert("Could not save page", error.message);
+      }
+    },
+    [user],
+  );
+
+  const deleteNotebookPage = useCallback(
+    async (pageId: string) => {
+      if (!user) return;
+      setWorkspace((current) => {
+        if (!current) return current;
+        const next = { ...current.notebookPages };
+        delete next[pageId];
+        return { ...current, notebookPages: next };
+      });
+      try {
+        await deleteNotebookPageRemote(user.uid, pageId);
+      } catch (error: any) {
+        Alert.alert("Could not delete page", error.message);
+      }
+    },
+    [user],
+  );
+
   if (loading || (user && !workspace)) {
     return (
-      <SafeAreaProvider>
-        <SafeAreaView style={[styles.loader, { backgroundColor: theme.bg }]}>
-          <ActivityIndicator color={theme.accent} />
-          <Text style={{ color: theme.muted, marginTop: 12, fontSize: 14 }}>Opening LifeOS…</Text>
-        </SafeAreaView>
-      </SafeAreaProvider>
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaProvider>
+          <SafeAreaView style={[styles.loader, { backgroundColor: theme.bg }]}>
+            <ActivityIndicator color={theme.accent} />
+            <Text style={{ color: theme.muted, marginTop: 12, fontSize: 14 }}>Opening LifeOS…</Text>
+          </SafeAreaView>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
     );
   }
 
   if (!user) {
     return (
-      <SafeAreaProvider>
-        <SignIn />
-      </SafeAreaProvider>
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaProvider>
+          <SignIn />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
     );
   }
 
@@ -94,17 +134,23 @@ export default function App() {
     updateResources: (value) => savePart("resources", value),
     updateLife: (value) => savePart("life", value),
     updateSchool: (value) => savePart("school", value),
+    updateNotebookHub: (value) => savePart("notebookHub", value),
+    upsertNotebookPage,
+    deleteNotebookPage,
   };
 
   return (
-    <SafeAreaProvider>
-      <LifeOSContext.Provider value={state}>
-        <RootNavigator />
-      </LifeOSContext.Provider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <LifeOSContext.Provider value={state}>
+          <RootNavigator />
+        </LifeOSContext.Provider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   loader: { flex: 1, alignItems: "center", justifyContent: "center" },
 });

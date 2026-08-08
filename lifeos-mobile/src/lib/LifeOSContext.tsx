@@ -6,6 +6,8 @@ import type {
   ClassRecord,
   LifeHubState,
   Note,
+  NotebookHub,
+  NotebookPage,
   Project,
   Resource,
   SettingsState,
@@ -31,6 +33,10 @@ export type AppState = {
   updateResources: (next: Resource[]) => Promise<void>;
   updateLife: (next: LifeHubState) => Promise<void>;
   updateSchool: (next: SchoolHubState) => Promise<void>;
+  updateNotebookHub: (next: NotebookHub) => Promise<void>;
+  /** Optimistic local merge + single-page RTDB write */
+  upsertNotebookPage: (page: NotebookPage) => Promise<void>;
+  deleteNotebookPage: (pageId: string) => Promise<void>;
 };
 
 export const LifeOSContext = createContext<AppState | null>(null);

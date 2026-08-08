@@ -80,6 +80,34 @@ export type CalendarEvent = {
 
 export type NoteTemplate = "blank" | "lined" | "dotted" | "cornell" | "meeting";
 
+/** Legacy freehand stroke (Skia v1). Kept so old notes don't break types. */
+export type InkPoint = { x: number; y: number; t?: number };
+
+export type InkStroke = {
+  id: string;
+  color: string;
+  width: number;
+  tool: "pen" | "highlighter" | "eraser";
+  points: InkPoint[];
+};
+
+/**
+ * Handwriting payload. v2 uses Apple PencilKit (`PKDrawing` base64) via the
+ * system tool picker. Legacy v1 stored polyline `strokes` from a custom canvas.
+ */
+export type NoteInk = {
+  version?: 1 | 2;
+  format?: "pencilkit";
+  /** Base64-encoded PKDrawing (PencilKit) */
+  data?: string;
+  /** Alias used by some PencilKit bridges */
+  pencilKitData?: string;
+  /** Legacy Skia strokes */
+  strokes?: InkStroke[];
+  height?: number;
+  updatedAt?: number;
+};
+
 export type Note = {
   id: string;
   title: string;
@@ -87,6 +115,8 @@ export type Note = {
   projectName?: string;
   classId?: string;
   template?: NoteTemplate;
+  /** Handwriting layer (mobile). Preserved by web if present. */
+  ink?: NoteInk;
   updatedAt: string;
 };
 
@@ -185,6 +215,116 @@ export type SettingsState = {
   spaceContext?: Record<string, { lastTaskId?: number; lastFilter?: string; updatedAt?: string }>;
 };
 
+/** Digital paper style for notebook pages (PencilKit draws on top). */
+export type PaperStyle = "blank" | "ruled" | "narrowRuled" | "grid" | "dotted" | "cornell";
+
+/** Optional LifeOS context — notebooks can also stay personal/unfiled. */
+export type NotebookContextLink = {
+  type: "class" | "project" | "personal";
+  classId?: string;
+  projectName?: string;
+  label?: string;
+};
+
+export type NotebookFolder = {
+  id: string;
+  name: string;
+  color?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Notebook = {
+  id: string;
+  name: string;
+  folderId?: string;
+  color?: string;
+  cover?: "solid" | "linen" | "slate";
+  context?: NotebookContextLink;
+  pageCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Typed text box on a page (overlay above PencilKit). */
+export type PageTextElement = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text: string;
+  fontSize: number;
+  bold?: boolean;
+  italic?: boolean;
+  /** Simple list marker — not a full word processor */
+  list?: "none" | "bullet" | "number";
+  opacity?: number;
+};
+
+/** Image on a page (overlay above PencilKit). */
+export type PageImageElement = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  uri: string;
+  /** local | cloud — cloud reserved for Storage upload later */
+  storage?: "local" | "cloud";
+  opacity?: number;
+};
+
+/**
+ * Future: indexed text from handwriting recognition (Vision / PKDrawing).
+ * Do not invent OCR results — only populate when a real recognizer runs.
+ */
+export type PageRecognitionIndex = {
+  status: "idle" | "pending" | "ready" | "unavailable";
+  /** Plain text extracted from ink, if any */
+  transcript?: string;
+  updatedAt?: string;
+  engine?: "apple-vision" | "none";
+};
+
+/**
+ * One sheet in a notebook. Ink is PencilKit PKDrawing (editable), not a flat image.
+ * Stored at users/{uid}/notebookPages/{pageId} so stroke saves don't rewrite the library.
+ */
+export type NotebookPage = {
+  id: string;
+  notebookId: string;
+  index: number;
+  title?: string;
+  paper: PaperStyle;
+  ink?: NoteInk;
+  textElements?: PageTextElement[];
+  imageElements?: PageImageElement[];
+  /**
+   * PDF page backing (Phase 6 architecture).
+   * When set, the page is an annotation layer over an imported PDF page.
+   * Do not fake PDF rendering until a real PDF pipeline exists.
+   */
+  pdfRef?: {
+    storagePath: string;
+    pageIndex: number;
+    pageCount?: number;
+    fileName?: string;
+  };
+  /** Handwriting recognition index — empty until a real engine is wired */
+  recognition?: PageRecognitionIndex;
+  updatedAt: string;
+};
+
+/** Canvas interaction mode for PageCanvasScreen */
+export type PageCanvasMode = "ink" | "text" | "image" | "select";
+
+/** Folders + notebook metadata (pages live separately). */
+export type NotebookHub = {
+  folders: NotebookFolder[];
+  notebooks: Notebook[];
+};
+
 export type Workspace = {
   tasks: Task[];
   projects: Project[];
@@ -196,4 +336,11 @@ export type Workspace = {
   resources: Resource[];
   life: LifeHubState;
   school: SchoolHubState;
+  /** Notebook library metadata */
+  notebookHub: NotebookHub;
+  /**
+   * Page documents keyed by page id. Synced as a map in RTDB
+   * (users/{uid}/notebookPages/{pageId}) for per-page writes.
+   */
+  notebookPages: Record<string, NotebookPage>;
 };

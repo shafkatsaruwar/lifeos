@@ -7,8 +7,9 @@ import {
   initializeAuth,
   type Auth,
 } from "firebase/auth";
-import { get, getDatabase, ref, set } from "firebase/database";
-import type { Workspace } from "../types";
+import { get, getDatabase, ref, remove, set } from "firebase/database";
+import type { NotebookHub, NotebookPage, Workspace } from "../types";
+import { emptyNotebookHub } from "./notebooks";
 
 /**
  * Public Firebase web client config (same project as lifeos-mu-three.vercel.app).
@@ -91,7 +92,34 @@ export const emptyWorkspace: Workspace = {
     professors: [],
     goals: [],
   },
+  notebookHub: emptyNotebookHub(),
+  notebookPages: {},
 };
+
+function normalizeNotebookHub(value: unknown): NotebookHub {
+  const hub = (value && typeof value === "object" ? value : {}) as Partial<NotebookHub>;
+  return {
+    folders: Array.isArray(hub.folders) ? hub.folders : [],
+    notebooks: Array.isArray(hub.notebooks) ? hub.notebooks : [],
+  };
+}
+
+function normalizeNotebookPages(value: unknown): Record<string, NotebookPage> {
+  if (!value || typeof value !== "object") return {};
+  // Legacy: if someone stored an array, re-key by id
+  if (Array.isArray(value)) {
+    const map: Record<string, NotebookPage> = {};
+    for (const page of value) {
+      if (page?.id) map[page.id] = page;
+    }
+    return map;
+  }
+  const map: Record<string, NotebookPage> = {};
+  for (const [id, page] of Object.entries(value as Record<string, NotebookPage>)) {
+    if (page && typeof page === "object") map[id] = { ...page, id: page.id || id };
+  }
+  return map;
+}
 
 export async function loadWorkspace(userId: string): Promise<Workspace> {
   const keys = Object.keys(emptyWorkspace) as (keyof Workspace)[];
@@ -113,6 +141,8 @@ export async function loadWorkspace(userId: string): Promise<Workspace> {
       ...loaded.school,
       profile: { ...emptyWorkspace.school.profile, ...loaded.school?.profile },
     },
+    notebookHub: normalizeNotebookHub(loaded.notebookHub),
+    notebookPages: normalizeNotebookPages(loaded.notebookPages),
   };
 }
 
@@ -123,4 +153,14 @@ export async function saveWorkspacePart<K extends keyof Workspace>(
 ) {
   const serializable = JSON.parse(JSON.stringify(value)) as Workspace[K];
   await set(ref(database, `users/${userId}/${key}`), serializable);
+}
+
+/** Per-page write so stroke autosave does not rewrite the whole library. */
+export async function saveNotebookPage(userId: string, page: NotebookPage) {
+  const serializable = JSON.parse(JSON.stringify(page)) as NotebookPage;
+  await set(ref(database, `users/${userId}/notebookPages/${page.id}`), serializable);
+}
+
+export async function deleteNotebookPageRemote(userId: string, pageId: string) {
+  await remove(ref(database, `users/${userId}/notebookPages/${pageId}`));
 }
