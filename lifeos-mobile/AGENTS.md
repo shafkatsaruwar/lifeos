@@ -19,3 +19,7 @@ Read versioned docs: https://docs.expo.dev/versions/v54.0.0/
   - PencilKit **requires a native iOS build**, not Expo Go.
 - Legacy single-note Draw mode still on `NoteEditorScreen` / `note.ink`.
 - **EAS builds:** always run from `lifeos-mobile/` on latest `main`. Do not “Rebuild” a failed job (reuses old commit). After install, `eas-build-post-install` ensures `expo` is present so prebuild does not fetch Expo 57 via `npx`.
+
+## Cursor Cloud specific instructions
+
+- When giving the user Mac terminal commands, assume their shell is already in **`lifeos-mobile/`**. Do not prefix with `cd lifeos-mobile` unless they are clearly at the repo root. For git ops that need the monorepo root, say so explicitly (e.g. `cd ..` then the command).
