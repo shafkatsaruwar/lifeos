@@ -3,7 +3,7 @@ import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useState } from "react";
-import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, useColorScheme, View } from "react-native";
+import { Alert, Image, Modal, Pressable, StyleSheet, Text, TextInput, useColorScheme, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GoogleAuthProvider, signInWithCredential } from "firebase/auth";
 import { auth, firebaseConfigured } from "../lib/firebase";
@@ -98,9 +98,7 @@ export function SignIn() {
     <SafeAreaView style={[styles.signIn, { backgroundColor: "#111115" }]}>
       <StatusBar style="light" />
       <View style={styles.signInInner}>
-        <View style={[styles.logo, { backgroundColor: "#6D5DFB" }]}>
-          <Feather name="activity" size={26} color="#FFF" />
-        </View>
+        <Image source={require("../../assets/icon.png")} style={styles.logo} accessibilityLabel="LifeOS" />
         <Text style={styles.signInTitle}>LifeOS</Text>
         <Text style={styles.signInCopy}>Your life, in focus. Native iPhone & iPad app — same private cloud data as the web.</Text>
         {firebaseConfigured && googleConfigured ? (
@@ -156,7 +154,7 @@ export function OnboardingName() {
 const styles = StyleSheet.create({
   signIn: { flex: 1 },
   signInInner: { flex: 1, justifyContent: "center", padding: 28, gap: 14, width: "100%", maxWidth: 480, alignSelf: "center" },
-  logo: { width: 56, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  logo: { width: 56, height: 56, borderRadius: 16, marginBottom: 8 },
   signInTitle: { color: "#FFF", fontSize: 40, fontWeight: "800", letterSpacing: -1 },
   signInCopy: { color: "#A1A1AA", fontSize: 16, lineHeight: 24, marginBottom: 12, maxWidth: 320 },
   signInButton: { height: 52, borderRadius: 14, backgroundColor: "#6D5DFB", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
