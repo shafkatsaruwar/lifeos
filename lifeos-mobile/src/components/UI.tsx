@@ -4,14 +4,22 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { useLayout } from "../lib/layout";
 
-export function Page({ children, edges = ["top"] as ("top" | "bottom" | "left" | "right")[] }: { children: React.ReactNode; edges?: ("top" | "bottom" | "left" | "right")[] }) {
+export function Page({
+  children,
+  edges = ["top"] as ("top" | "bottom" | "left" | "right")[],
+  /** Skip the iPad reading-width cap — used by the notebook writing surface. */
+  fullBleed = false,
+}: {
+  children: React.ReactNode;
+  edges?: ("top" | "bottom" | "left" | "right")[];
+  fullBleed?: boolean;
+}) {
   const { theme } = useLifeOS();
   const { contentMaxWidth } = useLayout();
+  const capped = !fullBleed && contentMaxWidth ? { maxWidth: contentMaxWidth, width: "100%" as const, alignSelf: "center" as const } : null;
   return (
     <SafeAreaView style={[styles.page, { backgroundColor: theme.bg }]} edges={edges}>
-      <View style={[styles.pageInner, contentMaxWidth ? { maxWidth: contentMaxWidth, width: "100%", alignSelf: "center" } : null]}>
-        {children}
-      </View>
+      <View style={[styles.pageInner, capped]}>{children}</View>
     </SafeAreaView>
   );
 }
