@@ -2831,7 +2831,7 @@ function Dashboard({ tasks, projects, classes, brainCount, user, onComplete, onF
           const startTime = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
           const endTime = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
           return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong><span>{event.notes || (event.source === "LifeOS" ? "Focus block" : event.source)}</span></div></div>;
-        }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p></div>}
+        }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p><p style={{ marginTop: 6 }}>Share a day plan from Synapse → Settings → LifeOS to see meds and appointments here.</p></div>}
       </section>
       <DashboardGmailCard user={user} onSettings={() => onGo("Settings")} />
       <section className="card projects-card">
