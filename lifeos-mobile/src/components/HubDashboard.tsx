@@ -56,9 +56,7 @@ export function QuickAction({
         { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.65 : 1 },
       ]}
     >
-      <View style={[styles.quickIcon, { backgroundColor: `${tint}1C` }]}>
-        <Feather name={icon} size={17} color={tint} />
-      </View>
+      <Feather name={icon} size={22} color={tint} />
       <Text
         style={[styles.quickLabel, { color: theme.text }]}
         numberOfLines={2}
@@ -94,8 +92,8 @@ export function DashboardRow({
       onPress={onPress}
       style={({ pressed }) => [styles.dataRow, { opacity: pressed ? 0.65 : 1 }]}
     >
-      <View style={[styles.dataIcon, { backgroundColor: `${tint}18` }]}>
-        <Feather name={icon} size={15} color={tint} />
+      <View style={styles.dataIcon}>
+        <Feather name={icon} size={20} color={tint} />
       </View>
       <View style={styles.grow}>
         <Text style={[styles.dataTitle, { color: theme.text }]} numberOfLines={1}>{title}</Text>
@@ -140,10 +138,9 @@ const styles = StyleSheet.create({
   bandActionText: { fontSize: 12, fontWeight: "800" },
   moduleBody: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   quickAction: { width: 82, minHeight: 80, borderWidth: 1, borderRadius: 8, padding: 9, justifyContent: "space-between", gap: 7 },
-  quickIcon: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   quickLabel: { minHeight: 28, fontSize: 11, lineHeight: 14, fontWeight: "800" },
   dataRow: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7 },
-  dataIcon: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  dataIcon: { width: 24, alignItems: "center", justifyContent: "center" },
   grow: { flex: 1, minWidth: 0 },
   dataTitle: { fontSize: 13, fontWeight: "800" },
   dataMeta: { fontSize: 11, marginTop: 2 },
