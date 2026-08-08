@@ -27,7 +27,7 @@ export function ClassDetailScreen() {
   const color = cls.color || theme.accent;
 
   return (
-    <Page edges={["bottom"]}>
+    <Page edges={["top", "bottom"]}>
       <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
         <Feather name="chevron-left" size={22} color={theme.text} />
         <Text style={{ color: theme.text, fontWeight: "700" }}>Courses</Text>
