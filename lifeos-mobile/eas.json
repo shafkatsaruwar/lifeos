@@ -1,6 +1,17 @@
 {
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
   "build": {
+    "base": {
+      "node": "20.19.4",
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+      }
+    },
     "development": {
+      "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
@@ -8,6 +19,7 @@
       }
     },
     "development-device": {
+      "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
@@ -15,8 +27,12 @@
       }
     },
     "preview": {
+      "extends": "base",
       "distribution": "internal"
     },
-    "production": {}
+    "production": {
+      "extends": "base",
+      "autoIncrement": true
+    }
   }
 }
