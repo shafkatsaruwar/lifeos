@@ -1,6 +1,6 @@
 /**
  * Expo app config. Merges app.json and ensures expo-updates is plugged in.
- * Project ID / updates URL live in app.json (extra.eas.projectId + updates.url).
+ * EAS_PROJECT_ID comes from EAS environment variables (or local .env) at build time.
  */
 const appJson = require("./app.json");
 
