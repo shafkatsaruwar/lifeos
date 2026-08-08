@@ -7,6 +7,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { auth, deleteNotebookPageRemote, loadWorkspace, saveNotebookPage, saveWorkspacePart } from "./src/lib/firebase";
 import type { NotebookPage, Workspace } from "./src/types";
 import { LifeOSContext, type AppState } from "./src/lib/LifeOSContext";
+import { applyOtaUpdateIfAvailable } from "./src/lib/ota";
 import { resolveTheme } from "./src/lib/theme";
 import { SignIn } from "./src/components/Auth";
 import { RootNavigator } from "./src/navigation/RootNavigator";
@@ -23,6 +24,10 @@ export default function App() {
   const themeMode = workspace?.settings.themeMode ?? "system";
   const dark = themeMode === "system" ? systemDark : themeMode === "dark";
   const theme = resolveTheme(dark, workspace?.settings.accent);
+
+  useEffect(() => {
+    void applyOtaUpdateIfAvailable();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

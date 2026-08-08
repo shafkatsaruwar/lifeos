@@ -93,6 +93,8 @@ JS/UI changes after that: merge to `main` → wait for **EAS Update (OTA)** work
 
 Native changes (new native module, plugin, SDK bump) still need a full EAS build.
 
+**Simulator vs TestFlight:** `npx expo start` on your Mac is Metro — live local files. TestFlight is a store binary + OTA channel. They will not match until the change is on `main`, the OTA Action is green, and the TestFlight app has relaunched (or you install a new build).
+
 ## Legacy WebView shell
 
 Phase 1 WebView entry is parked at `App.webview.tsx` if you ever need it.
