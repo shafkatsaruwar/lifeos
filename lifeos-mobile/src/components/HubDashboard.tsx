@@ -56,7 +56,7 @@ export function QuickAction({
         { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.65 : 1 },
       ]}
     >
-      <Feather name={icon} size={22} color={tint} />
+      <Feather name={icon} size={20} color={tint} />
       <Text
         style={[styles.quickLabel, { color: theme.text }]}
         numberOfLines={2}
@@ -137,10 +137,19 @@ const styles = StyleSheet.create({
   bandAction: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 2, marginRight: -6, paddingHorizontal: 6 },
   bandActionText: { fontSize: 12, fontWeight: "800" },
   moduleBody: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  quickAction: { width: 82, minHeight: 80, borderWidth: 1, borderRadius: 8, padding: 9, justifyContent: "space-between", gap: 7 },
-  quickLabel: { minHeight: 28, fontSize: 11, lineHeight: 14, fontWeight: "800" },
-  dataRow: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7 },
-  dataIcon: { width: 24, alignItems: "center", justifyContent: "center" },
+  quickAction: {
+    width: 72,
+    minHeight: 64,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    justifyContent: "flex-start",
+    gap: 6,
+  },
+  quickLabel: { fontSize: 11, lineHeight: 14, fontWeight: "800" },
+  dataRow: { minHeight: 50, flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 5 },
+  dataIcon: { width: 22, alignItems: "center", justifyContent: "center" },
   grow: { flex: 1, minWidth: 0 },
   dataTitle: { fontSize: 13, fontWeight: "800" },
   dataMeta: { fontSize: 11, marginTop: 2 },
