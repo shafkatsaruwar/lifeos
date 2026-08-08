@@ -44,7 +44,7 @@ export const CalendarEventSchema = z.object({
   title: z.string(),
   start: z.string(), // ISO datetime
   end: z.string().optional(),
-  source: z.enum(['LifeOS', 'iCal', 'Google', 'Outlook', 'Work']),
+  source: z.enum(['LifeOS', 'iCal', 'Google', 'Outlook', 'Work', 'Synapse']),
   color: z.string(),
   notes: z.string().optional(),
   location: z.string().optional(),

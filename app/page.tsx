@@ -70,6 +70,7 @@ import {
   nowIso,
   studyAbroadToCalendarEvents,
 } from "@/lib/studyAbroadHelpers";
+import { mergeSynapseCalendarEvents, parseSynapseDayPlan } from "@/lib/synapseImport";
 import type { ParsedTask } from "@/lib/useNLTaskCreation";
 import { useTaskBreakdown } from "@/lib/useTaskBreakdown";
 import {
@@ -94,7 +95,7 @@ type SpaceKind = "class" | "project" | "maintenance";
 type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban" | "BriefcaseBusiness" | "Camera" | "Code2" | "HeartPulse" | "Utensils" | "BookOpen";
 type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string; classId?: string; projectName?: string; storagePath?: string; storage?: "cloud" | "local" };
 type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind };
-type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work"; color: string; notes?: string; location?: string };
+type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work" | "Synapse"; color: string; notes?: string; location?: string };
 type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterStart?: string; semesterEnd?: string; archived?: boolean };
 type Note = { id: string; title: string; body: string; classId?: string; projectName?: string; template?: "blank" | "lined" | "dotted" | "cornell" | "meeting"; /** Handwriting from mobile (Apple PencilKit PKDrawing base64, or legacy strokes); preserved on web updates */ ink?: { version?: 1 | 2; format?: "pencilkit"; data?: string; pencilKitData?: string; strokes?: Array<{ id: string; color: string; width: number; tool: "pen" | "highlighter" | "eraser"; points: Array<{ x: number; y: number; t?: number }> }>; height?: number; updatedAt?: number }; updatedAt: string };
 type AmbientActivity = { title: string; startedAt: string; note?: string; spaceName?: string; spaceColor?: string };
@@ -917,6 +918,15 @@ export default function LifeOS() {
     };
     window.addEventListener("lifeos:google-calendar-events", importGoogleEvents);
     return () => window.removeEventListener("lifeos:google-calendar-events", importGoogleEvents);
+  }, []);
+  useEffect(() => {
+    const importSynapseEvents = (event: Event) => {
+      const incoming = (event as CustomEvent<CalendarEvent[]>).detail;
+      if (!Array.isArray(incoming)) return;
+      setCalendarEvents((current) => mergeSynapseCalendarEvents(current, incoming) as CalendarEvent[]);
+    };
+    window.addEventListener("lifeos:synapse-calendar-events", importSynapseEvents);
+    return () => window.removeEventListener("lifeos:synapse-calendar-events", importSynapseEvents);
   }, []);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -2101,6 +2111,7 @@ export default function LifeOS() {
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} />}
             {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} onLogout={handleLogout} />}
             {view === "Settings" && <CalendarConnections user={user} flash={flash} />}
+            {view === "Settings" && <SynapseDayPlanImport flash={flash} />}
             {!["Life", "School", "Work", "Study Abroad", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
         </AnimatePresence>
@@ -3534,6 +3545,58 @@ function CalendarConnections({ user, flash }: { user?: any; flash: (message: str
     { id: "google" as const, number: "2", name: "Google", detail: "Google Calendar" },
   ];
   return <section className="card settings-card calendar-hub"><div className="card-head"><div><span className="section-icon violet"><CalendarDays size={14} /></span><h2>Calendar connections</h2></div><span className="calendar-hub-note">Read-only imports</span></div><div className="calendar-auto-refresh"><span><CheckCircle2 size={14} /> Automatic refresh is on</span><small>Connected calendars update every 5 minutes while LifeOS is open.</small></div><div className="calendar-provider-tabs" role="tablist" aria-label="Calendar providers">{choices.map(choice => <button key={choice.id} role="tab" aria-selected={provider === choice.id} className={provider === choice.id ? "selected" : ""} onClick={() => setProvider(choice.id)}><b>{choice.number}</b><span>{choice.name}<small>{choice.detail}</small></span></button>)}</div><div className="calendar-provider-content">{provider === "apple" && <ICloudCalendarIntegration user={user} flash={flash} />}{provider === "google" && <GoogleCalendarIntegration user={user} flash={flash} />}</div></section>;
+}
+
+function SynapseDayPlanImport({ flash }: { flash: (message: string) => void }) {
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const importPlan = () => {
+    try {
+      setBusy(true);
+      setError("");
+      const events = parseSynapseDayPlan(text);
+      if (!events.length) throw new Error("No Synapse events found in that paste.");
+      window.dispatchEvent(new CustomEvent("lifeos:synapse-calendar-events", { detail: events }));
+      setText("");
+      flash(`${events.length} Synapse event${events.length === 1 ? "" : "s"} imported into your calendar`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not import Synapse day plan.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="card settings-card">
+      <div className="card-head">
+        <div>
+          <span className="section-icon blue"><HeartPulse size={14} /></span>
+          <h2>Synapse health day plan</h2>
+        </div>
+      </div>
+      <div className="settings-body">
+        <div className="integration-empty">
+          <strong>See upcoming meds and appointments beside your LifeOS day.</strong>
+          <p>In Synapse → Settings → LifeOS, tap Share day plan. Then paste the JSON here. Each import replaces earlier Synapse events so the plan stays current.</p>
+        </div>
+        <label htmlFor="synapse-day-plan">Synapse day-plan JSON</label>
+        <textarea
+          id="synapse-day-plan"
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          placeholder='{"v":1,"events":[...]}'
+          rows={5}
+        />
+        <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+          <button className="primary" type="button" disabled={busy || !text.trim()} onClick={importPlan}>
+            {busy ? "Importing…" : "Import Synapse plan"}
+          </button>
+        </div>
+        {error ? <p className="gmail-error" role="alert">{error}</p> : null}
+        <p className="settings-note">Read-only planning view. Log doses and change appointments in Synapse.</p>
+      </div>
+    </section>
+  );
 }
 
 function GoogleCalendarIntegration({ user, flash }: { user?: any; flash: (message: string) => void }) {

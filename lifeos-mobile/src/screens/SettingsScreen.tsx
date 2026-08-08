@@ -1,20 +1,46 @@
 import Feather from "@expo/vector-icons/Feather";
 import * as WebBrowser from "expo-web-browser";
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { signOut } from "firebase/auth";
 import { ActionButton, Card, Eyebrow, Page, SegmentedControl, Title } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { API_BASE } from "../lib/api";
 import { auth } from "../lib/firebase";
+import { mergeSynapseCalendarEvents, parseSynapseDayPlan } from "../lib/synapseImport";
 import { SPACE_COLORS } from "../lib/theme";
 import type { EnergyLevel, ThemeMode } from "../types";
 
 export function SettingsScreen() {
-  const { user, workspace, theme, dark, updateSettings, sync } = useLifeOS();
+  const { user, workspace, theme, dark, updateSettings, updateCalendar, sync } = useLifeOS();
   const [name, setName] = useState(workspace.settings.preferredName ?? "");
+  const [synapsePaste, setSynapsePaste] = useState("");
+  const [synapseBusy, setSynapseBusy] = useState(false);
   const themeMode = workspace.settings.themeMode ?? "system";
   const accent = workspace.settings.accent?.trim() || theme.accent;
+  const synapseEventCount = workspace.calendar.filter((event) => event.id.startsWith("synapse-")).length;
+
+  const importSynapsePlan = () => {
+    setSynapseBusy(true);
+    try {
+      const events = parseSynapseDayPlan(synapsePaste);
+      if (!events.length) {
+        Alert.alert("Synapse", "No Synapse events found in that paste.");
+        return;
+      }
+      const merged = mergeSynapseCalendarEvents(workspace.calendar, events);
+      void updateCalendar(merged as typeof workspace.calendar);
+      setSynapsePaste("");
+      Alert.alert(
+        "Imported",
+        `${events.length} Synapse event${events.length === 1 ? "" : "s"} added. Previous Synapse events were replaced.`,
+      );
+    } catch (error) {
+      Alert.alert("Synapse import", error instanceof Error ? error.message : "Could not import day plan.");
+    } finally {
+      setSynapseBusy(false);
+    }
+  };
   const accentOptions = useMemo(() => {
     const normalized = accent.toLowerCase();
     if (SPACE_COLORS.some((color) => color.toLowerCase() === normalized)) return [...SPACE_COLORS];
@@ -166,6 +192,49 @@ export function SettingsScreen() {
               value={Boolean(workspace.settings.weekStartsMonday)}
               onValueChange={(v) => patchSettings({ weekStartsMonday: v })}
               trackColor={{ true: theme.accent }}
+            />
+          </View>
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
+              <Feather name="heart" size={14} color={theme.accent} />
+            </View>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Synapse</Text>
+          </View>
+          <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 18 }}>
+            Import upcoming medications and appointments from Synapse so they show on Today&apos;s schedule. Re-import replaces earlier Synapse events.
+          </Text>
+          <Text style={{ color: theme.muted, fontSize: 12, marginTop: 8 }}>
+            {synapseEventCount
+              ? `${synapseEventCount} Synapse event${synapseEventCount === 1 ? "" : "s"} on your calendar`
+              : "No Synapse events yet"}
+          </Text>
+          <TextInput
+            value={synapsePaste}
+            onChangeText={setSynapsePaste}
+            placeholder='Paste Synapse day-plan JSON {"v":1,"events":[...]}'
+            placeholderTextColor={theme.muted}
+            multiline
+            style={[
+              styles.input,
+              {
+                color: theme.text,
+                borderColor: theme.border,
+                marginTop: 12,
+                minHeight: 96,
+                paddingTop: 10,
+                textAlignVertical: "top",
+              },
+            ]}
+          />
+          <View style={[styles.row, { marginTop: 12 }]}>
+            <ActionButton
+              label={synapseBusy ? "Importing…" : "Import Synapse plan"}
+              icon="download"
+              quiet
+              onPress={importSynapsePlan}
             />
           </View>
         </Card>

@@ -11,6 +11,7 @@ import { LifeOSContext, type AppState } from "./src/lib/LifeOSContext";
 import { applyOtaUpdateIfAvailable } from "./src/lib/ota";
 import { resolveTheme } from "./src/lib/theme";
 import { SignIn } from "./src/components/Auth";
+import { SynapseImportBridge } from "./src/components/SynapseImportBridge";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 
 // Required once at module load so the OAuth redirect from Google's web
@@ -277,6 +278,7 @@ export default function App() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <LifeOSContext.Provider value={state}>
+          <SynapseImportBridge />
           <RootNavigator />
         </LifeOSContext.Provider>
       </SafeAreaProvider>
