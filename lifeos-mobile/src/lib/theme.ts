@@ -5,6 +5,29 @@
 // border=line, accent=accent). "soft" and "danger" are mobile-only convenience tokens
 // not present as CSS vars on web; soft is derived from the accent tint used for
 // .section-icon.violet backgrounds, danger matches the web's error/danger red family.
+
+/** Same swatches as web Settings → Appearance (spaces / accent picker). */
+export const SPACE_COLORS = [
+  "#625af6",
+  "#4b8bdc",
+  "#47a47b",
+  "#d99b38",
+  "#e48b6b",
+  "#cf625a",
+  "#8b5cf6",
+  "#06b6d4",
+  "#0d9488",
+  "#65a30d",
+  "#db2777",
+  "#e11d48",
+  "#4338ca",
+  "#0ea5e9",
+  "#f59e0b",
+  "#ea580c",
+  "#c026d3",
+  "#64748b",
+] as const;
+
 export const LIGHT = {
   bg: "#F6F7F9",
   surface: "#FFFFFF",
@@ -36,6 +59,18 @@ export const DARK = {
 };
 
 export type Theme = typeof LIGHT;
+
+/** Apply the user's saved accent (shared with web) onto the base light/dark palette. */
+export function resolveTheme(dark: boolean, accent?: string): Theme {
+  const base = dark ? DARK : LIGHT;
+  const next = accent?.trim();
+  if (!next) return base;
+  return {
+    ...base,
+    accent: next,
+    soft: dark ? "#26243A" : `${next}18`,
+  };
+}
 
 // Web's section-icon accent families (used for dashboard card icon chips, badges, etc).
 export const ACCENTS = {
