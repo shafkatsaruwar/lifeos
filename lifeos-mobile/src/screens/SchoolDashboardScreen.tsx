@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 29, fontWeight: "800", marginTop: 2 },
   subtitle: { fontSize: 13, marginTop: 2 },
   profileButton: { width: 44, height: 44, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  quickRow: { gap: 9, paddingRight: 16 },
+  quickRow: { gap: 7, paddingRight: 16 },
   courseRow: { gap: 10, paddingVertical: 8, paddingRight: 12 },
   courseCard: { width: 152, minHeight: 146, borderWidth: 1, borderRadius: 8, padding: 12 },
   courseIcon: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center" },

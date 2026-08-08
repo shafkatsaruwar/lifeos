@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 29, fontWeight: "800", marginTop: 2 },
   greeting: { fontSize: 13, marginTop: 2 },
   nowButton: { width: 44, height: 44, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  quickRow: { gap: 9, paddingRight: 16 },
+  quickRow: { gap: 7, paddingRight: 16 },
   rowAction: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -10 },
   habitSummary: { flexDirection: "row", alignItems: "baseline", gap: 6, paddingVertical: 8 },
   habitCount: { fontSize: 22, fontWeight: "800", fontVariant: ["tabular-nums"] },
