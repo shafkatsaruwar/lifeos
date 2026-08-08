@@ -2,8 +2,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import {
   getAuth,
-  // @ts-expect-error -- RN-only export; present when Metro resolves the RN auth build
-  getReactNativePersistence,
   initializeAuth,
   type Auth,
 } from "firebase/auth";
@@ -37,14 +35,34 @@ function createApp(): FirebaseApp {
 
 const app = createApp();
 
+/**
+ * Load getReactNativePersistence from the RN build of @firebase/auth.
+ *
+ * `firebase/auth` often resolves to the browser/node build under Metro, where
+ * getReactNativePersistence is missing — then Auth falls back to memory and
+ * users are asked to sign in again after every app restart.
+ */
+function loadReactNativePersistence() {
+  // Deep RN entry — metro.config.js also aliases @firebase/auth → this file.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const rnAuth = require("@firebase/auth/dist/rn/index.js") as {
+    getReactNativePersistence?: (storage: typeof AsyncStorage) => Parameters<typeof initializeAuth>[1] extends {
+      persistence?: infer P;
+    }
+      ? P
+      : never;
+  };
+  if (typeof rnAuth.getReactNativePersistence !== "function") {
+    throw new Error(
+      "Firebase Auth RN persistence unavailable. Check metro.config.js aliases @firebase/auth → dist/rn.",
+    );
+  }
+  return rnAuth.getReactNativePersistence;
+}
+
 function createAuth(firebaseApp: FirebaseApp): Auth {
   try {
-    if (typeof getReactNativePersistence !== "function") {
-      console.warn(
-        "Firebase Auth: getReactNativePersistence unavailable. Check metro.config.js (unstable_enablePackageExports = false) and restart with -c.",
-      );
-      return getAuth(firebaseApp);
-    }
+    const getReactNativePersistence = loadReactNativePersistence();
     return initializeAuth(firebaseApp, {
       persistence: getReactNativePersistence(AsyncStorage),
     });
@@ -53,8 +71,8 @@ function createAuth(firebaseApp: FirebaseApp): Auth {
     if (error?.code === "auth/already-initialized") {
       return getAuth(firebaseApp);
     }
-    console.warn("Firebase Auth persistence init failed; falling back to getAuth.", error?.message || error);
-    return getAuth(firebaseApp);
+    // Re-throw other failures — silent getAuth() fallback would drop persistence.
+    throw error;
   }
 }
 
