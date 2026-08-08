@@ -1,16 +1,31 @@
 import Feather from "@expo/vector-icons/Feather";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { ActionButton, Card, Page, SegmentedControl } from "../components/UI";
 import { FocusModal } from "../components/FocusModal";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { PRIORITY_COLOR } from "../lib/theme";
-import type { EnergyLevel, Priority, TaskStatus } from "../types";
+import type { EnergyLevel, Priority, Task, TaskStatus } from "../types";
 
 const STATUS_OPTIONS: TaskStatus[] = ["Not started", "In progress", "Waiting", "Blocked", "Done", "Canceled"];
 const PRIORITY_OPTIONS: Priority[] = ["High", "Medium", "Low"];
 const ENERGY_OPTIONS: EnergyLevel[] = ["Low", "Medium", "High"];
+
+type SpaceOption = {
+  key: string;
+  label: string;
+  color: string;
+  kind: "inbox" | "project" | "class";
+  project: string;
+  classId?: string;
+};
+
+function spaceKeyForTask(task: Task) {
+  if (task.classId) return `class:${task.classId}`;
+  if (!task.project || task.project === "Inbox") return "inbox";
+  return `project:${task.project}`;
+}
 
 export function TaskDetailScreen() {
   const { workspace, theme, updateTasks, updateSettings } = useLifeOS();
@@ -19,6 +34,31 @@ export function TaskDetailScreen() {
   const taskId = route.params?.taskId as number;
   const task = workspace.tasks.find((t) => t.id === taskId);
   const [focusOpen, setFocusOpen] = useState(false);
+
+  const spaces = useMemo<SpaceOption[]>(() => {
+    const projectSpaces = workspace.projects.map((project) => ({
+      key: `project:${project.name}`,
+      label: project.name,
+      color: project.color || theme.accent,
+      kind: "project" as const,
+      project: project.name,
+    }));
+    const classSpaces = workspace.classes
+      .filter((course) => !course.archived)
+      .map((course) => ({
+        key: `class:${course.id}`,
+        label: course.code,
+        color: course.color || theme.accent,
+        kind: "class" as const,
+        project: course.code,
+        classId: course.id,
+      }));
+    return [
+      { key: "inbox", label: "Inbox", color: theme.muted, kind: "inbox", project: "Inbox" },
+      ...projectSpaces,
+      ...classSpaces,
+    ];
+  }, [theme.accent, theme.muted, workspace.classes, workspace.projects]);
 
   if (!task) {
     return (
@@ -29,6 +69,35 @@ export function TaskDetailScreen() {
   }
 
   const persist = (patch: Partial<typeof task>) => updateTasks(workspace.tasks.map((t) => (t.id === taskId ? { ...t, ...patch } : t)));
+  const activeSpaceKey = spaceKeyForTask(task);
+  const spaceOptions =
+    activeSpaceKey.startsWith("project:") && !spaces.some((space) => space.key === activeSpaceKey)
+      ? [
+          ...spaces,
+          {
+            key: activeSpaceKey,
+            label: task.project || "Space",
+            color: task.color || theme.accent,
+            kind: "project" as const,
+            project: task.project || "Inbox",
+          },
+        ]
+      : spaces;
+  const activeSpace = spaceOptions.find((space) => space.key === activeSpaceKey);
+  const spaceLabel = activeSpace?.label ?? task.project ?? "Inbox";
+  const spaceColor = activeSpace?.color ?? task.color ?? theme.accent;
+
+  const routeToSpace = (space: SpaceOption) => {
+    if (space.kind === "inbox") {
+      persist({ project: "Inbox", classId: undefined, color: theme.accent });
+      return;
+    }
+    if (space.kind === "project") {
+      persist({ project: space.project, classId: undefined, color: space.color });
+      return;
+    }
+    persist({ project: space.project, classId: space.classId, color: space.color });
+  };
 
   const deleteTask = () => {
     Alert.alert("Delete task", `Delete "${task.title}"? This can't be undone.`, [
@@ -79,12 +148,45 @@ export function TaskDetailScreen() {
           placeholder="Task title"
           placeholderTextColor={theme.muted}
         />
-        <Text style={[styles.spaceLabel, { color: theme.muted }]}>{task.project || "Inbox"}</Text>
+        <View style={styles.spaceLabelRow}>
+          <View style={[styles.spaceDot, { backgroundColor: spaceColor }]} />
+          <Text style={[styles.spaceLabel, { color: theme.muted }]}>{spaceLabel}</Text>
+        </View>
 
         <View style={styles.row}>
           <ActionButton label="Set as Now" icon="target" quiet onPress={() => updateSettings({ ...workspace.settings, nowTaskId: task.id })} />
           <ActionButton label="Focus" icon="play" onPress={() => setFocusOpen(true)} />
         </View>
+
+        <Card>
+          <Text style={[styles.cardLabel, { color: theme.text }]}>Space</Text>
+          <Text style={[styles.spaceHint, { color: theme.muted }]}>Route this task to a project or class.</Text>
+          <View style={styles.chipWrap}>
+            {spaceOptions.map((space) => {
+              const active = space.key === activeSpaceKey;
+              return (
+                <Pressable
+                  key={space.key}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={`Move to ${space.label}`}
+                  onPress={() => routeToSpace(space)}
+                  style={[
+                    styles.chip,
+                    styles.spaceChip,
+                    {
+                      borderColor: active ? space.color : theme.border,
+                      backgroundColor: active ? `${space.color}22` : "transparent",
+                    },
+                  ]}
+                >
+                  <View style={[styles.spaceDot, { backgroundColor: space.color }]} />
+                  <Text style={{ color: theme.text, fontSize: 12, fontWeight: "700" }}>{space.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Card>
 
         <Card>
           <Text style={[styles.cardLabel, { color: theme.text }]}>Status</Text>
@@ -192,7 +294,11 @@ const styles = StyleSheet.create({
   },
   backButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   titleInput: { fontSize: 26, fontWeight: "700", lineHeight: 32 },
-  spaceLabel: { fontSize: 13, fontWeight: "700", marginTop: -6 },
+  spaceLabelRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: -6 },
+  spaceLabel: { fontSize: 13, fontWeight: "700" },
+  spaceHint: { fontSize: 12, lineHeight: 17, marginBottom: 8, marginTop: -2 },
+  spaceDot: { width: 8, height: 8, borderRadius: 4 },
+  spaceChip: { flexDirection: "row", alignItems: "center", gap: 7 },
   row: { flexDirection: "row", gap: 10 },
   cardLabel: { fontSize: 13, fontWeight: "800", marginBottom: 4 },
   priorityHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
