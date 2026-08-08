@@ -17,7 +17,8 @@ export function PaperBackground({ paper, overlay }: Props) {
   }
 
   const lineGap = paper === "narrowRuled" ? 22 : paper === "ruled" || paper === "cornell" ? 32 : 28;
-  const lines = Array.from({ length: 48 }, (_, i) => i);
+  // Enough guides for full-bleed iPad landscape (not a phone-width sheet).
+  const lines = Array.from({ length: 80 }, (_, i) => i);
 
   return (
     <View style={[styles.fill, overlay ? styles.transparent : styles.paper]} pointerEvents="none">
@@ -53,8 +54,8 @@ export function PaperBackground({ paper, overlay }: Props) {
         : null}
 
       {paper === "dotted"
-        ? Array.from({ length: 40 }, (_, row) =>
-            Array.from({ length: 24 }, (_, col) => (
+        ? Array.from({ length: 60 }, (_, row) =>
+            Array.from({ length: 48 }, (_, col) => (
               <View
                 key={`d-${row}-${col}`}
                 style={[styles.dot, { top: 20 + row * 24, left: 16 + col * 24 }]}

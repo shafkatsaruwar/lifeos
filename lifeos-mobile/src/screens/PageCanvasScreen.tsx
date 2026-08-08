@@ -219,7 +219,7 @@ export function PageCanvasScreen() {
   const overlayInteractive = mode !== "ink";
 
   return (
-    <Page edges={["top", "bottom"]}>
+    <Page edges={["top", "bottom"]} fullBleed>
       <View style={styles.chrome}>
         <Pressable
           accessibilityLabel="Back to pages"
@@ -410,7 +410,7 @@ export function PageCanvasScreen() {
         ) : null}
 
         <View style={styles.stageMain}>
-          <View style={styles.sheet}>
+          <View style={[styles.sheet, isWide && styles.sheetWide]}>
             <View style={StyleSheet.absoluteFill} pointerEvents={inkInteractive ? "auto" : "none"}>
               <HandwritingCanvas ref={pencilRef} ink={page.ink} onChange={onInkChange} backgroundColor="#FFFEFA" />
             </View>
@@ -435,13 +435,15 @@ export function PageCanvasScreen() {
               interactive={overlayInteractive}
             />
           </View>
-          <Text style={[styles.hint, { color: theme.muted }]}>
-            {mode === "ink"
-              ? pencilReady
-                ? "Apple PencilKit · ink autosaves"
-                : "Native build required for PencilKit"
-              : "Move · resize · edit overlays · switch to Ink to draw"}
-          </Text>
+          {!isWide ? (
+            <Text style={[styles.hint, { color: theme.muted }]}>
+              {mode === "ink"
+                ? pencilReady
+                  ? "Apple PencilKit · ink autosaves"
+                  : "Native build required for PencilKit"
+                : "Move · resize · edit overlays · switch to Ink to draw"}
+            </Text>
+          ) : null}
         </View>
       </View>
     </Page>
@@ -496,10 +498,10 @@ const styles = StyleSheet.create({
   contextBar: { maxHeight: 46, marginBottom: 4 },
   paperRow: { paddingHorizontal: 12, gap: 8, alignItems: "center" },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
-  stage: { flex: 1, paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
-  stageWide: { flexDirection: "row", paddingHorizontal: 16 },
-  pageStrip: { width: 56, marginRight: 10 },
-  pageStripInner: { gap: 8, paddingBottom: 24 },
+  stage: { flex: 1, minHeight: 0, paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
+  stageWide: { flexDirection: "row", paddingHorizontal: 8, paddingBottom: 0, gap: 0 },
+  pageStrip: { width: 52, marginRight: 8, flexGrow: 0, flexShrink: 0 },
+  pageStripInner: { gap: 8, paddingBottom: 24, paddingTop: 2 },
   stripItem: {
     width: 44,
     height: 56,
@@ -508,14 +510,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  stageMain: { flex: 1, gap: 8 },
+  stageMain: { flex: 1, minWidth: 0, minHeight: 0, gap: 8 },
   sheet: {
     flex: 1,
+    minHeight: 0,
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(15,23,42,0.1)",
     backgroundColor: "#FFFEFA",
+  },
+  /** iPad: paper fills the remaining stage edge-to-edge (page strip kept). */
+  sheetWide: {
+    borderRadius: 12,
+    marginRight: 8,
   },
   hint: { fontSize: 11, fontWeight: "600", textAlign: "center" },
 });
