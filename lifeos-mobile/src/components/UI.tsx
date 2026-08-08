@@ -25,8 +25,20 @@ export function Page({
 }
 
 export function Card({ children, style }: { children: React.ReactNode; style?: object }) {
-  const { theme } = useLifeOS();
-  return <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }, style]}>{children}</View>;
+  const { theme, workspace } = useLifeOS();
+  const compact = Boolean(workspace.settings.compactMode);
+  return (
+    <View
+      style={[
+        styles.card,
+        compact && styles.cardCompact,
+        { backgroundColor: theme.surface, borderColor: theme.border },
+        style,
+      ]}
+    >
+      {children}
+    </View>
+  );
 }
 
 export function ActionButton({
@@ -133,6 +145,7 @@ const styles = StyleSheet.create({
   page: { flex: 1 },
   pageInner: { flex: 1, width: "100%" },
   card: { borderWidth: 1, borderRadius: 20, padding: 18, gap: 12 },
+  cardCompact: { borderRadius: 16, padding: 14, gap: 8 },
   action: { minHeight: 44, paddingHorizontal: 15, borderRadius: 12, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   actionText: { fontSize: 14, fontWeight: "800" },
   iconButton: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },

@@ -48,9 +48,19 @@ const TAB_ICONS: Record<string, keyof typeof Feather.glyphMap> = {
   LibraryTab: "book-open",
 };
 
+function useStackScreenOptions() {
+  const { workspace } = useLifeOS();
+  const reduceMotion = Boolean(workspace.settings.reduceMotion);
+  return {
+    headerShown: false as const,
+    animation: reduceMotion ? ("fade" as const) : ("default" as const),
+  };
+}
+
 function NowStackNavigator() {
+  const screenOptions = useStackScreenOptions();
   return (
-    <NowStack.Navigator screenOptions={{ headerShown: false }}>
+    <NowStack.Navigator screenOptions={screenOptions}>
       <NowStack.Screen name="NowHome" component={NowScreen} />
       <NowStack.Screen name="TaskDetail" component={TaskDetailScreen} />
       <NowStack.Screen name="Settings" component={SettingsScreen} />
@@ -59,8 +69,9 @@ function NowStackNavigator() {
 }
 
 function LifeStackNavigator() {
+  const screenOptions = useStackScreenOptions();
   return (
-    <LifeStack.Navigator screenOptions={{ headerShown: false }}>
+    <LifeStack.Navigator screenOptions={screenOptions}>
       <LifeStack.Screen name="LifeDashboard" component={LifeDashboardScreen} />
       <LifeStack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
       <LifeStack.Screen name="ProjectsDirectory" component={ProjectsDirectoryScreen} />
@@ -70,8 +81,9 @@ function LifeStackNavigator() {
 }
 
 function TasksStackNavigator() {
+  const screenOptions = useStackScreenOptions();
   return (
-    <TasksStack.Navigator screenOptions={{ headerShown: false }}>
+    <TasksStack.Navigator screenOptions={screenOptions}>
       <TasksStack.Screen name="TasksList" component={TasksScreen} />
       <TasksStack.Screen name="TaskDetail" component={TaskDetailScreen} />
     </TasksStack.Navigator>
@@ -79,8 +91,9 @@ function TasksStackNavigator() {
 }
 
 function SchoolStackNavigator() {
+  const screenOptions = useStackScreenOptions();
   return (
-    <SchoolStack.Navigator screenOptions={{ headerShown: false }}>
+    <SchoolStack.Navigator screenOptions={screenOptions}>
       <SchoolStack.Screen name="SchoolDashboard" component={SchoolDashboardScreen} />
       <SchoolStack.Screen name="ClassDetail" component={ClassDetailScreen} />
       <SchoolStack.Screen name="CoursesDirectory" component={CoursesDirectoryScreen} />
@@ -92,8 +105,9 @@ function SchoolStackNavigator() {
 }
 
 function CalendarStackNavigator() {
+  const screenOptions = useStackScreenOptions();
   return (
-    <CalendarStack.Navigator screenOptions={{ headerShown: false }}>
+    <CalendarStack.Navigator screenOptions={screenOptions}>
       <CalendarStack.Screen name="CalendarMain" component={CalendarScreen} />
       <CalendarStack.Screen name="ConnectWeb" component={ConnectWebScreen} />
     </CalendarStack.Navigator>
@@ -101,14 +115,20 @@ function CalendarStackNavigator() {
 }
 
 function LibraryStackNavigator() {
+  const { workspace } = useLifeOS();
+  const reduceMotion = Boolean(workspace.settings.reduceMotion);
+  const screenOptions = useStackScreenOptions();
   return (
-    <LibraryStack.Navigator screenOptions={{ headerShown: false }}>
+    <LibraryStack.Navigator screenOptions={screenOptions}>
       <LibraryStack.Screen name="NotebooksList" component={NotebooksScreen} />
       <LibraryStack.Screen name="NotebookDetail" component={NotebookDetailScreen} />
       <LibraryStack.Screen
         name="PageCanvas"
         component={PageCanvasScreen}
-        options={{ presentation: "fullScreenModal", animation: "slide_from_bottom" }}
+        options={{
+          presentation: "fullScreenModal",
+          animation: reduceMotion ? "fade" : "slide_from_bottom",
+        }}
       />
       <LibraryStack.Screen name="NotesList" component={NotesScreen} />
       <LibraryStack.Screen name="NoteEditor" component={NoteEditorScreen} />

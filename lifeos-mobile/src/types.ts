@@ -205,6 +205,7 @@ export type SettingsState = {
   defaultFocusMinutes?: number;
   defaultEnergy?: EnergyLevel;
   weekStartsMonday?: boolean;
+  compactMode?: boolean;
   reduceMotion?: boolean;
   themeMode?: ThemeMode;
   currentEnergy?: EnergyLevel;
