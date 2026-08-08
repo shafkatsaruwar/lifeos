@@ -69,6 +69,30 @@ iOS bundle ID: `com.shafkatsaruwar.lifeos`
 | School | SchoolOS hub |
 | Library | Notes, Brain, Resources |
 
+## Synapse-style auto updates (EAS Update)
+
+Cloud agents open PRs. Once a PR merges to `main`, GitHub Actions publishes an **OTA** (`eas update`) to the `production` channel. Your TestFlight / production build downloads it on the next cold start — no `git fetch`, no Metro.
+
+### One-time setup
+
+1. From `lifeos-mobile/` (logged into Expo):
+   ```bash
+   npx eas-cli login
+   npx eas-cli update:configure
+   ```
+   Copy the project UUID into `.env` as `EAS_PROJECT_ID=` (and/or commit it under `expo.extra.eas.projectId` in `app.json` if you prefer).
+2. Add GitHub repo secrets: `EXPO_TOKEN` (expo.dev → Access tokens) and `EAS_PROJECT_ID`.
+3. Ship **one new native build** so the binary is channel-aware:
+   ```bash
+   npx eas-cli build --platform ios --profile production
+   ```
+   Then submit to TestFlight as usual.
+4. (Optional) Enable auto-merge on agent PRs in GitHub if you want merge→OTA with less clicking.
+
+JS/UI changes after that: merge to `main` → wait for **EAS Update (OTA)** workflow → force-quit LifeOS → reopen.
+
+Native changes (new native module, plugin, SDK bump) still need a full EAS build.
+
 ## Legacy WebView shell
 
 Phase 1 WebView entry is parked at `App.webview.tsx` if you ever need it.
