@@ -15,6 +15,7 @@
       "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
+      "config": "ios-simulator-ensure-expo.yml",
       "ios": {
         "simulator": true
       }
@@ -23,17 +24,20 @@
       "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
+      "config": "ios-ensure-expo.yml",
       "ios": {
         "simulator": false
       }
     },
     "preview": {
       "extends": "base",
-      "distribution": "internal"
+      "distribution": "internal",
+      "config": "ios-ensure-expo.yml"
     },
     "production": {
       "extends": "base",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "config": "ios-ensure-expo.yml"
     }
   }
 }
