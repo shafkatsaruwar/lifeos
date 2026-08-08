@@ -17,4 +17,6 @@ Read versioned docs: https://docs.expo.dev/versions/v54.0.0/
   - Architecture stubs (not faked): `notebookPdf.ts`, `handwritingRecognition.ts`, `notebookAi.ts`.
   - PencilKit **requires a native iOS build**, not Expo Go.
 - Legacy single-note Draw mode still on `NoteEditorScreen` / `note.ink`.
-- **EAS builds:** always run from `lifeos-mobile/` on latest `main`. Do not “Rebuild” a failed job (reuses old commit). After install, `eas-build-post-install` ensures `expo` is present so prebuild does not fetch Expo 57 via `npx`.
+- **EAS builds:** always run from `lifeos-mobile/` on latest `main`. Do not “Rebuild” a failed job (reuses old commit).
+  - Local `expo` must exist before prebuild; otherwise `npx` fetches Expo 57 and fails.
+  - Use npm `postinstall` + `.eas/build/*-ensure-expo.yml` (runs ensure between install and prebuild). Do **not** use `eas-build-post-install` for this — on iOS that hook runs *after* prebuild.
