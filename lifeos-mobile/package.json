@@ -9,6 +9,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "update:preview": "eas update --channel preview --message \"preview $(date -u +%Y-%m-%dT%H:%MZ)\" --non-interactive",
+    "update:production": "eas update --channel production --message \"production $(date -u +%Y-%m-%dT%H:%MZ)\" --non-interactive",
     "eas-build-post-install": "node ./scripts/ensure-expo-installed.js"
   },
   "dependencies": {
@@ -27,6 +29,7 @@
     "expo-image-picker": "~17.0.11",
     "expo-pencilkit-ui": "^1.0.4",
     "expo-status-bar": "~3.0.9",
+    "expo-updates": "~29.0.19",
     "expo-web-browser": "~15.0.11",
     "firebase": "^12.17.1",
     "react": "19.1.0",
