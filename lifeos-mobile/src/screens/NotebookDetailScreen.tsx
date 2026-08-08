@@ -1,5 +1,5 @@
 import Feather from "@expo/vector-icons/Feather";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -15,7 +15,15 @@ import { Empty, Page } from "../components/UI";
 import { PaperThumb } from "../components/PaperBackground";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { useLayout } from "../lib/layout";
-import { createPage, pagesForNotebook, reindexPages } from "../lib/notebooks";
+import {
+  cloneNotebookPage,
+  createPage,
+  movePageInList,
+  pagesForNotebook,
+  primaryPageForNotebook,
+  reindexPages,
+  setNotebookFolder,
+} from "../lib/notebooks";
 import type { NotebookContextLink } from "../types";
 
 export function NotebookDetailScreen() {
@@ -24,17 +32,36 @@ export function NotebookDetailScreen() {
   const route = useRoute<any>();
   const { isTablet, isWide } = useLayout();
   const notebookId = route.params?.notebookId as string;
+  const organizeOnly = Boolean(route.params?.organizeOnly);
   const hub = workspace.notebookHub;
   const notebook = hub.notebooks.find((n) => n.id === notebookId);
   const pages = pagesForNotebook(workspace.notebookPages, notebookId);
   const columns = isWide ? 4 : isTablet ? 3 : 2;
-  const [contextOpen, setContextOpen] = useState(false);
+  const [organizeOpen, setOrganizeOpen] = useState(false);
+
+  // Opening a note should land on the writing surface — not a thumbnail picker.
+  useEffect(() => {
+    if (organizeOnly || !notebookId) return;
+    const page = primaryPageForNotebook(workspace.notebookPages, notebookId);
+    if (!page) return;
+    navigation.replace("PageCanvas", { notebookId, pageId: page.id });
+  }, [organizeOnly, notebookId, navigation, workspace.notebookPages]);
+
+  if (!organizeOnly) {
+    return (
+      <Page>
+        <View style={styles.missing}>
+          <Text style={{ color: theme.muted }}>Opening note…</Text>
+        </View>
+      </Page>
+    );
+  }
 
   if (!notebook) {
     return (
       <Page>
         <View style={styles.missing}>
-          <Text style={{ color: theme.muted }}>Notebook not found.</Text>
+          <Text style={{ color: theme.muted }}>Note not found.</Text>
         </View>
       </Page>
     );
@@ -62,7 +89,10 @@ export function NotebookDetailScreen() {
 
   const setContext = (context?: NotebookContextLink) => {
     void touchNotebook({ context });
-    setContextOpen(false);
+  };
+
+  const moveToFolder = async (folderId: string | undefined) => {
+    await updateNotebookHub(setNotebookFolder(hub, notebookId, folderId));
   };
 
   const addPage = async () => {
@@ -75,32 +105,21 @@ export function NotebookDetailScreen() {
   const duplicatePage = async (pageId: string) => {
     const source = workspace.notebookPages[pageId];
     if (!source) return;
-    const copy = {
-      ...createPage(notebookId, pages.length, source.paper),
-      ink: source.ink,
-      title: source.title ? `${source.title} copy` : undefined,
-      textElements: source.textElements,
-      imageElements: source.imageElements,
-    };
+    const copy = cloneNotebookPage(source, pages.length);
     await upsertNotebookPage(copy);
     await touchNotebook(undefined, pages.length + 1);
   };
 
   const movePage = async (pageId: string, direction: -1 | 1) => {
-    const index = pages.findIndex((p) => p.id === pageId);
-    const swap = index + direction;
-    if (index < 0 || swap < 0 || swap >= pages.length) return;
-    const next = [...pages];
-    const tmp = next[index];
-    next[index] = next[swap];
-    next[swap] = tmp;
-    await Promise.all(reindexPages(next).map((p) => upsertNotebookPage(p)));
+    const next = movePageInList(pages, pageId, direction);
+    if (!next) return;
+    await Promise.all(next.map((p) => upsertNotebookPage(p)));
     await touchNotebook();
   };
 
   const removePage = (pageId: string) => {
     if (pages.length <= 1) {
-      Alert.alert("Keep at least one page", "A notebook needs a page to write on.");
+      Alert.alert("Keep at least one page", "A note needs a page to write on.");
       return;
     }
     Alert.alert("Delete page?", "Handwriting and overlays on this page will be removed.", [
@@ -135,17 +154,17 @@ export function NotebookDetailScreen() {
             value={notebook.name}
             onChangeText={rename}
             style={[styles.titleInput, { color: theme.text }]}
-            placeholder="Untitled notebook"
+            placeholder="Untitled note"
             placeholderTextColor={theme.muted}
           />
-          <Pressable onPress={() => setContextOpen(true)}>
+          <Pressable onPress={() => setOrganizeOpen(true)}>
             <Text style={[styles.meta, { color: theme.muted }]}>
-              {folder ? `${folder.name} · ` : ""}
+              {folder ? `${folder.name} · ` : "Unfiled · "}
               {notebook.context?.label || "Personal"}
               {" · "}
               {pages.length} {pages.length === 1 ? "page" : "pages"}
               {"  "}
-              <Text style={{ color: theme.accent }}>Edit context</Text>
+              <Text style={{ color: theme.accent }}>Organize</Text>
             </Text>
           </Pressable>
         </View>
@@ -200,12 +219,34 @@ export function NotebookDetailScreen() {
         ListEmptyComponent={<Empty title="No pages." body="Add a page to start writing." />}
       />
 
-      <Modal visible={contextOpen} transparent animationType="fade" onRequestClose={() => setContextOpen(false)}>
-        <Pressable style={styles.modalDim} onPress={() => setContextOpen(false)}>
+      <Modal visible={organizeOpen} transparent animationType="fade" onRequestClose={() => setOrganizeOpen(false)}>
+        <Pressable style={styles.modalDim} onPress={() => setOrganizeOpen(false)}>
           <Pressable style={[styles.modalCard, { backgroundColor: theme.surface, borderColor: theme.border }]} onPress={() => {}}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>LifeOS context</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Organize</Text>
+            <Text style={{ color: theme.muted, fontSize: 11, fontWeight: "800" }}>FOLDER</Text>
+            <View style={styles.chipWrap}>
+              <ContextChip
+                label="No folder"
+                active={!notebook.folderId}
+                onPress={() => void moveToFolder(undefined)}
+              />
+              {hub.folders.map((item) => (
+                <ContextChip
+                  key={item.id}
+                  label={item.name}
+                  active={notebook.folderId === item.id}
+                  onPress={() => void moveToFolder(item.id)}
+                />
+              ))}
+            </View>
+            {hub.folders.length === 0 ? (
+              <Text style={{ color: theme.muted, fontSize: 13, fontWeight: "600" }}>
+                Create a folder from Library → Notes first, then move this note into it.
+              </Text>
+            ) : null}
+            <Text style={{ color: theme.muted, fontSize: 11, fontWeight: "800", marginTop: 4 }}>LIFEOS CONTEXT</Text>
             <Text style={{ color: theme.muted, fontSize: 13, fontWeight: "600" }}>
-              Optional. Notebooks can stay personal.
+              Optional. Notes can stay personal.
             </Text>
             <View style={styles.chipWrap}>
               <ContextChip
@@ -232,6 +273,12 @@ export function NotebookDetailScreen() {
                 />
               ))}
             </View>
+            <Pressable
+              onPress={() => setOrganizeOpen(false)}
+              style={[styles.doneBtn, { backgroundColor: theme.text }]}
+            >
+              <Text style={{ color: theme.surface, fontWeight: "800" }}>Done</Text>
+            </Pressable>
           </Pressable>
         </Pressable>
       </Modal>
@@ -275,4 +322,5 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: "800" },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  doneBtn: { minHeight: 44, borderRadius: 12, alignItems: "center", justifyContent: "center", marginTop: 4 },
 });

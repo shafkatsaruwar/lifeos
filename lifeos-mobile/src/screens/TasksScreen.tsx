@@ -7,7 +7,7 @@ import { TaskRow } from "../components/TaskRow";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { PRIORITY_RANK, dueRank, taskIsOpen } from "../lib/helpers";
 
-type Filter = "All" | "Open" | "Done";
+type Filter = "Open" | "Done";
 type Sort = "Due" | "Priority" | "Space";
 
 const SORT_OPTIONS: { key: Sort; label: string; icon: keyof typeof Feather.glyphMap }[] = [
@@ -23,10 +23,9 @@ export function TasksScreen() {
   const [sort, setSort] = useState<Sort>("Due");
 
   const tasks = useMemo(() => {
-    let list = workspace.tasks;
-    if (filter === "Open") list = list.filter(taskIsOpen);
-    if (filter === "Done") list = list.filter((t) => !taskIsOpen(t));
-    const sorted = [...list];
+    // Archived (done/canceled) tasks are browsed on web Settings → Archives only.
+    if (filter === "Done") return [];
+    const sorted = workspace.tasks.filter(taskIsOpen);
     if (sort === "Due") sorted.sort((a, b) => dueRank(a.due) - dueRank(b.due));
     if (sort === "Priority") sorted.sort((a, b) => PRIORITY_RANK[a.priority ?? "Medium"] - PRIORITY_RANK[b.priority ?? "Medium"]);
     if (sort === "Space") sorted.sort((a, b) => (a.project ?? "").localeCompare(b.project ?? ""));
@@ -77,22 +76,24 @@ export function TasksScreen() {
           <SegmentedControl
             value={filter}
             onChange={setFilter}
-            options={[{ key: "Open", label: "Open" }, { key: "Done", label: "Done" }, { key: "All", label: "All" }]}
+            options={[{ key: "Open", label: "Open" }, { key: "Done", label: "Done" }]}
           />
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Sort by ${activeSort.label}. Tap to change.`}
-          onPress={cycleSort}
-          style={({ pressed }) => [
-            styles.sortChip,
-            { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.75 : 1 },
-          ]}
-        >
-          <Feather name={activeSort.icon} size={14} color={theme.text} />
-          <Text style={[styles.sortLabel, { color: theme.text }]}>{activeSort.label}</Text>
-          <Feather name="chevron-down" size={14} color={theme.muted} />
-        </Pressable>
+        {filter !== "Done" ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Sort by ${activeSort.label}. Tap to change.`}
+            onPress={cycleSort}
+            style={({ pressed }) => [
+              styles.sortChip,
+              { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.75 : 1 },
+            ]}
+          >
+            <Feather name={activeSort.icon} size={14} color={theme.text} />
+            <Text style={[styles.sortLabel, { color: theme.text }]}>{activeSort.label}</Text>
+            <Feather name="chevron-down" size={14} color={theme.muted} />
+          </Pressable>
+        ) : null}
       </View>
 
       <FlatList
@@ -102,7 +103,16 @@ export function TasksScreen() {
         renderItem={({ item }) => (
           <TaskRow task={item} onPress={() => navigation.navigate("TaskDetail", { taskId: item.id })} onToggleDone={() => toggleDone(item.id)} />
         )}
-        ListEmptyComponent={<Empty title="Nothing here." body="Tasks you create or capture will show up in this list." />}
+        ListEmptyComponent={
+          filter === "Done" ? (
+            <Empty
+              title="Archived on the web"
+              body="Go to the web to see archived tasks — Settings → Archives in LifeOS."
+            />
+          ) : (
+            <Empty title="Nothing here." body="Tasks you create or capture will show up in this list." />
+          )
+        }
       />
     </Page>
   );

@@ -5,6 +5,7 @@ import { Card, Empty, Page } from "../components/UI";
 import { TaskRow } from "../components/TaskRow";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { dueRank, taskIsOpen } from "../lib/helpers";
+import { primaryPageForNotebook } from "../lib/notebooks";
 
 export function ProjectDetailScreen() {
   const { theme, workspace, updateTasks } = useLifeOS();
@@ -17,7 +18,9 @@ export function ProjectDetailScreen() {
   const projectTasks = workspace.tasks.filter((t) => t.project === projectName);
   const active = projectTasks.filter(taskIsOpen).sort((a, b) => dueRank(a.due) - dueRank(b.due));
   const completed = projectTasks.filter((t) => !taskIsOpen(t));
-  const notes = workspace.notes.filter((n) => n.projectName === projectName);
+  const textNotes = workspace.notes.filter((n) => n.projectName === projectName);
+  const pageNotes = workspace.notebookHub.notebooks.filter((n) => n.context?.projectName === projectName);
+  const notesCount = textNotes.length + pageNotes.length;
   const resources = workspace.resources.filter((r) => r.projectName === projectName);
 
   const toggleDone = (id: number) =>
@@ -41,7 +44,7 @@ export function ProjectDetailScreen() {
 
         <View style={styles.metaStrip}>
           <MetaBlock label="Open work" value={String(active.length)} theme={theme} />
-          <MetaBlock label="Notes" value={String(notes.length)} theme={theme} />
+          <MetaBlock label="Notes" value={String(notesCount)} theme={theme} />
           <MetaBlock label="Files" value={String(resources.length)} theme={theme} />
         </View>
 
@@ -63,35 +66,45 @@ export function ProjectDetailScreen() {
           </>
         ) : null}
 
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Notebooks</Text>
-        {workspace.notebookHub.notebooks.filter((n) => n.context?.projectName === projectName).length ? (
-          workspace.notebookHub.notebooks
-            .filter((n) => n.context?.projectName === projectName)
-            .map((nb) => (
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>Notes</Text>
+        {notesCount ? (
+          <>
+            {pageNotes.map((nb) => (
               <Pressable
                 key={nb.id}
-                onPress={() => navigation.navigate("LibraryTab", { screen: "NotebookDetail", params: { notebookId: nb.id } })}
+                onPress={() => {
+                  const page = primaryPageForNotebook(workspace.notebookPages, nb.id);
+                  if (page) {
+                    navigation.navigate("LibraryTab", {
+                      screen: "PageCanvas",
+                      params: { notebookId: nb.id, pageId: page.id },
+                    });
+                  } else {
+                    navigation.navigate("LibraryTab", { screen: "NotebookDetail", params: { notebookId: nb.id } });
+                  }
+                }}
                 style={[styles.simpleRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
               >
-                <Feather name="book" size={15} color={theme.accent} />
+                <Feather name="edit-3" size={15} color={theme.accent} />
                 <Text style={{ color: theme.text, fontWeight: "700", flex: 1 }} numberOfLines={1}>{nb.name}</Text>
                 <Feather name="chevron-right" size={16} color={theme.muted} />
               </Pressable>
-            ))
+            ))}
+            {textNotes.map((note) => (
+              <Pressable
+                key={note.id}
+                onPress={() => navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } })}
+                style={[styles.simpleRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              >
+                <Feather name="file-text" size={15} color={theme.accent} />
+                <Text style={{ color: theme.text, fontWeight: "700", flex: 1 }} numberOfLines={1}>
+                  {note.title || "Untitled note"}
+                </Text>
+              </Pressable>
+            ))}
+          </>
         ) : (
-          <Card><Empty title="No notebooks linked." body="Create one in Library → Notebooks and link this space." /></Card>
-        )}
-
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Notes</Text>
-        {notes.length ? (
-          notes.map((note) => (
-            <Pressable key={note.id} onPress={() => navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } })} style={[styles.simpleRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Feather name="file-text" size={15} color={theme.accent} />
-              <Text style={{ color: theme.text, fontWeight: "700", flex: 1 }} numberOfLines={1}>{note.title || "Untitled note"}</Text>
-            </Pressable>
-          ))
-        ) : (
-          <Card><Empty title="No notes yet." body="Start one from this space." /></Card>
+          <Card><Empty title="No notes yet." body="Create one in Library → Notes and link this space." /></Card>
         )}
 
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Files</Text>

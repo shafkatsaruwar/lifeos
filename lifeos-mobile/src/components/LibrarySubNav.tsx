@@ -3,11 +3,10 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useLifeOS } from "../lib/LifeOSContext";
 
-type Tab = "notebooks" | "notes" | "brain" | "resources";
+type Tab = "notes" | "brain" | "resources";
 
 const TABS: { key: Tab; label: string; icon: keyof typeof Feather.glyphMap; route: string }[] = [
-  { key: "notebooks", label: "Notebooks", icon: "book", route: "NotebooksList" },
-  { key: "notes", label: "Notes", icon: "file-text", route: "NotesList" },
+  { key: "notes", label: "Notes", icon: "edit-3", route: "NotebooksList" },
   { key: "brain", label: "Brain", icon: "zap", route: "Brain" },
   { key: "resources", label: "Files", icon: "paperclip", route: "Resources" },
 ];

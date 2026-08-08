@@ -51,20 +51,12 @@ export function QuickAction({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.quickAction,
-        { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.65 : 1 },
-      ]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [styles.quickAction, { opacity: pressed ? 0.55 : 1 }]}
+      hitSlop={6}
     >
-      <Feather name={icon} size={20} color={tint} />
-      <Text
-        style={[styles.quickLabel, { color: theme.text }]}
-        numberOfLines={2}
-        adjustsFontSizeToFit
-        minimumFontScale={0.76}
-      >
-        {label}
-      </Text>
+      <Feather name={icon} size={22} color={tint} />
     </Pressable>
   );
 }
@@ -138,16 +130,11 @@ const styles = StyleSheet.create({
   bandActionText: { fontSize: 12, fontWeight: "800" },
   moduleBody: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   quickAction: {
-    width: 72,
-    minHeight: 64,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    justifyContent: "flex-start",
-    gap: 6,
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  quickLabel: { fontSize: 11, lineHeight: 14, fontWeight: "800" },
   dataRow: { minHeight: 50, flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 5 },
   dataIcon: { width: 22, alignItems: "center", justifyContent: "center" },
   grow: { flex: 1, minWidth: 0 },

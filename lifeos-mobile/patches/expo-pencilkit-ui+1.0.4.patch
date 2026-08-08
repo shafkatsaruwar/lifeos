@@ -1,0 +1,100 @@
+diff --git a/node_modules/expo-pencilkit-ui/build/index.d.ts b/node_modules/expo-pencilkit-ui/build/index.d.ts
+--- a/node_modules/expo-pencilkit-ui/build/index.d.ts
++++ b/node_modules/expo-pencilkit-ui/build/index.d.ts
+@@ -43,6 +43,8 @@
+     imagePath?: {
+         uri: string;
+     };
++    /** "any" (finger + Pencil) or "pencilOnly" (finger scrolls; Pencil writes). */
++    drawingPolicy?: "any" | "pencilOnly";
+     onDrawStart?: (event: NativeEvent<DrawStartEvent>) => void;
+     onDrawEnd?: (event: NativeEvent<DrawEndEvent>) => void;
+     onDrawChange?: (event: NativeEvent<DrawChangeEvent>) => void;
+diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift
+--- a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift
++++ b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift
+@@ -30,6 +30,11 @@
+             Prop("imagePath") { (view: ExpoPencilKitView, imagePath: [String: Any]?) in
+                 view.setImagePath(imagePath)
+             }
++
++            // LifeOS Phase 2: "any" | "pencilOnly"
++            Prop("drawingPolicy") { (view: ExpoPencilKitView, policy: String?) in
++                view.setDrawingPolicy(policy)
++            }
+         }
+ 
+         // Setup tool picker for a specific canvas
+@@ -136,20 +141,20 @@
+             return
+         }
+ 
+-        toolPicker = PKToolPicker()
++        if toolPicker == nil {
++            toolPicker = PKToolPicker()
++            toolPickerObserver = ToolPickerObserver()
++            if let observer = toolPickerObserver {
++                toolPicker?.addObserver(observer)
++            }
++        }
+ 
+-        // Configure tool picker
+-        toolPicker?.setVisible(true, forFirstResponder: canvasView)
+         toolPicker?.addObserver(canvasView)
++        toolPicker?.setVisible(true, forFirstResponder: canvasView)
+ 
+-        // Create and add tool picker observer
+-        toolPickerObserver = ToolPickerObserver()
+-        toolPicker?.addObserver(toolPickerObserver!)
++        // Keep canvas first responder so pen / eraser / lasso stay available after page jumps.
++        _ = canvasView.becomeFirstResponder()
+ 
+-        // Make canvas view first responder
+-        canvasView.becomeFirstResponder()
+-
+-        // Get the undo manager from canvas view
+         undoManager = canvasView.undoManager
+     }
+ 
+diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift
+--- a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift
++++ b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift
+@@ -23,17 +23,17 @@
+     }
+ 
+     private func setupCanvasView() {
+-        // Configure canvas view exactly like the working example
++        // LifeOS Phase 2: document zoom/scroll owned by RN; PencilKit only draws.
+         canvasView.drawingPolicy = .anyInput
+         canvasView.overrideUserInterfaceStyle = .light
+         canvasView.isMultipleTouchEnabled = true
+         canvasView.isOpaque = true
+         canvasView.backgroundColor = UIColor.clear
+         canvasView.delegate = self
+-        canvasView.isScrollEnabled = true
++        canvasView.isScrollEnabled = false
+         canvasView.isUserInteractionEnabled = true
+         canvasView.minimumZoomScale = 1.0
+-        canvasView.maximumZoomScale = 4.0
++        canvasView.maximumZoomScale = 1.0
+         canvasView.bounces = false
+         canvasView.bouncesZoom = false
+ 
+@@ -53,6 +53,17 @@
+ 
+     }
+ 
++    // MARK: - Props (LifeOS)
++
++    func setDrawingPolicy(_ policy: String?) {
++        let value = (policy ?? "any").lowercased()
++        if value == "pencilonly" || value == "pencil" {
++            canvasView.drawingPolicy = .pencilOnly
++        } else {
++            canvasView.drawingPolicy = .anyInput
++        }
++    }
++
+     public override func didMoveToSuperview() {
+         super.didMoveToSuperview()
+ 

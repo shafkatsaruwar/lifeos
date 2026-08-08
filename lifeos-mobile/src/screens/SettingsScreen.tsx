@@ -1,9 +1,11 @@
 import Feather from "@expo/vector-icons/Feather";
+import * as WebBrowser from "expo-web-browser";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { signOut } from "firebase/auth";
 import { ActionButton, Card, Eyebrow, Page, SegmentedControl, Title } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { API_BASE } from "../lib/api";
 import { auth } from "../lib/firebase";
 import { SPACE_COLORS } from "../lib/theme";
 import type { EnergyLevel, ThemeMode } from "../types";
@@ -164,6 +166,26 @@ export function SettingsScreen() {
               value={Boolean(workspace.settings.weekStartsMonday)}
               onValueChange={(v) => patchSettings({ weekStartsMonday: v })}
               trackColor={{ true: theme.accent }}
+            />
+          </View>
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
+              <Feather name="archive" size={14} color={theme.accent} />
+            </View>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Archives</Text>
+          </View>
+          <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 18 }}>
+            Done and canceled tasks are kept in Settings → Archives on the web. Go to the web to see archived tasks.
+          </Text>
+          <View style={{ marginTop: 14 }}>
+            <ActionButton
+              label="Open archives on web"
+              icon="external-link"
+              quiet
+              onPress={() => WebBrowser.openBrowserAsync(`${API_BASE}/?view=Settings`)}
             />
           </View>
         </Card>

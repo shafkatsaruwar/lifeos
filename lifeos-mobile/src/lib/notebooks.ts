@@ -16,13 +16,67 @@ export const PAPER_OPTIONS: { key: PaperStyle; label: string }[] = [
   { key: "ruled", label: "Ruled" },
   { key: "narrowRuled", label: "Narrow" },
   { key: "grid", label: "Grid" },
+  { key: "graph", label: "Graph" },
   { key: "dotted", label: "Dotted" },
   { key: "cornell", label: "Cornell" },
+  { key: "todo", label: "To-do" },
+  { key: "music", label: "Music" },
+];
+
+/** Starter page templates — paper + optional seed text (no fake handwriting). */
+export type PageTemplate = {
+  id: string;
+  label: string;
+  paper: PaperStyle;
+  title?: string;
+  seedTexts?: Array<Partial<PageTextElement> & { text: string }>;
+};
+
+export const PAGE_TEMPLATES: PageTemplate[] = [
+  { id: "blank", label: "Blank", paper: "blank" },
+  { id: "ruled", label: "Ruled", paper: "ruled" },
+  { id: "cornell", label: "Cornell", paper: "cornell", title: "Notes" },
+  {
+    id: "meeting",
+    label: "Meeting",
+    paper: "ruled",
+    title: "Meeting",
+    seedTexts: [
+      { text: "Attendees", y: 56, fontSize: 14, bold: true, width: 280, height: 36 },
+      { text: "Agenda", y: 120, fontSize: 14, bold: true, width: 280, height: 36 },
+      { text: "Actions", y: 280, fontSize: 14, bold: true, width: 280, height: 36 },
+    ],
+  },
+  {
+    id: "todo",
+    label: "To-do",
+    paper: "todo",
+    title: "To-do",
+    seedTexts: [{ text: "Today", y: 40, fontSize: 18, bold: true, width: 220, height: 40 }],
+  },
+  { id: "graph", label: "Graph", paper: "graph" },
+  { id: "music", label: "Music", paper: "music" },
+  { id: "dotted", label: "Dotted", paper: "dotted" },
 ];
 
 export const NOTEBOOK_COLORS = ["#625AF6", "#3F7ED7", "#31926A", "#D38232", "#D95754", "#202124"] as const;
 
 export const TEXT_SIZES = [14, 18, 24, 32] as const;
+
+/** US Letter aspect (width:height) for notebook sheets in the editor. */
+export const PAGE_ASPECT = 8.5 / 11;
+/** Subtle gap between pages in Seamless view. */
+export const PAGE_GAP = 14;
+export const PAGE_SHEET_COLOR = "#FFFEFA";
+
+export function pageHeightForWidth(width: number): number {
+  return Math.max(320, Math.round(width / PAGE_ASPECT));
+}
+
+export function pageSizeForWidth(width: number): { width: number; height: number } {
+  const w = Math.max(240, Math.round(width));
+  return { width: w, height: pageHeightForWidth(w) };
+}
 
 export function emptyNotebookHub(): NotebookHub {
   return { folders: [], notebooks: [] };
@@ -40,7 +94,7 @@ export function createNotebook(
   const now = new Date().toISOString();
   return {
     id: uid(),
-    name: name.trim() || "Untitled notebook",
+    name: name.trim() || "Untitled note",
     folderId: opts?.folderId,
     color: opts?.color ?? NOTEBOOK_COLORS[0],
     cover: "solid",
@@ -48,6 +102,25 @@ export function createNotebook(
     pageCount: 1,
     createdAt: now,
     updatedAt: now,
+  };
+}
+
+/** Move a notebook into a folder, or pass `undefined` / omit to unfile it. */
+export function setNotebookFolder(
+  hub: NotebookHub,
+  notebookId: string,
+  folderId: string | undefined,
+): NotebookHub {
+  const now = new Date().toISOString();
+  return {
+    ...hub,
+    notebooks: hub.notebooks.map((notebook) => {
+      if (notebook.id !== notebookId) return notebook;
+      const next = { ...notebook, updatedAt: now };
+      if (folderId) next.folderId = folderId;
+      else delete next.folderId;
+      return next;
+    }),
   };
 }
 
@@ -98,12 +171,60 @@ export function createPage(notebookId: string, index: number, paper: PaperStyle 
   };
 }
 
+/** Deep-ish copy for Duplicate — new ids on overlays so edits don't alias. */
+export function cloneNotebookPage(source: NotebookPage, index: number): NotebookPage {
+  const base = createPage(source.notebookId, index, source.paper);
+  return {
+    ...base,
+    ink: source.ink ? { ...source.ink } : undefined,
+    title: source.title ? `${source.title} copy` : undefined,
+    textElements: (source.textElements ?? []).map((t) => ({ ...t, id: uid() })),
+    imageElements: (source.imageElements ?? []).map((img) => ({ ...img, id: uid() })),
+    recognition: undefined,
+  };
+}
+
+export function pageFromTemplate(
+  notebookId: string,
+  index: number,
+  template: PageTemplate,
+): NotebookPage {
+  const page = createPage(notebookId, index, template.paper);
+  return {
+    ...page,
+    title: template.title,
+    textElements: (template.seedTexts ?? []).map((seed) => createTextElement(seed)),
+  };
+}
+
 export function pagesForNotebook(pages: Record<string, NotebookPage>, notebookId: string): NotebookPage[] {
   return Object.values(pages || {})
     .filter((p) => p.notebookId === notebookId)
     .sort((a, b) => a.index - b.index);
 }
 
+/** Page to open when tapping a note — most recently edited, else first page. */
+export function primaryPageForNotebook(
+  pages: Record<string, NotebookPage>,
+  notebookId: string,
+): NotebookPage | undefined {
+  const list = pagesForNotebook(pages, notebookId);
+  if (!list.length) return undefined;
+  return [...list].sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""))[0] ?? list[0];
+}
+
 export function reindexPages(pages: NotebookPage[]): NotebookPage[] {
   return pages.map((p, index) => ({ ...p, index, updatedAt: new Date().toISOString() }));
+}
+
+/** Swap two pages in order, then reindex. */
+export function movePageInList(pages: NotebookPage[], pageId: string, direction: -1 | 1): NotebookPage[] | null {
+  const index = pages.findIndex((p) => p.id === pageId);
+  const swap = index + direction;
+  if (index < 0 || swap < 0 || swap >= pages.length) return null;
+  const next = [...pages];
+  const tmp = next[index];
+  next[index] = next[swap];
+  next[swap] = tmp;
+  return reindexPages(next);
 }

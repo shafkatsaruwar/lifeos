@@ -198,6 +198,9 @@ export type SchoolHubState = {
   goals: HubRecord[];
 };
 
+/** Notebook editor page layout preference (persisted in settings). */
+export type NotebookPageView = "seamless" | "single";
+
 export type SettingsState = {
   accent?: string;
   preferredName?: string;
@@ -208,6 +211,8 @@ export type SettingsState = {
   compactMode?: boolean;
   reduceMotion?: boolean;
   themeMode?: ThemeMode;
+  /** Continuous vertical pages vs one page at a time. Default: seamless. */
+  notebookPageView?: NotebookPageView;
   currentEnergy?: EnergyLevel;
   ambientActivity?: AmbientActivity | null;
   momentumLog?: MomentumEntry[];
@@ -217,7 +222,16 @@ export type SettingsState = {
 };
 
 /** Digital paper style for notebook pages (PencilKit draws on top). */
-export type PaperStyle = "blank" | "ruled" | "narrowRuled" | "grid" | "dotted" | "cornell";
+export type PaperStyle =
+  | "blank"
+  | "ruled"
+  | "narrowRuled"
+  | "grid"
+  | "graph"
+  | "dotted"
+  | "cornell"
+  | "todo"
+  | "music";
 
 /** Optional LifeOS context — notebooks can also stay personal/unfiled. */
 export type NotebookContextLink = {
@@ -274,6 +288,8 @@ export type PageImageElement = {
   /** local | cloud — cloud reserved for Storage upload later */
   storage?: "local" | "cloud";
   opacity?: number;
+  /** Degrees clockwise — optional, defaults to 0 */
+  rotation?: number;
 };
 
 /**

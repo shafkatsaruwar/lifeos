@@ -4,7 +4,8 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { DashboardModule, DashboardRow, ModuleEmpty, ProgressBar, QuickAction } from "../components/HubDashboard";
 import { Eyebrow, Page } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
-import { formatDueDate, getGreeting, taskIsOpen, toDateKey, uid } from "../lib/helpers";
+import { formatDueDate, getGreeting, taskIsOpen, toDateKey } from "../lib/helpers";
+import { createNotebook, createPage, primaryPageForNotebook } from "../lib/notebooks";
 
 function periodProgress(now: Date) {
   const day = (now.getHours() * 60 + now.getMinutes()) / 1440;
@@ -18,7 +19,7 @@ function periodProgress(now: Date) {
 }
 
 export function LifeDashboardScreen() {
-  const { theme, workspace, updateTasks, updateNotes, updateProjects, updateLife } = useLifeOS();
+  const { theme, workspace, updateTasks, updateNotebookHub, upsertNotebookPage, updateProjects, updateLife } = useLifeOS();
   const navigation = useNavigation<any>();
   const now = new Date();
   const today = toDateKey(now);
@@ -30,9 +31,33 @@ export function LifeDashboardScreen() {
     .filter((task) => !task.classId && taskIsOpen(task))
     .filter((task) => !task.due || (task.due >= today && task.due <= weekEndKey))
     .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
-  const notes = workspace.notes
+  const textNotes = workspace.notes
     .filter((note) => !note.classId)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    .map((note) => ({
+      id: note.id,
+      title: note.title || "Untitled note",
+      updatedAt: note.updatedAt,
+      open: () => navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } }),
+    }));
+  const pageNotes = workspace.notebookHub.notebooks
+    .filter((nb) => nb.context?.type !== "class")
+    .map((nb) => ({
+      id: nb.id,
+      title: nb.name,
+      updatedAt: nb.updatedAt,
+      open: () => {
+        const page = primaryPageForNotebook(workspace.notebookPages, nb.id);
+        if (page) {
+          navigation.navigate("LibraryTab", {
+            screen: "PageCanvas",
+            params: { notebookId: nb.id, pageId: page.id },
+          });
+        } else {
+          navigation.navigate("LibraryTab", { screen: "NotebookDetail", params: { notebookId: nb.id } });
+        }
+      },
+    }));
+  const notes = [...textNotes, ...pageNotes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const habitsDone = workspace.life.habits.filter((habit) => habit.completedDates?.includes(today)).length;
   const upcomingEvents = [...workspace.calendar]
     .filter((event) => event.start.slice(0, 10) >= today)
@@ -65,9 +90,15 @@ export function LifeDashboardScreen() {
   };
 
   const createNote = async () => {
-    const id = uid();
-    await updateNotes([{ id, title: "", body: "", template: "blank", updatedAt: new Date().toISOString() }, ...workspace.notes]);
-    navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: id } });
+    const hub = workspace.notebookHub;
+    const notebook = createNotebook("Untitled note", { context: { type: "personal", label: "Personal" } });
+    const page = createPage(notebook.id, 0, "ruled");
+    await updateNotebookHub({ ...hub, notebooks: [notebook, ...hub.notebooks] });
+    await upsertNotebookPage(page);
+    navigation.navigate("LibraryTab", {
+      screen: "PageCanvas",
+      params: { notebookId: notebook.id, pageId: page.id },
+    });
   };
 
   const createProject = async () => {
@@ -199,12 +230,12 @@ export function LifeDashboardScreen() {
           {notes.length ? notes.slice(0, 3).map((note) => (
             <DashboardRow
               key={note.id}
-              icon="file-text"
-              title={note.title || "Untitled note"}
+              icon="edit-3"
+              title={note.title}
               meta={new Date(note.updatedAt).toLocaleDateString()}
-              onPress={() => navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } })}
+              onPress={note.open}
             />
-          )) : <ModuleEmpty text="Personal notes will appear here." />}
+          )) : <ModuleEmpty text="Handwritten and typed notes will appear here." />}
         </DashboardModule>
 
         <DashboardModule icon="activity" title="Recent trainings" action="Open" onAction={() => openCollection("trainings")}>
@@ -295,7 +326,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 29, fontWeight: "800", marginTop: 2 },
   greeting: { fontSize: 13, marginTop: 2 },
   nowButton: { width: 44, height: 44, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  quickRow: { gap: 7, paddingRight: 16 },
+  quickRow: { flexGrow: 1, justifyContent: "center", alignItems: "center", gap: 14 },
   rowAction: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -10 },
   habitSummary: { flexDirection: "row", alignItems: "baseline", gap: 6, paddingVertical: 8 },
   habitCount: { fontSize: 22, fontWeight: "800", fontVariant: ["tabular-nums"] },

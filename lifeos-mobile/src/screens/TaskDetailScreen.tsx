@@ -223,6 +223,21 @@ export function TaskDetailScreen() {
             onChangeText={(v) => persist({ due: v })}
             placeholder="YYYY-MM-DD"
             placeholderTextColor={theme.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+          />
+        </Card>
+
+        <Card>
+          <Text style={[styles.cardLabel, { color: theme.text }]}>Start time</Text>
+          <TextInput
+            value={task.startTime ?? ""}
+            onChangeText={(v) => persist({ startTime: v.trim() || undefined })}
+            placeholder="HH:mm (optional)"
+            placeholderTextColor={theme.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
             style={[styles.input, { color: theme.text, borderColor: theme.border }]}
           />
         </Card>

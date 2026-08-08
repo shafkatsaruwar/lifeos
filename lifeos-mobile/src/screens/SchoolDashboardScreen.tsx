@@ -7,6 +7,7 @@ import { FocusModal } from "../components/FocusModal";
 import { Eyebrow, Page } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatDueDate, taskIsOpen, toDateKey } from "../lib/helpers";
+import { primaryPageForNotebook } from "../lib/notebooks";
 
 export function SchoolDashboardScreen() {
   const { theme, workspace, updateTasks } = useLifeOS();
@@ -23,8 +24,36 @@ export function SchoolDashboardScreen() {
     .filter((task) => !task.due || (task.due >= today && task.due <= weekEndKey))
     .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
   const assignments = academicTasks.filter((task) => task.academicType && task.academicType !== "Reading" && task.academicType !== "Discussion");
-  const lectureNotes = workspace.notes
-    .filter((note) => note.classId)
+  const lectureNotes = [
+    ...workspace.notes
+      .filter((note) => note.classId)
+      .map((note) => ({
+        id: note.id,
+        title: note.title || "Untitled lecture",
+        updatedAt: note.updatedAt,
+        classId: note.classId,
+        open: () => navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } }),
+      })),
+    ...workspace.notebookHub.notebooks
+      .filter((nb) => nb.context?.classId)
+      .map((nb) => ({
+        id: nb.id,
+        title: nb.name,
+        updatedAt: nb.updatedAt,
+        classId: nb.context?.classId,
+        open: () => {
+          const page = primaryPageForNotebook(workspace.notebookPages, nb.id);
+          if (page) {
+            navigation.navigate("LibraryTab", {
+              screen: "PageCanvas",
+              params: { notebookId: nb.id, pageId: page.id },
+            });
+          } else {
+            navigation.navigate("LibraryTab", { screen: "NotebookDetail", params: { notebookId: nb.id } });
+          }
+        },
+      })),
+  ]
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, 4);
   const focusTask = workspace.tasks.find((task) => task.id === focusTaskId);
@@ -146,11 +175,11 @@ export function SchoolDashboardScreen() {
             return (
               <DashboardRow
                 key={note.id}
-                icon="file-text"
-                title={note.title || "Untitled lecture"}
+                icon="edit-3"
+                title={note.title}
                 meta={`${course?.code ?? "Course"} · ${new Date(note.updatedAt).toLocaleDateString()}`}
                 color={course?.color}
-                onPress={() => navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } })}
+                onPress={note.open}
               />
             );
           }) : <ModuleEmpty text="Course-linked notes will appear here." />}
@@ -226,7 +255,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 29, fontWeight: "800", marginTop: 2 },
   subtitle: { fontSize: 13, marginTop: 2 },
   profileButton: { width: 44, height: 44, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  quickRow: { gap: 7, paddingRight: 16 },
+  quickRow: { flexGrow: 1, justifyContent: "center", alignItems: "center", gap: 14 },
   courseRow: { gap: 10, paddingVertical: 8, paddingRight: 12 },
   courseCard: { width: 152, minHeight: 146, borderWidth: 1, borderRadius: 8, padding: 12 },
   courseIcon: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center" },
