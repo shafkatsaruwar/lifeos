@@ -50,12 +50,22 @@ export function TaskDetailScreen() {
   };
 
   return (
-    <Page edges={["bottom"]}>
+    <Page edges={["top", "bottom"]}>
       <View style={styles.headRow}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
+        <Pressable
+          accessibilityLabel="Back"
+          accessibilityRole="button"
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
           <Feather name="chevron-left" size={22} color={theme.text} />
         </Pressable>
-        <Pressable onPress={deleteTask} style={styles.backButton}>
+        <Pressable
+          accessibilityLabel="Delete task"
+          accessibilityRole="button"
+          onPress={deleteTask}
+          style={styles.backButton}
+        >
           <Feather name="trash-2" size={19} color={theme.danger} />
         </Pressable>
       </View>
@@ -171,8 +181,16 @@ export function TaskDetailScreen() {
 const styles = StyleSheet.create({
   screen: { padding: 20, paddingTop: 4, paddingBottom: 28, gap: 14 },
   missing: { flex: 1, alignItems: "center", justifyContent: "center" },
-  headRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 12, paddingTop: 4 },
-  backButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  headRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingTop: 4,
+    paddingBottom: 2,
+    minHeight: 44,
+  },
+  backButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   titleInput: { fontSize: 26, fontWeight: "700", lineHeight: 32 },
   spaceLabel: { fontSize: 13, fontWeight: "700", marginTop: -6 },
   row: { flexDirection: "row", gap: 10 },

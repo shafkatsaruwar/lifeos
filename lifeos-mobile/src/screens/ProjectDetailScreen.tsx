@@ -24,7 +24,7 @@ export function ProjectDetailScreen() {
     updateTasks(workspace.tasks.map((t) => (t.id === id ? { ...t, done: !t.done, status: !t.done ? "Done" : "Not started" } : t)));
 
   return (
-    <Page edges={["bottom"]}>
+    <Page edges={["top", "bottom"]}>
       <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
         <Feather name="chevron-left" size={22} color={theme.text} />
         <Text style={{ color: theme.text, fontWeight: "700" }}>Projects</Text>
