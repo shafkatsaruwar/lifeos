@@ -1,7 +1,17 @@
 import Feather from "@expo/vector-icons/Feather";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AppState,
+  type AppStateStatus,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { endFocusLiveActivity, syncFocusLiveActivity } from "../lib/focusLiveActivity";
@@ -30,6 +40,8 @@ export function FocusModal({ visible, task, onClose }: { visible: boolean; task:
   const [started, setStarted] = useState(Boolean(task.focusSessionStarted));
   const [checklist, setChecklist] = useState<string[]>(task.checklist ?? []);
   const [checks, setChecks] = useState<boolean[]>(task.checklistProgress ?? []);
+  const taskRef = useRef(task);
+  taskRef.current = task;
 
   const persist = useCallback(
     (patch: Partial<Task>) =>
@@ -54,11 +66,45 @@ export function FocusModal({ visible, task, onClose }: { visible: boolean; task:
     syncFocusLiveActivity(task, fresh, isRunning);
   }, [task.id, task.focusUpdatedAt, task.focusSessionRunning, task.focusSessionStarted, visible]);
 
+  // Wall-clock ticks: JS intervals freeze in background, so never decrement a local
+  // counter — always derive remaining from focusUpdatedAt + focusRemainingSeconds.
   useEffect(() => {
-    if (!running) return;
-    const id = setInterval(() => setRemaining((value) => Math.max(0, value - 1)), 1000);
-    return () => clearInterval(id);
-  }, [running]);
+    if (!visible || !running) return;
+
+    const syncFromClock = (persistCatchUp = false) => {
+      const current = taskRef.current;
+      const fresh = taskRemaining(current);
+      setRemaining(fresh);
+      if (persistCatchUp) {
+        persist({ focusRemainingSeconds: fresh, focusSessionRunning: fresh > 0 });
+        syncFocusLiveActivity(current, fresh, fresh > 0);
+      }
+      return fresh;
+    };
+
+    syncFromClock(false);
+    const id = setInterval(() => {
+      syncFromClock(false);
+    }, 1000);
+
+    const onAppState = (state: AppStateStatus) => {
+      if (state !== "active") return;
+      // Catch up after background/lock — Live Activity already used wall-clock.
+      const current = taskRef.current;
+      const fresh = syncFromClock(true);
+      if (fresh <= 0) {
+        setRunning(false);
+        endFocusLiveActivity(current, 0);
+        void cancelFocusNotifications(current.id);
+      }
+    };
+    const sub = AppState.addEventListener("change", onAppState);
+
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
+  }, [visible, running, persist]);
 
   useEffect(() => {
     if (remaining === 0 && running) {
