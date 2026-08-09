@@ -8,6 +8,7 @@ import {
 } from "./HandwritingCanvas";
 import { PageElementsLayer } from "./PageElementsLayer";
 import { PaperBackground } from "./PaperBackground";
+import { PdfPageUnderlay } from "./PdfPageUnderlay";
 import { PAGE_SHEET_COLOR, paperColorHex } from "../lib/notebooks";
 import type { NoteInk, NotebookPage, PageCanvasMode, PageImageElement, PageTextElement } from "../types";
 
@@ -87,6 +88,7 @@ export const PageSheet = memo(function PageSheet({
       ]}
     >
       <View style={[StyleSheet.absoluteFill, { backgroundColor: sheetColor }]} />
+      {page.pdfRef ? <PdfPageUnderlay page={page} /> : null}
       {liveInk ? (
         <View style={StyleSheet.absoluteFill} pointerEvents={inkInteractive ? "auto" : "none"}>
           <HandwritingCanvas
@@ -100,11 +102,11 @@ export const PageSheet = memo(function PageSheet({
             inkWidth={inkWidth}
             ink={page.ink}
             onChange={onInkChange}
-            backgroundColor={sheetColor.replace("#", "")}
+            backgroundColor={page.pdfRef ? "00000000" : sheetColor.replace("#", "")}
           />
         </View>
       ) : null}
-      {page.paper !== "blank" ? (
+      {!page.pdfRef && page.paper !== "blank" ? (
         <PaperBackground paper={page.paper} paperColor={page.paperColor} overlay />
       ) : null}
       <PageElementsLayer

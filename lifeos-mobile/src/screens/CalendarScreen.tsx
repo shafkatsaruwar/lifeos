@@ -23,6 +23,7 @@ import {
 } from "../lib/helpers";
 import { fetchIcsFromUrl, parseIcsEvents } from "../lib/api";
 import { SPACE_COLORS } from "../lib/theme";
+import { mergeCalendarWithWorkMeetings } from "../lib/workos";
 import type { CalendarEvent } from "../types";
 
 type Mode = "upcoming" | "month" | "day";
@@ -55,7 +56,10 @@ export function CalendarScreen() {
   const [color, setColor] = useState<string>(SPACE_COLORS[0]);
 
   const todayKey = toDateKey(new Date());
-  const events = workspace.calendar;
+  const events = useMemo(() => {
+    if (workspace.settings.enableWorkOS === false) return workspace.calendar;
+    return mergeCalendarWithWorkMeetings(workspace.calendar, workspace.work);
+  }, [workspace.calendar, workspace.work, workspace.settings.enableWorkOS]);
 
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const firstDayOffset = monthStart.getDay();

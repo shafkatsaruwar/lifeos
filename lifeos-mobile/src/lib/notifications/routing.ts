@@ -9,7 +9,10 @@ export function navigateFromNotification(payload: Partial<NotifPayload> | null |
   const id = payload.targetId;
 
   if (category === "focus") {
-    navigationRef.navigate("NowTab" as never, { screen: "NowHome" } as never);
+    navigationRef.navigate("NowTab" as never, {
+      screen: "NowHome",
+      params: { openFocus: true },
+    } as never);
     return;
   }
 
@@ -39,6 +42,7 @@ export const linking = {
       NowTab: {
         screens: {
           NowHome: "now",
+          Focus: "focus",
           Settings: "settings",
           TaskDetail: "now/task/:taskId",
         },
@@ -64,6 +68,11 @@ export const linking = {
       },
       SchoolTab: {
         path: "school",
+      },
+      WorkTab: {
+        screens: {
+          WorkDashboard: "work",
+        },
       },
       LibraryTab: {
         path: "library",

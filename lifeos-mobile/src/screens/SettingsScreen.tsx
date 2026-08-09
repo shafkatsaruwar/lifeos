@@ -275,7 +275,7 @@ export function SettingsScreen() {
             <Text style={[styles.cardLabel, { color: theme.text }]}>Environments</Text>
           </View>
           <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>
-            Show or hide Life and School tabs. Work syncs with the web app (Work hub on mobile comes later).
+            Show or hide Life, School, and Work tabs. Data stays in sync with the web app.
           </Text>
           <View style={styles.settingRow}>
             <View style={styles.grow}>
@@ -302,7 +302,7 @@ export function SettingsScreen() {
           <View style={styles.settingRow}>
             <View style={styles.grow}>
               <Text style={{ color: theme.text, fontWeight: "800" }}>Work</Text>
-              <Text style={{ color: theme.muted, fontSize: 12 }}>Saved for web parity</Text>
+              <Text style={{ color: theme.muted, fontSize: 12 }}>Show the Work tab and hub</Text>
             </View>
             <Switch
               value={workspace.settings.enableWorkOS !== false}

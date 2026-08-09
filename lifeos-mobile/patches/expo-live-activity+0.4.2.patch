@@ -1,0 +1,17 @@
+diff --git a/node_modules/expo-live-activity/ios-files/LiveActivityWidgetBundle.swift b/node_modules/expo-live-activity/ios-files/LiveActivityWidgetBundle.swift
+--- a/node_modules/expo-live-activity/ios-files/LiveActivityWidgetBundle.swift
++++ b/node_modules/expo-live-activity/ios-files/LiveActivityWidgetBundle.swift
+@@ -4,6 +4,13 @@
+ @main
+ struct LiveActivityWidgetBundle: WidgetBundle {
+   var body: some Widget {
+     LiveActivityWidget()
++    // LifeOS home-screen widgets (Attention-first family)
++    LifeOSAttentionWidget()
++    LifeOSNowFocusWidget()
++    LifeOSTasksWidget()
++    LifeOSDeadlineWidget()
++    LifeOSCalendarWidget()
++    LifeOSTodayWidget()
+   }
+ }

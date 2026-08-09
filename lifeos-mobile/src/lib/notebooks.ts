@@ -1,4 +1,5 @@
 import type {
+  Note,
   Notebook,
   NotebookContextLink,
   NotebookCoverStyle,
@@ -14,6 +15,110 @@ import type {
 } from "../types";
 import { recognitionSearchText } from "./handwritingRecognition";
 import { uid } from "./helpers";
+
+const TEMPLATE_TO_PAPER: Record<string, PaperStyle> = {
+  blank: "blank",
+  lined: "ruled",
+  dotted: "dotted",
+  cornell: "cornell",
+  meeting: "ruled",
+};
+
+/**
+ * One-time (idempotent) migration: legacy typed `Note` → notebook + page.
+ * Existing notebooks tagged with `context.legacyNoteId` are skipped.
+ */
+export function migrateLegacyNotesToNotebooks(
+  notes: Note[],
+  hub: NotebookHub,
+  pages: Record<string, NotebookPage>,
+): { hub: NotebookHub; pages: Record<string, NotebookPage>; migratedIds: string[] } {
+  const already = new Set(
+    hub.notebooks.map((n) => n.context?.legacyNoteId).filter(Boolean) as string[],
+  );
+  const nextHub = { ...hub, notebooks: [...hub.notebooks] };
+  const nextPages = { ...pages };
+  const migratedIds: string[] = [];
+
+  for (const note of notes) {
+    if (!note?.id || already.has(note.id)) continue;
+    const paper = TEMPLATE_TO_PAPER[note.template || "blank"] || "ruled";
+    const context: NotebookContextLink = {
+      type: note.classId ? "class" : note.projectName ? "project" : "personal",
+      classId: note.classId,
+      projectName: note.projectName,
+      label: note.projectName || "Personal",
+      legacyNoteId: note.id,
+    };
+    const notebook = createNotebook(note.title?.trim() || "Untitled note", {
+      color: NOTEBOOK_COLORS[migratedIds.length % NOTEBOOK_COLORS.length],
+      cover: "minimal",
+      context,
+    });
+    notebook.updatedAt = note.updatedAt || notebook.updatedAt;
+    const page = createPage(notebook.id, 0, paper);
+    const body = (note.body || "").trim();
+    page.title = note.title?.trim() || undefined;
+    page.textElements = body
+      ? [
+          createTextElement({
+            text: body,
+            x: 40,
+            y: 56,
+            width: 280,
+            height: Math.min(480, 40 + body.split("\n").length * 22),
+            fontSize: 16,
+          }),
+        ]
+      : [];
+    if (note.ink) page.ink = note.ink;
+    page.updatedAt = note.updatedAt || page.updatedAt;
+    nextHub.notebooks.push(notebook);
+    nextPages[page.id] = page;
+    migratedIds.push(note.id);
+    already.add(note.id);
+  }
+
+  return { hub: nextHub, pages: nextPages, migratedIds };
+}
+
+/** Find notebook created from a legacy note id (if any). */
+export function notebookForLegacyNote(hub: NotebookHub, noteId: string): Notebook | undefined {
+  return hub.notebooks.find((n) => n.context?.legacyNoteId === noteId && !n.trashedAt);
+}
+
+/** Create a page-based note from plain text (replaces legacy `Note` writes). */
+export function createNotebookFromText(
+  title: string,
+  body: string,
+  opts?: { projectName?: string; classId?: string; paper?: PaperStyle },
+): { notebook: Notebook; page: NotebookPage } {
+  const notebook = createNotebook(title.trim() || "Untitled note", {
+    cover: "minimal",
+    context: {
+      type: opts?.classId ? "class" : opts?.projectName ? "project" : "personal",
+      classId: opts?.classId,
+      projectName: opts?.projectName,
+      label: opts?.projectName || "Personal",
+    },
+  });
+  const page = createPage(notebook.id, 0, opts?.paper || "ruled");
+  const text = body.trim();
+  if (text) {
+    page.textElements = [
+      createTextElement({
+        text,
+        x: 40,
+        y: 56,
+        width: 280,
+        height: Math.min(480, 40 + text.split("\n").length * 22),
+        fontSize: 16,
+      }),
+    ];
+  }
+  if (title.trim()) page.title = title.trim();
+  return { notebook, page };
+}
 
 export const PAPER_OPTIONS: { key: PaperStyle; label: string }[] = [
   { key: "blank", label: "Plain" },

@@ -1,7 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useMemo, useState } from "react";
 import {
-  ActionSheetIOS,
   Alert,
   FlatList,
   Modal,
@@ -35,13 +34,12 @@ import {
   setNotebookStarred,
   trashNotebook,
 } from "../lib/notebooks";
-import type { Note, Notebook, NotebookFolder } from "../types";
+import type { Notebook, NotebookFolder } from "../types";
 
 type BrowseFilter = "all" | "starred" | "unfiled" | "trash" | string;
 
 type NoteRow =
   | { kind: "pages"; id: string; updatedAt: string; notebook: Notebook }
-  | { kind: "text"; id: string; updatedAt: string; note: Note }
   | { kind: "new"; id: "new" };
 
 const SIDEBAR_W = 232;
@@ -54,7 +52,7 @@ const QUICK_BG = {
 } as const;
 
 export function NotebooksScreen() {
-  const { theme, dark, workspace, updateNotebookHub, upsertNotebookPage, deleteNotebookPage, updateNotes } =
+  const { theme, dark, workspace, updateNotebookHub, upsertNotebookPage, deleteNotebookPage } =
     useLifeOS();
   const navigation = useNavigation<any>();
   const { isTablet, isWide } = useLayout();
@@ -112,13 +110,7 @@ export function NotebooksScreen() {
       notebook,
     }));
 
-    // Typed notes: All + Unfiled only (no trash/star model yet).
-    if (filter === "all" || filter === "unfiled") {
-      for (const note of workspace.notes) {
-        if (q && !(note.title || note.body || "").toLowerCase().includes(q)) continue;
-        rows.push({ kind: "text", id: note.id, updatedAt: note.updatedAt, note });
-      }
-    }
+    // Legacy typed notes are migrated into notebooks on load — library is one model.
 
     rows.sort((a, b) => {
       if (a.kind === "new" || b.kind === "new") return 0;
@@ -146,35 +138,8 @@ export function NotebooksScreen() {
     setComposer("notebook");
   };
 
-  const createTextNote = () => {
-    const id = uid();
-    void updateNotes([
-      { id, title: "", body: "", template: "blank", updatedAt: new Date().toISOString() },
-      ...workspace.notes,
-    ]);
-    navigation.navigate("NoteEditor", { noteId: id });
-  };
-
   const openCreateMenu = (inFolderId?: string) => {
-    const createPages = () => openCreateNotebook(inFolderId);
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ["Cancel", "New note", "New text note"],
-          cancelButtonIndex: 0,
-        },
-        (index) => {
-          if (index === 1) createPages();
-          if (index === 2) createTextNote();
-        },
-      );
-      return;
-    }
-    Alert.alert("New note", undefined, [
-      { text: "Cancel", style: "cancel" },
-      { text: "New note", onPress: createPages },
-      { text: "New text note", onPress: createTextNote },
-    ]);
+    openCreateNotebook(inFolderId);
   };
 
   const openCreateFolder = () => {
@@ -249,17 +214,6 @@ export function NotebooksScreen() {
     Alert.alert("Delete forever?", `"${notebook.name}" and all its pages will be removed.`, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: () => void purgeNotebook(notebook.id) },
-    ]);
-  };
-
-  const confirmDeleteTextNote = (note: Note) => {
-    Alert.alert("Delete note?", `"${note.title || "Untitled note"}" will be removed.`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => void updateNotes(workspace.notes.filter((n) => n.id !== note.id)),
-      },
     ]);
   };
 
@@ -477,34 +431,16 @@ export function NotebooksScreen() {
   const renderCoverFace = (opts: {
     color: string;
     cover?: Notebook["cover"];
-    kind?: "pages" | "text";
     starred?: boolean;
   }) => (
     <View style={{ width: coverW }}>
-      {opts.kind === "text" ? (
-        <View
-          style={[
-            styles.textCover,
-            {
-              width: coverW,
-              height: coverH,
-              backgroundColor: dark ? "#22252C" : "#F4F6FA",
-              borderColor: theme.border,
-            },
-          ]}
-        >
-          <View style={[styles.spine, { backgroundColor: opts.color }]} />
-          <Feather name="type" size={22} color={opts.color} />
-        </View>
-      ) : (
-        <NotebookCoverFace
-          color={opts.color}
-          cover={opts.cover}
-          width={coverW}
-          height={coverH}
-          borderColor={theme.border}
-        />
-      )}
+      <NotebookCoverFace
+        color={opts.color}
+        cover={opts.cover}
+        width={coverW}
+        height={coverH}
+        borderColor={theme.border}
+      />
       {opts.starred ? (
         <View style={styles.starBadge}>
           <Feather name="star" size={12} color={theme.warning} />
@@ -535,23 +471,6 @@ export function NotebooksScreen() {
             <Feather name="plus" size={28} color={theme.accent} />
           </View>
           <Text style={[styles.metaTitle, { color: theme.text }]}>New…</Text>
-        </Pressable>
-      );
-    }
-
-    if (item.kind === "text") {
-      const note = item.note;
-      return (
-        <Pressable
-          onPress={() => navigation.navigate("NoteEditor", { noteId: note.id })}
-          onLongPress={() => confirmDeleteTextNote(note)}
-          style={{ width: coverW, marginBottom: 4 }}
-        >
-          {renderCoverFace({ color: theme.blue, cover: "minimal", kind: "text" })}
-          <Text style={[styles.metaTitle, { color: theme.text }]} numberOfLines={1}>
-            {note.title || "Untitled note"}
-          </Text>
-          <Text style={[styles.metaDate, { color: theme.muted }]}>{formatEdited(note.updatedAt)}</Text>
         </Pressable>
       );
     }

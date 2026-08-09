@@ -1,7 +1,9 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
 import { useMemo } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { PlanTomorrowModal } from "../components/PlanTomorrowModal";
+import { useState } from "react";
 import { DashboardModule, DashboardRow, ModuleEmpty, ProgressBar, QuickAction } from "../components/HubDashboard";
 import { Eyebrow, Page } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
@@ -34,6 +36,7 @@ export function LifeDashboardScreen() {
   const { theme, workspace, updateTasks, updateNotebookHub, upsertNotebookPage, updateProjects, updateLife } =
     useLifeOS();
   const navigation = useNavigation<any>();
+  const [planTomorrowOpen, setPlanTomorrowOpen] = useState(false);
   const now = new Date();
   const today = toDateKey(now);
   const weekEnd = new Date(now);
@@ -127,14 +130,6 @@ export function LifeDashboardScreen() {
   const inboxCount = buildInbox(workspace).filter((i) => i.bucket === "today").length;
   const habitsDone = workspace.life.habits.filter((habit) => habit.completedDates?.includes(today)).length;
   const notes = useMemo(() => {
-    const textNotes = workspace.notes
-      .filter((note) => !note.classId)
-      .map((note) => ({
-        id: note.id,
-        title: note.title || "Untitled note",
-        updatedAt: note.updatedAt,
-        open: () => navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } }),
-      }));
     const pageNotes = workspace.notebookHub.notebooks
       .filter((nb) => nb.context?.type !== "class" && !nb.trashedAt)
       .map((nb) => ({
@@ -153,8 +148,8 @@ export function LifeDashboardScreen() {
           }
         },
       }));
-    return [...textNotes, ...pageNotes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  }, [workspace.notes, workspace.notebookHub.notebooks, workspace.notebookPages, navigation]);
+    return pageNotes.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }, [workspace.notebookHub.notebooks, workspace.notebookPages, navigation]);
 
   const createTask = async () => {
     const id = Date.now();
@@ -187,10 +182,27 @@ export function LifeDashboardScreen() {
     });
   };
 
-  const createProject = async () => {
-    const nameNext = `New project ${workspace.projects.length + 1}`;
-    await updateProjects([...workspace.projects, { name: nameNext, kind: "finishable", color: theme.accent }]);
-    navigation.navigate("ProjectDetail", { projectName: nameNext });
+  const createProject = () => {
+    Alert.prompt(
+      "New project",
+      "Give this project a name",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Create",
+          onPress: async (value?: string) => {
+            const nameNext = (value || "").trim() || `New project ${workspace.projects.length + 1}`;
+            if (workspace.projects.some((p) => p.name === nameNext)) {
+              Alert.alert("Name taken", "Another project already uses that name.");
+              return;
+            }
+            await updateProjects([...workspace.projects, { name: nameNext, kind: "finishable", color: theme.accent }]);
+            navigation.navigate("ProjectDetail", { projectName: nameNext });
+          },
+        },
+      ],
+      "plain-text",
+    );
   };
 
   const toggleHabit = (id: string) => {
@@ -251,6 +263,7 @@ export function LifeDashboardScreen() {
           <QuickAction icon="edit-3" label="New note" onPress={createNote} />
           <QuickAction icon="check-square" label="New task" onPress={createTask} color={theme.blue} />
           <QuickAction icon="folder-plus" label="New project" onPress={createProject} color={theme.warning} />
+          <QuickAction icon="sun" label="Plan tomorrow" onPress={() => setPlanTomorrowOpen(true)} color={theme.accent} />
           <QuickAction icon="map" label="Trip idea" onPress={() => openCollection("trips", true)} color={theme.success} />
         </ScrollView>
 
@@ -414,6 +427,7 @@ export function LifeDashboardScreen() {
           )}
         </DashboardModule>
       </ScrollView>
+      <PlanTomorrowModal visible={planTomorrowOpen} onClose={() => setPlanTomorrowOpen(false)} />
     </Page>
   );
 }

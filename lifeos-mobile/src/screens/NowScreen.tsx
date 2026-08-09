@@ -1,12 +1,14 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { ActionButton, Card, Empty, Eyebrow, IconButton, Page, Subtitle, Title } from "../components/UI";
 import { QuickCaptureModal } from "../components/QuickCaptureModal";
 import { AiTaskModal } from "../components/AiTaskModal";
 import { AmbientStartModal, AmbientWrapupModal, BreakModal } from "../components/AmbientModals";
 import { SearchModal } from "../components/SearchModal";
+import { PlanTomorrowModal } from "../components/PlanTomorrowModal";
+import { SwipeDeleteRow } from "../components/SwipeDeleteRow";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatAmbientDuration, formatDueDate, getGreeting, taskIsOpen } from "../lib/helpers";
 import { PRIORITY_RANK } from "../lib/helpers";
@@ -15,6 +17,7 @@ import { FocusModal } from "../components/FocusModal";
 export function NowScreen() {
   const { workspace, theme, updateSettings, updateTasks } = useLifeOS();
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const [focusOpen, setFocusOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
@@ -22,6 +25,7 @@ export function NowScreen() {
   const [ambientWrapupOpen, setAmbientWrapupOpen] = useState(false);
   const [breakOpen, setBreakOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [planTomorrowOpen, setPlanTomorrowOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -29,7 +33,26 @@ export function NowScreen() {
     return () => clearInterval(id);
   }, []);
 
+  // Deep link / notification: open Focus for running or paused session.
+  useEffect(() => {
+    if (!route.params?.openFocus) return;
+    const focusTask =
+      workspace.tasks.find((t) => t.focusSessionRunning && taskIsOpen(t)) ||
+      workspace.tasks.find((t) => t.focusSessionStarted && taskIsOpen(t) && (t.focusRemainingSeconds ?? 0) > 0);
+    if (focusTask) {
+      if (workspace.settings.nowTaskId !== focusTask.id) {
+        void updateSettings({ ...workspace.settings, nowTaskId: focusTask.id });
+      }
+      setFocusOpen(true);
+    }
+    navigation.setParams?.({ openFocus: undefined });
+  }, [route.params?.openFocus, workspace.tasks]);
+
   const current = workspace.tasks.find((task) => task.id === workspace.settings.nowTaskId && taskIsOpen(task));
+  const focusTask =
+    current ||
+    workspace.tasks.find((t) => t.focusSessionRunning && taskIsOpen(t)) ||
+    workspace.tasks.find((t) => t.focusSessionStarted && taskIsOpen(t) && (t.focusRemainingSeconds ?? 0) > 0);
   const suggestions = workspace.tasks
     .filter(taskIsOpen)
     .filter((task) => task.id !== current?.id)
@@ -53,6 +76,18 @@ export function NowScreen() {
           <IconButton icon="settings" label="Settings" onPress={() => navigation.navigate("Settings")} />
         </View>
         <Subtitle>LifeOS can suggest the next move. You still choose what gets your attention.</Subtitle>
+
+        <Pressable
+          onPress={() => setPlanTomorrowOpen(true)}
+          style={[styles.planCard, { backgroundColor: theme.soft, borderColor: theme.accent }]}
+        >
+          <Feather name="sun" size={18} color={theme.accent} />
+          <View style={styles.grow}>
+            <Text style={[styles.planTitle, { color: theme.text }]}>Wanna plan for tomorrow?</Text>
+            <Text style={{ color: theme.muted, fontSize: 13 }}>Pick up to three things for tomorrow.</Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={theme.accent} />
+        </Pressable>
 
         <View style={styles.quickRow}>
           <Pressable onPress={() => setCaptureOpen(true)} style={[styles.quickAction, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -133,20 +168,29 @@ export function NowScreen() {
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Good next choices</Text>
         {suggestions.length ? (
           suggestions.map((task) => (
-            <Pressable
+            <SwipeDeleteRow
               key={task.id}
-              onPress={() => updateSettings({ ...workspace.settings, nowTaskId: task.id })}
-              style={({ pressed }) => [styles.choice, { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.7 : 1 }]}
+              label={task.title}
+              confirmTitle="Delete task"
+              onDelete={() => updateTasks(workspace.tasks.filter((t) => t.id !== task.id))}
             >
-              <View style={[styles.dot, { backgroundColor: task.color || theme.accent }]} />
-              <View style={styles.grow}>
-                <Text style={[styles.choiceTitle, { color: theme.text }]}>{task.title}</Text>
-                <Text style={[styles.choiceMeta, { color: theme.muted }]}>
-                  {task.project || "Personal"} · Due {formatDueDate(task.due)} · {task.focusMinutes ?? 25} min
-                </Text>
-              </View>
-              <Feather name="arrow-up-right" size={18} color={theme.muted} />
-            </Pressable>
+              <Pressable
+                onPress={() => updateSettings({ ...workspace.settings, nowTaskId: task.id })}
+                style={({ pressed }) => [
+                  styles.choice,
+                  { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <View style={[styles.dot, { backgroundColor: task.color || theme.accent }]} />
+                <View style={styles.grow}>
+                  <Text style={[styles.choiceTitle, { color: theme.text }]}>{task.title}</Text>
+                  <Text style={[styles.choiceMeta, { color: theme.muted }]}>
+                    {task.project || "Personal"} · Due {formatDueDate(task.due)} · {task.focusMinutes ?? 25} min
+                  </Text>
+                </View>
+                <Feather name="arrow-up-right" size={18} color={theme.muted} />
+              </Pressable>
+            </SwipeDeleteRow>
           ))
         ) : (
           <Card>
@@ -155,13 +199,14 @@ export function NowScreen() {
         )}
       </ScrollView>
 
-      {current ? <FocusModal visible={focusOpen} task={current} onClose={() => setFocusOpen(false)} /> : null}
+      {focusTask ? <FocusModal visible={focusOpen} task={focusTask} onClose={() => setFocusOpen(false)} /> : null}
       <QuickCaptureModal visible={captureOpen} onClose={() => setCaptureOpen(false)} />
       <AiTaskModal visible={aiOpen} onClose={() => setAiOpen(false)} />
       <AmbientStartModal visible={ambientStartOpen} onClose={() => setAmbientStartOpen(false)} />
       <AmbientWrapupModal visible={ambientWrapupOpen} activity={ambient ?? null} onClose={() => setAmbientWrapupOpen(false)} />
       <BreakModal visible={breakOpen} onClose={() => setBreakOpen(false)} />
       <SearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} />
+      <PlanTomorrowModal visible={planTomorrowOpen} onClose={() => setPlanTomorrowOpen(false)} />
     </Page>
   );
 }
@@ -188,4 +233,13 @@ const styles = StyleSheet.create({
   dot: { width: 10, height: 10, borderRadius: 5 },
   choiceTitle: { fontSize: 15, fontWeight: "800", lineHeight: 20 },
   choiceMeta: { fontSize: 13, lineHeight: 19, marginTop: 2 },
+  planCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 14,
+  },
+  planTitle: { fontSize: 16, fontWeight: "800" },
 });

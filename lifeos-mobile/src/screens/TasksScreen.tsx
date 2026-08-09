@@ -101,7 +101,12 @@ export function TasksScreen() {
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
-          <TaskRow task={item} onPress={() => navigation.navigate("TaskDetail", { taskId: item.id })} onToggleDone={() => toggleDone(item.id)} />
+          <TaskRow
+            task={item}
+            onPress={() => navigation.navigate("TaskDetail", { taskId: item.id })}
+            onToggleDone={() => toggleDone(item.id)}
+            onDelete={() => updateTasks(workspace.tasks.filter((t) => t.id !== item.id))}
+          />
         )}
         ListEmptyComponent={
           filter === "Done" ? (

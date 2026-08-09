@@ -27,6 +27,7 @@ export function FocusModal({ visible, task, onClose }: { visible: boolean; task:
   const { workspace, theme, updateTasks } = useLifeOS();
   const [remaining, setRemaining] = useState(taskRemaining(task));
   const [running, setRunning] = useState(Boolean(task.focusSessionRunning));
+  const [started, setStarted] = useState(Boolean(task.focusSessionStarted));
   const [checklist, setChecklist] = useState<string[]>(task.checklist ?? []);
   const [checks, setChecks] = useState<boolean[]>(task.checklistProgress ?? []);
 
@@ -41,11 +42,17 @@ export function FocusModal({ visible, task, onClose }: { visible: boolean; task:
   );
 
   useEffect(() => {
-    setRemaining(taskRemaining(task));
-    setRunning(Boolean(task.focusSessionRunning));
+    if (!visible) return;
+    const fresh = taskRemaining(task);
+    const isRunning = Boolean(task.focusSessionRunning);
+    setRemaining(fresh);
+    setRunning(isRunning);
+    setStarted(Boolean(task.focusSessionStarted));
     setChecklist(task.checklist ?? []);
     setChecks(task.checklistProgress ?? []);
-  }, [task.id, visible]);
+    // Sync with wall-clock remaining — never the stale pre-reset state.
+    syncFocusLiveActivity(task, fresh, isRunning);
+  }, [task.id, task.focusUpdatedAt, task.focusSessionRunning, task.focusSessionStarted, visible]);
 
   useEffect(() => {
     if (!running) return;
@@ -62,14 +69,6 @@ export function FocusModal({ visible, task, onClose }: { visible: boolean; task:
     }
   }, [remaining, running, persist, task]);
 
-  // Lock Screen + Dynamic Island — system counts down from end date while running.
-  // Do not sync on every remaining tick; ActivityKit owns the countdown clock.
-  useEffect(() => {
-    if (!visible) return;
-    syncFocusLiveActivity(task, remaining, running);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- remaining intentionally omitted
-  }, [visible, task.id, task.title, task.project, running]);
-
   const focusAlertsOn = () => {
     const prefs = resolveNotificationPrefs(workspace.settings);
     return prefs.enabled && prefs.focus;
@@ -78,7 +77,9 @@ export function FocusModal({ visible, task, onClose }: { visible: boolean; task:
   const toggle = () => {
     const next = !running;
     setRunning(next);
+    if (next) setStarted(true);
     persist({ focusRemainingSeconds: remaining, focusSessionRunning: next, focusSessionStarted: true });
+    // pause→resume restarts ActivityKit via syncFocusLiveActivity
     syncFocusLiveActivity(task, remaining, next);
     if (next) {
       void scheduleFocusNotifications(task.id, remaining, focusAlertsOn());
@@ -134,7 +135,7 @@ export function FocusModal({ visible, task, onClose }: { visible: boolean; task:
         <StatusBar style="light" />
         <View style={styles.focusHeader}>
           <Pressable onPress={onClose} style={styles.closeButton}><Feather name="chevron-down" color="#FFF" size={24} /></Pressable>
-          <Text style={styles.focusHeaderText}>Focus in progress</Text>
+          <Text style={styles.focusHeaderText}>{running ? "Focus in progress" : started ? "Focus paused" : "Focus"}</Text>
           <View style={{ width: 44 }} />
         </View>
         <ScrollView contentContainerStyle={styles.focusBody}>
@@ -143,11 +144,13 @@ export function FocusModal({ visible, task, onClose }: { visible: boolean; task:
           <Text style={styles.focusSub}>Stay with this one thing. You can leave this screen without pausing the timer.</Text>
           <View style={[styles.timerRing, { borderColor: theme.accent }]}>
             <Text style={styles.timer}>{durationText(remaining)}</Text>
-            <Text style={styles.timerSub}>{running ? "In progress" : "Paused"}</Text>
+            <Text style={styles.timerSub}>{running ? "In progress" : started ? "Paused" : "Ready"}</Text>
           </View>
           <Pressable onPress={toggle} style={[styles.focusMainButton, { backgroundColor: theme.accent }]}>
             <Feather name={running ? "pause" : "play"} size={20} color="#FFF" />
-            <Text style={styles.focusMainText}>{running ? "Pause & save" : "Resume focus"}</Text>
+            <Text style={styles.focusMainText}>
+              {running ? "Pause & save" : started ? "Resume focus" : "Start focus"}
+            </Text>
           </Pressable>
           <Pressable onPress={finish} style={styles.focusDoneButton}>
             <Feather name="check" size={18} color="#78E0AF" />

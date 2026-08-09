@@ -1,12 +1,53 @@
 import Feather from "@expo/vector-icons/Feather";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useColorScheme,
+  View,
+} from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { ActionButton, Card, Page, SegmentedControl } from "../components/UI";
 import { FocusModal } from "../components/FocusModal";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { PRIORITY_COLOR } from "../lib/theme";
 import type { EnergyLevel, Priority, Task, TaskStatus } from "../types";
+
+function parseDueDate(due?: string): Date {
+  if (due && /^\d{4}-\d{2}-\d{2}$/.test(due)) {
+    const [y, m, d] = due.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return new Date();
+}
+
+function formatDueDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function parseStartTime(startTime?: string): Date {
+  const date = new Date();
+  if (startTime && /^\d{1,2}:\d{2}$/.test(startTime)) {
+    const [h, m] = startTime.split(":").map(Number);
+    date.setHours(h, m, 0, 0);
+    return date;
+  }
+  date.setHours(9, 0, 0, 0);
+  return date;
+}
+
+function formatStartTime(date: Date): string {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
 
 const STATUS_OPTIONS: TaskStatus[] = ["Not started", "In progress", "Waiting", "Blocked", "Done", "Canceled"];
 const PRIORITY_OPTIONS: Priority[] = ["High", "Medium", "Low"];
@@ -34,6 +75,10 @@ export function TaskDetailScreen() {
   const taskId = route.params?.taskId as number;
   const task = workspace.tasks.find((t) => t.id === taskId);
   const [focusOpen, setFocusOpen] = useState(false);
+  const [showDuePicker, setShowDuePicker] = useState(false);
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const colorScheme = useColorScheme();
+  const pickerTheme = colorScheme === "dark" ? "dark" : "light";
 
   const spaces = useMemo<SpaceOption[]>(() => {
     const projectSpaces = workspace.projects.map((project) => ({
@@ -217,29 +262,137 @@ export function TaskDetailScreen() {
         </Card>
 
         <Card>
-          <Text style={[styles.cardLabel, { color: theme.text }]}>Due date</Text>
-          <TextInput
-            value={task.due ?? ""}
-            onChangeText={(v) => persist({ due: v })}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={theme.muted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={[styles.input, { color: theme.text, borderColor: theme.border }]}
-          />
+          <View style={styles.cardHeadRow}>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Due date</Text>
+            {task.due ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear due date"
+                onPress={() => {
+                  setShowDuePicker(false);
+                  persist({ due: undefined });
+                }}
+              >
+                <Text style={[styles.clearText, { color: theme.muted }]}>Clear</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {Platform.OS === "ios" && task.due ? (
+            <View style={styles.pickerRow}>
+              <DateTimePicker
+                value={parseDueDate(task.due)}
+                mode="date"
+                display="compact"
+                themeVariant={pickerTheme}
+                onChange={(_, date) => {
+                  if (date) persist({ due: formatDueDate(date) });
+                }}
+              />
+            </View>
+          ) : Platform.OS === "ios" ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Pick due date"
+              onPress={() => persist({ due: formatDueDate(new Date()) })}
+              style={[styles.pickerButton, { borderColor: theme.border }]}
+            >
+              <Feather name="calendar" size={16} color={theme.accent} />
+              <Text style={{ color: theme.muted, fontSize: 15, fontWeight: "600" }}>Pick a date</Text>
+            </Pressable>
+          ) : (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Pick due date"
+                onPress={() => setShowDuePicker(true)}
+                style={[styles.pickerButton, { borderColor: theme.border }]}
+              >
+                <Feather name="calendar" size={16} color={theme.accent} />
+                <Text style={{ color: task.due ? theme.text : theme.muted, fontSize: 15, fontWeight: "600" }}>
+                  {task.due || "Pick a date"}
+                </Text>
+              </Pressable>
+              {showDuePicker ? (
+                <DateTimePicker
+                  value={parseDueDate(task.due)}
+                  mode="date"
+                  display="default"
+                  onChange={(event, date) => {
+                    setShowDuePicker(false);
+                    if (event.type !== "dismissed" && date) persist({ due: formatDueDate(date) });
+                  }}
+                />
+              ) : null}
+            </>
+          )}
         </Card>
 
         <Card>
-          <Text style={[styles.cardLabel, { color: theme.text }]}>Start time</Text>
-          <TextInput
-            value={task.startTime ?? ""}
-            onChangeText={(v) => persist({ startTime: v.trim() || undefined })}
-            placeholder="HH:mm (optional)"
-            placeholderTextColor={theme.muted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={[styles.input, { color: theme.text, borderColor: theme.border }]}
-          />
+          <View style={styles.cardHeadRow}>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Start time</Text>
+            {task.startTime ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear start time"
+                onPress={() => {
+                  setShowStartPicker(false);
+                  persist({ startTime: undefined });
+                }}
+              >
+                <Text style={[styles.clearText, { color: theme.muted }]}>Clear</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {Platform.OS === "ios" && task.startTime ? (
+            <View style={styles.pickerRow}>
+              <DateTimePicker
+                value={parseStartTime(task.startTime)}
+                mode="time"
+                display="compact"
+                minuteInterval={5}
+                themeVariant={pickerTheme}
+                onChange={(_, date) => {
+                  if (date) persist({ startTime: formatStartTime(date) });
+                }}
+              />
+            </View>
+          ) : Platform.OS === "ios" ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Pick start time"
+              onPress={() => persist({ startTime: formatStartTime(parseStartTime()) })}
+              style={[styles.pickerButton, { borderColor: theme.border }]}
+            >
+              <Feather name="clock" size={16} color={theme.accent} />
+              <Text style={{ color: theme.muted, fontSize: 15, fontWeight: "600" }}>Pick a time</Text>
+            </Pressable>
+          ) : (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Pick start time"
+                onPress={() => setShowStartPicker(true)}
+                style={[styles.pickerButton, { borderColor: theme.border }]}
+              >
+                <Feather name="clock" size={16} color={theme.accent} />
+                <Text style={{ color: task.startTime ? theme.text : theme.muted, fontSize: 15, fontWeight: "600" }}>
+                  {task.startTime || "Pick a time"}
+                </Text>
+              </Pressable>
+              {showStartPicker ? (
+                <DateTimePicker
+                  value={parseStartTime(task.startTime)}
+                  mode="time"
+                  display="default"
+                  minuteInterval={5}
+                  onChange={(event, date) => {
+                    setShowStartPicker(false);
+                    if (event.type !== "dismissed" && date) persist({ startTime: formatStartTime(date) });
+                  }}
+                />
+              ) : null}
+            </>
+          )}
         </Card>
 
         <Card>
@@ -322,6 +475,17 @@ const styles = StyleSheet.create({
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   input: { minHeight: 44, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, fontSize: 15 },
+  pickerRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 36 },
+  pickerButton: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  clearText: { fontSize: 13, fontWeight: "700", paddingVertical: 2 },
   textarea: { minHeight: 90, borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 15, textAlignVertical: "top" },
   checkRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
   checkBox: { width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },

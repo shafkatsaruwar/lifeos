@@ -21,6 +21,16 @@ diff --git a/node_modules/expo-pencilkit-ui/build/index.d.ts b/node_modules/expo
      clearDrawing(): Promise<void>;
      undo(): Promise<void>;
      redo(): Promise<void>;
+@@ -70,4 +76,8 @@
+  * PencilKit View Component
+  */
+ export declare const PencilKitView: React.ForwardRefExoticComponent<PencilKitViewProps & React.RefAttributes<PencilKitViewRef>>;
++/**
++ * LifeOS: render stored PKDrawing base64 → PNG base64 (no live canvas required).
++ */
++export declare function renderDrawingPng(base64String: string, width: number, height: number, scale?: number): Promise<string>;
+ //# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
 diff --git a/node_modules/expo-pencilkit-ui/build/index.js b/node_modules/expo-pencilkit-ui/build/index.js
 --- a/node_modules/expo-pencilkit-ui/build/index.js
 +++ b/node_modules/expo-pencilkit-ui/build/index.js
@@ -51,6 +61,22 @@ diff --git a/node_modules/expo-pencilkit-ui/build/index.js b/node_modules/expo-p
          clearDrawing: async () => {
              if (Platform.OS === "ios" &&
                  ExpoPencilKit &&
+@@ -148,4 +168,13 @@
+         ref: viewRef,
+     });
+ });
+-//# sourceMappingURL=index.js.map
+\ No newline at end of file
++//# sourceMappingURL=index.js.map
++/**
++ * LifeOS: render stored PKDrawing base64 → PNG base64 (no live canvas required).
++ */
++export async function renderDrawingPng(base64String, width, height, scale = 2) {
++    if (Platform.OS !== "ios" || !ExpoPencilKit || !base64String) {
++        return "";
++    }
++    return (await ExpoPencilKit.renderDrawingPng(base64String, width, height, scale)) || "";
++}
 diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift
 --- a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift
 +++ b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift
@@ -90,7 +116,22 @@ diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift b/node
          // Clear drawing from canvas
          AsyncFunction("clearDrawing") { (viewTag: Int) in
              await MainActor.run {
-@@ -131,28 +150,77 @@
+@@ -67,6 +86,14 @@
+             }
+         }
+ 
++        // LifeOS: render a stored PKDrawing (base64) to PNG without a live canvas.
++        // width/height are the canvas points used when the strokes were drawn.
++        AsyncFunction("renderDrawingPng") { (base64String: String, width: Double, height: Double, scale: Double) -> String in
++            return await MainActor.run {
++                return self.renderDrawingPng(base64String: base64String, width: width, height: height, scale: scale)
++            }
++        }
++
+         // Get canvas data as base64
+         AsyncFunction("getCanvasDataAsBase64") { (viewTag: Int) -> String in
+             return await MainActor.run {
+@@ -131,28 +158,77 @@
  
      // MARK: - Private Methods
  
@@ -179,6 +220,34 @@ diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift b/node
      private func clearDrawing() {
          canvasView?.drawing = PKDrawing()
      }
+@@ -193,6 +269,27 @@
+ 
+         let base64String = imageData.base64EncodedString()
+         return base64String
++    }
++
++    private func renderDrawingPng(base64String: String, width: Double, height: Double, scale: Double) -> String {
++        guard let drawingData = Data(base64Encoded: base64String) else {
++            return ""
++        }
++        do {
++            let drawing = try PKDrawing(data: drawingData)
++            let w = max(CGFloat(width), 1)
++            let h = max(CGFloat(height), 1)
++            let s = max(CGFloat(scale), 1)
++            // Match the editor canvas coordinate space so strokes align with overlays.
++            let rect = CGRect(x: 0, y: 0, width: w, height: h)
++            let image = drawing.image(from: rect, scale: s)
++            guard let png = image.pngData() else {
++                return ""
++            }
++            return png.base64EncodedString()
++        } catch {
++            return ""
++        }
+     }
+ 
+     private func getCanvasDataAsBase64() -> String {
 diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift
 --- a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift
 +++ b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift
@@ -205,16 +274,14 @@ diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift b/node_m
          canvasView.bounces = false
          canvasView.bouncesZoom = false
  
-@@ -49,8 +50,19 @@
-             canvasView.trailingAnchor.constraint(equalTo: trailingAnchor),
-             canvasView.bottomAnchor.constraint(equalTo: bottomAnchor)
+@@ -51,6 +52,17 @@
          ])
-+
-+
+ 
+ 
 +    }
- 
++
 +    // MARK: - Props (LifeOS)
- 
++
 +    func setDrawingPolicy(_ policy: String?) {
 +        let value = (policy ?? "any").lowercased()
 +        if value == "pencilonly" || value == "pencil" {

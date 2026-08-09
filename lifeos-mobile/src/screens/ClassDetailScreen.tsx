@@ -116,7 +116,20 @@ export function ClassDetailScreen() {
             {textNotes.map((note) => (
               <Pressable
                 key={note.id}
-                onPress={() => navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } })}
+                onPress={() => {
+                  const nb = workspace.notebookHub.notebooks.find((n) => n.context?.legacyNoteId === note.id);
+                  const page = nb
+                    ? Object.values(workspace.notebookPages).find((p) => p.notebookId === nb.id)
+                    : undefined;
+                  if (nb && page) {
+                    navigation.navigate("LibraryTab", {
+                      screen: "PageCanvas",
+                      params: { notebookId: nb.id, pageId: page.id },
+                    });
+                  } else {
+                    navigation.navigate("LibraryTab", { screen: "NotebooksList" });
+                  }
+                }}
                 style={[styles.simpleRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
               >
                 <Feather name="file-text" size={15} color={theme.accent} />

@@ -8,12 +8,14 @@ import { auth, deleteNotebookPageRemote, loadWorkspace, saveNotebookPage, saveWo
 import { clearCachedPageInk } from "./src/lib/inkCache";
 import type { NotebookPage, Workspace } from "./src/types";
 import { LifeOSContext, type AppState } from "./src/lib/LifeOSContext";
+import { migrateLegacyNotesToNotebooks } from "./src/lib/notebooks";
 import { applyOtaUpdateIfAvailable } from "./src/lib/ota";
 import { resolveTheme } from "./src/lib/theme";
 import { SignIn } from "./src/components/Auth";
 import { FocusLiveActivityBridge } from "./src/components/FocusLiveActivityBridge";
 import { NotificationsBridge } from "./src/components/NotificationsBridge";
 import { SynapseImportBridge } from "./src/components/SynapseImportBridge";
+import { WidgetsBridge } from "./src/components/WidgetsBridge";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 
 // Required once at module load so the OAuth redirect from Google's web
@@ -123,7 +125,31 @@ export default function App() {
     if (!user) return;
     // Initial load is a full replace (no local optimistic state yet).
     loadWorkspace(user.uid)
-      .then((next) => setWorkspace(next))
+      .then(async (next) => {
+        const { hub, pages, migratedIds } = migrateLegacyNotesToNotebooks(
+          next.notes,
+          next.notebookHub,
+          next.notebookPages,
+        );
+        if (!migratedIds.length) {
+          setWorkspace(next);
+          return;
+        }
+        const migrated = { ...next, notebookHub: hub, notebookPages: pages };
+        setWorkspace(migrated);
+        pendingWrites.current += 1;
+        try {
+          await saveWorkspacePart(user.uid, "notebookHub", hub);
+          for (const page of Object.values(pages)) {
+            if (migratedIds.some((id) => hub.notebooks.find((n) => n.context?.legacyNoteId === id)?.id === page.notebookId)) {
+              await saveNotebookPage(user.uid, page);
+            }
+          }
+        } finally {
+          pendingWrites.current = Math.max(0, pendingWrites.current - 1);
+          lastWriteAt.current = Date.now();
+        }
+      })
       .catch((error) => Alert.alert("Could not load LifeOS", error.message));
   }, [user]);
 
@@ -272,6 +298,7 @@ export default function App() {
     updateResources: (value) => savePart("resources", value),
     updateLife: (value) => savePart("life", value),
     updateSchool: (value) => savePart("school", value),
+    updateWork: (value) => savePart("work", value),
     updateNotebookHub: (value) => savePart("notebookHub", value),
     upsertNotebookPage,
     deleteNotebookPage,
@@ -287,6 +314,7 @@ export default function App() {
           <SynapseImportBridge />
           <FocusLiveActivityBridge />
           <NotificationsBridge />
+          <WidgetsBridge />
           <RootNavigator />
         </LifeOSContext.Provider>
       </SafeAreaProvider>

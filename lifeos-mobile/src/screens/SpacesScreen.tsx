@@ -1,5 +1,5 @@
 import Feather from "@expo/vector-icons/Feather";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Empty, Eyebrow, Page, Subtitle, Title } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
@@ -25,7 +25,26 @@ export function SpacesScreen() {
       : workspace.tasks.filter((t) => t.classId === item.id && taskIsOpen(t)).length;
 
   const createProject = () => {
-    updateProjects([...workspace.projects, { name: `New space ${workspace.projects.length + 1}`, color: theme.accent, kind: "finishable" }]);
+    Alert.prompt(
+      "New project",
+      "Give this project a name",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Create",
+          onPress: (value?: string) => {
+            const name = (value || "").trim() || `New space ${workspace.projects.length + 1}`;
+            if (workspace.projects.some((p) => p.name === name)) {
+              Alert.alert("Name taken", "Another project already uses that name.");
+              return;
+            }
+            void updateProjects([...workspace.projects, { name, color: theme.accent, kind: "finishable" }]);
+            navigation.navigate("ProjectDetail", { projectName: name });
+          },
+        },
+      ],
+      "plain-text",
+    );
   };
 
   return (

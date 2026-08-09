@@ -16,6 +16,8 @@ try {
 /** One Focus Live Activity at a time. */
 let activeActivityId: string | undefined;
 let activeTaskId: number | undefined;
+/** Tracks whether the last sync had a running countdown (for pause→resume restart). */
+let lastRunning = false;
 
 const CONFIG = {
   backgroundColor: "#111827",
@@ -63,32 +65,49 @@ function stateFor(task: Task, remainingSeconds: number, running: boolean) {
   };
 }
 
+function stopCurrent(state: ReturnType<typeof stateFor>) {
+  if (!LiveActivity || !activeActivityId) return;
+  try {
+    LiveActivity.stopActivity(activeActivityId, state);
+  } catch {
+    /* ignore */
+  }
+  activeActivityId = undefined;
+  activeTaskId = undefined;
+}
+
 /** Start or refresh the Focus Live Activity (Lock Screen + Dynamic Island). */
 export function syncFocusLiveActivity(task: Task, remainingSeconds: number, running: boolean) {
   if (!isAvailable() || !LiveActivity) return;
 
   const state = stateFor(task, remainingSeconds, running);
+  const resumeFromPause = running && !lastRunning && activeTaskId === task.id;
 
   try {
     if (!running) {
       if (activeActivityId) {
         LiveActivity.updateActivity(activeActivityId, state);
+      } else {
+        // Keep a paused activity visible after cold start.
+        const id = LiveActivity.startActivity(state, CONFIG);
+        if (id) {
+          activeActivityId = id;
+          activeTaskId = task.id;
+        }
       }
+      lastRunning = false;
       return;
     }
 
-    if (activeActivityId && activeTaskId === task.id) {
+    // ActivityKit often won't restart a digital timer on update alone — stop + start.
+    if (resumeFromPause || (activeActivityId && activeTaskId !== task.id)) {
+      stopCurrent(state);
+    }
+
+    if (activeActivityId && activeTaskId === task.id && !resumeFromPause) {
       LiveActivity.updateActivity(activeActivityId, state);
+      lastRunning = true;
       return;
-    }
-
-    if (activeActivityId) {
-      try {
-        LiveActivity.stopActivity(activeActivityId, state);
-      } catch {
-        /* ignore */
-      }
-      activeActivityId = undefined;
     }
 
     const id = LiveActivity.startActivity(state, CONFIG);
@@ -96,6 +115,7 @@ export function syncFocusLiveActivity(task: Task, remainingSeconds: number, runn
       activeActivityId = id;
       activeTaskId = task.id;
     }
+    lastRunning = true;
   } catch (error) {
     console.warn("[focusLiveActivity] sync failed", error);
   }
@@ -122,6 +142,7 @@ export function endFocusLiveActivity(task?: Task, remainingSeconds = 0) {
   } finally {
     activeActivityId = undefined;
     activeTaskId = undefined;
+    lastRunning = false;
   }
 }
 

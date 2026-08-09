@@ -13,6 +13,7 @@ import type {
   SettingsState,
   SchoolHubState,
   Task,
+  WorkHubState,
   Workspace,
 } from "../types";
 import type { Theme } from "./theme";
@@ -33,6 +34,7 @@ export type AppState = {
   updateResources: (next: Resource[]) => Promise<void>;
   updateLife: (next: LifeHubState) => Promise<void>;
   updateSchool: (next: SchoolHubState) => Promise<void>;
+  updateWork: (next: WorkHubState) => Promise<void>;
   updateNotebookHub: (next: NotebookHub) => Promise<void>;
   /** Optimistic local merge + single-page RTDB write */
   upsertNotebookPage: (page: NotebookPage) => Promise<void>;

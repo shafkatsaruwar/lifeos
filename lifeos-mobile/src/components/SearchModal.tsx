@@ -75,7 +75,17 @@ export function SearchModal({ visible, onClose }: { visible: boolean; onClose: (
           kind: "Note",
           title: note.title || "Untitled note",
           subtitle: note.body.replace(/<[^>]+>/g, " ").slice(0, 60) || "Empty note",
-          onSelect: () => go("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } }),
+          onSelect: () => {
+            const nb = workspace.notebookHub.notebooks.find((n) => n.context?.legacyNoteId === note.id);
+            if (nb) {
+              const page = Object.values(workspace.notebookPages).find((p) => p.notebookId === nb.id);
+              if (page) {
+                go("LibraryTab", { screen: "PageCanvas", params: { notebookId: nb.id, pageId: page.id } });
+                return;
+              }
+            }
+            go("LibraryTab", { screen: "NotebooksList" });
+          },
         });
       }
     });

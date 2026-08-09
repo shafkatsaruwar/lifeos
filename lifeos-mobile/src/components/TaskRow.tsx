@@ -4,22 +4,54 @@ import { useLifeOS } from "../lib/LifeOSContext";
 import { PRIORITY_COLOR } from "../lib/theme";
 import { formatDueDate, taskIsOpen } from "../lib/helpers";
 import type { Task } from "../types";
+import { SwipeDeleteRow } from "./SwipeDeleteRow";
 
-export function TaskRow({ task, onPress, onToggleDone }: { task: Task; onPress: () => void; onToggleDone: () => void }) {
+export function TaskRow({
+  task,
+  onPress,
+  onToggleDone,
+  onDelete,
+}: {
+  task: Task;
+  onPress: () => void;
+  onToggleDone: () => void;
+  onDelete?: () => void;
+}) {
   const { theme } = useLifeOS();
   const open = taskIsOpen(task);
   const priorityColor = PRIORITY_COLOR[task.priority ?? "Medium"];
-  return (
+  const row = (
     <Pressable onPress={onPress} style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <Pressable onPress={onToggleDone} hitSlop={10} style={[styles.check, { borderColor: open ? theme.border : theme.accent, backgroundColor: open ? "transparent" : theme.accent }]}>
+      <Pressable
+        onPress={onToggleDone}
+        hitSlop={10}
+        style={[
+          styles.check,
+          {
+            borderColor: open ? theme.border : theme.accent,
+            backgroundColor: open ? "transparent" : theme.accent,
+          },
+        ]}
+      >
         {!open ? <Feather name="check" size={13} color={theme.surface} /> : null}
       </Pressable>
       <View style={styles.grow}>
-        <Text numberOfLines={1} style={[styles.title, { color: theme.text, textDecorationLine: open ? "none" : "line-through" }, !open && { color: theme.muted }]}>
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.title,
+            { color: theme.text, textDecorationLine: open ? "none" : "line-through" },
+            !open && { color: theme.muted },
+          ]}
+        >
           {task.title}
         </Text>
         <View style={styles.metaRow}>
-          {task.project ? <Text style={[styles.metaChip, { color: theme.muted }]} numberOfLines={1}>{task.project}</Text> : null}
+          {task.project ? (
+            <Text style={[styles.metaChip, { color: theme.muted }]} numberOfLines={1}>
+              {task.project}
+            </Text>
+          ) : null}
           <Text style={[styles.metaDot, { color: theme.muted }]}>·</Text>
           <Text style={[styles.metaChip, { color: theme.muted }]}>{formatDueDate(task.due)}</Text>
           {task.focusMinutes ? (
@@ -33,6 +65,14 @@ export function TaskRow({ task, onPress, onToggleDone }: { task: Task; onPress: 
       <View style={[styles.priorityDot, { backgroundColor: priorityColor }]} />
       <Feather name="chevron-right" size={16} color={theme.muted} />
     </Pressable>
+  );
+
+  if (!onDelete) return row;
+
+  return (
+    <SwipeDeleteRow label={task.title || "task"} onDelete={onDelete} confirmTitle="Delete task">
+      {row}
+    </SwipeDeleteRow>
   );
 }
 

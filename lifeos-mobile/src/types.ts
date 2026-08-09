@@ -1,3 +1,6 @@
+import type { WorkHubState } from "./lib/workos";
+export type { WorkHubState };
+
 export type EnergyLevel = "Low" | "Medium" | "High";
 export type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
 export type Priority = "High" | "Medium" | "Low";
@@ -73,7 +76,7 @@ export type CalendarEvent = {
   title: string;
   start: string;
   end?: string;
-  source?: "LifeOS" | "iCal" | "Google" | "Outlook" | "Synapse";
+  source?: "LifeOS" | "iCal" | "Google" | "Outlook" | "Synapse" | "Work";
   color?: string;
   notes?: string;
 };
@@ -285,6 +288,8 @@ export type NotebookContextLink = {
   classId?: string;
   projectName?: string;
   label?: string;
+  /** Set when this notebook was migrated from a legacy typed `Note`. */
+  legacyNoteId?: string;
 };
 
 export type NotebookFolder = {
@@ -433,6 +438,8 @@ export type Workspace = {
   resources: Resource[];
   life: LifeHubState;
   school: SchoolHubState;
+  /** WorkOS hub — same Firebase `work` key as web */
+  work: WorkHubState;
   /** Notebook library metadata */
   notebookHub: NotebookHub;
   /**

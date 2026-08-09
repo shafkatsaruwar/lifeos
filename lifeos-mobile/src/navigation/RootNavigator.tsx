@@ -35,6 +35,7 @@ import { ResourcesScreen } from "../screens/ResourcesScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
 import { NotificationSettingsScreen } from "../screens/NotificationSettingsScreen";
 import { NotificationCenterScreen } from "../screens/NotificationCenterScreen";
+import { WorkDashboardScreen } from "../screens/WorkDashboardScreen";
 
 const Tab = createBottomTabNavigator();
 const NowStack = createNativeStackNavigator();
@@ -43,6 +44,7 @@ const TasksStack = createNativeStackNavigator();
 const CalendarStack = createNativeStackNavigator();
 const LibraryStack = createNativeStackNavigator();
 const SchoolStack = createNativeStackNavigator();
+const WorkStack = createNativeStackNavigator();
 
 /** Feather stroke icons — lighter and less boxy than filled Ionicons squares. */
 const TAB_ICONS: Record<string, keyof typeof Feather.glyphMap> = {
@@ -51,6 +53,7 @@ const TAB_ICONS: Record<string, keyof typeof Feather.glyphMap> = {
   CalendarTab: "calendar",
   LifeTab: "heart",
   SchoolTab: "award",
+  WorkTab: "briefcase",
   LibraryTab: "book-open",
 };
 
@@ -68,6 +71,7 @@ function NowStackNavigator() {
   return (
     <NowStack.Navigator screenOptions={screenOptions}>
       <NowStack.Screen name="NowHome" component={NowScreen} />
+      <NowStack.Screen name="Focus" component={NowScreen} initialParams={{ openFocus: true }} />
       <NowStack.Screen name="TaskDetail" component={TaskDetailScreen} />
       <NowStack.Screen name="Settings" component={SettingsScreen} />
       <NowStack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
@@ -109,6 +113,17 @@ function SchoolStackNavigator() {
       <SchoolStack.Screen name="SchoolProfile" component={SchoolProfileScreen} />
       <SchoolStack.Screen name="HubCollection" component={HubCollectionScreen} />
     </SchoolStack.Navigator>
+  );
+}
+
+function WorkStackNavigator() {
+  const screenOptions = useStackScreenOptions();
+  return (
+    <WorkStack.Navigator screenOptions={screenOptions}>
+      <WorkStack.Screen name="WorkDashboard" component={WorkDashboardScreen} />
+      <WorkStack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
+      <WorkStack.Screen name="TaskDetail" component={TaskDetailScreen} />
+    </WorkStack.Navigator>
   );
 }
 
@@ -214,6 +229,7 @@ export function RootNavigator() {
 
   const showLife = settings.enableLifeOS !== false;
   const showSchool = settings.enableSchoolOS !== false;
+  const showWork = settings.enableWorkOS !== false;
 
   const base = dark ? DarkTheme : DefaultTheme;
   const navTheme = {
@@ -322,6 +338,18 @@ export function RootNavigator() {
               tabBarLabel: "School",
               tabBarButton: showSchool ? undefined : () => null,
               tabBarItemStyle: showSchool
+                ? undefined
+                : { display: "none", width: 0, height: 0, minWidth: 0, flex: 0, padding: 0 },
+            }}
+          />
+          <Tab.Screen
+            name="WorkTab"
+            component={WorkStackNavigator}
+            options={{
+              title: "Work",
+              tabBarLabel: "Work",
+              tabBarButton: showWork ? undefined : () => null,
+              tabBarItemStyle: showWork
                 ? undefined
                 : { display: "none", width: 0, height: 0, minWidth: 0, flex: 0, padding: 0 },
             }}

@@ -18,7 +18,8 @@ const LABELS: Record<CreateKind, { title: string; prompt: string }> = {
 };
 
 export function AcademicCreateScreen() {
-  const { theme, workspace, updateClasses, updateTasks, updateNotes, updateSchool } = useLifeOS();
+  const { theme, workspace, updateClasses, updateTasks, updateSchool, updateNotebookHub, upsertNotebookPage } =
+    useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const kind = (route.params?.kind ?? "assignment") as CreateKind;
@@ -58,19 +59,20 @@ export function AcademicCreateScreen() {
     }
 
     if (kind === "lecture") {
-      const id = uid();
-      await updateNotes([
-        {
-          id,
-          title: title.trim(),
-          body: detail.trim(),
-          classId,
-          template: "cornell",
-          updatedAt: new Date().toISOString(),
-        },
-        ...workspace.notes,
-      ]);
-      navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: id } });
+      const { createNotebookFromText } = await import("../lib/notebooks");
+      const { notebook, page } = createNotebookFromText(title.trim(), detail.trim(), {
+        classId,
+        paper: "cornell",
+      });
+      await updateNotebookHub({
+        ...workspace.notebookHub,
+        notebooks: [notebook, ...workspace.notebookHub.notebooks],
+      });
+      await upsertNotebookPage(page);
+      navigation.navigate("LibraryTab", {
+        screen: "PageCanvas",
+        params: { notebookId: notebook.id, pageId: page.id },
+      });
       return;
     }
 

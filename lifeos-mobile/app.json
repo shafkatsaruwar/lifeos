@@ -11,6 +11,12 @@
       "supportsTablet": true,
       "requireFullScreen": false,
       "bundleIdentifier": "com.shafkatsaruwar.lifeos",
+      "usesAppleSignIn": true,
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.shafkatsaruwar.lifeos"
+        ]
+      },
       "infoPlist": {
         "NSSupportsLiveActivities": true,
         "UISupportedInterfaceOrientations~ipad": [
@@ -46,7 +52,10 @@
       ],
       "expo-live-activity",
       "expo-notifications",
-      "expo-updates"
+      "expo-updates",
+      "expo-apple-authentication",
+      "@react-native-community/datetimepicker",
+      "./plugins/withLifeOSWidgets.js"
     ],
     "runtimeVersion": {
       "policy": "appVersion"

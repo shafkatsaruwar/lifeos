@@ -110,6 +110,7 @@ export const emptyWorkspace: Workspace = {
     professors: [],
     goals: [],
   },
+  work: { projects: [], deliverables: [], tasks: [], meetings: [] },
   notebookHub: emptyNotebookHub(),
   notebookPages: {},
 };
@@ -158,6 +159,12 @@ export async function loadWorkspace(userId: string): Promise<Workspace> {
       ...emptyWorkspace.school,
       ...loaded.school,
       profile: { ...emptyWorkspace.school.profile, ...loaded.school?.profile },
+    },
+    work: {
+      projects: Array.isArray(loaded.work?.projects) ? loaded.work.projects : [],
+      deliverables: Array.isArray(loaded.work?.deliverables) ? loaded.work.deliverables : [],
+      tasks: Array.isArray(loaded.work?.tasks) ? loaded.work.tasks : [],
+      meetings: Array.isArray(loaded.work?.meetings) ? loaded.work.meetings : [],
     },
     notebookHub: normalizeNotebookHub(loaded.notebookHub),
     notebookPages: normalizeNotebookPages(loaded.notebookPages),

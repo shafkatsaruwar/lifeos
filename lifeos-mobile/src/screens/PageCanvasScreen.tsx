@@ -33,7 +33,14 @@ import { Page } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { useLayout } from "../lib/layout";
 import { buildPageAiContext, isNotebookAiAvailable, runNotebookAi } from "../lib/notebookAi";
-import { isPdfPipelineAvailable } from "../lib/notebookPdf";
+import {
+  isPdfPipelineAvailable,
+  notebookPagesForExport,
+  pagesFromPdfImport,
+  planPdfExport,
+  planPdfImport,
+  sharePdf,
+} from "../lib/notebookPdf";
 import {
   cloneNotebookPage,
   createImageElement,
@@ -1196,14 +1203,44 @@ export function PageCanvasScreen() {
             }
           />
           <MenuRow
-            label={isPdfPipelineAvailable() ? "Import PDF page" : "PDF Import"}
+            label="Import PDF"
             onPress={() =>
-              runMoreAction(() =>
-                Alert.alert(
-                  "PDF pipeline",
-                  "Import/annotate/export hooks live in notebookPdf.ts — not faked in the UI yet.",
-                ),
-              )
+              runMoreAction(async () => {
+                if (!isPdfPipelineAvailable()) return;
+                const plan = await planPdfImport();
+                if (!plan) return;
+                const created = pagesFromPdfImport(notebookId, plan, pages.length);
+                await Promise.all(created.map((p) => upsertNotebookPage(p)));
+                await touchPageCount(pages.length + created.length);
+                if (created[0]) await openCreatedPage(created[0].id);
+              })
+            }
+          />
+          <MenuRow
+            label="Export PDF"
+            onPress={() =>
+              runMoreAction(async () => {
+                // Persist live PencilKit strokes before compositing the PDF.
+                await flushInk();
+                const latestPages = {
+                  ...workspace.notebookPages,
+                  ...pagesByIdRef.current,
+                };
+                const result = await planPdfExport({
+                  notebookId,
+                  notebookName: notebook?.name || "notebook",
+                  pages: notebookPagesForExport(latestPages, notebookId),
+                  includeInk: true,
+                  includeOverlays: true,
+                  canvasWidth: sheetSize.width,
+                  canvasHeight: sheetSize.height,
+                });
+                if (!result.ok) {
+                  Alert.alert("Export failed", result.reason);
+                  return;
+                }
+                await sharePdf(result.uri);
+              })
             }
           />
         </MenuSection>

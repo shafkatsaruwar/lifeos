@@ -24,36 +24,25 @@ export function SchoolDashboardScreen() {
     .filter((task) => !task.due || (task.due >= today && task.due <= weekEndKey))
     .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
   const assignments = academicTasks.filter((task) => task.academicType && task.academicType !== "Reading" && task.academicType !== "Discussion");
-  const lectureNotes = [
-    ...workspace.notes
-      .filter((note) => note.classId)
-      .map((note) => ({
-        id: note.id,
-        title: note.title || "Untitled lecture",
-        updatedAt: note.updatedAt,
-        classId: note.classId,
-        open: () => navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } }),
-      })),
-    ...workspace.notebookHub.notebooks
-      .filter((nb) => nb.context?.classId)
-      .map((nb) => ({
-        id: nb.id,
-        title: nb.name,
-        updatedAt: nb.updatedAt,
-        classId: nb.context?.classId,
-        open: () => {
-          const page = primaryPageForNotebook(workspace.notebookPages, nb.id);
-          if (page) {
-            navigation.navigate("LibraryTab", {
-              screen: "PageCanvas",
-              params: { notebookId: nb.id, pageId: page.id },
-            });
-          } else {
-            navigation.navigate("LibraryTab", { screen: "NotebookDetail", params: { notebookId: nb.id } });
-          }
-        },
-      })),
-  ]
+  const lectureNotes = workspace.notebookHub.notebooks
+    .filter((nb) => nb.context?.classId && !nb.trashedAt)
+    .map((nb) => ({
+      id: nb.id,
+      title: nb.name,
+      updatedAt: nb.updatedAt,
+      classId: nb.context?.classId,
+      open: () => {
+        const page = primaryPageForNotebook(workspace.notebookPages, nb.id);
+        if (page) {
+          navigation.navigate("LibraryTab", {
+            screen: "PageCanvas",
+            params: { notebookId: nb.id, pageId: page.id },
+          });
+        } else {
+          navigation.navigate("LibraryTab", { screen: "NotebookDetail", params: { notebookId: nb.id } });
+        }
+      },
+    }))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, 4);
   const focusTask = workspace.tasks.find((task) => task.id === focusTaskId);
