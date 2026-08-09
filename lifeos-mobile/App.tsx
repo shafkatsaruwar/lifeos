@@ -11,6 +11,8 @@ import { LifeOSContext, type AppState } from "./src/lib/LifeOSContext";
 import { applyOtaUpdateIfAvailable } from "./src/lib/ota";
 import { resolveTheme } from "./src/lib/theme";
 import { SignIn } from "./src/components/Auth";
+import { FocusLiveActivityBridge } from "./src/components/FocusLiveActivityBridge";
+import { NotificationsBridge } from "./src/components/NotificationsBridge";
 import { SynapseImportBridge } from "./src/components/SynapseImportBridge";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 
@@ -32,6 +34,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
+  const [onboardingReplay, setOnboardingReplay] = useState(false);
   const pendingWrites = useRef(0);
   /** Wall-clock of last successful local write — silent sync must not apply a fetch that started earlier. */
   const lastWriteAt = useRef(0);
@@ -272,6 +275,9 @@ export default function App() {
     updateNotebookHub: (value) => savePart("notebookHub", value),
     upsertNotebookPage,
     deleteNotebookPage,
+    onboardingReplay,
+    startOnboardingReplay: () => setOnboardingReplay(true),
+    clearOnboardingReplay: () => setOnboardingReplay(false),
   };
 
   return (
@@ -279,6 +285,8 @@ export default function App() {
       <SafeAreaProvider>
         <LifeOSContext.Provider value={state}>
           <SynapseImportBridge />
+          <FocusLiveActivityBridge />
+          <NotificationsBridge />
           <RootNavigator />
         </LifeOSContext.Provider>
       </SafeAreaProvider>

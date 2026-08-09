@@ -1,4 +1,5 @@
 import Feather from "@expo/vector-icons/Feather";
+import { useNavigation } from "@react-navigation/native";
 import * as WebBrowser from "expo-web-browser";
 import { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
@@ -7,12 +8,15 @@ import { ActionButton, Card, Eyebrow, Page, SegmentedControl, Title } from "../c
 import { useLifeOS } from "../lib/LifeOSContext";
 import { API_BASE } from "../lib/api";
 import { auth } from "../lib/firebase";
+import { resolveNotificationPrefs } from "../lib/notifications";
 import { mergeSynapseCalendarEvents, parseSynapseDayPlan } from "../lib/synapseImport";
 import { SPACE_COLORS } from "../lib/theme";
 import type { EnergyLevel, ThemeMode } from "../types";
 
 export function SettingsScreen() {
-  const { user, workspace, theme, dark, updateSettings, updateCalendar, sync } = useLifeOS();
+  const navigation = useNavigation<any>();
+  const { user, workspace, theme, dark, updateSettings, updateCalendar, sync, startOnboardingReplay } = useLifeOS();
+  const notifPrefs = resolveNotificationPrefs(workspace.settings);
   const [name, setName] = useState(workspace.settings.preferredName ?? "");
   const [synapsePaste, setSynapsePaste] = useState("");
   const [synapseBusy, setSynapseBusy] = useState(false);
@@ -199,6 +203,30 @@ export function SettingsScreen() {
         <Card>
           <View style={styles.sectionHead}>
             <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
+              <Feather name="bell" size={14} color={theme.accent} />
+            </View>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Notifications</Text>
+          </View>
+          <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 18 }}>
+            Due dates, deadlines, calendar, and focus — without spam.
+          </Text>
+          <Pressable
+            onPress={() => navigation.navigate("NotificationSettings")}
+            style={[styles.notifRow, { borderColor: theme.border, backgroundColor: theme.bg }]}
+          >
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>
+                {notifPrefs.enabled ? "Alerts on" : "Alerts off"}
+              </Text>
+              <Text style={{ color: theme.muted, fontSize: 12 }}>Categories, timing, and system permission</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={theme.muted} />
+          </Pressable>
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
               <Feather name="heart" size={14} color={theme.accent} />
             </View>
             <Text style={[styles.cardLabel, { color: theme.text }]}>Synapse</Text>
@@ -235,6 +263,75 @@ export function SettingsScreen() {
               icon="download"
               quiet
               onPress={importSynapsePlan}
+            />
+          </View>
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
+              <Feather name="layers" size={14} color={theme.accent} />
+            </View>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Environments</Text>
+          </View>
+          <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>
+            Show or hide Life and School tabs. Work syncs with the web app (Work hub on mobile comes later).
+          </Text>
+          <View style={styles.settingRow}>
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>Life</Text>
+            </View>
+            <Switch
+              value={workspace.settings.enableLifeOS !== false}
+              onValueChange={(value) => patchSettings({ enableLifeOS: value })}
+              trackColor={{ true: theme.accent }}
+            />
+          </View>
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <View style={styles.settingRow}>
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>School</Text>
+            </View>
+            <Switch
+              value={workspace.settings.enableSchoolOS !== false}
+              onValueChange={(value) => patchSettings({ enableSchoolOS: value })}
+              trackColor={{ true: theme.accent }}
+            />
+          </View>
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <View style={styles.settingRow}>
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>Work</Text>
+              <Text style={{ color: theme.muted, fontSize: 12 }}>Saved for web parity</Text>
+            </View>
+            <Switch
+              value={workspace.settings.enableWorkOS !== false}
+              onValueChange={(value) => patchSettings({ enableWorkOS: value })}
+              trackColor={{ true: theme.accent }}
+            />
+          </View>
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
+              <Feather name="map" size={14} color={theme.accent} />
+            </View>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Intro</Text>
+          </View>
+          <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 18 }}>
+            Replay the short first-run walkthrough — name, spaces, and a first move.
+          </Text>
+          <View style={{ marginTop: 14 }}>
+            <ActionButton
+              label="Show intro again"
+              icon="play"
+              quiet
+              onPress={() => {
+                // Local replay flag — do not rely on clearing Firebase settings
+                // (silent sync was restoring onboardingCompletedAt and killing the flow).
+                startOnboardingReplay();
+              }}
             />
           </View>
         </Card>
@@ -315,6 +412,16 @@ const styles = StyleSheet.create({
   cardLabel: { fontSize: 16, fontWeight: "800" },
   sectionHead: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4 },
   sectionIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  notifRow: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   themeRow: { flexDirection: "row", gap: 10, marginTop: 8 },
   themeChoice: {
     flex: 1,

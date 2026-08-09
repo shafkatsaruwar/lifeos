@@ -11,12 +11,12 @@ const TABS: { key: Tab; label: string; icon: keyof typeof Feather.glyphMap; rout
   { key: "resources", label: "Files", icon: "paperclip", route: "Resources" },
 ];
 
-export function LibrarySubNav({ active }: { active: Tab }) {
+export function LibrarySubNav({ active, compact = false }: { active: Tab; compact?: boolean }) {
   const { theme } = useLifeOS();
   const navigation = useNavigation<any>();
 
   return (
-    <View style={styles.subNav}>
+    <View style={[styles.subNav, compact ? styles.subNavCompact : styles.subNavPage]}>
       {TABS.map((tab) => {
         const on = tab.key === active;
         return (
@@ -44,7 +44,9 @@ export function LibrarySubNav({ active }: { active: Tab }) {
 }
 
 const styles = StyleSheet.create({
-  subNav: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 20, marginTop: 14 },
+  subNav: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  subNavPage: { paddingHorizontal: 20, marginTop: 14 },
+  subNavCompact: { paddingHorizontal: 6, marginTop: 2 },
   pill: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   pillActive: { borderWidth: 1.5 },
   text: { fontSize: 12, fontWeight: "800" },

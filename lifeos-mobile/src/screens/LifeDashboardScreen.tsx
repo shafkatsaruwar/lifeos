@@ -1,10 +1,12 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
+import { useMemo } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { DashboardModule, DashboardRow, ModuleEmpty, ProgressBar, QuickAction } from "../components/HubDashboard";
 import { Eyebrow, Page } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatDueDate, getGreeting, taskIsOpen, toDateKey } from "../lib/helpers";
+import { buildInbox } from "../lib/notifications";
 import { createNotebook, createPage, primaryPageForNotebook } from "../lib/notebooks";
 
 function periodProgress(now: Date) {
@@ -18,8 +20,19 @@ function periodProgress(now: Date) {
   return { day, week, month, year };
 }
 
+/** Map projects / school into calm “life areas” — overview, not a task dump. */
+const AREA_HINTS: { match: RegExp; icon: keyof typeof Feather.glyphMap; tint: "accent" | "blue" | "success" | "warning" | "danger" }[] = [
+  { match: /synapse|ai|code|dev/i, icon: "zap", tint: "accent" },
+  { match: /career|job|work|interview/i, icon: "briefcase", tint: "blue" },
+  { match: /school|class|study|exam|gre|master/i, icon: "book", tint: "warning" },
+  { match: /photo|camera|gallery/i, icon: "camera", tint: "success" },
+  { match: /home|house|family/i, icon: "home", tint: "danger" },
+  { match: /personal|life|health|habit/i, icon: "heart", tint: "accent" },
+];
+
 export function LifeDashboardScreen() {
-  const { theme, workspace, updateTasks, updateNotebookHub, upsertNotebookPage, updateProjects, updateLife } = useLifeOS();
+  const { theme, workspace, updateTasks, updateNotebookHub, upsertNotebookPage, updateProjects, updateLife } =
+    useLifeOS();
   const navigation = useNavigation<any>();
   const now = new Date();
   const today = toDateKey(now);
@@ -27,48 +40,121 @@ export function LifeDashboardScreen() {
   weekEnd.setDate(now.getDate() + 7);
   const weekEndKey = toDateKey(weekEnd);
   const progress = periodProgress(now);
-  const lifeTasks = workspace.tasks
-    .filter((task) => !task.classId && taskIsOpen(task))
-    .filter((task) => !task.due || (task.due >= today && task.due <= weekEndKey))
-    .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
-  const textNotes = workspace.notes
-    .filter((note) => !note.classId)
-    .map((note) => ({
-      id: note.id,
-      title: note.title || "Untitled note",
-      updatedAt: note.updatedAt,
-      open: () => navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } }),
-    }));
-  const pageNotes = workspace.notebookHub.notebooks
-    .filter((nb) => nb.context?.type !== "class")
-    .map((nb) => ({
-      id: nb.id,
-      title: nb.name,
-      updatedAt: nb.updatedAt,
-      open: () => {
-        const page = primaryPageForNotebook(workspace.notebookPages, nb.id);
-        if (page) {
-          navigation.navigate("LibraryTab", {
-            screen: "PageCanvas",
-            params: { notebookId: nb.id, pageId: page.id },
-          });
-        } else {
-          navigation.navigate("LibraryTab", { screen: "NotebookDetail", params: { notebookId: nb.id } });
-        }
-      },
-    }));
-  const notes = [...textNotes, ...pageNotes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const habitsDone = workspace.life.habits.filter((habit) => habit.completedDates?.includes(today)).length;
-  const upcomingEvents = [...workspace.calendar]
-    .filter((event) => event.start.slice(0, 10) >= today)
-    .sort((a, b) => a.start.localeCompare(b.start))
-    .slice(0, 3);
-  const reading = workspace.life.media.filter((item) => item.category === "Reading").slice(0, 2);
-  const watching = workspace.life.media.filter((item) => item.category === "Watching").slice(0, 2);
-  const listening = workspace.life.media.filter((item) => item.category === "Listening").slice(0, 3);
+  const name = workspace.settings.preferredName?.trim() || "there";
 
-  const toggleTask = (id: number) =>
-    updateTasks(workspace.tasks.map((task) => task.id === id ? { ...task, done: true, status: "Done" } : task));
+  const openTasks = useMemo(() => workspace.tasks.filter((t) => !t.classId && taskIsOpen(t)), [workspace.tasks]);
+
+  const attention = useMemo(() => {
+    return openTasks
+      .filter((task) => {
+        if (!task.due) return task.priority === "High";
+        const key = task.due.slice(0, 10);
+        return key <= today || task.priority === "High";
+      })
+      .sort((a, b) => {
+        const aOver = (a.due?.slice(0, 10) ?? "9999") < today ? 0 : 1;
+        const bOver = (b.due?.slice(0, 10) ?? "9999") < today ? 0 : 1;
+        if (aOver !== bOver) return aOver - bOver;
+        return (a.due ?? "9999").localeCompare(b.due ?? "9999");
+      })
+      .slice(0, 4);
+  }, [openTasks, today]);
+
+  const weekPulse = useMemo(() => {
+    const events = [...workspace.calendar]
+      .filter((e) => {
+        const key = e.start.slice(0, 10);
+        return key >= today && key <= weekEndKey;
+      })
+      .sort((a, b) => a.start.localeCompare(b.start))
+      .slice(0, 4)
+      .map((e) => ({
+        id: `e-${e.id}`,
+        title: e.title,
+        meta: new Date(e.start).toLocaleString("en-US", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+        color: e.color || theme.blue,
+        icon: "calendar" as const,
+        onPress: () => navigation.navigate("CalendarTab"),
+      }));
+
+    const deadlines = openTasks
+      .filter((t) => t.due && t.due.slice(0, 10) >= today && t.due.slice(0, 10) <= weekEndKey)
+      .filter((t) => t.academicType || t.priority === "High")
+      .slice(0, 3)
+      .map((t) => ({
+        id: `t-${t.id}`,
+        title: t.title,
+        meta: `${t.academicType ? `${t.academicType} · ` : ""}${formatDueDate(t.due)}`,
+        color: t.color || theme.warning,
+        icon: "flag" as const,
+        onPress: () => navigation.navigate("TasksTab", { screen: "TaskDetail", params: { taskId: t.id } }),
+      }));
+
+    return [...events, ...deadlines].slice(0, 5);
+  }, [workspace.calendar, openTasks, today, weekEndKey, theme.blue, theme.warning, navigation]);
+
+  const areas = useMemo(() => {
+    return workspace.projects.slice(0, 6).map((project) => {
+      const open = workspace.tasks.filter((task) => task.project === project.name && taskIsOpen(task)).length;
+      const hint = AREA_HINTS.find((h) => h.match.test(project.name));
+      const tintKey = hint?.tint ?? "accent";
+      const color =
+        project.color ||
+        (tintKey === "blue"
+          ? theme.blue
+          : tintKey === "success"
+            ? theme.success
+            : tintKey === "warning"
+              ? theme.warning
+              : tintKey === "danger"
+                ? theme.danger
+                : theme.accent);
+      return {
+        project,
+        open,
+        icon: hint?.icon ?? ("folder" as const),
+        color,
+      };
+    });
+  }, [workspace.projects, workspace.tasks, theme]);
+
+  const inboxCount = buildInbox(workspace).filter((i) => i.bucket === "today").length;
+  const habitsDone = workspace.life.habits.filter((habit) => habit.completedDates?.includes(today)).length;
+  const notes = useMemo(() => {
+    const textNotes = workspace.notes
+      .filter((note) => !note.classId)
+      .map((note) => ({
+        id: note.id,
+        title: note.title || "Untitled note",
+        updatedAt: note.updatedAt,
+        open: () => navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } }),
+      }));
+    const pageNotes = workspace.notebookHub.notebooks
+      .filter((nb) => nb.context?.type !== "class" && !nb.trashedAt)
+      .map((nb) => ({
+        id: nb.id,
+        title: nb.name,
+        updatedAt: nb.updatedAt,
+        open: () => {
+          const page = primaryPageForNotebook(workspace.notebookPages, nb.id);
+          if (page) {
+            navigation.navigate("LibraryTab", {
+              screen: "PageCanvas",
+              params: { notebookId: nb.id, pageId: page.id },
+            });
+          } else {
+            navigation.navigate("LibraryTab", { screen: "NotebookDetail", params: { notebookId: nb.id } });
+          }
+        },
+      }));
+    return [...textNotes, ...pageNotes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }, [workspace.notes, workspace.notebookHub.notebooks, workspace.notebookPages, navigation]);
 
   const createTask = async () => {
     const id = Date.now();
@@ -102,9 +188,9 @@ export function LifeDashboardScreen() {
   };
 
   const createProject = async () => {
-    const name = `New project ${workspace.projects.length + 1}`;
-    await updateProjects([...workspace.projects, { name, kind: "finishable", color: theme.accent }]);
-    navigation.navigate("ProjectDetail", { projectName: name });
+    const nameNext = `New project ${workspace.projects.length + 1}`;
+    await updateProjects([...workspace.projects, { name: nameNext, kind: "finishable", color: theme.accent }]);
+    navigation.navigate("ProjectDetail", { projectName: nameNext });
   };
 
   const toggleHabit = (id: string) => {
@@ -113,7 +199,10 @@ export function LifeDashboardScreen() {
       habits: workspace.life.habits.map((habit) => {
         if (habit.id !== id) return habit;
         const dates = habit.completedDates ?? [];
-        return { ...habit, completedDates: dates.includes(today) ? dates.filter((date) => date !== today) : [...dates, today] };
+        return {
+          ...habit,
+          completedDates: dates.includes(today) ? dates.filter((date) => date !== today) : [...dates, today],
+        };
       }),
     });
   };
@@ -126,17 +215,36 @@ export function LifeDashboardScreen() {
       <ScrollView contentContainerStyle={styles.screen}>
         <View style={styles.header}>
           <View style={styles.grow}>
-            <Eyebrow>{now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }).toUpperCase()}</Eyebrow>
-            <Text style={[styles.title, { color: theme.text }]}>LifeOS</Text>
-            <Text style={[styles.greeting, { color: theme.muted }]}>{getGreeting(now, workspace.settings.preferredName || "there")}</Text>
+            <Eyebrow>
+              {now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }).toUpperCase()}
+            </Eyebrow>
+            <Text style={[styles.title, { color: theme.text }]}>Life</Text>
+            <Text style={[styles.greeting, { color: theme.muted }]}>{getGreeting(now, name)}</Text>
+            <Text style={[styles.subGreeting, { color: theme.muted }]}>
+              A quiet look at what’s going on — execution stays in Now.
+            </Text>
           </View>
-          <Pressable
-            accessibilityLabel="Open focus and ambient tools"
-            onPress={() => navigation.navigate("NowTab")}
-            style={[styles.nowButton, { backgroundColor: theme.text }]}
-          >
-            <Feather name="zap" size={18} color={theme.surface} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              accessibilityLabel="Notification inbox"
+              onPress={() => navigation.navigate("NotificationCenter")}
+              style={[styles.iconBtn, { backgroundColor: theme.soft }]}
+            >
+              <Feather name="bell" size={18} color={theme.accent} />
+              {inboxCount > 0 ? (
+                <View style={[styles.badge, { backgroundColor: theme.danger }]}>
+                  <Text style={styles.badgeText}>{inboxCount > 9 ? "9+" : inboxCount}</Text>
+                </View>
+              ) : null}
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Open Now"
+              onPress={() => navigation.navigate("NowTab")}
+              style={[styles.iconBtn, { backgroundColor: theme.text }]}
+            >
+              <Feather name="zap" size={18} color={theme.surface} />
+            </Pressable>
+          </View>
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickRow}>
@@ -144,175 +252,185 @@ export function LifeDashboardScreen() {
           <QuickAction icon="check-square" label="New task" onPress={createTask} color={theme.blue} />
           <QuickAction icon="folder-plus" label="New project" onPress={createProject} color={theme.warning} />
           <QuickAction icon="map" label="Trip idea" onPress={() => openCollection("trips", true)} color={theme.success} />
-          <QuickAction icon="coffee" label="New recipe" onPress={() => openCollection("recipes", true)} color={theme.danger} />
-          <QuickAction icon="activity" label="New training" onPress={() => openCollection("trainings", true)} color={theme.blue} />
         </ScrollView>
 
-        <DashboardModule icon="check-circle" title="Tasks this week" action="All tasks" onAction={() => navigation.navigate("TasksTab")}>
-          {lifeTasks.length ? lifeTasks.slice(0, 4).map((task) => (
-            <DashboardRow
-              key={task.id}
-              icon="check-square"
-              title={task.title}
-              meta={`${task.project ?? "Inbox"} · ${formatDueDate(task.due)}`}
-              color={task.color}
-              onPress={() => navigation.navigate("TasksTab", { screen: "TaskDetail", params: { taskId: task.id } })}
-              trailing={
-                <Pressable accessibilityLabel={`Complete ${task.title}`} hitSlop={10} onPress={() => toggleTask(task.id)} style={styles.rowAction}>
-                  <Feather name="circle" size={19} color={theme.muted} />
-                </Pressable>
-              }
-            />
-          )) : <ModuleEmpty text="Your life task list is clear for the next seven days." />}
+        <DashboardModule
+          icon="alert-circle"
+          title="Needs attention"
+          action="Tasks"
+          onAction={() => navigation.navigate("TasksTab")}
+        >
+          {attention.length ? (
+            attention.map((task) => {
+              const overdue = Boolean(task.due && task.due.slice(0, 10) < today);
+              return (
+                <DashboardRow
+                  key={task.id}
+                  icon={overdue ? "alert-triangle" : "flag"}
+                  title={task.title}
+                  meta={`${task.project ?? "Inbox"} · ${formatDueDate(task.due)}${task.priority === "High" ? " · High" : ""}`}
+                  color={overdue ? theme.danger : task.color || theme.warning}
+                  onPress={() => navigation.navigate("TasksTab", { screen: "TaskDetail", params: { taskId: task.id } })}
+                />
+              );
+            })
+          ) : (
+            <ModuleEmpty text="Nothing pressing. Enjoy the calm — or pick something up in Now." />
+          )}
         </DashboardModule>
 
-        <DashboardModule icon="bar-chart-2" title="Habits today" action="Manage" onAction={() => openCollection("habits")}>
-          {workspace.life.habits.length ? (
-            <>
-              <View style={styles.habitSummary}>
-                <Text style={[styles.habitCount, { color: theme.text }]}>{habitsDone}/{workspace.life.habits.length}</Text>
-                <Text style={[styles.habitMeta, { color: theme.muted }]}>completed today</Text>
-              </View>
-              {workspace.life.habits.slice(0, 4).map((habit) => {
-                const done = habit.completedDates?.includes(today);
-                return (
-                  <DashboardRow
-                    key={habit.id}
-                    icon={done ? "check" : "circle"}
-                    title={habit.title}
-                    meta={done ? "Done today" : "Tap to complete"}
-                    color={done ? theme.success : theme.accent}
-                    onPress={() => toggleHabit(habit.id)}
-                  />
-                );
-              })}
-            </>
-          ) : <ModuleEmpty text="Add a habit and it will show up here every day." />}
-        </DashboardModule>
-
-        <DashboardModule icon="folder" title="Active projects" action="See all" onAction={() => navigation.navigate("ProjectsDirectory")}>
-          {workspace.projects.length ? workspace.projects.slice(0, 4).map((project) => {
-            const open = workspace.tasks.filter((task) => task.project === project.name && taskIsOpen(task)).length;
-            return (
+        <DashboardModule
+          icon="calendar"
+          title="This week"
+          action="Calendar"
+          onAction={() => navigation.navigate("CalendarTab")}
+        >
+          {weekPulse.length ? (
+            weekPulse.map((item) => (
               <DashboardRow
-                key={project.name}
-                icon="folder"
-                title={project.name}
-                meta={`${open} open task${open === 1 ? "" : "s"} · ${project.kind === "maintenance" ? "Ongoing" : "Finishable"}`}
-                color={project.color}
-                onPress={() => navigation.navigate("ProjectDetail", { projectName: project.name })}
+                key={item.id}
+                icon={item.icon}
+                title={item.title}
+                meta={item.meta}
+                color={item.color}
+                onPress={item.onPress}
               />
-            );
-          }) : <ModuleEmpty text="Create a project for anything with more than one step." />}
+            ))
+          ) : (
+            <ModuleEmpty text="No events or deadlines in the next seven days." />
+          )}
         </DashboardModule>
 
-        <DashboardModule icon="calendar" title="Month calendar" action="Open" onAction={() => navigation.navigate("CalendarTab")}>
-          {upcomingEvents.length ? upcomingEvents.map((event) => (
-            <DashboardRow
-              key={event.id}
-              icon="calendar"
-              title={event.title}
-              meta={new Date(event.start).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-              color={event.color}
-              onPress={() => navigation.navigate("CalendarTab")}
-            />
-          )) : <ModuleEmpty text="No upcoming events on your calendar." />}
+        <DashboardModule
+          icon="layers"
+          title="Active areas"
+          action="Projects"
+          onAction={() => navigation.navigate("ProjectsDirectory")}
+        >
+          {areas.length ? (
+            <View style={styles.areaGrid}>
+              {areas.map(({ project, open, icon, color }) => (
+                <Pressable
+                  key={project.name}
+                  onPress={() => navigation.navigate("ProjectDetail", { projectName: project.name })}
+                  style={[styles.areaCard, { borderColor: theme.border, backgroundColor: theme.surface }]}
+                >
+                  <View style={[styles.areaIcon, { backgroundColor: `${color}22` }]}>
+                    <Feather name={icon} size={16} color={color} />
+                  </View>
+                  <Text style={[styles.areaTitle, { color: theme.text }]} numberOfLines={1}>
+                    {project.name}
+                  </Text>
+                  <Text style={{ color: theme.muted, fontSize: 11, fontWeight: "600" }}>
+                    {open} open · {project.kind === "maintenance" ? "Ongoing" : "Finishable"}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <ModuleEmpty text="Projects become life areas here — Career, School, Home, and the rest." />
+          )}
         </DashboardModule>
 
-        <DashboardModule icon="clock" title="Your progress">
+        <DashboardModule icon="trending-up" title="Momentum">
           <ProgressBar label="Day" value={progress.day} color={theme.blue} />
           <ProgressBar label="Week" value={progress.week} color={theme.success} />
           <ProgressBar label="Month" value={progress.month} color={theme.warning} />
-          <ProgressBar label="Year" value={progress.year} color={theme.accent} />
+          <View style={styles.habitSummary}>
+            <Text style={[styles.habitCount, { color: theme.text }]}>
+              {habitsDone}/{workspace.life.habits.length || 0}
+            </Text>
+            <Text style={[styles.habitMeta, { color: theme.muted }]}>habits today</Text>
+            <Pressable onPress={() => openCollection("habits")} hitSlop={8}>
+              <Text style={{ color: theme.accent, fontWeight: "800", fontSize: 12 }}>Manage</Text>
+            </Pressable>
+          </View>
+          {workspace.life.habits.slice(0, 3).map((habit) => {
+            const done = habit.completedDates?.includes(today);
+            return (
+              <DashboardRow
+                key={habit.id}
+                icon={done ? "check" : "circle"}
+                title={habit.title}
+                meta={done ? "Done today" : "Tap to complete"}
+                color={done ? theme.success : theme.accent}
+                onPress={() => toggleHabit(habit.id)}
+              />
+            );
+          })}
         </DashboardModule>
 
         <DashboardModule icon="edit-3" title="Recent notes" action="Library" onAction={() => navigation.navigate("LibraryTab")}>
-          {notes.length ? notes.slice(0, 3).map((note) => (
-            <DashboardRow
-              key={note.id}
-              icon="edit-3"
-              title={note.title}
-              meta={new Date(note.updatedAt).toLocaleDateString()}
-              onPress={note.open}
-            />
-          )) : <ModuleEmpty text="Handwritten and typed notes will appear here." />}
+          {notes.length ? (
+            notes.slice(0, 3).map((note) => (
+              <DashboardRow
+                key={note.id}
+                icon="edit-3"
+                title={note.title}
+                meta={new Date(note.updatedAt).toLocaleDateString()}
+                onPress={note.open}
+              />
+            ))
+          ) : (
+            <ModuleEmpty text="Handwritten and typed notes will appear here." />
+          )}
         </DashboardModule>
-
-        <DashboardModule icon="activity" title="Recent trainings" action="Open" onAction={() => openCollection("trainings")}>
-          {workspace.life.trainings.length ? workspace.life.trainings.slice(0, 3).map((training) => (
-            <DashboardRow key={training.id} icon="activity" title={training.title} meta={training.subtitle || training.date} color={theme.blue} />
-          )) : <ModuleEmpty text="Log a training session and it will appear here." />}
-        </DashboardModule>
-
-        <DashboardModule icon="tool" title="Useful tools" action="Open" onAction={() => openCollection("tools")}>
-          {workspace.life.tools.length ? workspace.life.tools.slice(0, 3).map((tool) => (
-            <DashboardRow key={tool.id} icon="tool" title={tool.title} meta={tool.subtitle} color={theme.warning} />
-          )) : <ModuleEmpty text="Keep frequently used links and resources here." />}
-        </DashboardModule>
-
-        <View style={styles.split}>
-          <View style={styles.splitItem}>
-            <DashboardModule icon="play" title="Watching" action="Open" onAction={() => openCollection("media")}>
-              {watching.length ? watching.map((item) => (
-                <DashboardRow key={item.id} icon="film" title={item.title} meta={item.subtitle} />
-              )) : <ModuleEmpty text="Nothing queued." />}
-            </DashboardModule>
-          </View>
-          <View style={styles.splitItem}>
-            <DashboardModule icon="book-open" title="Reading" action="Open" onAction={() => openCollection("media")}>
-              {reading.length ? reading.map((item) => (
-                <DashboardRow key={item.id} icon="book" title={item.title} meta={item.subtitle} />
-              )) : <ModuleEmpty text="No current book." />}
-            </DashboardModule>
-          </View>
-        </View>
 
         <DashboardModule icon="compass" title="Life databases">
           <View style={styles.databaseGrid}>
             <DatabaseButton icon="check-circle" label="Habits" onPress={() => openCollection("habits")} />
             <DatabaseButton icon="coffee" label="Recipes" onPress={() => openCollection("recipes")} />
-            <DatabaseButton icon="archive" label="Food storage" onPress={() => openCollection("food")} />
-            <DatabaseButton icon="activity" label="Exercises" onPress={() => openCollection("exercises")} />
             <DatabaseButton icon="activity" label="Trainings" onPress={() => openCollection("trainings")} />
             <DatabaseButton icon="map" label="Trips" onPress={() => openCollection("trips")} />
             <DatabaseButton icon="book-open" label="Media" onPress={() => openCollection("media")} />
-            <DatabaseButton icon="tool" label="Tools" onPress={() => openCollection("tools")} />
-            <DatabaseButton icon="user" label="Contacts" onPress={() => openCollection("contacts")} />
-            <DatabaseButton icon="file-text" label="Documents" onPress={() => openCollection("documents")} />
-            <DatabaseButton icon="lock" label="Vault links" onPress={() => openCollection("vault")} />
             <DatabaseButton icon="camera" label="Gallery" onPress={() => openCollection("gallery")} />
-            <DatabaseButton icon="archive" label="Archive" onPress={() => openCollection("archive")} />
+            <DatabaseButton icon="tool" label="Tools" onPress={() => openCollection("tools")} />
+            <DatabaseButton icon="image" label="Vision" onPress={() => openCollection("vision")} />
           </View>
-        </DashboardModule>
-
-        <DashboardModule icon="headphones" title="Recent albums" action="Open" onAction={() => openCollection("media")}>
-          {listening.length ? listening.map((item) => (
-            <DashboardRow key={item.id} icon="headphones" title={item.title} meta={item.subtitle} color={theme.success} />
-          )) : <ModuleEmpty text="Add music under Listening in Books & media." />}
         </DashboardModule>
 
         <DashboardModule icon="image" title="Vision board" action="Open" onAction={() => openCollection("vision")}>
           {workspace.life.vision.length ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.visionRow}>
               {workspace.life.vision.slice(0, 5).map((item) => (
-                <Pressable key={item.id} onPress={() => openCollection("vision")} style={[styles.visionTile, { backgroundColor: theme.soft }]}>
-                  {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.visionImage} /> : <Feather name="image" size={24} color={theme.accent} />}
-                  <Text style={styles.visionLabel} numberOfLines={1}>{item.title}</Text>
+                <Pressable
+                  key={item.id}
+                  onPress={() => openCollection("vision")}
+                  style={[styles.visionTile, { backgroundColor: theme.soft }]}
+                >
+                  {item.imageUrl ? (
+                    <Image source={{ uri: item.imageUrl }} style={styles.visionImage} />
+                  ) : (
+                    <Feather name="image" size={24} color={theme.accent} />
+                  )}
+                  <Text style={styles.visionLabel} numberOfLines={1}>
+                    {item.title}
+                  </Text>
                 </Pressable>
               ))}
             </ScrollView>
-          ) : <ModuleEmpty text="Add images or links that keep the bigger picture visible." />}
+          ) : (
+            <ModuleEmpty text="Add images or links that keep the bigger picture visible." />
+          )}
         </DashboardModule>
       </ScrollView>
     </Page>
   );
 }
 
-function DatabaseButton({ icon, label, onPress }: { icon: keyof typeof Feather.glyphMap; label: string; onPress: () => void }) {
+function DatabaseButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
   const { theme } = useLifeOS();
   return (
     <Pressable onPress={onPress} style={[styles.databaseButton, { borderColor: theme.border }]}>
-      <Feather name={icon} size={15} color={theme.warning} />
+      <Feather name={icon} size={15} color={theme.blue} />
       <Text style={[styles.databaseText, { color: theme.text }]}>{label}</Text>
       <Feather name="chevron-right" size={14} color={theme.muted} />
     </Pressable>
@@ -323,21 +441,81 @@ const styles = StyleSheet.create({
   screen: { padding: 16, paddingBottom: 28, gap: 18 },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   grow: { flex: 1, minWidth: 0 },
-  title: { fontSize: 29, fontWeight: "800", marginTop: 2 },
-  greeting: { fontSize: 13, marginTop: 2 },
-  nowButton: { width: 44, height: 44, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  quickRow: { flexGrow: 1, justifyContent: "center", alignItems: "center", gap: 14 },
-  rowAction: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -10 },
-  habitSummary: { flexDirection: "row", alignItems: "baseline", gap: 6, paddingVertical: 8 },
+  title: { fontSize: 32, fontWeight: "800", marginTop: 2, letterSpacing: -0.4 },
+  greeting: { fontSize: 15, marginTop: 4, fontWeight: "600" },
+  subGreeting: { fontSize: 12, marginTop: 4, lineHeight: 17 },
+  headerActions: { flexDirection: "row", gap: 8 },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  badgeText: { color: "#FFF", fontSize: 9, fontWeight: "800" },
+  quickRow: { flexGrow: 1, justifyContent: "flex-start", alignItems: "center", gap: 14, paddingRight: 8 },
+  areaGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingVertical: 6 },
+  areaCard: {
+    width: "48.5%",
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    gap: 6,
+    minHeight: 88,
+  },
+  areaIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  areaTitle: { fontSize: 14, fontWeight: "800" },
+  habitSummary: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
+    paddingVertical: 8,
+  },
   habitCount: { fontSize: 22, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  habitMeta: { fontSize: 12 },
-  split: { gap: 18 },
-  splitItem: { flex: 1 },
+  habitMeta: { fontSize: 12, flex: 1 },
   databaseGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingVertical: 8 },
-  databaseButton: { width: "48.5%", minHeight: 48, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 7 },
+  databaseButton: {
+    width: "48.5%",
+    minHeight: 48,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
   databaseText: { flex: 1, fontSize: 12, fontWeight: "800" },
   visionRow: { gap: 10, paddingVertical: 8 },
-  visionTile: { width: 142, height: 112, borderRadius: 8, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  visionTile: {
+    width: 142,
+    height: 112,
+    borderRadius: 10,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   visionImage: { width: "100%", height: "100%" },
-  visionLabel: { position: "absolute", left: 6, right: 6, bottom: 6, borderRadius: 5, backgroundColor: "rgba(0,0,0,0.62)", color: "#FFF", padding: 6, fontSize: 11, fontWeight: "800" },
+  visionLabel: {
+    position: "absolute",
+    left: 6,
+    right: 6,
+    bottom: 6,
+    borderRadius: 5,
+    backgroundColor: "rgba(0,0,0,0.62)",
+    color: "#FFF",
+    padding: 6,
+    fontSize: 11,
+    fontWeight: "800",
+  },
 });

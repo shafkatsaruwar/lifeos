@@ -10,10 +10,51 @@ diff --git a/node_modules/expo-pencilkit-ui/build/index.d.ts b/node_modules/expo
      onDrawStart?: (event: NativeEvent<DrawStartEvent>) => void;
      onDrawEnd?: (event: NativeEvent<DrawEndEvent>) => void;
      onDrawChange?: (event: NativeEvent<DrawChangeEvent>) => void;
+@@ -54,6 +56,10 @@
+  */
+ export interface PencilKitViewRef {
+     setupToolPicker(): Promise<void>;
++    /** LifeOS: show/hide Apple's floating PKToolPicker (keep false for custom toolbar). */
++    setToolPickerVisible(visible: boolean): Promise<void>;
++    /** LifeOS: pen | pencil | marker | eraser | vectorEraser | lasso */
++    setInkTool(tool: string, colorHex?: string, width?: number): Promise<void>;
+     clearDrawing(): Promise<void>;
+     undo(): Promise<void>;
+     redo(): Promise<void>;
+diff --git a/node_modules/expo-pencilkit-ui/build/index.js b/node_modules/expo-pencilkit-ui/build/index.js
+--- a/node_modules/expo-pencilkit-ui/build/index.js
++++ b/node_modules/expo-pencilkit-ui/build/index.js
+@@ -23,6 +23,26 @@
+                 }
+             }
+         },
++        setToolPickerVisible: async (visible) => {
++            if (Platform.OS === "ios" &&
++                ExpoPencilKit &&
++                viewRef.current) {
++                const viewTag = findNodeHandle(viewRef.current);
++                if (viewTag) {
++                    await ExpoPencilKit.setToolPickerVisible(viewTag, visible);
++                }
++            }
++        },
++        setInkTool: async (tool, colorHex, width) => {
++            if (Platform.OS === "ios" &&
++                ExpoPencilKit &&
++                viewRef.current) {
++                const viewTag = findNodeHandle(viewRef.current);
++                if (viewTag) {
++                    await ExpoPencilKit.setInkTool(viewTag, tool, colorHex ?? null, width ?? null);
++                }
++            }
++        },
+         clearDrawing: async () => {
+             if (Platform.OS === "ios" &&
+                 ExpoPencilKit &&
 diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift
 --- a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift
 +++ b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift
-@@ -30,6 +30,11 @@
+@@ -30,15 +30,34 @@
              Prop("imagePath") { (view: ExpoPencilKitView, imagePath: [String: Any]?) in
                  view.setImagePath(imagePath)
              }
@@ -25,7 +66,37 @@ diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift b/node
          }
  
          // Setup tool picker for a specific canvas
-@@ -136,20 +141,20 @@
+         AsyncFunction("setupToolPicker") { (viewTag: Int) in
+             await MainActor.run {
+-                self.setupToolPicker(for: viewTag)
++                self.setupToolPicker(for: viewTag, visible: false)
+             }
+         }
+ 
++        // LifeOS: show/hide Apple's floating PKToolPicker (default: hidden — we use our own toolbar)
++        AsyncFunction("setToolPickerVisible") { (viewTag: Int, visible: Bool) in
++            await MainActor.run {
++                self.setToolPickerVisible(visible)
++            }
++        }
++
++        // LifeOS: set PKCanvasView.tool from custom toolbar (pen / pencil / marker / eraser / lasso)
++        AsyncFunction("setInkTool") { (viewTag: Int, tool: String, colorHex: String?, width: Double?) in
++            await MainActor.run {
++                self.setInkTool(tool: tool, colorHex: colorHex, width: width)
++            }
++        }
++
+         // Clear drawing from canvas
+         AsyncFunction("clearDrawing") { (viewTag: Int) in
+             await MainActor.run {
+@@ -131,28 +150,77 @@
+ 
+     // MARK: - Private Methods
+ 
+-    private func setupToolPicker(for viewTag: Int) {
++    private func setupToolPicker(for viewTag: Int, visible: Bool = false) {
+         guard let canvasView = self.canvasView else {
              return
          }
  
@@ -41,31 +112,85 @@ diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift b/node
 -        // Configure tool picker
 -        toolPicker?.setVisible(true, forFirstResponder: canvasView)
          toolPicker?.addObserver(canvasView)
-+        toolPicker?.setVisible(true, forFirstResponder: canvasView)
++        // LifeOS owns the chrome — keep system picker hidden unless explicitly shown.
++        toolPicker?.setVisible(visible, forFirstResponder: canvasView)
++        _ = canvasView.becomeFirstResponder()
  
 -        // Create and add tool picker observer
 -        toolPickerObserver = ToolPickerObserver()
 -        toolPicker?.addObserver(toolPickerObserver!)
-+        // Keep canvas first responder so pen / eraser / lasso stay available after page jumps.
-+        _ = canvasView.becomeFirstResponder()
++        undoManager = canvasView.undoManager
  
 -        // Make canvas view first responder
 -        canvasView.becomeFirstResponder()
--
++        // Default pen if nothing selected yet.
++        if !(canvasView.tool is PKInkingTool) && !(canvasView.tool is PKEraserTool) && !(canvasView.tool is PKLassoTool) {
++            canvasView.tool = PKInkingTool(.pen, color: .black, width: 5.5)
++        }
++    }
+ 
 -        // Get the undo manager from canvas view
-         undoManager = canvasView.undoManager
+-        undoManager = canvasView.undoManager
++    private func setToolPickerVisible(_ visible: Bool) {
++        guard let canvasView = self.canvasView else { return }
++        if toolPicker == nil {
++            setupToolPicker(for: 0, visible: visible)
++            return
++        }
++        toolPicker?.setVisible(visible, forFirstResponder: canvasView)
++        if visible {
++            _ = canvasView.becomeFirstResponder()
++        }
      }
  
++    private func setInkTool(tool: String, colorHex: String?, width: Double?) {
++        guard let canvasView = self.canvasView else { return }
++        let color = colorFromHexString(colorHex ?? "202124")
++        let w = CGFloat(width ?? 5.5)
++        let key = tool.lowercased()
++
++        switch key {
++        case "pen":
++            canvasView.tool = PKInkingTool(.pen, color: color, width: w)
++        case "pencil":
++            canvasView.tool = PKInkingTool(.pencil, color: color, width: w)
++        case "marker":
++            canvasView.tool = PKInkingTool(.marker, color: color, width: max(w, 12))
++        case "eraser", "bitmaperaser":
++            if #available(iOS 16.4, *) {
++                canvasView.tool = PKEraserTool(.bitmap)
++            } else {
++                canvasView.tool = PKEraserTool(.vector)
++            }
++        case "vectoreraser":
++            canvasView.tool = PKEraserTool(.vector)
++        case "lasso":
++            canvasView.tool = PKLassoTool()
++        default:
++            canvasView.tool = PKInkingTool(.pen, color: color, width: w)
++        }
++
++        // Keep system picker in sync if it's ever shown, but stay hidden by default.
++        toolPicker?.selectedTool = canvasView.tool
++        _ = canvasView.becomeFirstResponder()
++        toolPicker?.setVisible(false, forFirstResponder: canvasView)
++    }
++
+     private func clearDrawing() {
+         canvasView?.drawing = PKDrawing()
+     }
 diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift
 --- a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift
 +++ b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift
-@@ -23,17 +23,17 @@
+@@ -23,17 +23,18 @@
      }
  
      private func setupCanvasView() {
 -        // Configure canvas view exactly like the working example
-+        // LifeOS Phase 2: document zoom/scroll owned by RN; PencilKit only draws.
-         canvasView.drawingPolicy = .anyInput
+-        canvasView.drawingPolicy = .anyInput
++        // LifeOS: document zoom/scroll owned by RN; default Pencil-only (finger scrolls).
++        canvasView.drawingPolicy = .pencilOnly
++        canvasView.tool = PKInkingTool(.pen, color: .black, width: 5.5)
          canvasView.overrideUserInterfaceStyle = .light
          canvasView.isMultipleTouchEnabled = true
          canvasView.isOpaque = true
@@ -80,12 +205,16 @@ diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift b/node_m
          canvasView.bounces = false
          canvasView.bouncesZoom = false
  
-@@ -53,6 +53,17 @@
- 
-     }
+@@ -49,8 +50,19 @@
+             canvasView.trailingAnchor.constraint(equalTo: trailingAnchor),
+             canvasView.bottomAnchor.constraint(equalTo: bottomAnchor)
+         ])
++
++
++    }
  
 +    // MARK: - Props (LifeOS)
-+
+ 
 +    func setDrawingPolicy(_ policy: String?) {
 +        let value = (policy ?? "any").lowercased()
 +        if value == "pencilonly" || value == "pencil" {
@@ -93,8 +222,6 @@ diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift b/node_m
 +        } else {
 +            canvasView.drawingPolicy = .anyInput
 +        }
-+    }
-+
-     public override func didMoveToSuperview() {
-         super.didMoveToSuperview()
+     }
  
+     public override func didMoveToSuperview() {

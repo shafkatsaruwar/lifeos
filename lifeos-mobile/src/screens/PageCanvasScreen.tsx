@@ -1,11 +1,11 @@
 import Feather from "@expo/vector-icons/Feather";
 import * as ImagePicker from "expo-image-picker";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  ActionSheetIOS,
   Alert,
   FlatList,
   LayoutAnimation,
+  type LayoutRectangle,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   Platform,
@@ -15,16 +15,20 @@ import {
   Text,
   UIManager,
   View,
-  type ViewToken,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { AnchoredPopover } from "../components/AnchoredPopover";
 import { DocumentZoom } from "../components/DocumentZoom";
 import {
   isPencilKitAvailable,
   preferredDrawingPolicy,
   type HandwritingCanvasRef,
+  type InkToolKind,
 } from "../components/HandwritingCanvas";
+import { InkToolTray, type DrawingTip } from "../components/InkToolTray";
+import { PaperBackground } from "../components/PaperBackground";
 import { PageSheet } from "../components/PageSheet";
+import { TemplatePicker } from "../components/TemplatePicker";
 import { Page } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { useLayout } from "../lib/layout";
@@ -41,9 +45,9 @@ import {
   pageFromTemplate,
   pageSizeForWidth,
   pagesForNotebook,
-  PAPER_OPTIONS,
   reindexPages,
   TEXT_SIZES,
+  trashNotebook,
   type PageTemplate,
 } from "../lib/notebooks";
 import type {
@@ -53,7 +57,6 @@ import type {
   PageCanvasMode,
   PageImageElement,
   PageTextElement,
-  PaperStyle,
 } from "../types";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -98,19 +101,20 @@ export function PageCanvasScreen() {
   const pageIdRef = useRef(pageId);
   pageIdRef.current = pageId;
   const modeRef = useRef<PageCanvasMode>("ink");
-  /**
-   * Freeze list→page sync while writing when the list can't scroll (finger draws).
-   * With pencilOnly, finger scrolls — unlock so scroll-end can change pages.
-   */
-  const inkLockScrollRef = useRef(true);
   const drawingPolicy = preferredDrawingPolicy(isTablet);
+  const ensuringNextPageRef = useRef(false);
+  const moreBtnRef = useRef<View>(null);
 
   const [mode, setMode] = useState<PageCanvasMode>("ink");
   modeRef.current = mode;
-  inkLockScrollRef.current = mode === "ink" && drawingPolicy === "any";
-  const [paperOpen, setPaperOpen] = useState(false);
+  const [inkTool, setInkTool] = useState<InkToolKind>("pen");
+  const [inkColor, setInkColor] = useState<string>("202124");
+  const [inkWidth, setInkWidth] = useState<number>(5.5);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [toolPanel, setToolPanel] = useState<"none" | "text" | "paper" | "templates">("none");
+  const [toolPanel, setToolPanel] = useState<"none" | "text" | "pen" | "eraser" | "shape" | "templates">("none");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [moreAnchor, setMoreAnchor] = useState<LayoutRectangle | null>(null);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [stageWidth, setStageWidth] = useState(0);
   const [viewMode, setViewMode] = useState<NotebookPageView>(workspace.settings.notebookPageView ?? "seamless");
   /** Session-only document zoom; resets when leaving the note. */
@@ -119,8 +123,8 @@ export function PageCanvasScreen() {
 
   const sheetSize = useMemo(() => {
     const width = stageWidth > 0 ? stageWidth : isWide ? 640 : 360;
-    return pageSizeForWidth(width);
-  }, [stageWidth, isWide]);
+    return pageSizeForWidth(width, page?.paperOrientation, page?.paperSize);
+  }, [stageWidth, isWide, page?.paperOrientation, page?.paperSize]);
 
   useEffect(() => {
     setViewMode(workspace.settings.notebookPageView ?? "seamless");
@@ -197,14 +201,16 @@ export function PageCanvasScreen() {
     return unsub;
   }, [navigation, flushInk]);
 
-  // Re-assert system tool picker (eraser / lasso / pens) when the focused page changes.
+  // Keep PencilKit first-responder + LifeOS ink tool; never show Apple's floating picker.
   useEffect(() => {
     if (mode !== "ink") return;
     const timer = setTimeout(() => {
       void pencilRef.current?.assertToolPicker();
+      void pencilRef.current?.setInkTool(inkTool, inkColor, inkWidth);
+      void pencilRef.current?.setToolPickerVisible(false);
     }, 80);
     return () => clearTimeout(timer);
-  }, [pageId, mode]);
+  }, [pageId, mode, inkTool, inkColor, inkWidth]);
 
   const jumpToPage = useCallback(
     async (nextPageId: string, opts?: { animated?: boolean }) => {
@@ -225,36 +231,8 @@ export function PageCanvasScreen() {
     [flushInk, navigation, pageId, pages, viewMode],
   );
 
-  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    // Ink mode disables list scrolling — ignore viewability churn from autosave re-renders
-    // (old logic picked the topmost index, so writing on page 4 could snap back to page 2).
-    if (inkLockScrollRef.current) return;
-    if (scrollingRef.current) return;
-    const visible = viewableItems.filter((token) => token.isViewable && token.item);
-    if (!visible.length) return;
-    // Most-visible page wins; index is only a tie-breaker.
-    const best = visible.reduce((a, b) => {
-      const ap = a.percentVisible ?? 0;
-      const bp = b.percentVisible ?? 0;
-      if (bp !== ap) return bp > ap ? b : a;
-      return (a.index ?? 0) <= (b.index ?? 0) ? a : b;
-    });
-    const nextId = (best.item as NotebookPage | undefined)?.id;
-    if (nextId && nextId !== pageIdRef.current) {
-      ignoreScrollSyncRef.current = true;
-      void flushInk().then(() => {
-        setSelectedId(null);
-        navigation.setParams({ pageId: nextId });
-      });
-    }
-  }).current;
-
-  const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 60,
-    minimumViewTime: 120,
-  }).current;
-
   // Keep Seamless list aligned when pageId changes from strip / chevrons only.
+  // Never auto-scroll from viewability — that reintroduced page jumps while writing.
   useEffect(() => {
     if (viewMode !== "seamless" || pageIndex < 0 || stageWidth <= 0) return;
     if (ignoreScrollSyncRef.current) {
@@ -263,6 +241,7 @@ export function PageCanvasScreen() {
     }
     // Don't yank the list during ink — live canvas + autosave already own the viewport.
     if (modeRef.current === "ink") return;
+    if (scrollingRef.current) return;
     const timer = setTimeout(() => {
       try {
         listRef.current?.scrollToIndex({ index: pageIndex, animated: false, viewPosition: 0 });
@@ -272,34 +251,6 @@ export function PageCanvasScreen() {
     }, 16);
     return () => clearTimeout(timer);
   }, [pageIndex, viewMode, stageWidth]);
-
-  if (!page || !notebook) {
-    return (
-      <Page edges={["top", "bottom"]}>
-        <View style={styles.missing}>
-          <Text style={{ color: theme.muted }}>Page not found.</Text>
-        </View>
-      </Page>
-    );
-  }
-
-  const texts = page.textElements ?? [];
-  const images = page.imageElements ?? [];
-  const selectedText = texts.find((t) => t.id === selectedId);
-
-  const persistPage = (patch: Partial<NotebookPage>) => persistPageById(pageId, patch);
-  const onInkChange = (ink: NoteInk) => persistPage({ ink });
-
-  const setPageView = (next: NotebookPageView) => {
-    setViewMode(next);
-    void updateSettings({ ...workspace.settings, notebookPageView: next });
-  };
-
-  const goPage = (delta: number) => {
-    const next = pages[pageIndex + delta];
-    if (!next) return;
-    void jumpToPage(next.id);
-  };
 
   const touchPageCount = useCallback(
     async (count: number) => {
@@ -354,6 +305,30 @@ export function PageCanvasScreen() {
     openCreatedPage,
   ]);
 
+  /** Quietly append a trailing page so Seamless scroll never hits a hard end. */
+  const ensureTrailingPage = useCallback(async () => {
+    if (ensuringNextPageRef.current) return;
+    const livePages = pagesForNotebook(pagesByIdRef.current, notebookId);
+    const last = livePages[livePages.length - 1];
+    if (!last) return;
+    const lastEmpty =
+      !last.ink?.data &&
+      !last.ink?.pencilKitData &&
+      !(last.textElements?.length) &&
+      !(last.imageElements?.length);
+    // Keep at most one empty page at the end — avoid infinite blank sheets.
+    if (lastEmpty) return;
+
+    ensuringNextPageRef.current = true;
+    try {
+      const newPage = createPage(notebookId, livePages.length, last.paper ?? "ruled");
+      await upsertNotebookPage(newPage);
+      await touchPageCount(livePages.length + 1);
+    } finally {
+      ensuringNextPageRef.current = false;
+    }
+  }, [notebookId, upsertNotebookPage, touchPageCount]);
+
   const addPageFromTemplate = useCallback(
     async (template: PageTemplate) => {
       await flushInk();
@@ -363,7 +338,6 @@ export function PageCanvasScreen() {
       nextList.splice(insertAt, 0, newPage);
       await Promise.all(reindexPages(nextList).map((p) => upsertNotebookPage(p)));
       await touchPageCount(nextList.length);
-      setPaperOpen(false);
       setToolPanel("none");
       openCreatedPage(newPage.id, insertAt);
     },
@@ -401,9 +375,34 @@ export function PageCanvasScreen() {
     [flushInk, pages, upsertNotebookPage, touchPageCount, viewMode],
   );
 
+  const deleteCurrentNotebook = useCallback(() => {
+    const name = hubRef.current.notebooks.find((n) => n.id === notebookId)?.name ?? "this note";
+    Alert.alert(
+      "Delete note?",
+      `"${name}" will move to Trash. Restore it later from Library → Trash.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Move to Trash",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              allowRemoveRef.current = true;
+              await updateNotebookHub(trashNotebook(hubRef.current, notebookId));
+              navigation.navigate("NotebooksList");
+            })();
+          },
+        },
+      ],
+    );
+  }, [notebookId, updateNotebookHub, navigation]);
+
   const removeCurrentPage = useCallback(() => {
     if (pages.length <= 1) {
-      Alert.alert("Keep at least one page", "A note needs a page to write on.");
+      Alert.alert("Only page", "Deleting the last page removes the whole note.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete note", style: "destructive", onPress: () => deleteCurrentNotebook() },
+      ]);
       return;
     }
     const targetId = pageIdRef.current;
@@ -437,12 +436,104 @@ export function PageCanvasScreen() {
     upsertNotebookPage,
     touchPageCount,
     navigation,
+    deleteCurrentNotebook,
   ]);
 
-  const setPaper = (paper: PaperStyle) => {
-    setPaperOpen(false);
+  const texts = page?.textElements ?? [];
+  const images = page?.imageElements ?? [];
+  const selectedText = texts.find((t) => t.id === selectedId);
+  const persistPage = (patch: Partial<NotebookPage>) => persistPageById(pageId, patch);
+
+  const setPageView = (next: NotebookPageView) => {
+    setViewMode(next);
+    void updateSettings({ ...workspace.settings, notebookPageView: next });
+  };
+
+  const goPage = (delta: number) => {
+    const next = pages[pageIndex + delta];
+    if (!next) return;
+    void jumpToPage(next.id);
+  };
+
+  const applyPaperTemplate = (selection: {
+    paper: NotebookPage["paper"];
+    paperColor: NonNullable<NotebookPage["paperColor"]>;
+    paperOrientation: NonNullable<NotebookPage["paperOrientation"]>;
+    paperSize: NonNullable<NotebookPage["paperSize"]>;
+  }) => {
     setToolPanel("none");
-    persistPage({ paper });
+    // Flush strokes first, then swap paper only — never clear ink / text / images.
+    void (async () => {
+      await flushInk();
+      const latest = pagesByIdRef.current[pageIdRef.current];
+      if (!latest) return;
+      await persistPageById(pageIdRef.current, {
+        paper: selection.paper,
+        paperColor: selection.paperColor,
+        // Keep existing layout unless the picker explicitly changed it.
+        paperOrientation: selection.paperOrientation ?? latest.paperOrientation,
+        paperSize: selection.paperSize ?? latest.paperSize,
+        ink: latest.ink,
+        textElements: latest.textElements,
+        imageElements: latest.imageElements,
+      });
+    })();
+  };
+
+  const applyInk = (tool: InkToolKind, color: string, width: number) => {
+    setMode("ink");
+    setSelectedId(null);
+    setInkTool(tool);
+    setInkColor(color);
+    setInkWidth(width);
+    void pencilRef.current?.setInkTool(tool, color, width);
+    void pencilRef.current?.setToolPickerVisible(false);
+  };
+
+  const selectInkTool = (tool: InkToolKind, panel: "none" | "pen" | "eraser" = "none", width = inkWidth) => {
+    setToolPanel(panel);
+    applyInk(tool, inkColor, width);
+  };
+
+  const clearPageInk = () => {
+    Alert.alert("Clear page?", "This removes handwriting on this page. Overlays stay.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Clear",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            try {
+              await pencilRef.current?.clearDrawing();
+            } catch {
+              /* ignore */
+            }
+            persistPage({
+              ink: {
+                version: 2,
+                format: "pencilkit",
+                data: "",
+                updatedAt: Date.now(),
+              },
+            });
+          })();
+        },
+      },
+    ]);
+  };
+
+  const insertShape = (kind: "box" | "line") => {
+    const el = createTextElement({
+      y: 72 + (page?.textElements?.length ?? 0) * 20,
+      width: kind === "line" ? 220 : 140,
+      height: kind === "line" ? 28 : 100,
+      text: kind === "line" ? "————————" : "",
+      fontSize: kind === "line" ? 18 : 16,
+    });
+    persistPage({ textElements: [...(page?.textElements ?? []), el] });
+    setSelectedId(el.id);
+    setMode("text");
+    setToolPanel("text");
   };
 
   const insertText = () => {
@@ -502,15 +593,16 @@ export function PageCanvasScreen() {
           },
         ],
         "plain-text",
-        page.title ?? "",
+        page?.title ?? "",
       );
       return;
     }
-    const next = page.title?.trim() ? undefined : `Page ${page.index + 1}`;
+    const next = page?.title?.trim() ? undefined : `Page ${(page?.index ?? 0) + 1}`;
     persistPage({ title: next });
   };
 
   const askAi = async () => {
+    if (!page) return;
     const result = await runNotebookAi({
       action: "summarize-page",
       notebookId,
@@ -522,76 +614,23 @@ export function PageCanvasScreen() {
           page.recognition?.status === "ready" ? page.recognition.transcript : undefined,
       }),
       lifeOsContext: {
-        classId: notebook.context?.classId,
-        projectName: notebook.context?.projectName,
+        classId: notebook?.context?.classId,
+        projectName: notebook?.context?.projectName,
       },
     });
     if (!result.ok) Alert.alert("Not available yet", result.reason);
   };
 
   const openMore = () => {
-    const actions = [
-      "Add page after",
-      "Duplicate page",
-      "Move earlier",
-      "Move later",
-      "Delete page",
-      "New from template…",
-      "Rename page",
-      "Organize note",
-      viewMode === "seamless" ? "View: Single page" : "View: Seamless",
-      ...(isNotebookAiAvailable() ? ["Ask AI about this page"] : ["AI (coming later)"]),
-      ...(isPdfPipelineAvailable() ? ["Import PDF page"] : ["PDF import (architecture ready)"]),
-      "Cancel",
-    ];
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: actions,
-          cancelButtonIndex: actions.length - 1,
-          destructiveButtonIndex: actions.indexOf("Delete page"),
-        },
-        (index) => {
-          const label = actions[index];
-          if (label === "Add page after") void addPage();
-          else if (label === "Duplicate page") void duplicateCurrentPage();
-          else if (label === "Move earlier") void moveCurrentPage(-1);
-          else if (label === "Move later") void moveCurrentPage(1);
-          else if (label === "Delete page") removeCurrentPage();
-          else if (label === "New from template…") {
-            setPaperOpen(false);
-            setToolPanel("templates");
-          } else if (label === "Rename page") promptRename();
-          else if (label === "Organize note") {
-            navigation.navigate("NotebookDetail", { notebookId, organizeOnly: true });
-          } else if (label?.startsWith("View:")) {
-            setPageView(viewMode === "seamless" ? "single" : "seamless");
-          } else if (label?.startsWith("Ask AI")) void askAi();
-          else if (label?.startsWith("AI")) {
-            Alert.alert("AI stays quiet for now", "Write first. Notebook AI actions will plug into LifeOS later without interrupting the page.");
-          } else if (label?.startsWith("PDF")) {
-            Alert.alert("PDF pipeline", "Import/annotate/export hooks live in notebookPdf.ts — not faked in the UI yet.");
-          }
-        },
-      );
-    } else {
-      Alert.alert("Page", undefined, [
-        { text: "Add page after", onPress: () => void addPage() },
-        { text: "Duplicate", onPress: () => void duplicateCurrentPage() },
-        { text: "Delete page", style: "destructive", onPress: () => removeCurrentPage() },
-        { text: "Templates", onPress: () => setToolPanel("templates") },
-        { text: "Rename page", onPress: promptRename },
-        {
-          text: "Organize note",
-          onPress: () => navigation.navigate("NotebookDetail", { notebookId, organizeOnly: true }),
-        },
-        {
-          text: viewMode === "seamless" ? "View: Single page" : "View: Seamless",
-          onPress: () => setPageView(viewMode === "seamless" ? "single" : "seamless"),
-        },
-        { text: "Cancel", style: "cancel" },
-      ]);
-    }
+    moreBtnRef.current?.measureInWindow((x, y, width, height) => {
+      setMoreAnchor({ x, y, width, height });
+      setMoreOpen(true);
+    });
+  };
+
+  const runMoreAction = (action: () => void) => {
+    setMoreOpen(false);
+    requestAnimationFrame(action);
   };
 
   const inkInteractive = mode === "ink";
@@ -602,9 +641,8 @@ export function PageCanvasScreen() {
     (mode !== "ink" || listScrollWhileInk) && zoomScale <= 1.01;
 
   const onScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    scrollingRef.current = false;
-    if (inkLockScrollRef.current) return;
-    const offsetY = event.nativeEvent.contentOffset.y;
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const offsetY = contentOffset.y;
     const stride = sheetSize.height + PAGE_GAP;
     const index = Math.max(0, Math.min(pages.length - 1, Math.round(offsetY / stride)));
     const next = pages[index];
@@ -615,6 +653,19 @@ export function PageCanvasScreen() {
         navigation.setParams({ pageId: next.id });
       });
     }
+    // Near the document end → append the next page so scroll never dead-ends.
+    // Do this only on user scroll — never mid-stroke (appending reflows the list).
+    const nearEnd =
+      offsetY + layoutMeasurement.height >= contentSize.height - Math.max(120, sheetSize.height * 0.35);
+    if (nearEnd && index >= pages.length - 1) {
+      void ensureTrailingPage();
+    }
+    // Clear after sync so late layout passes don't treat this as an active drag.
+    scrollingRef.current = false;
+  };
+
+  const onInkChangeLive = (ink: NoteInk) => {
+    persistPage({ ink });
   };
 
   const pageIndicator = pageIndex >= 0 ? `Page ${pageIndex + 1} / ${pages.length}` : "";
@@ -622,12 +673,17 @@ export function PageCanvasScreen() {
   const renderSeamlessPage = useCallback(
     ({ item, index }: { item: NotebookPage; index: number }) => {
       const live = item.id === pageId;
+      const size = pageSizeForWidth(
+        stageWidth > 0 ? stageWidth : sheetSize.width,
+        item.paperOrientation,
+        item.paperSize,
+      );
       return (
-        <View style={{ marginBottom: index === pages.length - 1 ? 28 : PAGE_GAP }}>
+        <View style={{ marginBottom: PAGE_GAP }}>
           <PageSheet
             page={item}
-            width={sheetSize.width}
-            height={sheetSize.height}
+            width={size.width}
+            height={size.height}
             liveInk={live}
             inkInteractive={live && inkInteractive}
             overlayInteractive={live && overlayInteractive}
@@ -636,8 +692,13 @@ export function PageCanvasScreen() {
             pageLabel={`${index + 1}`}
             pencilRef={live ? pencilRef : undefined}
             drawingPolicy={drawingPolicy}
+            inkTool={inkTool}
+            inkColor={inkColor}
+            inkWidth={inkWidth}
             zoomScale={zoomScale}
-            onInkChange={(ink) => persistPageById(item.id, { ink })}
+            onInkChange={(ink) => {
+              void persistPageById(item.id, { ink });
+            }}
             onSelect={(id) => {
               if (!live) return;
               setSelectedId(id);
@@ -657,18 +718,30 @@ export function PageCanvasScreen() {
     },
     [
       pageId,
-      pages.length,
+      stageWidth,
       sheetSize.width,
-      sheetSize.height,
       inkInteractive,
       overlayInteractive,
       mode,
       selectedId,
       drawingPolicy,
+      inkTool,
+      inkColor,
+      inkWidth,
       zoomScale,
       persistPageById,
     ],
   );
+
+  if (!page || !notebook) {
+    return (
+      <Page edges={["top", "bottom"]}>
+        <View style={styles.missing}>
+          <Text style={{ color: theme.muted }}>Page not found.</Text>
+        </View>
+      </Page>
+    );
+  }
 
   return (
     <Page edges={["top", "bottom"]} fullBleed>
@@ -725,21 +798,34 @@ export function PageCanvasScreen() {
             color={theme.text}
           />
         </Pressable>
-        <Pressable accessibilityLabel="More" onPress={openMore} style={styles.chromeBtn}>
-          <Feather name="more-horizontal" size={18} color={theme.text} />
-        </Pressable>
+        <View ref={moreBtnRef} collapsable={false}>
+          <Pressable accessibilityLabel="More" onPress={openMore} style={styles.chromeBtn}>
+            <Feather name="more-horizontal" size={18} color={theme.text} />
+          </Pressable>
+        </View>
       </View>
 
-      <View style={[styles.toolRail, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+      <View
+        style={[
+          styles.toolRail,
+          {
+            borderColor: "rgba(15,23,42,0.08)",
+            backgroundColor: "rgba(245,248,250,0.94)",
+          },
+        ]}
+      >
         <ToolBtn
           icon="edit-3"
-          label="Ink"
-          active={mode === "ink"}
+          label="Pen"
+          active={mode === "ink" && (inkTool === "pen" || inkTool === "pencil" || inkTool === "marker")}
           onPress={() => {
-            setMode("ink");
-            setSelectedId(null);
-            setToolPanel("none");
-            setPaperOpen(false);
+            const drawing =
+              inkTool === "pen" || inkTool === "pencil" || inkTool === "marker" ? inkTool : "pen";
+            if (mode === "ink" && toolPanel === "pen" && drawing === inkTool) {
+              setToolPanel("none");
+              return;
+            }
+            selectInkTool(drawing, "pen");
           }}
         />
         <ToolBtn
@@ -749,7 +835,6 @@ export function PageCanvasScreen() {
           onPress={() => {
             setMode("text");
             setToolPanel("text");
-            setPaperOpen(false);
             if (!selectedText) insertText();
           }}
         />
@@ -760,26 +845,41 @@ export function PageCanvasScreen() {
           onPress={() => {
             setMode("image");
             setToolPanel("none");
-            setPaperOpen(false);
             void insertImage();
           }}
         />
         <ToolBtn
+          icon="square"
+          label="Shape"
+          active={toolPanel === "shape"}
+          onPress={() => setToolPanel((p) => (p === "shape" ? "none" : "shape"))}
+        />
+        <ToolBtn
           icon="layout"
-          label="Paper"
-          active={paperOpen || toolPanel === "paper"}
+          label="Template"
+          active={templatePickerOpen}
           onPress={() => {
-            setPaperOpen((v) => !v);
-            setToolPanel((p) => (p === "paper" ? "none" : "paper"));
+            setToolPanel("none");
+            setTemplatePickerOpen(true);
           }}
         />
         <ToolBtn
-          icon="copy"
-          label="Templates"
-          active={toolPanel === "templates"}
+          icon="crop"
+          label="Lasso"
+          active={mode === "ink" && inkTool === "lasso"}
+          onPress={() => selectInkTool("lasso")}
+        />
+        <ToolBtn
+          icon="slash"
+          label="Eraser"
+          active={mode === "ink" && (inkTool === "eraser" || inkTool === "vectorEraser")}
           onPress={() => {
-            setPaperOpen(false);
-            setToolPanel((p) => (p === "templates" ? "none" : "templates"));
+            const tool = inkTool === "vectorEraser" ? "vectorEraser" : "eraser";
+            if (mode === "ink" && toolPanel === "eraser" && (inkTool === "eraser" || inkTool === "vectorEraser")) {
+              setToolPanel("none");
+              return;
+            }
+            selectInkTool(tool, "eraser");
           }}
         />
         {pencilReady ? (
@@ -794,25 +894,35 @@ export function PageCanvasScreen() {
         ) : null}
       </View>
 
-      {(paperOpen || toolPanel === "paper") && (
+      {toolPanel === "pen" || toolPanel === "eraser" ? (
+        <InkToolTray
+          mode={toolPanel === "eraser" ? "eraser" : "pen"}
+          inkTool={inkTool}
+          inkColor={inkColor}
+          onSelectTip={(tip: DrawingTip, width: number) => {
+            setToolPanel("pen");
+            applyInk(tip, inkColor, width);
+          }}
+          onColorChange={(color) => applyInk(inkTool, color, inkWidth)}
+          onWidthChange={(width) => applyInk(inkTool, inkColor, width)}
+          onSelectEraser={(tool, width) => {
+            setToolPanel("eraser");
+            applyInk(tool, inkColor, width);
+          }}
+          onClearPage={clearPageInk}
+        />
+      ) : null}
+
+      {toolPanel === "shape" ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.paperRow} style={styles.contextBar}>
-          {PAPER_OPTIONS.map((opt) => {
-            const active = page.paper === opt.key;
-            return (
-              <Pressable
-                key={opt.key}
-                onPress={() => setPaper(opt.key)}
-                style={[
-                  styles.chip,
-                  { borderColor: active ? theme.accent : theme.border, backgroundColor: active ? theme.soft : theme.bg },
-                ]}
-              >
-                <Text style={{ color: active ? theme.accent : theme.text, fontWeight: "700", fontSize: 12 }}>{opt.label}</Text>
-              </Pressable>
-            );
-          })}
+          <Pressable onPress={() => insertShape("box")} style={[styles.chip, { borderColor: theme.border, backgroundColor: theme.bg }]}>
+            <Text style={{ color: theme.text, fontWeight: "700", fontSize: 12 }}>Box</Text>
+          </Pressable>
+          <Pressable onPress={() => insertShape("line")} style={[styles.chip, { borderColor: theme.border, backgroundColor: theme.bg }]}>
+            <Text style={{ color: theme.text, fontWeight: "700", fontSize: 12 }}>Line</Text>
+          </Pressable>
         </ScrollView>
-      )}
+      ) : null}
 
       {toolPanel === "templates" ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.paperRow} style={styles.contextBar}>
@@ -891,7 +1001,6 @@ export function PageCanvasScreen() {
                   onPress={() => void jumpToPage(p.id)}
                   onLongPress={() => {
                     void jumpToPage(p.id).then(() => {
-                      // Defer so pageId matches the strip target before sheet actions run.
                       setTimeout(() => openMore(), 0);
                     });
                   }}
@@ -900,14 +1009,17 @@ export function PageCanvasScreen() {
                     styles.stripItem,
                     {
                       borderColor: active ? theme.accent : theme.border,
-                      backgroundColor: active ? theme.soft : theme.surface,
-                      transform: [{ scale: active ? 1.04 : 1 }],
+                      backgroundColor: theme.surface,
+                      shadowOpacity: active ? 0.12 : 0,
                     },
                   ]}
                 >
-                  <Text style={{ color: active ? theme.accent : theme.text, fontWeight: "800", fontSize: 11 }}>
-                    {p.index + 1}
-                  </Text>
+                  <View style={styles.stripPaper}>
+                    <PaperBackground paper={p.paper ?? "ruled"} paperColor={p.paperColor} />
+                  </View>
+                  <View style={[styles.stripBadge, { backgroundColor: active ? theme.accent : "rgba(15,23,42,0.55)" }]}>
+                    <Text style={styles.stripBadgeText}>{p.index + 1}</Text>
+                  </View>
                 </Pressable>
               );
             })}
@@ -946,7 +1058,7 @@ export function PageCanvasScreen() {
                 data={pages}
                 keyExtractor={(item) => item.id}
                 renderItem={renderSeamlessPage}
-                extraData={`${pageId}:${mode}:${zoomScale}`}
+                extraData={`${pageId}:${mode}:${selectedId}:${inkTool}:${zoomScale}`}
                 showsVerticalScrollIndicator
                 contentContainerStyle={styles.seamlessList}
                 // Pencil-only: finger scrolls while Ink stays active. anyInput: leave Ink to scroll.
@@ -956,9 +1068,13 @@ export function PageCanvasScreen() {
                   scrollingRef.current = true;
                 }}
                 onMomentumScrollEnd={onScrollEnd}
-                onScrollEndDrag={onScrollEnd}
-                onViewableItemsChanged={onViewableItemsChanged}
-                viewabilityConfig={viewabilityConfig}
+                onScrollEndDrag={(event) => {
+                  // If momentum will continue, wait for onMomentumScrollEnd.
+                  if (event.nativeEvent.velocity && Math.abs(event.nativeEvent.velocity.y) > 0.05) {
+                    return;
+                  }
+                  onScrollEnd(event);
+                }}
                 getItemLayout={(_, index) => {
                   const stride = sheetSize.height + PAGE_GAP;
                   return { length: stride, offset: stride * index, index };
@@ -970,7 +1086,6 @@ export function PageCanvasScreen() {
                 updateCellsBatchingPeriod={40}
                 initialNumToRender={Math.min(pages.length, 3)}
                 removeClippedSubviews={Platform.OS === "android"}
-                maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
                 onScrollToIndexFailed={(info) => {
                   const stride = sheetSize.height + PAGE_GAP;
                   listRef.current?.scrollToOffset({
@@ -993,8 +1108,11 @@ export function PageCanvasScreen() {
                   pageLabel={`${pageIndex + 1}`}
                   pencilRef={pencilRef}
                   drawingPolicy={drawingPolicy}
+                  inkTool={inkTool}
+                  inkColor={inkColor}
+                  inkWidth={inkWidth}
                   zoomScale={zoomScale}
-                  onInkChange={onInkChange}
+                  onInkChange={onInkChangeLive}
                   onSelect={(id) => {
                     setSelectedId(id);
                     if (id && texts.some((t) => t.id === id)) {
@@ -1014,23 +1132,141 @@ export function PageCanvasScreen() {
           {!isWide ? (
             <Text style={[styles.hint, { color: theme.muted }]}>
               {viewMode === "seamless"
-                ? mode === "ink"
-                  ? pencilReady
-                    ? listScrollWhileInk
-                      ? "Pencil writes · finger scrolls · pinch to zoom"
-                      : "Ink mode · switch tool to scroll · pinch to zoom"
-                    : "Native build required for PencilKit"
-                  : "Scroll pages · move overlays · switch to Ink to draw"
-                : mode === "ink"
-                  ? pencilReady
-                    ? "Apple PencilKit · ink autosaves · pinch to zoom"
-                    : "Native build required for PencilKit"
-                  : "Move · resize · edit overlays · switch to Ink to draw"}
+                ? pencilReady
+                  ? "Pencil writes · finger scrolls pages · pinch to zoom"
+                  : "Native build required for PencilKit"
+                : pencilReady
+                  ? "Pencil writes · switch to Seamless to scroll pages"
+                  : "Native build required for PencilKit"}
             </Text>
           ) : null}
         </View>
       </View>
+
+      <AnchoredPopover visible={moreOpen} onClose={() => setMoreOpen(false)} anchor={moreAnchor} width={268}>
+        <MenuSection label="Page">
+          <MenuRow label="Add page after" onPress={() => runMoreAction(() => void addPage())} />
+          <MenuRow label="Duplicate page" onPress={() => runMoreAction(() => void duplicateCurrentPage())} />
+          <MenuRow label="Rename page" onPress={() => runMoreAction(promptRename)} />
+          <MenuRow
+            label="Change template"
+            onPress={() =>
+              runMoreAction(() => {
+                setTemplatePickerOpen(true);
+              })
+            }
+          />
+        </MenuSection>
+        <MenuSection label="Organize">
+          <MenuRow label="Move earlier" onPress={() => runMoreAction(() => void moveCurrentPage(-1))} />
+          <MenuRow label="Move later" onPress={() => runMoreAction(() => void moveCurrentPage(1))} />
+          <MenuRow
+            label="Organize note"
+            onPress={() =>
+              runMoreAction(() => navigation.navigate("NotebookDetail", { notebookId, organizeOnly: true }))
+            }
+          />
+          <MenuRow
+            label="New from template…"
+            onPress={() => runMoreAction(() => setToolPanel("templates"))}
+          />
+        </MenuSection>
+        <MenuSection label="View">
+          <MenuRow
+            label={viewMode === "seamless" ? "Single" : "Seamless"}
+            detail={viewMode === "seamless" ? "One page" : "Continuous"}
+            onPress={() =>
+              runMoreAction(() => setPageView(viewMode === "seamless" ? "single" : "seamless"))
+            }
+          />
+        </MenuSection>
+        <MenuSection label="Other">
+          <MenuRow
+            label={isNotebookAiAvailable() ? "Ask AI about this page" : "AI"}
+            onPress={() =>
+              runMoreAction(() => {
+                if (isNotebookAiAvailable()) void askAi();
+                else {
+                  Alert.alert(
+                    "AI stays quiet for now",
+                    "Write first. Notebook AI actions will plug into LifeOS later without interrupting the page.",
+                  );
+                }
+              })
+            }
+          />
+          <MenuRow
+            label={isPdfPipelineAvailable() ? "Import PDF page" : "PDF Import"}
+            onPress={() =>
+              runMoreAction(() =>
+                Alert.alert(
+                  "PDF pipeline",
+                  "Import/annotate/export hooks live in notebookPdf.ts — not faked in the UI yet.",
+                ),
+              )
+            }
+          />
+        </MenuSection>
+        <MenuSection label="Destructive" last>
+          <MenuRow label="Delete page" danger onPress={() => runMoreAction(removeCurrentPage)} />
+          <MenuRow label="Delete note" danger onPress={() => runMoreAction(deleteCurrentNotebook)} />
+        </MenuSection>
+      </AnchoredPopover>
+
+      <TemplatePicker
+        visible={templatePickerOpen}
+        current={page.paper}
+        currentColor={page.paperColor}
+        currentOrientation={page.paperOrientation}
+        currentSize={page.paperSize}
+        preserveContent
+        onClose={() => setTemplatePickerOpen(false)}
+        onSelect={applyPaperTemplate}
+      />
     </Page>
+  );
+}
+
+function MenuSection({
+  label,
+  children,
+  last,
+}: {
+  label: string;
+  children: ReactNode;
+  last?: boolean;
+}) {
+  const { theme } = useLifeOS();
+  return (
+    <View style={!last ? styles.menuSection : undefined}>
+      <Text style={[styles.menuSectionLabel, { color: theme.muted }]}>{label}</Text>
+      {children}
+    </View>
+  );
+}
+
+function MenuRow({
+  label,
+  detail,
+  onPress,
+  danger,
+}: {
+  label: string;
+  detail?: string;
+  onPress: () => void;
+  danger?: boolean;
+}) {
+  const { theme } = useLifeOS();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: theme.soft }]}
+    >
+      <Text style={{ color: danger ? theme.danger : theme.text, fontWeight: "700", fontSize: 14, flex: 1 }}>
+        {label}
+      </Text>
+      {detail ? <Text style={{ color: theme.muted, fontSize: 12, fontWeight: "600" }}>{detail}</Text> : null}
+    </Pressable>
   );
 }
 
@@ -1052,9 +1288,9 @@ function ToolBtn({
     <Pressable
       accessibilityLabel={label}
       onPress={onPress}
-      style={[styles.toolBtn, active && { backgroundColor: theme.soft }]}
+      style={[styles.toolBtn, active && { backgroundColor: "#FFFFFF" }]}
     >
-      <Feather name={icon} size={16} color={danger ? theme.danger : active ? theme.accent : theme.text} />
+      <Feather name={icon} size={16} color={danger ? theme.danger : theme.text} />
     </Pressable>
   );
 }
@@ -1080,32 +1316,75 @@ const styles = StyleSheet.create({
   toolRail: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
     marginHorizontal: 12,
     marginBottom: 6,
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 22,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     gap: 2,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
   },
-  toolBtn: { width: 40, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  toolBtn: { width: 40, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   toolDivider: { width: StyleSheet.hairlineWidth, height: 22, marginHorizontal: 4 },
-  contextBar: { maxHeight: 46, marginBottom: 4 },
-  paperRow: { paddingHorizontal: 12, gap: 8, alignItems: "center" },
+  contextBar: { maxHeight: 46, marginBottom: 4, alignSelf: "center" },
+  paperRow: { paddingHorizontal: 12, gap: 8, alignItems: "center", justifyContent: "center" },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   templateHint: { fontSize: 11, fontWeight: "800", marginRight: 4, alignSelf: "center" },
   stage: { flex: 1, minHeight: 0, paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
   stageWide: { flexDirection: "row", paddingHorizontal: 8, paddingBottom: 0, gap: 0 },
-  pageStrip: { width: 52, marginRight: 8, flexGrow: 0, flexShrink: 0 },
+  pageStrip: { width: 56, marginRight: 8, flexGrow: 0, flexShrink: 0 },
   pageStripInner: { gap: 8, paddingBottom: 24, paddingTop: 2 },
-  stripAdd: { borderStyle: "dashed" },
+  stripAdd: { borderStyle: "dashed", alignItems: "center", justifyContent: "center" },
   stripItem: {
-    width: 44,
-    height: 56,
+    width: 48,
+    height: 64,
     borderRadius: 10,
-    borderWidth: 1,
+    borderWidth: 1.5,
+    overflow: "hidden",
+    shadowColor: "#0F172A",
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  stripPaper: { ...StyleSheet.absoluteFillObject, opacity: 0.95 },
+  stripBadge: {
+    position: "absolute",
+    left: 4,
+    bottom: 4,
+    minWidth: 18,
+    height: 16,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  stripBadgeText: { color: "#fff", fontSize: 9, fontWeight: "800" },
+  menuSection: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(15,23,42,0.08)",
+    paddingBottom: 4,
+    marginBottom: 4,
+  },
+  menuSectionLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 2,
+  },
+  menuRow: {
+    minHeight: 40,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   stageMain: { flex: 1, minWidth: 0, minHeight: 0, gap: 8 },
   seamlessList: { paddingBottom: 40, alignItems: "center" },

@@ -12,6 +12,7 @@
       "requireFullScreen": false,
       "bundleIdentifier": "com.shafkatsaruwar.lifeos",
       "infoPlist": {
+        "NSSupportsLiveActivities": true,
         "UISupportedInterfaceOrientations~ipad": [
           "UIInterfaceOrientationPortrait",
           "UIInterfaceOrientationPortraitUpsideDown",
@@ -42,14 +43,23 @@
         {
           "photosPermission": "Allow LifeOS to place photos on notebook pages."
         }
-      ]
+      ],
+      "expo-live-activity",
+      "expo-notifications",
+      "expo-updates"
     ],
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
+      "url": "https://u.expo.dev/6021a343-7ac2-421d-a247-35279744602d",
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
+    },
+    "extra": {
+      "eas": {
+        "projectId": "6021a343-7ac2-421d-a247-35279744602d"
+      }
     }
   }
 }

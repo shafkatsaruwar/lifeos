@@ -1,14 +1,17 @@
 import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
-import Constants from "expo-constants";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { cachePageInk, readCachedPageInk } from "../lib/inkCache";
 import type { NoteInk } from "../types";
 
 export type DrawingPolicy = "any" | "pencilOnly";
 
+export type InkToolKind = "pen" | "pencil" | "marker" | "eraser" | "vectorEraser" | "lasso";
+
 export type PencilKitViewRef = {
   setupToolPicker(): Promise<void>;
+  setToolPickerVisible?(visible: boolean): Promise<void>;
+  setInkTool?(tool: string, colorHex?: string, width?: number): Promise<void>;
   clearDrawing(): Promise<void>;
   undo(): Promise<void>;
   redo(): Promise<void>;
@@ -20,8 +23,10 @@ export type PencilKitViewRef = {
 export type HandwritingCanvasRef = PencilKitViewRef & {
   /** Immediately persist any pending strokes (call before leaving a page). */
   flush(): Promise<void>;
-  /** Re-show system tool picker (pen / eraser / lasso) after page focus changes. */
+  /** Keep canvas first-responder; system PKToolPicker stays hidden. */
   assertToolPicker(): Promise<void>;
+  setInkTool(tool: InkToolKind, colorHex?: string, width?: number): Promise<void>;
+  setToolPickerVisible(visible: boolean): Promise<void>;
 };
 
 type PencilKitViewProps = {
@@ -44,13 +49,13 @@ export function isPencilKitAvailable(): boolean {
 }
 
 /**
- * Physical iPad → Pencil writes, finger scrolls.
- * Simulator / iPhone → finger/trackpad can draw.
+ * iPad (device or simulator) → Pencil only; finger scrolls / never inks.
+ * iPhone → anyInput so finger can still sketch without a Pencil.
  */
 export function preferredDrawingPolicy(isTablet: boolean): DrawingPolicy {
-  if (Platform.OS !== "ios" || !isTablet) return "any";
-  if (!Constants.isDevice) return "any";
-  return "pencilOnly";
+  if (Platform.OS !== "ios") return "any";
+  if (isTablet) return "pencilOnly";
+  return "any";
 }
 
 function loadPencilKit(): PencilKitModule | null {
@@ -91,16 +96,31 @@ type Props = {
    * which would interrupt live PencilKit / trackpad drawing.
    */
   documentKey?: string;
-  /** When this changes, re-assert the system tool picker (focused page). */
+  /** When this changes, re-bind the live canvas (focused page). */
   toolPickerKey?: string;
+  /** Initial / controlled ink tool from LifeOS toolbar. */
+  inkTool?: InkToolKind;
+  inkColor?: string;
+  inkWidth?: number;
 };
 
 /**
- * Apple PencilKit canvas + system PKToolPicker (pen, pencil, marker, eraser, lasso, colors…).
- * Requires a native iOS build with expo-pencilkit-ui (EAS development/production client).
+ * Apple PencilKit drawing engine for LifeOS.
+ * System PKToolPicker is kept hidden — ink tools come from our toolbar via setInkTool.
+ * Requires a native iOS build with expo-pencilkit-ui.
  */
 export const HandwritingCanvas = React.forwardRef<HandwritingCanvasRef | null, Props>(function HandwritingCanvas(
-  { ink, onChange, backgroundColor = "#FFFFFF", documentKey, drawingPolicy = "any", toolPickerKey },
+  {
+    ink,
+    onChange,
+    backgroundColor = "#FFFFFF",
+    documentKey,
+    drawingPolicy = "pencilOnly",
+    toolPickerKey,
+    inkTool = "pen",
+    inkColor = "202124",
+    inkWidth = 5.5,
+  },
   ref,
 ) {
   const pencilKit = useRef(loadPencilKit()).current;
@@ -150,17 +170,41 @@ export const HandwritingCanvas = React.forwardRef<HandwritingCanvasRef | null, P
     }
   }, [emitInk]);
 
+  const applyInkTool = useCallback(
+    async (tool: InkToolKind = inkTool, color: string = inkColor, width: number = inkWidth) => {
+      try {
+        await canvasRef.current?.setInkTool?.(tool, color.replace("#", ""), width);
+      } catch {
+        /* native method missing until rebuild */
+      }
+    },
+    [inkTool, inkColor, inkWidth],
+  );
+
   const assertToolPicker = useCallback(async () => {
     try {
+      // Bind undo manager / first responder — keep Apple's floating picker hidden.
       await canvasRef.current?.setupToolPicker();
+      await canvasRef.current?.setToolPickerVisible?.(false);
+      await applyInkTool();
     } catch {
-      /* picker can race on unmount */
+      /* can race on unmount */
     }
-  }, []);
+  }, [applyInkTool]);
 
   useImperativeHandle(ref, () => ({
     setupToolPicker: assertToolPicker,
     assertToolPicker,
+    setInkTool: async (tool, color, width) => {
+      await applyInkTool(tool, color ?? inkColor, width ?? inkWidth);
+    },
+    setToolPickerVisible: async (visible) => {
+      try {
+        await canvasRef.current?.setToolPickerVisible?.(visible);
+      } catch {
+        /* ignore */
+      }
+    },
     clearDrawing: async () => {
       await canvasRef.current?.clearDrawing();
     },
@@ -177,7 +221,7 @@ export const HandwritingCanvas = React.forwardRef<HandwritingCanvasRef | null, P
       await canvasRef.current?.setCanvasBackgroundColor(color);
     },
     flush,
-  }), [flush, assertToolPicker]);
+  }), [flush, assertToolPicker, applyInkTool, inkColor, inkWidth]);
 
   const persistData = useCallback(
     (data: string, immediate = false) => {
@@ -221,6 +265,10 @@ export const HandwritingCanvas = React.forwardRef<HandwritingCanvasRef | null, P
       try {
         await native.setupToolPicker();
         if (cancelled) return;
+        await native.setToolPickerVisible?.(false);
+        if (cancelled) return;
+        await native.setInkTool?.(inkTool, inkColor.replace("#", ""), inkWidth);
+        if (cancelled) return;
         await native.setCanvasBackgroundColor(backgroundColorRef.current.replace("#", ""));
         if (cancelled) return;
       } catch {
@@ -253,7 +301,19 @@ export const HandwritingCanvas = React.forwardRef<HandwritingCanvasRef | null, P
     return () => {
       cancelled = true;
     };
-  }, [pencilKit, ready, documentKey, emitInk]);
+  }, [pencilKit, ready, documentKey, emitInk, inkTool, inkColor, inkWidth]);
+
+  // LifeOS toolbar → PencilKit tool (no system picker).
+  useEffect(() => {
+    if (!pencilKit || !ready) return;
+    void applyInkTool(inkTool, inkColor, inkWidth);
+  }, [pencilKit, ready, inkTool, inkColor, inkWidth, applyInkTool]);
+
+  // Paper tint changes must not remount / clear strokes — update native bg only.
+  useEffect(() => {
+    if (!pencilKit || !ready) return;
+    void canvasRef.current?.setCanvasBackgroundColor?.(backgroundColor.replace("#", ""));
+  }, [pencilKit, ready, backgroundColor]);
 
   // Late-arriving workspace ink after an empty first hydrate (sync catch-up).
   useEffect(() => {
@@ -303,8 +363,7 @@ export const HandwritingCanvas = React.forwardRef<HandwritingCanvasRef | null, P
         <Text style={styles.fallbackTitle}>Apple PencilKit needs a native build</Text>
         <Text style={styles.fallbackBody}>
           Expo Go can’t load Apple’s writing tools. Install a LifeOS development build
-          (`npx expo run:ios` or EAS development), then open Draw again for the system
-          pen, pencil, marker, eraser, and lasso picker.
+          (`npx expo run:ios` or EAS development), then reopen the note to write with PencilKit.
         </Text>
       </View>
     );

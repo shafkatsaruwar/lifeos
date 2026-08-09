@@ -201,6 +201,24 @@ export type SchoolHubState = {
 /** Notebook editor page layout preference (persisted in settings). */
 export type NotebookPageView = "seamless" | "single";
 
+/** Local notification lead times (before the due/start moment). */
+export type NotificationLead = "exact" | "5m" | "15m" | "30m" | "1h" | "1d";
+
+export type NotificationPrefs = {
+  /** Master switch after the user opts in. */
+  enabled?: boolean;
+  tasks?: boolean;
+  dueDates?: boolean;
+  deadlines?: boolean;
+  calendar?: boolean;
+  focus?: boolean;
+  important?: boolean;
+  /** Which offsets to schedule (capped per item to avoid spam). */
+  leads?: NotificationLead[];
+  /** ISO — set when we’ve asked for OS permission once. */
+  permissionAskedAt?: string;
+};
+
 export type SettingsState = {
   accent?: string;
   preferredName?: string;
@@ -213,6 +231,18 @@ export type SettingsState = {
   themeMode?: ThemeMode;
   /** Continuous vertical pages vs one page at a time. Default: seamless. */
   notebookPageView?: NotebookPageView;
+  /** Favorite paper templates for the Noteshelf-style picker. */
+  favoritePaperStyles?: PaperStyle[];
+  /** Environment tabs — synced with web; undefined/true = shown. */
+  enableLifeOS?: boolean;
+  enableSchoolOS?: boolean;
+  enableWorkOS?: boolean;
+  /** Local notification preferences (mobile). */
+  notifications?: NotificationPrefs;
+  /** ISO timestamp when first-run onboarding finished (or was skipped / migrated). */
+  onboardingCompletedAt?: string;
+  /** Bump to offer a short “what’s new” flow later without replaying v1. */
+  onboardingVersion?: number;
   currentEnergy?: EnergyLevel;
   ambientActivity?: AmbientActivity | null;
   momentumLog?: MomentumEntry[];
@@ -220,6 +250,13 @@ export type SettingsState = {
   weeklyReviewDate?: string;
   spaceContext?: Record<string, { lastTaskId?: number; lastFilter?: string; updatedAt?: string }>;
 };
+
+/** Destinations after onboarding “first move”. */
+export type OnboardingDestination =
+  | { tab: "NowTab" }
+  | { tab: "TasksTab" }
+  | { tab: "LibraryTab"; screen: "Brain" }
+  | { tab: "LibraryTab"; screen: "PageCanvas"; params: { notebookId: string; pageId: string } };
 
 /** Digital paper style for notebook pages (PencilKit draws on top). */
 export type PaperStyle =
@@ -232,6 +269,15 @@ export type PaperStyle =
   | "cornell"
   | "todo"
   | "music";
+
+/** Per-page paper tint (Noteshelf-style). */
+export type PaperColor = "white" | "cream" | "yellow" | "black";
+
+/** Per-page orientation. */
+export type PaperOrientation = "portrait" | "landscape";
+
+/** Logical paper size preset for the editor stage. */
+export type PaperSizePreset = "ipad" | "letter" | "a4";
 
 /** Optional LifeOS context — notebooks can also stay personal/unfiled. */
 export type NotebookContextLink = {
@@ -249,12 +295,36 @@ export type NotebookFolder = {
   updatedAt: string;
 };
 
+/** Note cover style — architecture for more covers without schema rewrites. */
+export type NotebookCoverStyle =
+  | "solid"
+  | "minimal"
+  | "linen"
+  | "slate"
+  | "academic"
+  | "gradient"
+  | "colorful"
+  | "leather"
+  | "band"
+  | "sketch"
+  | "midnight"
+  | "mosaic"
+  | "ribbon"
+  | "kraft";
+
 export type Notebook = {
   id: string;
   name: string;
   folderId?: string;
   color?: string;
-  cover?: "solid" | "linen" | "slate";
+  /** Visual cover for library cards / create flow. Default: solid. */
+  cover?: NotebookCoverStyle;
+  /** Optional subtitle under the title on covers. */
+  coverSubtitle?: string;
+  /** Pinned to Starred in the library. */
+  starred?: boolean;
+  /** Soft-delete — shown in Trash until purged. */
+  trashedAt?: string;
   context?: NotebookContextLink;
   pageCount: number;
   createdAt: string;
@@ -313,7 +383,17 @@ export type NotebookPage = {
   notebookId: string;
   index: number;
   title?: string;
+  /**
+   * Per-page paper template (lined, blank, graph…).
+   * This is the page template id — never a notebook-wide setting.
+   */
   paper: PaperStyle;
+  /** Page tint — optional; defaults to white. */
+  paperColor?: PaperColor;
+  /** Page orientation — optional; defaults to portrait. */
+  paperOrientation?: PaperOrientation;
+  /** Logical size preset — optional; defaults to ipad. */
+  paperSize?: PaperSizePreset;
   ink?: NoteInk;
   textElements?: PageTextElement[];
   imageElements?: PageImageElement[];

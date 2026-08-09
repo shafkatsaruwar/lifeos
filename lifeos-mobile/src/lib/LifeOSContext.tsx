@@ -37,6 +37,10 @@ export type AppState = {
   /** Optimistic local merge + single-page RTDB write */
   upsertNotebookPage: (page: NotebookPage) => Promise<void>;
   deleteNotebookPage: (pageId: string) => Promise<void>;
+  /** Local-only: Settings → Show intro again (survives Firebase silent sync). */
+  onboardingReplay: boolean;
+  startOnboardingReplay: () => void;
+  clearOnboardingReplay: () => void;
 };
 
 export const LifeOSContext = createContext<AppState | null>(null);

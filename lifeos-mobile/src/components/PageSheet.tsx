@@ -4,10 +4,11 @@ import {
   HandwritingCanvas,
   type DrawingPolicy,
   type HandwritingCanvasRef,
+  type InkToolKind,
 } from "./HandwritingCanvas";
 import { PageElementsLayer } from "./PageElementsLayer";
 import { PaperBackground } from "./PaperBackground";
-import { PAGE_SHEET_COLOR } from "../lib/notebooks";
+import { PAGE_SHEET_COLOR, paperColorHex } from "../lib/notebooks";
 import type { NoteInk, NotebookPage, PageCanvasMode, PageImageElement, PageTextElement } from "../types";
 
 type Props = {
@@ -25,6 +26,9 @@ type Props = {
   drawingPolicy?: DrawingPolicy;
   /** Document zoom scale — overlay drag deltas are corrected by 1/zoom. */
   zoomScale?: number;
+  inkTool?: InkToolKind;
+  inkColor?: string;
+  inkWidth?: number;
   onInkChange: (ink: NoteInk) => void;
   onSelect: (id: string | null) => void;
   onChangeTexts: (next: PageTextElement[]) => void;
@@ -46,8 +50,11 @@ export const PageSheet = memo(function PageSheet({
   selectedId,
   pageLabel,
   pencilRef,
-  drawingPolicy = "any",
+  drawingPolicy = "pencilOnly",
   zoomScale = 1,
+  inkTool = "pen",
+  inkColor = "202124",
+  inkWidth = 5.5,
   onInkChange,
   onSelect,
   onChangeTexts,
@@ -55,6 +62,7 @@ export const PageSheet = memo(function PageSheet({
 }: Props) {
   const texts = page.textElements ?? [];
   const images = page.imageElements ?? [];
+  const sheetColor = paperColorHex(page.paperColor) || PAGE_SHEET_COLOR;
   const focusAnim = useRef(new Animated.Value(liveInk ? 1 : 0.92)).current;
 
   useEffect(() => {
@@ -78,7 +86,7 @@ export const PageSheet = memo(function PageSheet({
         },
       ]}
     >
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: PAGE_SHEET_COLOR }]} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: sheetColor }]} />
       {liveInk ? (
         <View style={StyleSheet.absoluteFill} pointerEvents={inkInteractive ? "auto" : "none"}>
           <HandwritingCanvas
@@ -87,13 +95,18 @@ export const PageSheet = memo(function PageSheet({
             documentKey={page.id}
             toolPickerKey={page.id}
             drawingPolicy={drawingPolicy}
+            inkTool={inkTool}
+            inkColor={inkColor}
+            inkWidth={inkWidth}
             ink={page.ink}
             onChange={onInkChange}
-            backgroundColor={PAGE_SHEET_COLOR}
+            backgroundColor={sheetColor.replace("#", "")}
           />
         </View>
       ) : null}
-      {page.paper !== "blank" ? <PaperBackground paper={page.paper} overlay /> : null}
+      {page.paper !== "blank" ? (
+        <PaperBackground paper={page.paper} paperColor={page.paperColor} overlay />
+      ) : null}
       <PageElementsLayer
         mode={mode}
         texts={texts}
@@ -127,7 +140,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
-    backgroundColor: "rgba(255,254,250,0.88)",
+    backgroundColor: "rgba(255,255,255,0.9)",
   },
   pageBadgeLive: {
     backgroundColor: "rgba(98,90,246,0.12)",

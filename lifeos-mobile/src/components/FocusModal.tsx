@@ -1,10 +1,16 @@
 import Feather from "@expo/vector-icons/Feather";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { endFocusLiveActivity, syncFocusLiveActivity } from "../lib/focusLiveActivity";
 import { durationText, taskRemaining } from "../lib/helpers";
+import {
+  cancelFocusNotifications,
+  resolveNotificationPrefs,
+  scheduleFocusNotifications,
+} from "../lib/notifications";
 import type { Task } from "../types";
 
 // Checklist templates ported from web's focusChecklistTemplates.
@@ -24,6 +30,16 @@ export function FocusModal({ visible, task, onClose }: { visible: boolean; task:
   const [checklist, setChecklist] = useState<string[]>(task.checklist ?? []);
   const [checks, setChecks] = useState<boolean[]>(task.checklistProgress ?? []);
 
+  const persist = useCallback(
+    (patch: Partial<Task>) =>
+      updateTasks(
+        workspace.tasks.map((item) =>
+          item.id === task.id ? { ...item, ...patch, focusUpdatedAt: new Date().toISOString() } : item,
+        ),
+      ),
+    [task.id, updateTasks, workspace.tasks],
+  );
+
   useEffect(() => {
     setRemaining(taskRemaining(task));
     setRunning(Boolean(task.focusSessionRunning));
@@ -38,20 +54,50 @@ export function FocusModal({ visible, task, onClose }: { visible: boolean; task:
   }, [running]);
 
   useEffect(() => {
-    if (remaining === 0 && running) setRunning(false);
-  }, [remaining, running]);
+    if (remaining === 0 && running) {
+      setRunning(false);
+      persist({ focusRemainingSeconds: 0, focusSessionRunning: false });
+      endFocusLiveActivity(task, 0);
+      void cancelFocusNotifications(task.id);
+    }
+  }, [remaining, running, persist, task]);
 
-  const persist = (patch: Partial<Task>) =>
-    updateTasks(workspace.tasks.map((item) => (item.id === task.id ? { ...item, ...patch, focusUpdatedAt: new Date().toISOString() } : item)));
+  // Lock Screen + Dynamic Island — system counts down from end date while running.
+  // Do not sync on every remaining tick; ActivityKit owns the countdown clock.
+  useEffect(() => {
+    if (!visible) return;
+    syncFocusLiveActivity(task, remaining, running);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- remaining intentionally omitted
+  }, [visible, task.id, task.title, task.project, running]);
+
+  const focusAlertsOn = () => {
+    const prefs = resolveNotificationPrefs(workspace.settings);
+    return prefs.enabled && prefs.focus;
+  };
 
   const toggle = () => {
     const next = !running;
     setRunning(next);
     persist({ focusRemainingSeconds: remaining, focusSessionRunning: next, focusSessionStarted: true });
+    syncFocusLiveActivity(task, remaining, next);
+    if (next) {
+      void scheduleFocusNotifications(task.id, remaining, focusAlertsOn());
+    } else {
+      void cancelFocusNotifications(task.id);
+    }
   };
 
   const finish = () => {
-    persist({ done: true, status: "Done", focusSessionRunning: false, focusRemainingSeconds: remaining, checklist, checklistProgress: checks });
+    persist({
+      done: true,
+      status: "Done",
+      focusSessionRunning: false,
+      focusRemainingSeconds: remaining,
+      checklist,
+      checklistProgress: checks,
+    });
+    endFocusLiveActivity(task, remaining);
+    void cancelFocusNotifications(task.id);
     onClose();
   };
 

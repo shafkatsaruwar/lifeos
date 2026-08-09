@@ -1,5 +1,5 @@
 import Feather from "@expo/vector-icons/Feather";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActionSheetIOS,
   Alert,
@@ -7,60 +7,102 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
-import { Swipeable } from "react-native-gesture-handler";
 import { useNavigation } from "@react-navigation/native";
-import { Empty, Eyebrow, Page, Subtitle, Title } from "../components/UI";
+import { CreateNoteModal } from "../components/CreateNoteModal";
+import { NotebookCoverFace } from "../components/NotebookCoverFace";
+import { Empty, Page } from "../components/UI";
 import { LibrarySubNav } from "../components/LibrarySubNav";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { uid } from "../lib/helpers";
+import { useLayout } from "../lib/layout";
 import {
   createFolder,
   createNotebook,
-  createPage,
   emptyNotebookHub,
   NOTEBOOK_COLORS,
+  pageFromTemplate,
   pagesForNotebook,
   primaryPageForNotebook,
+  restoreNotebook,
   setNotebookFolder,
+  setNotebookStarred,
+  trashNotebook,
 } from "../lib/notebooks";
-import type { Note, Notebook, NotebookContextLink, NotebookFolder } from "../types";
+import type { Note, Notebook, NotebookFolder } from "../types";
 
-type FolderFilter = string | "all" | "unfiled";
+type BrowseFilter = "all" | "starred" | "unfiled" | "trash" | string;
+
 type NoteRow =
   | { kind: "pages"; id: string; updatedAt: string; notebook: Notebook }
-  | { kind: "text"; id: string; updatedAt: string; note: Note };
+  | { kind: "text"; id: string; updatedAt: string; note: Note }
+  | { kind: "new"; id: "new" };
+
+const SIDEBAR_W = 232;
+const QUICK_BG = {
+  all: { light: "#E8E9ED", dark: "#2A2C31" },
+  starred: { light: "#F5E7DF", dark: "#3A2E28" },
+  unfiled: { light: "#E4EEF8", dark: "#243040" },
+  trash: { light: "#EEEFF2", dark: "#2C2D32" },
+  templates: { light: "#EEF6E8", dark: "#273328" },
+} as const;
 
 export function NotebooksScreen() {
-  const { theme, workspace, updateNotebookHub, upsertNotebookPage, deleteNotebookPage, updateNotes } = useLifeOS();
+  const { theme, dark, workspace, updateNotebookHub, upsertNotebookPage, deleteNotebookPage, updateNotes } =
+    useLifeOS();
   const navigation = useNavigation<any>();
+  const { isTablet, isWide } = useLayout();
+  const { width: windowW } = useWindowDimensions();
   const hub = workspace.notebookHub ?? emptyNotebookHub();
-  const [folderFilter, setFolderFilter] = useState<FolderFilter>("all");
+
+  const [filter, setFilter] = useState<BrowseFilter>("all");
   const [composer, setComposer] = useState<null | "notebook" | "folder">(null);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [movingNotebookId, setMovingNotebookId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [color, setColor] = useState<string>(NOTEBOOK_COLORS[0]);
-  const [folderId, setFolderId] = useState<string | undefined>(undefined);
-  const [contextKey, setContextKey] = useState<string>("personal");
-  const openSwipeable = useRef<Swipeable | null>(null);
+  const [createFolderId, setCreateFolderId] = useState<string | undefined>(undefined);
+  const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
 
-  const activeFolder = folderFilter !== "all" && folderFilter !== "unfiled"
-    ? hub.folders.find((f) => f.id === folderFilter)
-    : undefined;
+  const activeFolder =
+    filter !== "all" && filter !== "starred" && filter !== "unfiled" && filter !== "trash"
+      ? hub.folders.find((f) => f.id === filter)
+      : undefined;
 
-  /** Page notes (handwritten / multipage) + typed notes in one list. */
+  const columns = isWide ? 4 : isTablet ? 3 : 2;
+  const mainPad = 20;
+  const gutter = 14;
+  const mainWidth = Math.max(
+    280,
+    (isTablet ? windowW - SIDEBAR_W : windowW) - mainPad * 2,
+  );
+  const coverW = (mainWidth - gutter * (columns - 1)) / columns;
+  const coverH = coverW * 1.28;
+
   const noteRows = useMemo(() => {
-    let pagesNotes = [...hub.notebooks];
-    if (folderFilter === "all" || folderFilter === "unfiled") {
-      // Home / Unfiled: only loose notes — filed ones live inside their folder.
-      pagesNotes = pagesNotes.filter((n) => !n.folderId);
-    } else {
-      pagesNotes = pagesNotes.filter((n) => n.folderId === folderFilter);
+    const q = query.trim().toLowerCase();
+    let pagesNotes = hub.notebooks.filter((n) => {
+      if (filter === "trash") return Boolean(n.trashedAt);
+      if (n.trashedAt) return false;
+      if (filter === "starred") return Boolean(n.starred);
+      if (filter === "unfiled") return !n.folderId;
+      if (activeFolder) return n.folderId === activeFolder.id;
+      return true; // all
+    });
+
+    if (q) {
+      pagesNotes = pagesNotes.filter(
+        (n) =>
+          n.name.toLowerCase().includes(q) ||
+          (n.coverSubtitle || "").toLowerCase().includes(q),
+      );
     }
 
     const rows: NoteRow[] = pagesNotes.map((notebook) => ({
@@ -70,23 +112,38 @@ export function NotebooksScreen() {
       notebook,
     }));
 
-    // Typed notes have no folders yet — show them in All and Unfiled.
-    if (folderFilter === "all" || folderFilter === "unfiled") {
+    // Typed notes: All + Unfiled only (no trash/star model yet).
+    if (filter === "all" || filter === "unfiled") {
       for (const note of workspace.notes) {
+        if (q && !(note.title || note.body || "").toLowerCase().includes(q)) continue;
         rows.push({ kind: "text", id: note.id, updatedAt: note.updatedAt, note });
       }
     }
 
-    return rows.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
-  }, [hub.notebooks, folderFilter, workspace.notes]);
+    rows.sort((a, b) => {
+      if (a.kind === "new" || b.kind === "new") return 0;
+      return (b.updatedAt || "").localeCompare(a.updatedAt || "");
+    });
+
+    // “New” tile at the front — except in Trash.
+    if (filter !== "trash") {
+      return [{ kind: "new" as const, id: "new" as const }, ...rows];
+    }
+    return rows;
+  }, [hub.notebooks, filter, workspace.notes, activeFolder, query]);
+
+  const headerTitle = useMemo(() => {
+    if (activeFolder) return activeFolder.name;
+    if (filter === "starred") return "Starred";
+    if (filter === "unfiled") return "Unfiled";
+    if (filter === "trash") return "Trash";
+    return "All Notes";
+  }, [activeFolder, filter]);
 
   const openCreateNotebook = (inFolderId?: string) => {
     setEditingFolderId(null);
+    setCreateFolderId(inFolderId || activeFolder?.id);
     setComposer("notebook");
-    setName("");
-    setColor(NOTEBOOK_COLORS[0]);
-    setFolderId(inFolderId);
-    setContextKey("personal");
   };
 
   const createTextNote = () => {
@@ -134,59 +191,29 @@ export function NotebooksScreen() {
     setColor(folder.color || NOTEBOOK_COLORS[1]);
   };
 
-  const resolveContext = (): NotebookContextLink | undefined => {
-    if (contextKey === "personal") return { type: "personal", label: "Personal" };
-    if (contextKey.startsWith("class:")) {
-      const classId = contextKey.slice(6);
-      const cls = workspace.classes.find((c) => c.id === classId);
-      if (!cls) return undefined;
-      return { type: "class", classId, label: cls.code };
-    }
-    if (contextKey.startsWith("project:")) {
-      const projectName = contextKey.slice(8);
-      return { type: "project", projectName, label: projectName };
-    }
-    return undefined;
-  };
-
-  const submit = async () => {
-    if (composer === "folder") {
-      if (editingFolderId) {
-        await updateNotebookHub({
-          ...hub,
-          folders: hub.folders.map((folder) =>
-            folder.id === editingFolderId
-              ? {
-                  ...folder,
-                  name: name.trim() || folder.name,
-                  color,
-                  updatedAt: new Date().toISOString(),
-                }
-              : folder,
-          ),
-        });
-        setComposer(null);
-        setEditingFolderId(null);
-        return;
-      }
-      const folder = createFolder(name, color);
-      await updateNotebookHub({ ...hub, folders: [folder, ...hub.folders] });
+  const submitFolder = async () => {
+    if (editingFolderId) {
+      await updateNotebookHub({
+        ...hub,
+        folders: hub.folders.map((folder) =>
+          folder.id === editingFolderId
+            ? {
+                ...folder,
+                name: name.trim() || folder.name,
+                color,
+                updatedAt: new Date().toISOString(),
+              }
+            : folder,
+        ),
+      });
       setComposer(null);
-      setFolderFilter(folder.id);
+      setEditingFolderId(null);
       return;
     }
-    if (composer === "notebook") {
-      const notebook = createNotebook(name, {
-        folderId: folderId || activeFolder?.id,
-        color,
-        context: resolveContext(),
-      });
-      const page = createPage(notebook.id, 0, "ruled");
-      await updateNotebookHub({ ...hub, notebooks: [notebook, ...hub.notebooks] });
-      await upsertNotebookPage(page);
-      setComposer(null);
-      navigation.navigate("PageCanvas", { notebookId: notebook.id, pageId: page.id });
-    }
+    const folder = createFolder(name, color);
+    await updateNotebookHub({ ...hub, folders: [folder, ...hub.folders] });
+    setComposer(null);
+    setFilter(folder.id);
   };
 
   const openNote = (notebookId: string) => {
@@ -198,7 +225,7 @@ export function NotebooksScreen() {
     navigation.navigate("PageCanvas", { notebookId, pageId: page.id });
   };
 
-  const deleteNotebook = async (notebookId: string) => {
+  const purgeNotebook = async (notebookId: string) => {
     const pages = pagesForNotebook(workspace.notebookPages, notebookId);
     await updateNotebookHub({
       ...hub,
@@ -207,14 +234,21 @@ export function NotebooksScreen() {
     await Promise.all(pages.map((p) => deleteNotebookPage(p.id)));
   };
 
-  const confirmDeleteNotebook = (notebook: Notebook) => {
-    Alert.alert("Delete note?", `"${notebook.name}" and all its pages will be removed.`, [
+  const moveToTrash = (notebook: Notebook) => {
+    Alert.alert("Move to Trash?", `"${notebook.name}" can be restored later.`, [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Delete",
+        text: "Move to Trash",
         style: "destructive",
-        onPress: () => void deleteNotebook(notebook.id),
+        onPress: () => void updateNotebookHub(trashNotebook(hub, notebook.id)),
       },
+    ]);
+  };
+
+  const confirmPurge = (notebook: Notebook) => {
+    Alert.alert("Delete forever?", `"${notebook.name}" and all its pages will be removed.`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => void purgeNotebook(notebook.id) },
     ]);
   };
 
@@ -240,13 +274,13 @@ export function NotebooksScreen() {
         return next;
       }),
     });
-    if (folderFilter === folder.id) setFolderFilter("all");
+    if (filter === folder.id) setFilter("all");
   };
 
   const confirmFolderActions = (folder: NotebookFolder) => {
-    const count = hub.notebooks.filter((n) => n.folderId === folder.id).length;
+    const count = hub.notebooks.filter((n) => n.folderId === folder.id && !n.trashedAt).length;
     Alert.alert(folder.name, count ? `${count} note${count === 1 ? "" : "s"} inside` : "Empty folder", [
-      { text: "Open", onPress: () => setFolderFilter(folder.id) },
+      { text: "Open", onPress: () => setFilter(folder.id) },
       { text: "Edit", onPress: () => openEditFolder(folder) },
       {
         text: "Delete folder",
@@ -254,9 +288,7 @@ export function NotebooksScreen() {
         onPress: () => {
           Alert.alert(
             "Delete folder?",
-            count
-              ? `Notes inside will stay, but become unfiled.`
-              : "This folder will be removed.",
+            count ? "Notes inside stay, but become unfiled." : "This folder will be removed.",
             [
               { text: "Cancel", style: "cancel" },
               { text: "Delete", style: "destructive", onPress: () => void deleteFolder(folder) },
@@ -274,232 +306,416 @@ export function NotebooksScreen() {
   };
 
   const confirmNotebookActions = (notebook: Notebook) => {
+    if (notebook.trashedAt) {
+      Alert.alert(notebook.name, undefined, [
+        {
+          text: "Restore",
+          onPress: () => void updateNotebookHub(restoreNotebook(hub, notebook.id)),
+        },
+        { text: "Delete forever", style: "destructive", onPress: () => confirmPurge(notebook) },
+        { text: "Cancel", style: "cancel" },
+      ]);
+      return;
+    }
     Alert.alert(notebook.name, undefined, [
       { text: "Open", onPress: () => openNote(notebook.id) },
+      {
+        text: notebook.starred ? "Remove star" : "Star",
+        onPress: () => void updateNotebookHub(setNotebookStarred(hub, notebook.id, !notebook.starred)),
+      },
       {
         text: "Organize…",
         onPress: () => navigation.navigate("NotebookDetail", { notebookId: notebook.id, organizeOnly: true }),
       },
       { text: "Move to folder…", onPress: () => setMovingNotebookId(notebook.id) },
-      { text: "Delete", style: "destructive", onPress: () => confirmDeleteNotebook(notebook) },
+      { text: "Move to Trash", style: "destructive", onPress: () => moveToTrash(notebook) },
       { text: "Cancel", style: "cancel" },
     ]);
   };
 
-  const insideFolder = Boolean(activeFolder);
-  const headerTitle = activeFolder?.name ?? (folderFilter === "unfiled" ? "Unfiled" : "Notes");
-  const headerSubtitle = activeFolder
-    ? "Handwritten or typed — they all live here."
-    : folderFilter === "unfiled"
-      ? "Notes that are not in a folder yet."
-      : "Open a folder for filed notes, or keep loose notes here.";
+  const quickTile = (
+    key: keyof typeof QUICK_BG,
+    label: string,
+    icon: keyof typeof Feather.glyphMap,
+    target: BrowseFilter,
+    iconColor?: string,
+  ) => {
+    const active = filter === target;
+    const bg = dark ? QUICK_BG[key].dark : QUICK_BG[key].light;
+    return (
+      <Pressable
+        key={key}
+        onPress={() => setFilter(target)}
+        style={[
+          styles.quickTile,
+          !isTablet && styles.quickTilePhone,
+          {
+            backgroundColor: bg,
+            borderColor: active ? theme.accent : "transparent",
+            borderWidth: active ? 1.5 : 0,
+          },
+        ]}
+        accessibilityRole="button"
+        accessibilityState={{ selected: active }}
+        accessibilityLabel={label}
+      >
+        <Feather name={icon} size={isTablet ? 18 : 16} color={iconColor || theme.text} />
+        <Text style={[styles.quickLabel, !isTablet && styles.quickLabelPhone, { color: theme.text }]} numberOfLines={1}>
+          {label}
+        </Text>
+      </Pressable>
+    );
+  };
 
-  const renderDeleteAction = (label: string, onDelete: () => void) => (
-    <Pressable
-      onPress={onDelete}
-      style={[styles.swipeDelete, { backgroundColor: theme.danger }]}
-      accessibilityLabel={`Delete ${label}`}
+  const foldersBlock = (horizontal: boolean) => {
+    if (horizontal) {
+      return (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.folderChips}>
+          {hub.folders.map((folder) => {
+            const active = filter === folder.id;
+            return (
+              <Pressable
+                key={folder.id}
+                onPress={() => setFilter(folder.id)}
+                onLongPress={() => confirmFolderActions(folder)}
+                delayLongPress={280}
+                style={[
+                  styles.folderChip,
+                  {
+                    backgroundColor: active ? theme.soft : theme.surface,
+                    borderColor: active ? theme.accent : theme.border,
+                  },
+                ]}
+              >
+                <View style={[styles.folderDot, { backgroundColor: folder.color || theme.accent }]} />
+                <Text style={{ color: active ? theme.accent : theme.text, fontSize: 13, fontWeight: "700" }} numberOfLines={1}>
+                  {folder.name}
+                </Text>
+              </Pressable>
+            );
+          })}
+          <Pressable
+            onPress={openCreateFolder}
+            style={[styles.folderChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
+          >
+            <Feather name="plus" size={14} color={theme.accent} />
+            <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "700" }}>Folder</Text>
+          </Pressable>
+        </ScrollView>
+      );
+    }
+    return (
+      <View style={styles.folderList}>
+        {hub.folders.map((folder) => {
+          const active = filter === folder.id;
+          const count = hub.notebooks.filter((n) => n.folderId === folder.id && !n.trashedAt).length;
+          return (
+            <Pressable
+              key={folder.id}
+              onPress={() => setFilter(folder.id)}
+              onLongPress={() => confirmFolderActions(folder)}
+              delayLongPress={280}
+              style={[styles.folderRow, active && { backgroundColor: theme.soft }]}
+            >
+              <View style={[styles.folderDot, { backgroundColor: folder.color || theme.accent }]} />
+              <Text style={[styles.folderName, { color: theme.text }]} numberOfLines={1}>
+                {folder.name}
+              </Text>
+              <Text style={{ color: theme.muted, fontSize: 12, fontWeight: "600" }}>{count || ""}</Text>
+            </Pressable>
+          );
+        })}
+        <Pressable onPress={openCreateFolder} style={styles.folderRow}>
+          <Feather name="plus-circle" size={16} color={theme.accent} />
+          <Text style={[styles.folderName, { color: theme.accent }]}>New Folder</Text>
+        </Pressable>
+      </View>
+    );
+  };
+
+  const browseChrome = (
+    <>
+      <View style={styles.quickGrid}>
+        {quickTile("all", "All", "home", "all")}
+        {quickTile("starred", "Starred", "star", "starred", theme.warning)}
+        {quickTile("unfiled", "Unfiled", "inbox", "unfiled", theme.blue)}
+        {quickTile("trash", "Trash", "trash-2", "trash", theme.muted)}
+      </View>
+
+      <Pressable
+        onPress={() => openCreateNotebook(activeFolder?.id)}
+        style={[
+          styles.templatesTile,
+          {
+            backgroundColor: dark ? QUICK_BG.templates.dark : QUICK_BG.templates.light,
+            borderColor: theme.border,
+          },
+        ]}
+      >
+        <Feather name="layout" size={16} color={theme.success} />
+        <Text style={[styles.quickLabel, { color: theme.text, flex: 1 }]}>New from template</Text>
+        <Feather name="plus" size={15} color={theme.muted} />
+      </Pressable>
+
+      <Text style={[styles.sectionLabel, { color: theme.muted }]}>Folders</Text>
+      {foldersBlock(!isTablet)}
+    </>
+  );
+
+  const sidebar = (
+    <ScrollView
+      style={[styles.sidebar, { width: SIDEBAR_W, borderRightColor: theme.border }]}
+      contentContainerStyle={styles.sidebarInner}
+      showsVerticalScrollIndicator={false}
     >
-      <Feather name="trash-2" size={20} color="#FFF" />
-      <Text style={styles.swipeDeleteText}>Delete</Text>
-    </Pressable>
+      <Text style={[styles.brand, { color: theme.text }]}>Library</Text>
+      <LibrarySubNav active="notes" compact />
+      {browseChrome}
+    </ScrollView>
+  );
+
+  const renderCoverFace = (opts: {
+    color: string;
+    cover?: Notebook["cover"];
+    kind?: "pages" | "text";
+    starred?: boolean;
+  }) => (
+    <View style={{ width: coverW }}>
+      {opts.kind === "text" ? (
+        <View
+          style={[
+            styles.textCover,
+            {
+              width: coverW,
+              height: coverH,
+              backgroundColor: dark ? "#22252C" : "#F4F6FA",
+              borderColor: theme.border,
+            },
+          ]}
+        >
+          <View style={[styles.spine, { backgroundColor: opts.color }]} />
+          <Feather name="type" size={22} color={opts.color} />
+        </View>
+      ) : (
+        <NotebookCoverFace
+          color={opts.color}
+          cover={opts.cover}
+          width={coverW}
+          height={coverH}
+          borderColor={theme.border}
+        />
+      )}
+      {opts.starred ? (
+        <View style={styles.starBadge}>
+          <Feather name="star" size={12} color={theme.warning} />
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const renderItem = ({ item }: { item: NoteRow }) => {
+    if (item.kind === "new") {
+      return (
+        <Pressable
+          onPress={() => openCreateMenu(activeFolder?.id)}
+          style={{ width: coverW }}
+          accessibilityLabel="New note"
+        >
+          <View
+            style={[
+              styles.newTile,
+              {
+                width: coverW,
+                height: coverH,
+                borderColor: theme.border,
+                backgroundColor: dark ? theme.surface : "#F0F1F4",
+              },
+            ]}
+          >
+            <Feather name="plus" size={28} color={theme.accent} />
+          </View>
+          <Text style={[styles.metaTitle, { color: theme.text }]}>New…</Text>
+        </Pressable>
+      );
+    }
+
+    if (item.kind === "text") {
+      const note = item.note;
+      return (
+        <Pressable
+          onPress={() => navigation.navigate("NoteEditor", { noteId: note.id })}
+          onLongPress={() => confirmDeleteTextNote(note)}
+          style={{ width: coverW, marginBottom: 4 }}
+        >
+          {renderCoverFace({ color: theme.blue, cover: "minimal", kind: "text" })}
+          <Text style={[styles.metaTitle, { color: theme.text }]} numberOfLines={1}>
+            {note.title || "Untitled note"}
+          </Text>
+          <Text style={[styles.metaDate, { color: theme.muted }]}>{formatEdited(note.updatedAt)}</Text>
+        </Pressable>
+      );
+    }
+
+    const notebook = item.notebook;
+    return (
+      <Pressable
+        onPress={() => (notebook.trashedAt ? confirmNotebookActions(notebook) : openNote(notebook.id))}
+        onLongPress={() => confirmNotebookActions(notebook)}
+        delayLongPress={280}
+        style={{ width: coverW, marginBottom: 4 }}
+      >
+        {renderCoverFace({
+          color: notebook.color || theme.accent,
+          cover: notebook.cover,
+          kind: "pages",
+          starred: notebook.starred,
+        })}
+        <Text style={[styles.metaTitle, { color: theme.text }]} numberOfLines={1}>
+          {notebook.name}
+        </Text>
+        <Text style={[styles.metaDate, { color: theme.muted }]}>{formatEdited(notebook.updatedAt)}</Text>
+      </Pressable>
+    );
+  };
+
+  const sectionHeader = (
+    <View
+      style={[
+        styles.mainHeader,
+        !isTablet && styles.mainHeaderPhone,
+        !isTablet && { borderTopColor: theme.border },
+      ]}
+    >
+      <Text
+        style={[
+          styles.mainTitle,
+          !isTablet && styles.mainTitlePhone,
+          {
+            color: theme.text,
+            fontFamily: Platform.OS === "ios" ? "Georgia" : undefined,
+          },
+        ]}
+        numberOfLines={1}
+      >
+        {headerTitle}
+      </Text>
+      <View style={styles.mainActions}>
+        <Pressable
+          onPress={() => setSearchOpen((v) => !v)}
+          style={[styles.iconBtn, { backgroundColor: theme.soft }]}
+          accessibilityLabel="Search notes"
+        >
+          <Feather name="search" size={17} color={theme.accent} />
+        </Pressable>
+        <Pressable
+          onPress={() => openCreateMenu(activeFolder?.id)}
+          style={[styles.iconBtn, { backgroundColor: theme.text }]}
+          accessibilityLabel="New note"
+        >
+          <Feather name="plus" size={17} color={theme.surface} />
+        </Pressable>
+      </View>
+    </View>
+  );
+
+  const searchField = searchOpen ? (
+    <TextInput
+      value={query}
+      onChangeText={setQuery}
+      placeholder="Search notes"
+      placeholderTextColor={theme.muted}
+      autoFocus
+      style={[
+        styles.searchInput,
+        isTablet && { marginHorizontal: 20 },
+        { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface },
+      ]}
+    />
+  ) : null;
+
+  const empty = (
+    filter === "trash" ? (
+      <Empty title="Trash is empty." body="Deleted notes land here until you remove them for good." />
+    ) : filter === "starred" ? (
+      <Empty title="No starred notes." body="Long-press a note and choose Star to pin it here." />
+    ) : activeFolder ? (
+      <Empty
+        title={`Nothing in ${activeFolder.name} yet.`}
+        body="Create a note here, or long-press a note and move it into this folder."
+      />
+    ) : (
+      <Empty title="No notes yet." body="Tap New to start a handwritten or text note." />
+    )
   );
 
   return (
-    <Page>
-      <View style={styles.header}>
-        <View style={styles.grow}>
-          {insideFolder || folderFilter === "unfiled" ? (
-            <Pressable
-              onPress={() => setFolderFilter("all")}
-              style={styles.backRow}
-              accessibilityLabel="Back to all notes"
-            >
-              <Feather name="chevron-left" size={18} color={theme.accent} />
-              <Text style={{ color: theme.accent, fontWeight: "800", fontSize: 13 }}>All notes</Text>
-            </Pressable>
+    <Page fullBleed>
+      <View style={[styles.shell, !isTablet && styles.shellPhone]}>
+        {isTablet ? sidebar : null}
+
+        <View style={styles.main}>
+          {isTablet ? (
+            <>
+              {sectionHeader}
+              {searchField}
+              <FlatList
+                data={noteRows}
+                key={`grid-${columns}-${filter}`}
+                keyExtractor={(item) => `${item.kind}-${item.id}`}
+                numColumns={columns}
+                columnWrapperStyle={columns > 1 ? { gap: gutter } : undefined}
+                contentContainerStyle={[styles.grid, { paddingHorizontal: mainPad, gap: gutter }]}
+                renderItem={renderItem}
+                ListEmptyComponent={empty}
+              />
+            </>
           ) : (
-            <Eyebrow>LIBRARY</Eyebrow>
+            <FlatList
+              data={noteRows}
+              key={`phone-grid-${columns}-${filter}`}
+              keyExtractor={(item) => `${item.kind}-${item.id}`}
+              numColumns={columns}
+              columnWrapperStyle={columns > 1 ? { gap: gutter } : undefined}
+              stickyHeaderIndices={[]}
+              ListHeaderComponent={
+                <View style={styles.phoneHeader}>
+                  <Text style={[styles.brand, { color: theme.text }]}>Library</Text>
+                  <LibrarySubNav active="notes" compact />
+                  {browseChrome}
+                  {sectionHeader}
+                  {searchField}
+                </View>
+              }
+              contentContainerStyle={[styles.grid, { paddingHorizontal: mainPad, gap: gutter }]}
+              renderItem={renderItem}
+              ListEmptyComponent={empty}
+            />
           )}
-          <Title>{headerTitle}</Title>
-          <Subtitle>{headerSubtitle}</Subtitle>
-        </View>
-        <View style={styles.headerActions}>
-          {!insideFolder ? (
-            <Pressable
-              onPress={openCreateFolder}
-              style={[styles.secondaryButton, { borderColor: theme.border, backgroundColor: theme.surface }]}
-              accessibilityLabel="New folder"
-            >
-              <Feather name="folder-plus" size={18} color={theme.text} />
-            </Pressable>
-          ) : null}
-          <Pressable
-            onPress={() => openCreateMenu(activeFolder?.id)}
-            style={[styles.addButton, { backgroundColor: theme.text }]}
-            accessibilityLabel={activeFolder ? `New note in ${activeFolder.name}` : "New note"}
-          >
-            <Feather name="plus" size={18} color={theme.surface} />
-          </Pressable>
         </View>
       </View>
 
-      <LibrarySubNav active="notes" />
-
-      {!insideFolder ? (
-        <View style={styles.folderRow}>
-          <Chip label="All" active={folderFilter === "all"} onPress={() => setFolderFilter("all")} />
-          <Chip label="Unfiled" active={folderFilter === "unfiled"} onPress={() => setFolderFilter("unfiled")} />
-        </View>
-      ) : null}
-
-      <FlatList
-        data={noteRows}
-        keyExtractor={(item) => `${item.kind}-${item.id}`}
-        contentContainerStyle={styles.list}
-        onScrollBeginDrag={() => openSwipeable.current?.close()}
-        ListHeaderComponent={
-          <>
-            {folderFilter === "all" && hub.folders.length > 0 ? (
-              <View style={styles.folderCards}>
-                {hub.folders.map((folder) => {
-                  const count = hub.notebooks.filter((n) => n.folderId === folder.id).length;
-                  return (
-                    <Pressable
-                      key={folder.id}
-                      onPress={() => setFolderFilter(folder.id)}
-                      onLongPress={() => confirmFolderActions(folder)}
-                      delayLongPress={280}
-                      style={[styles.folderCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                    >
-                      <View style={[styles.folderIcon, { backgroundColor: `${folder.color || theme.accent}22` }]}>
-                        <Feather name="folder" size={18} color={folder.color || theme.accent} />
-                      </View>
-                      <View style={styles.grow}>
-                        <Text style={[styles.folderCardTitle, { color: theme.text }]} numberOfLines={1}>
-                          {folder.name}
-                        </Text>
-                        <Text style={{ color: theme.muted, fontSize: 12, fontWeight: "600" }}>
-                          {count} {count === 1 ? "note" : "notes"} · hold to edit
-                        </Text>
-                      </View>
-                      <Feather name="chevron-right" size={18} color={theme.muted} />
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ) : null}
-            {activeFolder ? (
-              <Pressable
-                onPress={() => openCreateMenu(activeFolder.id)}
-                style={[styles.inFolderCta, { borderColor: theme.border, backgroundColor: theme.soft }]}
-              >
-                <Feather name="plus" size={16} color={theme.accent} />
-                <Text style={{ color: theme.accent, fontWeight: "800", fontSize: 13 }}>
-                  New note in {activeFolder.name}
-                </Text>
-              </Pressable>
-            ) : null}
-          </>
-        }
-        renderItem={({ item }) => {
-          if (item.kind === "text") {
-            const note = item.note;
-            return (
-              <Swipeable
-                overshootRight={false}
-                onSwipeableOpen={(_, swipeable) => {
-                  if (openSwipeable.current && openSwipeable.current !== swipeable) {
-                    openSwipeable.current.close();
-                  }
-                  openSwipeable.current = swipeable;
-                }}
-                renderRightActions={() =>
-                  renderDeleteAction(note.title || "Untitled note", () => confirmDeleteTextNote(note))
-                }
-              >
-                <Pressable
-                  onPress={() => navigation.navigate("NoteEditor", { noteId: note.id })}
-                  style={[styles.cover, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                >
-                  <View style={[styles.coverBand, { backgroundColor: theme.accent }]} />
-                  <View style={styles.coverBody}>
-                    <Text style={[styles.coverTitle, { color: theme.text }]} numberOfLines={2}>
-                      {note.title || "Untitled note"}
-                    </Text>
-                    <Text style={[styles.coverMeta, { color: theme.muted }]} numberOfLines={3}>
-                      {[note.projectName || note.classId ? "Linked" : "Text", note.body?.trim() ? "Typed" : "Empty"]
-                        .filter(Boolean)
-                        .join(" · ")}
-                      {"\n"}
-                      Edited {new Date(note.updatedAt).toLocaleDateString()}
-                    </Text>
-                  </View>
-                </Pressable>
-              </Swipeable>
-            );
-          }
-
-          const notebook = item.notebook;
-          const folder = hub.folders.find((f) => f.id === notebook.folderId);
-          const pageCount =
-            pagesForNotebook(workspace.notebookPages, notebook.id).length || notebook.pageCount || 0;
-          return (
-            <Swipeable
-              overshootRight={false}
-              onSwipeableOpen={(_, swipeable) => {
-                if (openSwipeable.current && openSwipeable.current !== swipeable) {
-                  openSwipeable.current.close();
-                }
-                openSwipeable.current = swipeable;
-              }}
-              renderRightActions={() =>
-                renderDeleteAction(notebook.name, () => confirmDeleteNotebook(notebook))
-              }
-            >
-              <Pressable
-                onPress={() => openNote(notebook.id)}
-                onLongPress={() => confirmNotebookActions(notebook)}
-                style={[styles.cover, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              >
-                <View style={[styles.coverBand, { backgroundColor: notebook.color || theme.accent }]} />
-                <View style={styles.coverBody}>
-                  <Text style={[styles.coverTitle, { color: theme.text }]} numberOfLines={2}>
-                    {notebook.name}
-                  </Text>
-                  <Text style={[styles.coverMeta, { color: theme.muted }]} numberOfLines={3}>
-                    {[
-                      !activeFolder ? folder?.name : null,
-                      notebook.context?.label,
-                      `${pageCount} ${pageCount === 1 ? "page" : "pages"}`,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                    {"\n"}
-                    Edited {new Date(notebook.updatedAt).toLocaleDateString()}
-                  </Text>
-                </View>
-              </Pressable>
-            </Swipeable>
-          );
+      <CreateNoteModal
+        visible={composer === "notebook"}
+        onClose={() => setComposer(null)}
+        onCreate={(result) => {
+          void (async () => {
+            const notebook = createNotebook(result.name, {
+              folderId: createFolderId,
+              color: result.color,
+              cover: result.cover,
+              context: { type: "personal", label: "Personal" },
+            });
+            const page = pageFromTemplate(notebook.id, 0, result.template);
+            await updateNotebookHub({ ...hub, notebooks: [notebook, ...hub.notebooks] });
+            await upsertNotebookPage(page);
+            setComposer(null);
+            navigation.navigate("PageCanvas", { notebookId: notebook.id, pageId: page.id });
+          })();
         }}
-        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-        ListEmptyComponent={
-          activeFolder ? (
-            <Empty
-              title={`Nothing in ${activeFolder.name} yet.`}
-              body="Create a note in this folder, or long-press a note elsewhere and choose Move to folder."
-            />
-          ) : folderFilter === "all" && hub.folders.length > 0 ? (
-            <Empty title="No loose notes." body="Everything is in a folder above — open one, or create a new note here." />
-          ) : (
-            <Empty title="No notes yet." body="Start a handwritten note or a text note — both live here." />
-          )
-        }
       />
 
       <Modal
-        visible={composer != null}
+        visible={composer === "folder"}
         transparent
         animationType="fade"
         onRequestClose={() => {
@@ -519,18 +735,12 @@ export function NotebooksScreen() {
             onPress={() => {}}
           >
             <Text style={[styles.modalTitle, { color: theme.text }]}>
-              {composer === "folder"
-                ? editingFolderId
-                  ? "Edit folder"
-                  : "New folder"
-                : activeFolder
-                  ? `New note in ${activeFolder.name}`
-                  : "New note"}
+              {editingFolderId ? "Edit folder" : "New folder"}
             </Text>
             <TextInput
               value={name}
               onChangeText={setName}
-              placeholder={composer === "folder" ? "School, Personal…" : "Lecture Notes, Ideas…"}
+              placeholder="School, Personal…"
               placeholderTextColor={theme.muted}
               autoFocus
               style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.bg }]}
@@ -544,39 +754,6 @@ export function NotebooksScreen() {
                 />
               ))}
             </View>
-            {composer === "notebook" && hub.folders.length > 0 ? (
-              <View style={styles.folderPick}>
-                <Text style={{ width: "100%", color: theme.muted, fontSize: 11, fontWeight: "800" }}>FOLDER</Text>
-                <Chip label="No folder" active={!folderId} onPress={() => setFolderId(undefined)} />
-                {hub.folders.map((f) => (
-                  <Chip key={f.id} label={f.name} color={f.color} active={folderId === f.id} onPress={() => setFolderId(f.id)} />
-                ))}
-              </View>
-            ) : null}
-            {composer === "notebook" ? (
-              <View style={styles.folderPick}>
-                <Text style={{ width: "100%", color: theme.muted, fontSize: 11, fontWeight: "800" }}>
-                  LIFEOS CONTEXT (OPTIONAL)
-                </Text>
-                <Chip label="Personal" active={contextKey === "personal"} onPress={() => setContextKey("personal")} />
-                {workspace.classes.slice(0, 8).map((cls) => (
-                  <Chip
-                    key={cls.id}
-                    label={cls.code}
-                    active={contextKey === `class:${cls.id}`}
-                    onPress={() => setContextKey(`class:${cls.id}`)}
-                  />
-                ))}
-                {workspace.projects.slice(0, 8).map((project) => (
-                  <Chip
-                    key={project.name}
-                    label={project.name}
-                    active={contextKey === `project:${project.name}`}
-                    onPress={() => setContextKey(`project:${project.name}`)}
-                  />
-                ))}
-              </View>
-            ) : null}
             <View style={styles.modalActions}>
               <Pressable
                 onPress={() => {
@@ -587,9 +764,12 @@ export function NotebooksScreen() {
               >
                 <Text style={{ color: theme.text, fontWeight: "700" }}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={() => void submit()} style={[styles.modalBtn, { backgroundColor: theme.text, borderColor: theme.text }]}>
+              <Pressable
+                onPress={() => void submitFolder()}
+                style={[styles.modalBtn, { backgroundColor: theme.text, borderColor: theme.text }]}
+              >
                 <Text style={{ color: theme.surface, fontWeight: "700" }}>
-                  {composer === "folder" && editingFolderId ? "Save" : "Create"}
+                  {editingFolderId ? "Save" : "Create"}
                 </Text>
               </Pressable>
             </View>
@@ -652,6 +832,20 @@ export function NotebooksScreen() {
   );
 }
 
+function formatEdited(iso: string) {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: "numeric",
+      day: "numeric",
+      year: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
 function Chip({
   label,
   active,
@@ -682,32 +876,127 @@ function Chip({
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, gap: 12 },
-  grow: { flex: 1 },
-  backRow: { flexDirection: "row", alignItems: "center", gap: 2, marginLeft: -4, marginBottom: 2 },
-  headerActions: { flexDirection: "row", gap: 8 },
-  addButton: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  secondaryButton: {
-    width: 44,
-    height: 44,
+  shell: { flex: 1, flexDirection: "row" },
+  shellPhone: { flexDirection: "column" },
+  sidebar: { borderRightWidth: StyleSheet.hairlineWidth },
+  sidebarInner: { paddingTop: 8, paddingBottom: 28, paddingHorizontal: 14, gap: 12 },
+  brand: {
+    fontSize: 26,
+    fontWeight: "700",
+    fontFamily: Platform.OS === "ios" ? "Georgia" : undefined,
+    marginTop: 2,
+    marginBottom: 2,
+  },
+  phoneHeader: { gap: 12, paddingBottom: 10 },
+  quickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  quickTile: {
+    width: "48%",
+    flexGrow: 1,
     borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    gap: 8,
+    minHeight: 70,
+    justifyContent: "center",
+  },
+  quickTilePhone: {
+    minHeight: 58,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  quickLabel: { fontSize: 13, fontWeight: "700" },
+  quickLabelPhone: { fontSize: 12 },
+  templatesTile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    minHeight: 44,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginTop: 2,
+  },
+  folderList: { gap: 2 },
+  folderChips: { gap: 8, paddingVertical: 2 },
+  folderChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
     borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    minHeight: 34,
+  },
+  folderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 40,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+  },
+  folderDot: { width: 9, height: 9, borderRadius: 3 },
+  folderName: { flex: 1, fontSize: 14, fontWeight: "600" },
+  main: { flex: 1, minWidth: 0 },
+  mainHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 10,
+    gap: 12,
+  },
+  mainHeaderPhone: {
+    paddingHorizontal: 0,
+    paddingTop: 12,
+    paddingBottom: 4,
+    marginTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  mainTitle: { flex: 1, fontSize: 32, fontWeight: "600", letterSpacing: -0.4 },
+  mainTitlePhone: { fontSize: 24 },
+  mainActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },
-  folderRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 20, marginTop: 14 },
-  folderCards: { gap: 8, marginBottom: 16 },
-  folderCard: {
-    minHeight: 56,
+  searchInput: {
+    marginBottom: 4,
     borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontWeight: "600",
   },
-  folderIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  folderCardTitle: { fontSize: 15, fontWeight: "800" },
+  grid: { paddingBottom: 48 },
+  textCover: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  spine: { position: "absolute", left: 0, top: 0, bottom: 0, width: 7 },
+  starBadge: { position: "absolute", top: 8, right: 8 },
+  newTile: {
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  metaTitle: { marginTop: 8, fontSize: 13, fontWeight: "700" },
+  metaDate: { marginTop: 2, fontSize: 11, fontWeight: "600" },
   chip: {
     flexDirection: "row",
     alignItems: "center",
@@ -718,31 +1007,6 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   chipDot: { width: 8, height: 8, borderRadius: 4 },
-  list: { padding: 20, paddingBottom: 40 },
-  cover: { borderWidth: 1, borderRadius: 16, overflow: "hidden", minHeight: 120 },
-  coverBand: { height: 10, width: "100%" },
-  coverBody: { padding: 14, gap: 8 },
-  coverTitle: { fontSize: 16, fontWeight: "800", lineHeight: 21 },
-  coverMeta: { fontSize: 12, lineHeight: 17, fontWeight: "600" },
-  swipeDelete: {
-    width: 88,
-    marginLeft: 10,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  swipeDeleteText: { color: "#FFF", fontWeight: "800", fontSize: 12 },
-  inFolderCta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    minHeight: 44,
-    marginBottom: 14,
-  },
   modalDim: { flex: 1, backgroundColor: "rgba(15,23,42,0.35)", justifyContent: "center", padding: 24 },
   modalCard: { borderRadius: 18, borderWidth: 1, padding: 18, gap: 14 },
   modalTitle: { fontSize: 18, fontWeight: "800" },
