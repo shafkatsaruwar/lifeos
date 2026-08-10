@@ -15,6 +15,7 @@ import { SignIn } from "./src/components/Auth";
 import { FocusLiveActivityBridge } from "./src/components/FocusLiveActivityBridge";
 import { NotificationsBridge } from "./src/components/NotificationsBridge";
 import { SynapseImportBridge } from "./src/components/SynapseImportBridge";
+import { SiriTaskBridge } from "./src/components/SiriTaskBridge";
 import { WidgetsBridge } from "./src/components/WidgetsBridge";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 
@@ -315,6 +316,7 @@ export default function App() {
           <FocusLiveActivityBridge />
           <NotificationsBridge />
           <WidgetsBridge />
+          <SiriTaskBridge />
           <RootNavigator />
         </LifeOSContext.Provider>
       </SafeAreaProvider>

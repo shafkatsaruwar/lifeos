@@ -3,7 +3,7 @@ import WidgetKit
 
 // MARK: - Snapshot (mirrors RN `src/lib/widgets/snapshot.ts`)
 
-struct AttentionItem: Codable, Identifiable {
+struct AttentionItem: Decodable, Identifiable {
   let id: String
   let kind: String
   let title: String
@@ -11,9 +11,31 @@ struct AttentionItem: Codable, Identifiable {
   let meta: String?
   let deepLink: String
   let urgency: Double
+
+  private enum CodingKeys: String, CodingKey {
+    case id, kind, title, subtitle, meta, deepLink, urgency
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = (try? c.decode(String.self, forKey: .id))
+      ?? String((try? c.decode(Int.self, forKey: .id)) ?? 0)
+    kind = try c.decode(String.self, forKey: .kind)
+    title = try c.decode(String.self, forKey: .title)
+    subtitle = try? c.decode(String.self, forKey: .subtitle)
+    meta = try? c.decode(String.self, forKey: .meta)
+    deepLink = try c.decode(String.self, forKey: .deepLink)
+    if let d = try? c.decode(Double.self, forKey: .urgency) {
+      urgency = d
+    } else if let i = try? c.decode(Int.self, forKey: .urgency) {
+      urgency = Double(i)
+    } else {
+      urgency = 0
+    }
+  }
 }
 
-struct FocusBlock: Codable {
+struct FocusBlock: Decodable {
   let active: Bool
   let title: String?
   let project: String?
@@ -22,52 +44,168 @@ struct FocusBlock: Codable {
   let nextTitle: String?
   let progress: Double?
   let deepLink: String
+
+  private enum CodingKeys: String, CodingKey {
+    case active, title, project, remainingMinutes, endsAtLabel, nextTitle, progress, deepLink
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    active = (try? c.decode(Bool.self, forKey: .active)) ?? false
+    title = try? c.decode(String.self, forKey: .title)
+    project = try? c.decode(String.self, forKey: .project)
+    remainingMinutes = (try? c.decode(Int.self, forKey: .remainingMinutes))
+      ?? (try? c.decode(Double.self, forKey: .remainingMinutes)).map { Int($0) }
+    endsAtLabel = try? c.decode(String.self, forKey: .endsAtLabel)
+    nextTitle = try? c.decode(String.self, forKey: .nextTitle)
+    if let d = try? c.decode(Double.self, forKey: .progress) {
+      progress = d
+    } else if let i = try? c.decode(Int.self, forKey: .progress) {
+      progress = Double(i)
+    } else {
+      progress = nil
+    }
+    deepLink = (try? c.decode(String.self, forKey: .deepLink)) ?? "lifeos://now"
+  }
 }
 
-struct AttentionBlock: Codable {
+struct AttentionBlock: Decodable {
   let count: Int
   let headline: String
   let items: [AttentionItem]
   let deepLink: String
+
+  private enum CodingKeys: String, CodingKey {
+    case count, headline, items, deepLink
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    count = (try? c.decode(Int.self, forKey: .count))
+      ?? (try? c.decode(Double.self, forKey: .count)).map { Int($0) }
+      ?? 0
+    headline = (try? c.decode(String.self, forKey: .headline)) ?? "You're clear"
+    items = (try? c.decode([AttentionItem].self, forKey: .items)) ?? []
+    deepLink = (try? c.decode(String.self, forKey: .deepLink)) ?? "lifeos://now"
+  }
 }
 
-struct TaskRow: Codable, Identifiable {
-  let id: Int
+struct TaskRow: Decodable, Identifiable {
+  let id: String
   let title: String
   let when: String
   let deepLink: String
+
+  private enum CodingKeys: String, CodingKey {
+    case id, title, when, deepLink
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    if let s = try? c.decode(String.self, forKey: .id) {
+      id = s
+    } else if let i = try? c.decode(Int.self, forKey: .id) {
+      id = String(i)
+    } else if let d = try? c.decode(Double.self, forKey: .id) {
+      id = String(Int(d))
+    } else {
+      id = UUID().uuidString
+    }
+    title = try c.decode(String.self, forKey: .title)
+    when = (try? c.decode(String.self, forKey: .when)) ?? ""
+    deepLink = (try? c.decode(String.self, forKey: .deepLink)) ?? "lifeos://tasks"
+  }
 }
 
-struct TasksBlock: Codable {
+struct TasksBlock: Decodable {
   let dueToday: Int
   let highPriority: Int
   let items: [TaskRow]
   let deepLink: String
+
+  private enum CodingKeys: String, CodingKey {
+    case dueToday, highPriority, items, deepLink
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    dueToday = (try? c.decode(Int.self, forKey: .dueToday))
+      ?? (try? c.decode(Double.self, forKey: .dueToday)).map { Int($0) }
+      ?? 0
+    highPriority = (try? c.decode(Int.self, forKey: .highPriority))
+      ?? (try? c.decode(Double.self, forKey: .highPriority)).map { Int($0) }
+      ?? 0
+    items = (try? c.decode([TaskRow].self, forKey: .items)) ?? []
+    deepLink = (try? c.decode(String.self, forKey: .deepLink)) ?? "lifeos://tasks"
+  }
 }
 
-struct DeadlineBlock: Codable {
+struct DeadlineBlock: Decodable {
   let title: String?
   let hoursLeft: Int?
   let label: String?
   let deepLink: String
+
+  private enum CodingKeys: String, CodingKey {
+    case title, hoursLeft, label, deepLink
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    title = try? c.decode(String.self, forKey: .title)
+    hoursLeft = (try? c.decode(Int.self, forKey: .hoursLeft))
+      ?? (try? c.decode(Double.self, forKey: .hoursLeft)).map { Int($0) }
+    label = try? c.decode(String.self, forKey: .label)
+    deepLink = (try? c.decode(String.self, forKey: .deepLink)) ?? "lifeos://tasks"
+  }
 }
 
-struct CalendarBlock: Codable {
+struct CalendarBlock: Decodable {
   let title: String?
   let whenLabel: String?
   let prep: String?
   let deepLink: String
+
+  private enum CodingKeys: String, CodingKey {
+    case title, whenLabel, prep, deepLink
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    title = try? c.decode(String.self, forKey: .title)
+    whenLabel = try? c.decode(String.self, forKey: .whenLabel)
+    prep = try? c.decode(String.self, forKey: .prep)
+    deepLink = (try? c.decode(String.self, forKey: .deepLink)) ?? "lifeos://calendar"
+  }
 }
 
-struct TodayBlock: Codable {
+struct TodayBlock: Decodable {
   let activeFocus: Int
   let tasksDue: Int
   let eventsSoon: Int
   let deadlineHot: Int
   let deepLink: String
+
+  private enum CodingKeys: String, CodingKey {
+    case activeFocus, tasksDue, eventsSoon, deadlineHot, deepLink
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    func int(_ key: CodingKeys) -> Int {
+      (try? c.decode(Int.self, forKey: key))
+        ?? (try? c.decode(Double.self, forKey: key)).map { Int($0) }
+        ?? 0
+    }
+    activeFocus = int(.activeFocus)
+    tasksDue = int(.tasksDue)
+    eventsSoon = int(.eventsSoon)
+    deadlineHot = int(.deadlineHot)
+    deepLink = (try? c.decode(String.self, forKey: .deepLink)) ?? "lifeos://now"
+  }
 }
 
-struct WidgetSnapshot: Codable {
+struct WidgetSnapshot: Decodable {
   let updatedAt: String
   let focus: FocusBlock
   let attention: AttentionBlock
@@ -98,20 +236,29 @@ enum LifeOSWidgetPalette {
   static let track = Color(red: 0.90, green: 0.90, blue: 0.91)
 }
 
+func decodeLifeOSSnapshot(_ data: Data) -> WidgetSnapshot? {
+  if let snap = try? JSONDecoder().decode(WidgetSnapshot.self, from: data) {
+    return snap
+  }
+  return nil
+}
+
 func loadLifeOSSnapshot() -> WidgetSnapshot? {
   let groupId = "group.com.shafkatsaruwar.lifeos"
   let defaults = UserDefaults(suiteName: groupId)
   if let json = defaults?.string(forKey: "lifeosWidgetSnapshot"),
      let data = json.data(using: .utf8),
-     let snap = try? JSONDecoder().decode(WidgetSnapshot.self, from: data) {
+     let snap = decodeLifeOSSnapshot(data) {
     return snap
   }
-  // File fallback (same App Group container)
-  if let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupId)?
-    .appendingPathComponent("lifeos-widget-snapshot.json"),
-     let data = try? Data(contentsOf: url),
-     let snap = try? JSONDecoder().decode(WidgetSnapshot.self, from: data) {
-    return snap
+  // File fallbacks (App Group container)
+  if let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupId) {
+    for name in ["lifeos-widget-snapshot.json", "lifeosWidgetSnapshot.json"] {
+      let url = root.appendingPathComponent(name)
+      if let data = try? Data(contentsOf: url), let snap = decodeLifeOSSnapshot(data) {
+        return snap
+      }
+    }
   }
   return nil
 }
@@ -152,25 +299,24 @@ struct WidgetChrome<Content: View>: View {
   @ViewBuilder var content: () -> Content
 
   var body: some View {
-    Link(destination: URL(string: deepLink) ?? URL(string: "lifeos://now")!) {
-      VStack(alignment: .leading, spacing: 8) {
-        HStack {
-          Text(eyebrow)
-            .font(.system(size: 11, weight: .bold))
-            .tracking(0.8)
-            .foregroundStyle(LifeOSWidgetPalette.muted)
-          Spacer(minLength: 0)
-          Circle()
-            .fill(dot)
-            .frame(width: 8, height: 8)
-        }
-        content()
+    VStack(alignment: .leading, spacing: 8) {
+      HStack {
+        Text(eyebrow)
+          .font(.system(size: 11, weight: .bold))
+          .tracking(0.8)
+          .foregroundStyle(LifeOSWidgetPalette.muted)
         Spacer(minLength: 0)
+        Circle()
+          .fill(dot)
+          .frame(width: 8, height: 8)
       }
-      .padding(14)
-      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-      .background(LifeOSWidgetPalette.glass)
+      content()
+      Spacer(minLength: 0)
     }
+    .padding(14)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    // Use widgetURL (not Link-as-root) — Link wrappers often render blank on WidgetKit.
+    .widgetURL(URL(string: deepLink) ?? URL(string: "lifeos://now")!)
   }
 }
 
@@ -225,7 +371,7 @@ struct NowFocusView: View {
 
   var body: some View {
     let focus = snap?.focus
-    let deep = focus?.deepLink ?? "lifeos://now"
+    let deep = (focus?.active == true) ? "lifeos://focus" : "lifeos://now"
     WidgetChrome(eyebrow: family == .systemMedium ? "NOW / FOCUS" : "NOW", dot: LifeOSWidgetPalette.now, deepLink: deep) {
       if let focus, focus.active, let title = focus.title {
         Text(title)
@@ -277,8 +423,7 @@ struct AttentionView: View {
 
   var body: some View {
     let block = snap?.attention
-    let deep = block?.deepLink ?? "lifeos://now"
-    WidgetChrome(eyebrow: "ATTENTION", dot: LifeOSWidgetPalette.attention, deepLink: deep) {
+    WidgetChrome(eyebrow: "ATTENTION", dot: LifeOSWidgetPalette.attention, deepLink: "lifeos://now") {
       Text(block?.headline ?? "You're clear")
         .font(.system(size: family == .systemSmall ? 16 : 20, weight: .bold))
         .foregroundStyle(LifeOSWidgetPalette.ink)
@@ -342,8 +487,7 @@ struct TasksView: View {
 
   var body: some View {
     let block = snap?.tasks
-    let deep = block?.deepLink ?? "lifeos://tasks"
-    WidgetChrome(eyebrow: "TASKS", dot: LifeOSWidgetPalette.tasks, deepLink: deep) {
+    WidgetChrome(eyebrow: "TASKS", dot: LifeOSWidgetPalette.tasks, deepLink: "lifeos://tasks") {
       if family == .systemSmall {
         Text("\(block?.dueToday ?? 0)")
           .font(.system(size: 44, weight: .bold))
@@ -390,7 +534,7 @@ struct DeadlineView: View {
 
   var body: some View {
     let block = snap?.deadline
-    WidgetChrome(eyebrow: "DEADLINE", dot: LifeOSWidgetPalette.deadline, deepLink: block?.deepLink ?? "lifeos://tasks") {
+    WidgetChrome(eyebrow: "DEADLINE", dot: LifeOSWidgetPalette.deadline, deepLink: "lifeos://tasks") {
       Text(block?.label ?? "—")
         .font(.system(size: 40, weight: .bold))
         .foregroundStyle(LifeOSWidgetPalette.ink)
@@ -408,7 +552,7 @@ struct CalendarWidgetView: View {
 
   var body: some View {
     let block = snap?.calendar
-    WidgetChrome(eyebrow: "CALENDAR", dot: LifeOSWidgetPalette.calendar, deepLink: block?.deepLink ?? "lifeos://calendar") {
+    WidgetChrome(eyebrow: "CALENDAR", dot: LifeOSWidgetPalette.calendar, deepLink: "lifeos://calendar") {
       Text(block?.whenLabel ?? "Clear")
         .font(.system(size: 20, weight: .bold))
         .foregroundStyle(LifeOSWidgetPalette.ink)
@@ -434,7 +578,7 @@ struct TodayView: View {
   var body: some View {
     let today = snap?.today
     let attention = snap?.attention
-    WidgetChrome(eyebrow: "LIFEOS TODAY", dot: LifeOSWidgetPalette.tasks, deepLink: today?.deepLink ?? "lifeos://now") {
+    WidgetChrome(eyebrow: "LIFEOS TODAY", dot: LifeOSWidgetPalette.tasks, deepLink: "lifeos://now") {
       Text("Execute today.\nSee tomorrow.")
         .font(.system(size: 22, weight: .bold))
         .foregroundStyle(LifeOSWidgetPalette.ink)

@@ -35,6 +35,69 @@ export function navigateFromNotification(payload: Partial<NotifPayload> | null |
   navigationRef.navigate("LifeTab" as never, { screen: "LifeDashboard" } as never);
 }
 
+/**
+ * Handle home-screen widget taps (`lifeos://…`).
+ * Explicit navigation is more reliable than path config alone for tab+stack apps.
+ */
+export function navigateFromWidgetUrl(url: string | null | undefined): boolean {
+  if (!url || !navigationRef.isReady()) return false;
+  if (!url.startsWith("lifeos://") && !url.startsWith("exp+lifeos-mobile://")) return false;
+
+  let path = "";
+  try {
+    const parsed = new URL(url);
+    // `lifeos://calendar` → host "calendar"; `lifeos:///calendar` → pathname "/calendar"
+    path = [parsed.host, parsed.pathname.replace(/^\//, "")].filter(Boolean).join("/");
+  } catch {
+    path = url.replace(/^[^:]+:\/\//, "").replace(/^\//, "");
+  }
+  path = path.replace(/\/+$/, "");
+
+  if (!path || path === "now") {
+    navigationRef.navigate("NowTab" as never, { screen: "NowHome" } as never);
+    return true;
+  }
+  if (path === "focus") {
+    navigationRef.navigate("NowTab" as never, {
+      screen: "Focus",
+      params: { openFocus: true },
+    } as never);
+    return true;
+  }
+  if (path === "tasks" || path === "add-task" || path.startsWith("add-task?")) {
+    // SiriTaskBridge creates the task; here we just land on Tasks.
+    navigationRef.navigate("TasksTab" as never, { screen: "TasksList" } as never);
+    return true;
+  }
+  if (path === "calendar") {
+    navigationRef.navigate("CalendarTab" as never, { screen: "CalendarMain" } as never);
+    return true;
+  }
+  if (path === "life" || path === "life/inbox") {
+    navigationRef.navigate(
+      "LifeTab" as never,
+      {
+        screen: path === "life/inbox" ? "NotificationCenter" : "LifeDashboard",
+      } as never,
+    );
+    return true;
+  }
+
+  const taskMatch = path.match(/^task\/(\d+)$/) || path.match(/^now\/task\/(\d+)$/);
+  if (taskMatch) {
+    const taskId = Number(taskMatch[1]);
+    if (!Number.isNaN(taskId)) {
+      navigationRef.navigate("TasksTab" as never, {
+        screen: "TaskDetail",
+        params: { taskId },
+      } as never);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export const linking = {
   prefixes: ["lifeos://", "exp+lifeos-mobile://"],
   config: {

@@ -11,6 +11,7 @@
       "supportsTablet": true,
       "requireFullScreen": false,
       "bundleIdentifier": "com.shafkatsaruwar.lifeos",
+      "buildNumber": "14",
       "usesAppleSignIn": true,
       "entitlements": {
         "com.apple.security.application-groups": [
@@ -19,6 +20,18 @@
       },
       "infoPlist": {
         "NSSupportsLiveActivities": true,
+        "NSSiriUsageDescription": "LifeOS uses Siri so you can add tasks with your voice.",
+        "UIApplicationSceneManifest": {
+          "UIApplicationSupportsMultipleScenes": false,
+          "UISceneConfigurations": {
+            "UIWindowSceneSessionRoleApplication": [
+              {
+                "UISceneConfigurationName": "Default Configuration",
+                "UISceneDelegateClassName": "$(PRODUCT_MODULE_NAME).SceneDelegate"
+              }
+            ]
+          }
+        },
         "UISupportedInterfaceOrientations~ipad": [
           "UIInterfaceOrientationPortrait",
           "UIInterfaceOrientationPortraitUpsideDown",
@@ -55,7 +68,9 @@
       "expo-updates",
       "expo-apple-authentication",
       "@react-native-community/datetimepicker",
-      "./plugins/withLifeOSWidgets.js"
+      "./plugins/withLifeOSWidgets.js",
+      "./plugins/withLifeOSSiri.js",
+      "./plugins/withLifeOSSceneLifecycle.js"
     ],
     "runtimeVersion": {
       "policy": "appVersion"

@@ -88,21 +88,51 @@ function minutesUntil(iso?: string): number | null {
   return Math.round((t - Date.now()) / 60_000);
 }
 
+function eventStartDate(iso?: string): Date | null {
+  if (!iso) return null;
+  const normalized = iso.length <= 10 ? `${iso}T09:00:00` : iso;
+  const d = new Date(normalized);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatAmpm(iso?: string): string {
+  const d = eventStartDate(iso);
+  if (!d) return "";
+  // Date-only events shouldn't pretend to have a wall-clock time.
+  if (iso && iso.length <= 10) return "";
+  return d
+    .toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    .replace(":00", "")
+    .replace(/\s/g, "")
+    .toLowerCase();
+}
+
 function formatWhenLabel(iso?: string, today = toDateKey(new Date())): string {
   if (!iso) return "";
-  const day = iso.slice(0, 10);
-  const time = iso.includes("T") ? iso.slice(11, 16) : "";
-  const hh = time ? Number(time.slice(0, 2)) : NaN;
-  const mm = time ? time.slice(3, 5) : "";
-  const ampm =
-    Number.isFinite(hh) && time
-      ? `${((hh + 11) % 12) + 1}${mm === "00" ? "" : `:${mm}`}${hh >= 12 ? "p" : "a"}`
-      : "";
+  const d = eventStartDate(iso);
+  if (!d) return "";
+  const day = toDateKey(d);
+  const ampm = formatAmpm(iso);
   if (day === today) return ampm || "today";
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   if (day === toDateKey(tomorrow)) return ampm ? `tmw ${ampm}` : "tomorrow";
-  return ampm || day.slice(5);
+  const monthDay = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return ampm ? `${monthDay} · ${ampm}` : monthDay;
+}
+
+function formatCalendarWhen(iso?: string, today = toDateKey(new Date())): string {
+  if (!iso) return "";
+  const d = eventStartDate(iso);
+  if (!d) return "";
+  const day = toDateKey(d);
+  const time = formatAmpm(iso);
+  if (day === today) return time ? `Next at ${time}` : "Today";
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (day === toDateKey(tomorrow)) return time ? `Tomorrow · ${time}` : "Tomorrow";
+  const monthDay = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return time ? `${monthDay} · ${time}` : monthDay;
 }
 
 function endsAtLabel(remainingSeconds: number): string {
@@ -143,15 +173,19 @@ export function buildWidgetSnapshot(workspace: Workspace): WidgetSnapshot {
 
   const upcomingEvents = calendarEvents
     .filter((e) => {
-      const start = e.start.length <= 10 ? `${e.start}T09:00` : e.start;
-      return new Date(start).getTime() >= Date.now() - 5 * 60_000;
+      const start = eventStartDate(e.start);
+      return start != null && start.getTime() >= Date.now() - 5 * 60_000;
     })
-    .sort((a, b) => a.start.localeCompare(b.start));
+    .sort((a, b) => {
+      const as = eventStartDate(a.start)?.getTime() ?? 0;
+      const bs = eventStartDate(b.start)?.getTime() ?? 0;
+      return as - bs;
+    });
 
   const nextEvent = upcomingEvents[0];
   const nextEventMins = minutesUntil(
-    nextEvent?.start.length && nextEvent.start.length <= 10
-      ? `${nextEvent.start}T09:00`
+    nextEvent?.start && nextEvent.start.length <= 10
+      ? `${nextEvent.start}T09:00:00`
       : nextEvent?.start,
   );
 
@@ -204,15 +238,21 @@ export function buildWidgetSnapshot(workspace: Workspace): WidgetSnapshot {
     });
   }
 
-  if (nextEvent && nextEventMins != null && nextEventMins <= 180) {
+  // Surface the next event for up to a week (calendar widget always shows it too).
+  if (nextEvent && nextEventMins != null && nextEventMins <= 7 * 24 * 60) {
     attention.push({
       id: `event-${nextEvent.id}`,
       kind: "event",
       title: nextEventMins <= 60 ? `Event in ${Math.max(1, nextEventMins)}m` : nextEvent.title,
       subtitle: nextEventMins <= 60 ? nextEvent.title : formatWhenLabel(nextEvent.start, today),
-      meta: nextEventMins <= 60 ? `${Math.max(1, nextEventMins)}m` : "soon",
+      meta:
+        nextEventMins <= 60
+          ? `${Math.max(1, nextEventMins)}m`
+          : nextEventMins <= 180
+            ? "soon"
+            : formatWhenLabel(nextEvent.start, today) || "upcoming",
       deepLink: "lifeos://calendar",
-      urgency: 15 + Math.max(0, nextEventMins),
+      urgency: 15 + Math.max(0, Math.min(nextEventMins, 7 * 24 * 60)),
     });
   }
 
@@ -271,8 +311,8 @@ export function buildWidgetSnapshot(workspace: Workspace): WidgetSnapshot {
     }));
 
   const eventsSoon = upcomingEvents.filter((e) => {
-    const m = minutesUntil(e.start.length <= 10 ? `${e.start}T09:00` : e.start);
-    return m != null && m <= 24 * 60;
+    const m = minutesUntil(e.start.length <= 10 ? `${e.start}T09:00:00` : e.start);
+    return m != null && m <= 7 * 24 * 60;
   }).length;
 
   return {
@@ -315,16 +355,7 @@ export function buildWidgetSnapshot(workspace: Workspace): WidgetSnapshot {
     },
     calendar: {
       title: nextEvent?.title,
-      whenLabel: nextEvent
-        ? (() => {
-            const start = nextEvent.start.length <= 10 ? `${nextEvent.start}T09:00` : nextEvent.start;
-            const d = new Date(start);
-            const day = toDateKey(d);
-            const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-            if (day === today) return `Next at ${time.replace(/:00/, "").toLowerCase().replace(" ", "")}`;
-            return formatWhenLabel(start, today);
-          })()
-        : undefined,
+      whenLabel: nextEvent ? formatCalendarWhen(nextEvent.start, today) : undefined,
       prep: nextEvent?.notes?.split(" · ")[0],
       deepLink: "lifeos://calendar",
     },
@@ -339,32 +370,35 @@ export function buildWidgetSnapshot(workspace: Workspace): WidgetSnapshot {
 }
 
 /**
- * Persist snapshot for WidgetKit via App Group (`ExtensionStorage`) + document fallback.
+ * Persist snapshot for WidgetKit via App Group (`ExtensionStorage`).
+ * Document-directory writes are useless to widgets — App Group only.
  */
 export async function writeWidgetSnapshot(workspace: Workspace): Promise<void> {
   if (Platform.OS !== "ios") return;
   const snapshot = buildWidgetSnapshot(workspace);
+  // Ensure doubles stay doubles for Swift Codable (avoid Int-only JSON numbers where needed).
+  if (typeof snapshot.focus.progress === "number") {
+    snapshot.focus.progress = Number(snapshot.focus.progress);
+  }
+  for (const item of snapshot.attention.items) {
+    item.urgency = Number(item.urgency);
+  }
   const payload = JSON.stringify(snapshot);
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { ExtensionStorage } = require("@bacons/apple-targets") as typeof import("@bacons/apple-targets");
-    const storage = new ExtensionStorage(APP_GROUP);
-    storage.set(SNAPSHOT_KEY, payload);
-    ExtensionStorage.reloadWidget();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const native = (globalThis as any)?.expo?.modules?.ExtensionStorage;
+    if (!native?.setString) {
+      console.warn(
+        "[widgets] ExtensionStorage native module missing — rebuild the iOS app so App Group writes work.",
+      );
+      return;
+    }
+    // Call native directly (avoid @bacons/apple-targets caching a no-op stub at import time).
+    native.setString(SNAPSHOT_KEY, payload, APP_GROUP);
+    native.reloadWidget?.();
   } catch (error) {
     console.warn("[widgets] ExtensionStorage write failed", error);
-  }
-
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const FileSystem = require("expo-file-system/legacy") as typeof import("expo-file-system/legacy");
-    const base = FileSystem.documentDirectory;
-    if (base) {
-      await FileSystem.writeAsStringAsync(`${base}lifeos-widget-snapshot.json`, payload);
-    }
-  } catch {
-    /* optional fallback */
   }
 }
 
