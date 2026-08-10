@@ -4,6 +4,7 @@ import type {
   BrainItem,
   CalendarEvent,
   ClassRecord,
+  UserCalendar,
   LifeHubState,
   Note,
   NotebookHub,
@@ -30,6 +31,7 @@ export type AppState = {
   updateSettings: (next: SettingsState) => Promise<void>;
   updateClasses: (next: ClassRecord[]) => Promise<void>;
   updateCalendar: (next: CalendarEvent[]) => Promise<void>;
+  updateCalendars: (next: UserCalendar[]) => Promise<void>;
   updateBrain: (next: BrainItem[]) => Promise<void>;
   updateResources: (next: Resource[]) => Promise<void>;
   updateLife: (next: LifeHubState) => Promise<void>;

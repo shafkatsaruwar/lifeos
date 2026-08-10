@@ -254,6 +254,7 @@ export function workMeetingsToCalendarEvents(
       source: "Work" as const,
       location: meeting.location,
       notes: notes || undefined,
+      repeat: meeting.recurring || undefined,
     };
   });
 }

@@ -71,14 +71,45 @@ export type ClassRecord = {
   archived?: boolean;
 };
 
+/** Named calendar list (iOS-style) — events point at these via `calendarId`. */
+export type UserCalendar = {
+  id: string;
+  name: string;
+  color: string;
+  /** When false, events on this calendar are hidden from the Cal views. Default true. */
+  visible?: boolean;
+};
+
+/** iOS Calendar-style repeat frequencies for LifeOS events. */
+export type EventRepeatFrequency =
+  | "never"
+  | "daily"
+  | "weekly"
+  | "biweekly"
+  | "monthly"
+  | "yearly";
+
 export type CalendarEvent = {
   id: string;
   title: string;
   start: string;
   end?: string;
   source?: "LifeOS" | "iCal" | "Google" | "Outlook" | "Synapse" | "Work";
+  /** Which user calendar this event belongs to */
+  calendarId?: string;
   color?: string;
   notes?: string;
+  /** Recurrence rule; omit or `never` for a one-off event */
+  repeat?: EventRepeatFrequency;
+  /** Inclusive end date (YYYY-MM-DD) for the series */
+  repeatUntil?: string;
+  /** Occurrence dates skipped from the series (YYYY-MM-DD) */
+  repeatExceptions?: string[];
+  /**
+   * Present on expanded occurrence views only (not persisted).
+   * Points at the master series id.
+   */
+  recurringEventId?: string;
 };
 
 export type NoteTemplate = "blank" | "lined" | "dotted" | "cornell" | "meeting";
@@ -431,6 +462,8 @@ export type Workspace = {
   tasks: Task[];
   projects: Project[];
   calendar: CalendarEvent[];
+  /** User-defined calendars (Personal / Work / School / custom) */
+  calendars: UserCalendar[];
   classes: ClassRecord[];
   notes: Note[];
   settings: SettingsState;

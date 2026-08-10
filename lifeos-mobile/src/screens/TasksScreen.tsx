@@ -1,11 +1,12 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useMemo, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Empty, Eyebrow, Page, SegmentedControl, Subtitle, Title } from "../components/UI";
 import { TaskRow } from "../components/TaskRow";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { PRIORITY_RANK, dueRank, taskIsOpen } from "../lib/helpers";
+import type { Task } from "../types";
 
 type Filter = "Open" | "Done";
 type Sort = "Due" | "Priority" | "Space";
@@ -49,13 +50,60 @@ export function TasksScreen() {
     );
   };
 
-  const createTask = () => {
+  const createTask = (patch: Partial<Task> & { title: string }) => {
     const id = Date.now();
-    updateTasks([
-      ...workspace.tasks,
-      { id, title: "New task", project: "Inbox", priority: "Medium", focusMinutes: 30, energy: "Medium", status: "Not started", checklist: [], checklistProgress: [] },
-    ]);
+    const task: Task = {
+      id,
+      project: "Inbox",
+      priority: "Medium",
+      focusMinutes: workspace.settings.defaultFocusMinutes ?? 30,
+      energy: workspace.settings.defaultEnergy ?? "Medium",
+      status: "Not started",
+      checklist: [],
+      checklistProgress: [],
+      ...patch,
+      title: patch.title.trim() || "New task",
+    };
+    void updateTasks([...workspace.tasks, task]);
     navigation.navigate("TaskDetail", { taskId: id });
+  };
+
+  /** Web `/t` — full task, open editor to fill details. */
+  const createDetailedTask = () => {
+    createTask({ title: "New task" });
+  };
+
+  /** Web `/tm` — low-energy errand. */
+  const createMinorTask = () => {
+    const finish = (value?: string) => {
+      createTask({
+        title: (value || "").trim() || "New minor task",
+        priority: "Low",
+        energy: "Low",
+        focusMinutes: 5,
+      });
+    };
+    if (Platform.OS === "ios" && typeof Alert.prompt === "function") {
+      Alert.prompt(
+        "Minor task",
+        "Low-energy errand — water, charge, quick chore",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Add", onPress: finish },
+        ],
+        "plain-text",
+      );
+      return;
+    }
+    finish();
+  };
+
+  const openNewTaskMenu = () => {
+    Alert.alert("New task", "Minor is a quick low-energy errand. Detailed opens the full editor.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Minor task", onPress: createMinorTask },
+      { text: "Detailed task", onPress: createDetailedTask },
+    ]);
   };
 
   return (
@@ -66,7 +114,12 @@ export function TasksScreen() {
           <Title>Tasks</Title>
           <Subtitle>A clear list of what needs your attention.</Subtitle>
         </View>
-        <Pressable onPress={createTask} style={[styles.addButton, { backgroundColor: theme.text }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="New task"
+          onPress={openNewTaskMenu}
+          style={[styles.addButton, { backgroundColor: theme.text }]}
+        >
           <Feather name="plus" size={18} color={theme.surface} />
         </Pressable>
       </View>

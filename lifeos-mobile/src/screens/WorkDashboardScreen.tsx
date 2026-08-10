@@ -237,9 +237,8 @@ export function WorkDashboardScreen() {
         status: "active",
         createdAt: stamp,
       };
+      // Work hub only — do not mirror into Life Spaces on create (web parity).
       void updateWork({ ...work, projects: [project, ...work.projects] });
-      // Mirror into Life Spaces like web does on open (eager so it's ready).
-      void updateProjects(ensureLifeProjectForWork(workspace.projects, project));
       resetComposer();
       return;
     }

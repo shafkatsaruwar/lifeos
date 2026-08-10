@@ -295,6 +295,7 @@ export default function App() {
     updateSettings: (value) => savePart("settings", value),
     updateClasses: (value) => savePart("classes", value),
     updateCalendar: (value) => savePart("calendar", value),
+    updateCalendars: (value) => savePart("calendars", value),
     updateBrain: (value) => savePart("brain", value),
     updateResources: (value) => savePart("resources", value),
     updateLife: (value) => savePart("life", value),

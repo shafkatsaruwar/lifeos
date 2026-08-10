@@ -1,5 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
-import { useMemo, useState } from "react";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -11,20 +12,36 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { ActionButton, Card, Empty, Eyebrow, IconButton, Page, SegmentedControl, Subtitle, Title } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import {
+  CAL_PERSONAL_ID,
+  eventCalendarId,
+  eventDisplayColor,
+  findCalendar,
+  isEventVisible,
+  newCalendarId,
+  normalizeCalendars,
+} from "../lib/calendars";
+import {
   eventOccursOnDate,
   formatEventRange,
   toDateKey,
 } from "../lib/helpers";
 import { fetchIcsFromUrl, parseIcsEvents } from "../lib/api";
+import {
+  expandEventsInRange,
+  parseOccurrenceId,
+  REPEAT_OPTIONS,
+  repeatLabel,
+} from "../lib/recurrence";
 import { SPACE_COLORS } from "../lib/theme";
 import { mergeCalendarWithWorkMeetings } from "../lib/workos";
-import type { CalendarEvent } from "../types";
+import type { CalendarEvent, EventRepeatFrequency, UserCalendar } from "../types";
 
 type Mode = "upcoming" | "month" | "day";
 
@@ -36,15 +53,52 @@ function normalizeTime(value: string) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
+function dateFromDayKey(day: string) {
+  const match = day.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return new Date();
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0);
+}
+
+function dateFromTime(time: string, day = toDateKey(new Date())) {
+  const normalized = normalizeTime(time);
+  const [hours, minutes] = normalized.split(":").map(Number);
+  const base = dateFromDayKey(day);
+  base.setHours(hours, minutes, 0, 0);
+  return base;
+}
+
+function formatTime(date: Date) {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function formatDayLabel(day: string) {
+  return dateFromDayKey(day).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatTimeLabel(time: string) {
+  return dateFromTime(time).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export function CalendarScreen() {
-  const { theme, workspace, updateCalendar, updateTasks } = useLifeOS();
+  const { theme, workspace, updateCalendar, updateCalendars, updateTasks } = useLifeOS();
   const navigation = useNavigation<any>();
+  const colorScheme = useColorScheme();
+  const pickerTheme = colorScheme === "dark" ? "dark" : "light";
   const [mode, setMode] = useState<Mode>("upcoming");
   const [cursor, setCursor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => toDateKey(new Date()));
   const [importOpen, setImportOpen] = useState(false);
   const [icalUrl, setIcalUrl] = useState("");
   const [importing, setImporting] = useState(false);
+  const [calendarsOpen, setCalendarsOpen] = useState(false);
 
   const [composerOpen, setComposerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -53,13 +107,53 @@ export function CalendarScreen() {
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
   const [notes, setNotes] = useState("");
-  const [color, setColor] = useState<string>(SPACE_COLORS[0]);
+  const [calendarId, setCalendarId] = useState(CAL_PERSONAL_ID);
+  const [repeat, setRepeat] = useState<EventRepeatFrequency>("never");
+  const [repeatUntil, setRepeatUntil] = useState<string | undefined>();
+  const [occurrenceKey, setOccurrenceKey] = useState<string | undefined>();
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+  const [showUntilPicker, setShowUntilPicker] = useState(false);
+
+  const calendars = useMemo(() => normalizeCalendars(workspace.calendars), [workspace.calendars]);
+
+  // Persist default Personal / Work / School once so they sync across devices.
+  useEffect(() => {
+    if (!Array.isArray(workspace.calendars) || workspace.calendars.length === 0) {
+      void updateCalendars(calendars);
+    }
+  }, [workspace.calendars, calendars, updateCalendars]);
+
+  const applyStartTime = (next: string) => {
+    const normalized = normalizeTime(next);
+    setStartTime(normalized);
+    const startDate = dateFromTime(normalized, day);
+    const endDate = dateFromTime(endTime, day);
+    if (endDate <= startDate) {
+      const bumped = new Date(startDate);
+      bumped.setHours(bumped.getHours() + 1);
+      setEndTime(formatTime(bumped));
+    }
+  };
 
   const todayKey = toDateKey(new Date());
-  const events = useMemo(() => {
+  const masters = useMemo(() => {
     if (workspace.settings.enableWorkOS === false) return workspace.calendar;
     return mergeCalendarWithWorkMeetings(workspace.calendar, workspace.work);
   }, [workspace.calendar, workspace.work, workspace.settings.enableWorkOS]);
+
+  const events = useMemo(() => {
+    const monthPadStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    monthPadStart.setDate(monthPadStart.getDate() - 7);
+    const monthPadEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    monthPadEnd.setDate(monthPadEnd.getDate() + 14);
+    const horizon = new Date();
+    horizon.setDate(horizon.getDate() + 366);
+    const rangeStart = [toDateKey(monthPadStart), todayKey, selected].sort()[0];
+    const rangeEnd = [toDateKey(monthPadEnd), toDateKey(horizon), selected].sort().at(-1)!;
+    return expandEventsInRange(masters, rangeStart, rangeEnd).filter((e) => isEventVisible(e, calendars));
+  }, [masters, calendars, cursor, todayKey, selected]);
 
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const firstDayOffset = monthStart.getDay();
@@ -86,12 +180,23 @@ export function CalendarScreen() {
         const end = (e.end ?? e.start).slice(0, 10);
         return end >= todayKey && start <= horizonKey;
       })
-      .map((e) => ({ id: e.id, kind: "event" as const, title: e.title, date: e.start, color: e.color || theme.accent, meta: `${formatEventRange(e)} · ${e.source ?? "LifeOS"}` }));
+      .map((e) => {
+        const cal = findCalendar(calendars, eventCalendarId(e));
+        const series = e.repeat && e.repeat !== "never" ? ` · ${repeatLabel(e.repeat)}` : "";
+        return {
+          id: e.id,
+          kind: "event" as const,
+          title: e.title,
+          date: e.start,
+          color: eventDisplayColor(e, calendars),
+          meta: `${formatEventRange(e)} · ${cal?.name || e.source || "LifeOS"}${series}`,
+        };
+      });
     const taskItems = workspace.tasks
       .filter((t) => !t.done && !t.canceled && t.due && /^\d{4}-\d{2}-\d{2}$/.test(t.due) && t.due >= todayKey && t.due <= horizonKey)
       .map((t) => ({ id: String(t.id), kind: "task" as const, title: t.title, date: `${t.due}T${t.startTime || "09:00"}`, color: t.color || theme.accent, meta: `Task · due ${t.due === todayKey ? "today" : t.due} · ${t.focusMinutes ?? 30}m` }));
     return [...evItems, ...taskItems].sort((a, b) => a.date.localeCompare(b.date));
-  }, [events, workspace.tasks, todayKey, theme.accent]);
+  }, [events, calendars, workspace.tasks, todayKey, theme.accent]);
 
   const readyToPlace = workspace.tasks
     .filter((t) => !t.done && !t.canceled && (!t.startTime || t.due !== selected))
@@ -99,23 +204,106 @@ export function CalendarScreen() {
 
   const openComposer = (event?: CalendarEvent, defaultDay?: string) => {
     if (event) {
-      setEditingId(event.id);
-      setTitle(event.title);
-      setDay(event.start.slice(0, 10));
-      setStartTime(event.start.slice(11, 16) || "09:00");
-      setEndTime(event.end?.slice(11, 16) || "10:00");
-      setNotes(event.notes ?? "");
-      setColor(event.color || theme.accent);
+      const { seriesId, dateKey } = parseOccurrenceId(event.id);
+      const master = workspace.calendar.find((item) => item.id === seriesId) || event;
+      const id = eventCalendarId(master);
+      const cal = findCalendar(calendars, id);
+      setEditingId(seriesId);
+      setOccurrenceKey(dateKey);
+      setTitle(master.title);
+      setDay(master.start.slice(0, 10));
+      setStartTime(master.start.slice(11, 16) || "09:00");
+      setEndTime(master.end?.slice(11, 16) || "10:00");
+      setNotes(master.notes ?? "");
+      setCalendarId(cal?.id || CAL_PERSONAL_ID);
+      setRepeat(master.repeat && master.repeat !== "never" ? master.repeat : "never");
+      setRepeatUntil(master.repeatUntil);
     } else {
+      const fallback = calendars.find((c) => c.visible !== false) || calendars[0];
       setEditingId(null);
+      setOccurrenceKey(undefined);
       setTitle("");
       setDay(defaultDay || selected || todayKey);
       setStartTime("09:00");
       setEndTime("10:00");
       setNotes("");
-      setColor(theme.accent);
+      setCalendarId(fallback?.id || CAL_PERSONAL_ID);
+      setRepeat("never");
+      setRepeatUntil(undefined);
     }
+    setShowDatePicker(false);
+    setShowStartPicker(false);
+    setShowEndPicker(false);
+    setShowUntilPicker(false);
     setComposerOpen(true);
+  };
+
+  const pickRepeat = () => {
+    Alert.alert(
+      "Repeat",
+      undefined,
+      [
+        ...REPEAT_OPTIONS.map((option) => ({
+          text: option.label,
+          onPress: () => {
+            setRepeat(option.key);
+            if (option.key === "never") setRepeatUntil(undefined);
+          },
+        })),
+        { text: "Cancel", style: "cancel" as const },
+      ],
+    );
+  };
+
+  const toggleCalendarVisible = (id: string) => {
+    void updateCalendars(
+      calendars.map((c) => (c.id === id ? { ...c, visible: c.visible === false } : c)),
+    );
+  };
+
+  const addCalendar = () => {
+    const create = (name?: string, color?: string) => {
+      const trimmed = (name || "").trim() || `Calendar ${calendars.length + 1}`;
+      const next: UserCalendar = {
+        id: newCalendarId(),
+        name: trimmed,
+        color: color || SPACE_COLORS[calendars.length % SPACE_COLORS.length],
+        visible: true,
+      };
+      void updateCalendars([...calendars, next]);
+    };
+    if (Platform.OS === "ios" && typeof Alert.prompt === "function") {
+      Alert.prompt("New calendar", "Name this calendar", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Add", onPress: (value?: string) => create(value) },
+      ], "plain-text");
+      return;
+    }
+    create();
+  };
+
+  const deleteCalendar = (cal: UserCalendar) => {
+    if (calendars.length <= 1) {
+      Alert.alert("Keep one calendar", "You need at least one calendar.");
+      return;
+    }
+    Alert.alert("Delete calendar?", `Events on “${cal.name}” move to Personal.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          const fallback = calendars.find((c) => c.id !== cal.id)?.id || CAL_PERSONAL_ID;
+          void updateCalendar(
+            workspace.calendar.map((event) =>
+              eventCalendarId(event) === cal.id ? { ...event, calendarId: fallback, color: findCalendar(calendars, fallback)?.color } : event,
+            ),
+          );
+          void updateCalendars(calendars.filter((c) => c.id !== cal.id));
+          if (calendarId === cal.id) setCalendarId(fallback);
+        },
+      },
+    ]);
   };
 
   const saveEvent = async () => {
@@ -128,44 +316,78 @@ export function CalendarScreen() {
       Alert.alert("Invalid date", "Use YYYY-MM-DD for the date.");
       return;
     }
+    const cal = findCalendar(calendars, calendarId) || calendars[0];
     const start = `${day.trim()}T${normalizeTime(startTime)}`;
     const end = `${day.trim()}T${normalizeTime(endTime)}`;
+    const master = workspace.calendar.find((event) => event.id === editingId);
     const payload: CalendarEvent = {
       id: editingId ?? `lifeos-${Date.now()}`,
       title: clean,
       start,
       end,
-      source: "LifeOS",
-      color,
+      source: master?.source ?? "LifeOS",
+      calendarId: cal?.id || CAL_PERSONAL_ID,
+      color: cal?.color,
       notes: notes.trim() || undefined,
+      repeat: repeat === "never" ? undefined : repeat,
+      repeatUntil: repeat === "never" ? undefined : repeatUntil,
+      repeatExceptions: repeat === "never" ? undefined : master?.repeatExceptions,
     };
     if (editingId) {
+      // Don't rewrite Work-bridged masters from this editor.
+      if (editingId.startsWith("work-meet-")) {
+        Alert.alert("Work meeting", "Edit this meeting from WorkOS.");
+        return;
+      }
       await updateCalendar(
-        events.map((event) =>
-          event.id === editingId
-            ? { ...event, ...payload, source: event.source ?? "LifeOS" }
-            : event
-        )
+        workspace.calendar.map((event) =>
+          event.id === editingId ? { ...event, ...payload } : event,
+        ),
       );
     } else {
-      await updateCalendar([...events, payload]);
+      await updateCalendar([...workspace.calendar, payload]);
     }
     setSelected(day.trim());
     setComposerOpen(false);
   };
 
+  const deleteSeries = async () => {
+    if (!editingId) return;
+    if (editingId.startsWith("work-meet-")) {
+      Alert.alert("Work meeting", "Remove this meeting from WorkOS.");
+      return;
+    }
+    await updateCalendar(workspace.calendar.filter((event) => event.id !== editingId));
+    setComposerOpen(false);
+  };
+
+  const deleteThisOccurrence = async () => {
+    if (!editingId || !occurrenceKey) return;
+    const master = workspace.calendar.find((event) => event.id === editingId);
+    if (!master) return;
+    const exceptions = Array.from(new Set([...(master.repeatExceptions || []), occurrenceKey]));
+    await updateCalendar(
+      workspace.calendar.map((event) =>
+        event.id === editingId ? { ...event, repeatExceptions: exceptions } : event,
+      ),
+    );
+    setComposerOpen(false);
+  };
+
   const deleteEvent = () => {
     if (!editingId) return;
+    const isSeries = repeat !== "never" || Boolean(occurrenceKey);
+    if (isSeries && occurrenceKey) {
+      Alert.alert("Delete event?", "This is part of a repeating series.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "This event only", style: "destructive", onPress: () => void deleteThisOccurrence() },
+        { text: "All events", style: "destructive", onPress: () => void deleteSeries() },
+      ]);
+      return;
+    }
     Alert.alert("Delete event?", "This removes it from your LifeOS calendar.", [
       { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          await updateCalendar(events.filter((event) => event.id !== editingId));
-          setComposerOpen(false);
-        },
-      },
+      { text: "Delete", style: "destructive", onPress: () => void deleteSeries() },
     ]);
   };
 
@@ -185,8 +407,10 @@ export function CalendarScreen() {
     try {
       const ics = await fetchIcsFromUrl(icalUrl.trim());
       const parsed = parseIcsEvents(ics);
-      const existingIds = new Set(events.map((e) => e.id));
-      const merged = [...events.filter((e) => e.source !== "iCal" || !parsed.some((p) => p.id === e.id)), ...parsed.filter((p) => !existingIds.has(p.id) || true)];
+      const merged = [
+        ...workspace.calendar.filter((e) => e.source !== "iCal" || !parsed.some((p) => p.id === e.id)),
+        ...parsed,
+      ];
       const byId = new Map<string, CalendarEvent>();
       merged.forEach((e) => byId.set(e.id, e));
       await updateCalendar(Array.from(byId.values()));
@@ -214,10 +438,40 @@ export function CalendarScreen() {
           <Subtitle>Your timeline and ready work in one calm layer.</Subtitle>
         </View>
         <View style={styles.headerActions}>
+          <IconButton icon="layers" label="Calendars" onPress={() => setCalendarsOpen(true)} />
           <IconButton icon="plus" label="Add event" onPress={() => openComposer(undefined, selected)} />
           <IconButton icon="link" label="Import iCal" onPress={() => setImportOpen(true)} />
         </View>
       </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.calFilterRow}
+        style={styles.calFilterScroll}
+      >
+        {calendars.map((cal) => {
+          const on = cal.visible !== false;
+          return (
+            <Pressable
+              key={cal.id}
+              onPress={() => toggleCalendarVisible(cal.id)}
+              onLongPress={() => setCalendarsOpen(true)}
+              style={[
+                styles.calFilterChip,
+                {
+                  borderColor: on ? cal.color : theme.border,
+                  backgroundColor: on ? `${cal.color}22` : theme.surface,
+                  opacity: on ? 1 : 0.55,
+                },
+              ]}
+            >
+              <View style={[styles.calFilterDot, { backgroundColor: cal.color }]} />
+              <Text style={{ color: theme.text, fontSize: 12, fontWeight: "700" }}>{cal.name}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
       <View style={styles.segmentWrap}>
         <SegmentedControl
@@ -291,7 +545,7 @@ export function CalendarScreen() {
                   <Text style={[styles.dayNum, { color: muted ? theme.muted : theme.text, opacity: muted ? 0.4 : 1 }]}>{dayCell.getDate()}</Text>
                   <View style={styles.dayDots}>
                     {dayEvents.slice(0, 3).map((e, i) => (
-                      <View key={i} style={[styles.miniDot, { backgroundColor: e.color || theme.accent }]} />
+                      <View key={i} style={[styles.miniDot, { backgroundColor: eventDisplayColor(e, calendars) }]} />
                     ))}
                   </View>
                 </Pressable>
@@ -317,10 +571,14 @@ export function CalendarScreen() {
               <Pressable
                 key={event.id}
                 onPress={() => openComposer(event)}
-                style={[styles.dayEventCard, { borderColor: event.color || theme.border, backgroundColor: theme.surface }]}
+                style={[styles.dayEventCard, { borderColor: eventDisplayColor(event, calendars), backgroundColor: theme.surface }]}
               >
                 <Text style={[styles.dayEventTitle, { color: theme.text }]}>{event.title}</Text>
-                <Text style={[styles.dayEventMeta, { color: theme.muted }]}>{formatEventRange(event)}</Text>
+                <Text style={[styles.dayEventMeta, { color: theme.muted }]}>
+                  {formatEventRange(event)}
+                  {" · "}
+                  {findCalendar(calendars, eventCalendarId(event))?.name || event.source || "LifeOS"}
+                </Text>
                 {event.notes ? <Text style={[styles.dayEventNotes, { color: theme.muted }]}>{event.notes}</Text> : null}
               </Pressable>
             ))
@@ -369,39 +627,128 @@ export function CalendarScreen() {
                 style={[styles.importInput, { color: theme.text, borderColor: theme.border }]}
               />
               <Text style={[styles.fieldLabel, { color: theme.muted }]}>Date</Text>
-              <TextInput
-                value={day}
-                onChangeText={setDay}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={theme.muted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={[styles.importInput, { color: theme.text, borderColor: theme.border }]}
-              />
+              {Platform.OS === "ios" ? (
+                <View style={styles.pickerRow}>
+                  <DateTimePicker
+                    value={dateFromDayKey(day)}
+                    mode="date"
+                    display="compact"
+                    themeVariant={pickerTheme}
+                    onChange={(_, date) => {
+                      if (date) setDay(toDateKey(date));
+                    }}
+                  />
+                </View>
+              ) : (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Pick date"
+                    onPress={() => setShowDatePicker(true)}
+                    style={[styles.pickerButton, { borderColor: theme.border }]}
+                  >
+                    <Feather name="calendar" size={16} color={theme.accent} />
+                    <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>{formatDayLabel(day)}</Text>
+                  </Pressable>
+                  {showDatePicker ? (
+                    <DateTimePicker
+                      value={dateFromDayKey(day)}
+                      mode="date"
+                      display="default"
+                      onChange={(event, date) => {
+                        setShowDatePicker(false);
+                        if (event.type !== "dismissed" && date) setDay(toDateKey(date));
+                      }}
+                    />
+                  ) : null}
+                </>
+              )}
               <View style={styles.timeRow}>
                 <View style={styles.timeField}>
                   <Text style={[styles.fieldLabel, { color: theme.muted }]}>Start</Text>
-                  <TextInput
-                    value={startTime}
-                    onChangeText={setStartTime}
-                    placeholder="HH:mm"
-                    placeholderTextColor={theme.muted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={[styles.importInput, { color: theme.text, borderColor: theme.border }]}
-                  />
+                  {Platform.OS === "ios" ? (
+                    <View style={styles.pickerRow}>
+                      <DateTimePicker
+                        value={dateFromTime(startTime, day)}
+                        mode="time"
+                        display="compact"
+                        minuteInterval={5}
+                        themeVariant={pickerTheme}
+                        onChange={(_, date) => {
+                          if (date) applyStartTime(formatTime(date));
+                        }}
+                      />
+                    </View>
+                  ) : (
+                    <>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Pick start time"
+                        onPress={() => setShowStartPicker(true)}
+                        style={[styles.pickerButton, { borderColor: theme.border }]}
+                      >
+                        <Feather name="clock" size={16} color={theme.accent} />
+                        <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>
+                          {formatTimeLabel(startTime)}
+                        </Text>
+                      </Pressable>
+                      {showStartPicker ? (
+                        <DateTimePicker
+                          value={dateFromTime(startTime, day)}
+                          mode="time"
+                          display="default"
+                          minuteInterval={5}
+                          onChange={(event, date) => {
+                            setShowStartPicker(false);
+                            if (event.type !== "dismissed" && date) applyStartTime(formatTime(date));
+                          }}
+                        />
+                      ) : null}
+                    </>
+                  )}
                 </View>
                 <View style={styles.timeField}>
                   <Text style={[styles.fieldLabel, { color: theme.muted }]}>End</Text>
-                  <TextInput
-                    value={endTime}
-                    onChangeText={setEndTime}
-                    placeholder="HH:mm"
-                    placeholderTextColor={theme.muted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={[styles.importInput, { color: theme.text, borderColor: theme.border }]}
-                  />
+                  {Platform.OS === "ios" ? (
+                    <View style={styles.pickerRow}>
+                      <DateTimePicker
+                        value={dateFromTime(endTime, day)}
+                        mode="time"
+                        display="compact"
+                        minuteInterval={5}
+                        themeVariant={pickerTheme}
+                        onChange={(_, date) => {
+                          if (date) setEndTime(formatTime(date));
+                        }}
+                      />
+                    </View>
+                  ) : (
+                    <>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Pick end time"
+                        onPress={() => setShowEndPicker(true)}
+                        style={[styles.pickerButton, { borderColor: theme.border }]}
+                      >
+                        <Feather name="clock" size={16} color={theme.accent} />
+                        <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>
+                          {formatTimeLabel(endTime)}
+                        </Text>
+                      </Pressable>
+                      {showEndPicker ? (
+                        <DateTimePicker
+                          value={dateFromTime(endTime, day)}
+                          mode="time"
+                          display="default"
+                          minuteInterval={5}
+                          onChange={(event, date) => {
+                            setShowEndPicker(false);
+                            if (event.type !== "dismissed" && date) setEndTime(formatTime(date));
+                          }}
+                        />
+                      ) : null}
+                    </>
+                  )}
                 </View>
               </View>
               <Text style={[styles.fieldLabel, { color: theme.muted }]}>Notes</Text>
@@ -413,22 +760,110 @@ export function CalendarScreen() {
                 multiline
                 style={[styles.notesInput, { color: theme.text, borderColor: theme.border }]}
               />
-              <Text style={[styles.fieldLabel, { color: theme.muted }]}>Color</Text>
-              <View style={styles.colorRow}>
-                {SPACE_COLORS.slice(0, 8).map((swatch) => (
-                  <Pressable
-                    key={swatch}
-                    onPress={() => setColor(swatch)}
-                    style={[
-                      styles.colorChip,
-                      { backgroundColor: swatch, borderColor: color === swatch ? theme.text : "transparent" },
-                    ]}
-                  />
-                ))}
+              <Text style={[styles.fieldLabel, { color: theme.muted }]}>Calendar</Text>
+              <View style={styles.calPickRow}>
+                {calendars.map((cal) => {
+                  const on = calendarId === cal.id;
+                  return (
+                    <Pressable
+                      key={cal.id}
+                      onPress={() => setCalendarId(cal.id)}
+                      style={[
+                        styles.calPickChip,
+                        {
+                          borderColor: on ? cal.color : theme.border,
+                          backgroundColor: on ? `${cal.color}22` : theme.bg,
+                        },
+                      ]}
+                    >
+                      <View style={[styles.calFilterDot, { backgroundColor: cal.color }]} />
+                      <Text style={{ color: theme.text, fontSize: 13, fontWeight: "700" }}>{cal.name}</Text>
+                    </Pressable>
+                  );
+                })}
               </View>
+              <Text style={[styles.fieldLabel, { color: theme.muted }]}>Repeat</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Pick repeat frequency"
+                onPress={pickRepeat}
+                style={[styles.pickerButton, { borderColor: theme.border }]}
+              >
+                <Feather name="repeat" size={16} color={theme.accent} />
+                <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>{repeatLabel(repeat)}</Text>
+              </Pressable>
+              {repeat !== "never" ? (
+                <>
+                  <View style={styles.cardHeadRow}>
+                    <Text style={[styles.fieldLabel, { color: theme.muted, marginTop: 0 }]}>End repeat</Text>
+                    {repeatUntil ? (
+                      <Pressable onPress={() => setRepeatUntil(undefined)}>
+                        <Text style={{ color: theme.muted, fontSize: 12, fontWeight: "700" }}>Clear</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  {Platform.OS === "ios" ? (
+                    repeatUntil ? (
+                      <View style={styles.pickerRow}>
+                        <DateTimePicker
+                          value={dateFromDayKey(repeatUntil)}
+                          mode="date"
+                          display="compact"
+                          minimumDate={dateFromDayKey(day)}
+                          themeVariant={pickerTheme}
+                          onChange={(_, date) => {
+                            if (date) setRepeatUntil(toDateKey(date));
+                          }}
+                        />
+                      </View>
+                    ) : (
+                      <Pressable
+                        onPress={() => setRepeatUntil(day)}
+                        style={[styles.pickerButton, { borderColor: theme.border }]}
+                      >
+                        <Feather name="calendar" size={16} color={theme.accent} />
+                        <Text style={{ color: theme.muted, fontSize: 15, fontWeight: "600" }}>Never — tap to end on a date</Text>
+                      </Pressable>
+                    )
+                  ) : (
+                    <>
+                      <Pressable
+                        onPress={() => setShowUntilPicker(true)}
+                        style={[styles.pickerButton, { borderColor: theme.border }]}
+                      >
+                        <Feather name="calendar" size={16} color={theme.accent} />
+                        <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>
+                          {repeatUntil ? formatDayLabel(repeatUntil) : "Never"}
+                        </Text>
+                      </Pressable>
+                      {showUntilPicker ? (
+                        <DateTimePicker
+                          value={dateFromDayKey(repeatUntil || day)}
+                          mode="date"
+                          display="default"
+                          minimumDate={dateFromDayKey(day)}
+                          onChange={(event, date) => {
+                            setShowUntilPicker(false);
+                            if (event.type !== "dismissed" && date) setRepeatUntil(toDateKey(date));
+                          }}
+                        />
+                      ) : null}
+                    </>
+                  )}
+                </>
+              ) : null}
             </ScrollView>
             <View style={styles.row}>
-              <ActionButton label="Cancel" quiet onPress={() => setComposerOpen(false)} />
+              <ActionButton
+                label="Cancel"
+                quiet
+                onPress={() => {
+                  setShowDatePicker(false);
+                  setShowStartPicker(false);
+                  setShowEndPicker(false);
+                  setComposerOpen(false);
+                }}
+              />
               <ActionButton label={editingId ? "Save" : "Add event"} onPress={saveEvent} />
             </View>
             {editingId ? (
@@ -438,6 +873,49 @@ export function CalendarScreen() {
             ) : null}
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={calendarsOpen} transparent animationType="fade" onRequestClose={() => setCalendarsOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.importCard, { backgroundColor: theme.surface }]}>
+            <Text style={[styles.importTitle, { color: theme.text }]}>Calendars</Text>
+            <Text style={[styles.importSub, { color: theme.muted }]}>
+              Show or hide calendars like iOS. Tap a chip on the calendar screen to toggle visibility.
+            </Text>
+            <ScrollView style={styles.composerScroll} contentContainerStyle={{ gap: 8 }}>
+              {calendars.map((cal) => {
+                const on = cal.visible !== false;
+                return (
+                  <View
+                    key={cal.id}
+                    style={[styles.calManageRow, { borderColor: theme.border, backgroundColor: theme.bg }]}
+                  >
+                    <Pressable onPress={() => toggleCalendarVisible(cal.id)} style={styles.calManageMain}>
+                      <View style={[styles.calManageSwatch, { backgroundColor: cal.color, opacity: on ? 1 : 0.35 }]} />
+                      <View style={styles.grow}>
+                        <Text style={{ color: theme.text, fontWeight: "800" }}>{cal.name}</Text>
+                        <Text style={{ color: theme.muted, fontSize: 12 }}>{on ? "Visible" : "Hidden"}</Text>
+                      </View>
+                      <Feather name={on ? "eye" : "eye-off"} size={18} color={theme.muted} />
+                    </Pressable>
+                    <Pressable
+                      accessibilityLabel={`Delete ${cal.name}`}
+                      onPress={() => deleteCalendar(cal)}
+                      hitSlop={8}
+                      style={styles.calManageDelete}
+                    >
+                      <Feather name="trash-2" size={16} color={theme.danger} />
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.row}>
+              <ActionButton label="Done" quiet onPress={() => setCalendarsOpen(false)} />
+              <ActionButton label="Add calendar" icon="plus" onPress={addCalendar} />
+            </View>
+          </View>
+        </View>
       </Modal>
 
       <Modal visible={importOpen} transparent animationType="fade" onRequestClose={() => setImportOpen(false)}>
@@ -472,6 +950,41 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, paddingTop: 8, gap: 12 },
   headerActions: { flexDirection: "row", gap: 8 },
   grow: { flex: 1 },
+  calFilterScroll: { maxHeight: 44, marginTop: 12 },
+  calFilterRow: { paddingHorizontal: 20, gap: 8, alignItems: "center" },
+  calFilterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1.5,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    minHeight: 34,
+  },
+  calFilterDot: { width: 8, height: 8, borderRadius: 4 },
+  calPickRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4, marginBottom: 4 },
+  calPickChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    minHeight: 38,
+  },
+  calManageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  calManageMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12 },
+  calManageSwatch: { width: 18, height: 18, borderRadius: 9 },
+  calManageDelete: { padding: 6 },
+  cardHeadRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 6 },
   segmentWrap: { paddingHorizontal: 20, marginTop: 14 },
   list: { padding: 20, paddingBottom: 28, gap: 10 },
   upcomingRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 12 },
@@ -509,8 +1022,16 @@ const styles = StyleSheet.create({
   notesInput: { minHeight: 72, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, textAlignVertical: "top" },
   timeRow: { flexDirection: "row", gap: 10 },
   timeField: { flex: 1 },
-  colorRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4, marginBottom: 4 },
-  colorChip: { width: 28, height: 28, borderRadius: 14, borderWidth: 2 },
+  pickerRow: { flexDirection: "row", alignItems: "center", minHeight: 36, marginVertical: 4 },
+  pickerButton: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   row: { flexDirection: "row", gap: 10 },
   connectWebLink: { fontSize: 12, fontWeight: "700", textAlign: "center", marginTop: 4 },
   deleteLink: { fontSize: 13, fontWeight: "700", textAlign: "center", marginTop: 2 },
