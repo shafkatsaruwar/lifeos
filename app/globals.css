@@ -453,3 +453,10 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
   .create-modal.space-modal{width:calc(100vw - 20px);max-height:calc(100dvh - 20px)}
   .modal-layer.space-modal-layer{padding:10px}
 }
+
+.archived-task-row{display:flex;align-items:center;gap:10px;width:100%}
+.archived-task-open{flex:1;min-width:0;border:0;background:transparent;text-align:left;padding:0;cursor:pointer;color:inherit}
+.archived-task-open strong{display:block;font-size:12px;font-weight:700}
+.archived-task-open p{margin:2px 0 0;font-size:10px;color:var(--muted)}
+.archived-task-restore{flex-shrink:0;border:1px solid var(--line);background:var(--canvas);border-radius:8px;height:30px;padding:0 10px;font-size:10px;font-weight:700;color:var(--accent);cursor:pointer}
+.archived-task-restore:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--panel))}
