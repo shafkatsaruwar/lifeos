@@ -340,6 +340,14 @@ const normalizeTask = (task: Partial<Task>): Task => ({
   project: task.project ?? "Inbox",
   color: task.color ?? "#625af6",
   due: typeof task.due === "string" ? task.due : "",
+  startTime: typeof task.startTime === "string" && /^\d{1,2}:\d{2}/.test(task.startTime)
+    ? (() => {
+        const [hours, minutes] = task.startTime.split(":").map(Number);
+        if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return undefined;
+        if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return undefined;
+        return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+      })()
+    : undefined,
   priority: task.priority ?? "Medium",
   focusMinutes: task.focusMinutes ?? 45,
   energy: task.energy ?? "Medium",
@@ -4123,7 +4131,7 @@ function TaskWorkspace({ task, tasks, projects, classes, onExit, onSwitch, onUpd
             <label><span><Circle size={14} /> Status</span><select value={status} onChange={event => onUpdate({ status: event.target.value as TaskStatus })}>{(["Not started", "In progress", "Waiting", "Blocked", "Done", "Canceled"] as TaskStatus[]).map(value => <option key={value}>{value}</option>)}</select></label>
             <label><span><LayoutGrid size={14} /> Space</span><select value={spaceValue} onChange={event => updateSpace(event.target.value)}><option value="">Inbox / no space</option>{classes.length > 0 && <optgroup label="Classes">{classes.map(item => <option key={item.id} value={`class:${item.id}`}>{item.code} — {item.name}</option>)}</optgroup>}{projects.length > 0 && <optgroup label="Projects & maintenance">{projects.map(project => <option key={project.name} value={`project:${project.name}`}>{project.name}</option>)}</optgroup>}</select></label>
             <label><span><CalendarDays size={14} /> Due date</span><input type="date" value={dateValue} onChange={event => onUpdate({ due: event.target.value })} /></label>
-            <label><span><Clock3 size={14} /> Start time</span><input type="time" value={task.startTime ?? ""} onChange={event => onUpdate({ startTime: event.target.value })} /></label>
+            <label><span><Clock3 size={14} /> Start time</span><input type="time" value={task.startTime ?? ""} onChange={event => onUpdate({ startTime: event.target.value || undefined })} /></label>
             <label><span><Flame size={14} /> Priority</span><select value={task.priority} onChange={event => onUpdate({ priority: event.target.value as Task["priority"] })}><option>High</option><option>Medium</option><option>Low</option></select></label>
             <label><span><TimerReset size={14} /> Focus estimate</span><div className="task-number-field"><input type="number" min={5} max={240} step={5} value={task.focusMinutes} onChange={event => onUpdate({ focusMinutes: Math.max(5, Math.min(240, Number(event.target.value) || 5)) })} /><em>minutes</em></div></label>
             <label><span><Zap size={14} /> Energy</span><select value={task.energy} onChange={event => onUpdate({ energy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label>
