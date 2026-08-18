@@ -89,7 +89,24 @@
     },
     "extra": {
       "eas": {
-        "projectId": "6021a343-7ac2-421d-a247-35279744602d"
+        "projectId": "6021a343-7ac2-421d-a247-35279744602d",
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "LiveActivity",
+                  "bundleIdentifier": "com.shafkatsaruwar.lifeos.LiveActivity",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.shafkatsaruwar.lifeos"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
       }
     }
   }
