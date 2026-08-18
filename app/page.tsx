@@ -88,8 +88,8 @@ type EnergyLevel = "Low" | "Medium" | "High";
 type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
 type AcademicItemType = "Assignment" | "Project" | "Exam" | "Quiz" | "Lab" | "Reading" | "Discussion";
 type TaskProperty = { id: string; name: string; value: string };
-type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; status?: TaskStatus; notes?: string; handoffNote?: string; nextAction?: string; followUpDate?: string; recurringDays?: number; completedAt?: string; customProperties?: TaskProperty[]; checklist?: string[]; checklistProgress?: boolean[]; focusRemainingSeconds?: number; focusSessionStarted?: boolean; focusSessionRunning?: boolean; focusHalfwayPrompted?: boolean; classId?: string; academicType?: AcademicItemType; gradeWeight?: number; pointsEarned?: number; pointsPossible?: number; submission?: string; calendarEventId?: string; done?: boolean; canceled?: boolean };
-type FocusSessionUpdate = { remainingSeconds: number; hasStarted: boolean; isRunning: boolean; halfwayPrompted: boolean; focusMinutes?: number };
+type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; status?: TaskStatus; notes?: string; handoffNote?: string; nextAction?: string; followUpDate?: string; recurringDays?: number; completedAt?: string; customProperties?: TaskProperty[]; checklist?: string[]; checklistProgress?: boolean[]; focusRemainingSeconds?: number; focusSessionStarted?: boolean; focusSessionRunning?: boolean; focusHalfwayPrompted?: boolean; focusUpdatedAt?: string; classId?: string; academicType?: AcademicItemType; gradeWeight?: number; pointsEarned?: number; pointsPossible?: number; submission?: string; calendarEventId?: string; done?: boolean; canceled?: boolean };
+type FocusSessionUpdate = { remainingSeconds: number; hasStarted: boolean; isRunning: boolean; halfwayPrompted: boolean; focusMinutes?: number; checkpoint?: boolean };
 type ProjectKind = "maintenance" | "finishable";
 type SpaceKind = "class" | "project" | "maintenance";
 type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban" | "BriefcaseBusiness" | "Camera" | "Code2" | "HeartPulse" | "Utensils" | "BookOpen";
@@ -257,10 +257,38 @@ const focusChecklistTemplates = [
 ];
 
 const formatEventTime = (value: string) => new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+const asTaskList = (data: unknown): unknown[] | null => {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") return Object.values(data as Record<string, unknown>);
+  return null;
+};
 const getTaskFocusSeconds = (task: Task) => {
   const totalSeconds = Math.max(1, task.focusMinutes) * 60;
-  if (typeof task.focusRemainingSeconds !== "number" || !Number.isFinite(task.focusRemainingSeconds)) return totalSeconds;
-  return Math.max(0, Math.min(totalSeconds, Math.round(task.focusRemainingSeconds)));
+  const stored = typeof task.focusRemainingSeconds === "number" && Number.isFinite(task.focusRemainingSeconds)
+    ? Math.max(0, Math.min(totalSeconds, Math.round(task.focusRemainingSeconds)))
+    : totalSeconds;
+  if (!task.focusSessionRunning || !task.focusUpdatedAt) return stored;
+  const elapsed = Math.floor((Date.now() - Date.parse(task.focusUpdatedAt)) / 1000);
+  if (!Number.isFinite(elapsed) || elapsed <= 0) return stored;
+  return Math.max(0, stored - elapsed);
+};
+const mergeTasksFocus = (local: Task[], remote: Task[]) => {
+  const localById = new Map(local.map(task => [task.id, task]));
+  return remote.map(task => {
+    const prev = localById.get(task.id);
+    if (!prev) return task;
+    const localTs = Date.parse(prev.focusUpdatedAt ?? "") || 0;
+    const remoteTs = Date.parse(task.focusUpdatedAt ?? "") || 0;
+    if (remoteTs >= localTs) return task;
+    return {
+      ...task,
+      focusRemainingSeconds: prev.focusRemainingSeconds,
+      focusSessionStarted: prev.focusSessionStarted,
+      focusSessionRunning: prev.focusSessionRunning,
+      focusHalfwayPrompted: prev.focusHalfwayPrompted,
+      focusUpdatedAt: prev.focusUpdatedAt,
+    };
+  });
 };
 const formatFocusTime = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 const getEventDateRange = (event: CalendarEvent) => {
@@ -380,6 +408,7 @@ const normalizeTask = (task: Partial<Task>): Task => ({
   focusSessionStarted: Boolean(task.focusSessionStarted),
   focusSessionRunning: Boolean(task.focusSessionRunning),
   focusHalfwayPrompted: Boolean(task.focusHalfwayPrompted),
+  focusUpdatedAt: typeof task.focusUpdatedAt === "string" ? task.focusUpdatedAt : undefined,
   done: task.done,
   canceled: task.canceled,
 });
@@ -1097,7 +1126,11 @@ export default function LifeOS() {
   }, [cloudUserId]);
   useEffect(() => {
     if (!cloudUserId || !tasksHydrated) return;
-    syncDataToFirebase('tasks', tasks);
+    const snapshot = tasks;
+    const timer = window.setTimeout(() => {
+      syncDataToFirebase('tasks', snapshot);
+    }, 250);
+    return () => window.clearTimeout(timer);
   }, [cloudUserId, tasks, tasksHydrated]);
   useEffect(() => {
     const activeTasks = tasks.filter(task => !task.done && !task.canceled);
@@ -1363,7 +1396,8 @@ export default function LifeOS() {
   useEffect(() => {
     if (!cloudUserId || !tasksHydrated) return;
     listenToFirebaseChanges('tasks', (data) => {
-      if (Array.isArray(data)) setTasks(data.map(task => normalizeTask(task)));
+      const list = asTaskList(data);
+      if (list) setTasks(prev => mergeTasksFocus(prev, list.map(task => normalizeTask(task as Task))));
     });
     return () => stopListeningToFirebaseChanges('tasks');
   }, [cloudUserId, tasksHydrated]);
@@ -1760,10 +1794,17 @@ export default function LifeOS() {
     setTasks(items => items.map(task => task.id === id ? { ...task, checklistProgress: progress } : task));
   }, []);
   const updateFocusSession = useCallback((id: number, session: FocusSessionUpdate) => {
+    const stamped = new Date().toISOString();
     setTasks(items => items.map(task => {
       if (task.id !== id) return task;
+      // Heartbeats must never un-pause a session the phone just saved.
+      if (session.checkpoint && !task.focusSessionRunning) return task;
       const nextFocusMinutes = Math.max(5, Math.min(240, session.focusMinutes ?? task.focusMinutes));
       const remainingSeconds = Math.max(0, Math.min(nextFocusMinutes * 60, Math.round(session.remainingSeconds)));
+      if (session.checkpoint) {
+        if (task.focusRemainingSeconds === remainingSeconds) return task;
+        return { ...task, focusRemainingSeconds: remainingSeconds, focusUpdatedAt: stamped };
+      }
       if (
         task.focusRemainingSeconds === remainingSeconds
         && task.focusMinutes === nextFocusMinutes
@@ -1778,6 +1819,7 @@ export default function LifeOS() {
         focusSessionStarted: session.hasStarted,
         focusSessionRunning: session.isRunning,
         focusHalfwayPrompted: session.halfwayPrompted,
+        focusUpdatedAt: stamped,
       };
     }));
   }, []);
@@ -4265,8 +4307,8 @@ function FloatingFocusDock({ task, onResume, onUpdateSession, onEnd }: { task: T
       onUpdateSession({ remainingSeconds: 0, hasStarted: true, isRunning: false, halfwayPrompted: Boolean(task.focusHalfwayPrompted) });
       return;
     }
-    if (running && seconds > 0 && seconds % 15 === 0) onUpdateSession({ remainingSeconds: seconds, hasStarted: true, isRunning: true, halfwayPrompted: Boolean(task.focusHalfwayPrompted) });
-  }, [onUpdateSession, running, seconds, task.focusHalfwayPrompted]);
+    if (running && task.focusSessionRunning && seconds > 0 && seconds % 15 === 0) onUpdateSession({ remainingSeconds: seconds, hasStarted: true, isRunning: true, halfwayPrompted: Boolean(task.focusHalfwayPrompted), checkpoint: true });
+  }, [onUpdateSession, running, seconds, task.focusHalfwayPrompted, task.focusSessionRunning]);
   const toggleRunning = () => {
     const next = !running;
     setRunning(next);
@@ -4313,10 +4355,25 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
   const hasStartedRef = useRef(hasStarted);
   const runningRef = useRef(running);
   const halfwayPromptedRef = useRef(halfwayPrompted);
+  const remoteRunningRef = useRef(Boolean(task.focusSessionRunning));
+  remoteRunningRef.current = Boolean(task.focusSessionRunning);
   useEffect(() => { secondsRef.current = seconds; }, [seconds]);
   useEffect(() => { hasStartedRef.current = hasStarted; }, [hasStarted]);
   useEffect(() => { runningRef.current = running; }, [running]);
   useEffect(() => { halfwayPromptedRef.current = halfwayPrompted; }, [halfwayPrompted]);
+  useEffect(() => {
+    const nextRunning = Boolean(task.focusSessionRunning);
+    const nextSeconds = getTaskFocusSeconds(task);
+    const nextStarted = Boolean(task.focusSessionStarted) || nextSeconds < totalSeconds;
+    setRunning(nextRunning);
+    runningRef.current = nextRunning;
+    setSeconds(nextSeconds);
+    secondsRef.current = nextSeconds;
+    setHasStarted(nextStarted);
+    hasStartedRef.current = nextStarted;
+    setHalfwayPrompted(Boolean(task.focusHalfwayPrompted));
+    if (nextRunning) setBreakStage("hidden");
+  }, [task.focusHalfwayPrompted, task.focusRemainingSeconds, task.focusSessionRunning, task.focusSessionStarted, task.focusUpdatedAt, task.id, totalSeconds]);
   const saveFocusSession = useCallback((remainingSeconds = seconds, started = hasStarted, prompted = halfwayPrompted, isRunning = running) => {
     onUpdateFocusSession(task.id, { remainingSeconds, hasStarted: started, isRunning, halfwayPrompted: prompted });
   }, [hasStarted, halfwayPrompted, onUpdateFocusSession, running, seconds, task.id]);
@@ -4324,7 +4381,7 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
     onUpdateFocusSession(task.id, {
       remainingSeconds: secondsRef.current,
       hasStarted: hasStartedRef.current,
-      isRunning: runningRef.current,
+      isRunning: runningRef.current && remoteRunningRef.current,
       halfwayPrompted: halfwayPromptedRef.current,
     });
   }, [onUpdateFocusSession, task.id]);
@@ -4334,9 +4391,9 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
     return () => window.clearInterval(id);
   }, [running]);
   useEffect(() => {
-    if (!running || seconds <= 0 || seconds % 15 !== 0) return;
-    saveFocusSession(seconds, true, halfwayPrompted, true);
-  }, [halfwayPrompted, running, saveFocusSession, seconds]);
+    if (!running || !task.focusSessionRunning || seconds <= 0 || seconds % 15 !== 0) return;
+    onUpdateFocusSession(task.id, { remainingSeconds: seconds, hasStarted: true, isRunning: true, halfwayPrompted, checkpoint: true });
+  }, [halfwayPrompted, onUpdateFocusSession, running, seconds, task.focusSessionRunning, task.id]);
   useEffect(() => {
     if (seconds !== 0 || !hasStarted) return;
     setRunning(false);
@@ -4440,7 +4497,11 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
   }, [hasStarted, task.title, time]);
   const completedSteps = checks.filter(Boolean).length;
   const totalSteps = Math.max(1, checklist.length);
-  const resumeFocus = () => { setBreakStage("hidden"); setRunning(true); };
+  const resumeFocus = () => {
+    setBreakStage("hidden");
+    setRunning(true);
+    saveFocusSession(secondsRef.current, true, halfwayPromptedRef.current, true);
+  };
   const toggleTimer = () => {
     if (running) {
       setRunning(false);

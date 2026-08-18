@@ -18,7 +18,7 @@ export function DashboardModule({
   const { theme } = useLifeOS();
   return (
     <View style={styles.module}>
-      <View style={[styles.band, { backgroundColor: theme.highlight }]}>
+      <View style={styles.band}>
         <Feather name={icon} size={16} color={theme.text} />
         <Text style={[styles.bandTitle, { color: theme.text }]}>{title}</Text>
         {action && onAction ? (
@@ -124,7 +124,7 @@ export function ModuleEmpty({ text }: { text: string }) {
 
 const styles = StyleSheet.create({
   module: { gap: 8 },
-  band: { minHeight: 50, borderRadius: 8, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 9 },
+  band: { minHeight: 44, paddingHorizontal: 2, flexDirection: "row", alignItems: "center", gap: 9 },
   bandTitle: { fontSize: 16, fontWeight: "800", flex: 1 },
   bandAction: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 2, marginRight: -6, paddingHorizontal: 6 },
   bandActionText: { fontSize: 12, fontWeight: "800" },

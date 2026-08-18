@@ -70,7 +70,14 @@
       "@react-native-community/datetimepicker",
       "./plugins/withLifeOSWidgets.js",
       "./plugins/withLifeOSSiri.js",
-      "./plugins/withLifeOSSceneLifecycle.js"
+      "./plugins/withLifeOSSceneLifecycle.js",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "LifeOS uses the microphone so you can dump thoughts and tasks by speaking.",
+          "speechRecognitionPermission": "LifeOS converts what you say into text for MindDump and new tasks."
+        }
+      ]
     ],
     "runtimeVersion": {
       "policy": "appVersion"

@@ -11,11 +11,13 @@ export function TaskRow({
   onPress,
   onToggleDone,
   onDelete,
+  onRestore,
 }: {
   task: Task;
   onPress: () => void;
   onToggleDone: () => void;
   onDelete?: () => void;
+  onRestore?: () => void;
 }) {
   const { theme } = useLifeOS();
   const open = taskIsOpen(task);
@@ -63,7 +65,20 @@ export function TaskRow({
         </View>
       </View>
       <View style={[styles.priorityDot, { backgroundColor: priorityColor }]} />
-      <Feather name="chevron-right" size={16} color={theme.muted} />
+      {onRestore ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Restore ${task.title}`}
+          onPress={onRestore}
+          hitSlop={6}
+          style={({ pressed }) => [styles.restore, { borderColor: theme.border, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Feather name="rotate-ccw" size={13} color={theme.accent} />
+          <Text style={[styles.restoreLabel, { color: theme.accent }]}>Restore</Text>
+        </Pressable>
+      ) : (
+        <Feather name="chevron-right" size={16} color={theme.muted} />
+      )}
     </Pressable>
   );
 
@@ -85,4 +100,14 @@ const styles = StyleSheet.create({
   metaChip: { fontSize: 12 },
   metaDot: { fontSize: 12 },
   priorityDot: { width: 8, height: 8, borderRadius: 4 },
+  restore: {
+    minHeight: 36,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  restoreLabel: { fontSize: 12, fontWeight: "800" },
 });

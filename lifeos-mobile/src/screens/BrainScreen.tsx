@@ -58,12 +58,12 @@ export function BrainScreen() {
     <Page>
       <View style={styles.header}>
         <View style={styles.grow}>
-          <Eyebrow>NOTHING GETS LOST</Eyebrow>
-          <Title>Brain</Title>
+          <Eyebrow>DUMP IT. SORT LATER.</Eyebrow>
+          <Title>MindDump</Title>
           <Subtitle>
             {workspace.brain.length
-              ? `${workspace.brain.length} captured thought${workspace.brain.length === 1 ? "" : "s"}`
-              : "Your inbox is empty."}
+              ? `${workspace.brain.length} dumped thought${workspace.brain.length === 1 ? "" : "s"}`
+              : "Blab it, type it, get it out of your head."}
           </Subtitle>
         </View>
         <Pressable onPress={() => setCaptureOpen(true)} style={[styles.addButton, { backgroundColor: theme.text }]}>
@@ -105,7 +105,7 @@ export function BrainScreen() {
           </SwipeDeleteRow>
         )}
         ListEmptyComponent={
-          <Empty title="Inbox zero is not the goal." body="Capture the thought. Sort it out later, on your terms." />
+          <Empty title="Nothing dumped yet." body="Tap + and blab — or type. Get it out of your head first." />
         }
       />
       <QuickCaptureModal visible={captureOpen} onClose={() => setCaptureOpen(false)} />

@@ -1,11 +1,12 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useMemo, useState } from "react";
-import { Alert, FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Empty, Eyebrow, Page, SegmentedControl, Subtitle, Title } from "../components/UI";
 import { TaskRow } from "../components/TaskRow";
+import { TaskCaptureModal } from "../components/TaskCaptureModal";
 import { useLifeOS } from "../lib/LifeOSContext";
-import { PRIORITY_RANK, dueRank, taskIsOpen } from "../lib/helpers";
+import { PRIORITY_RANK, dueRank, taskIsOpen, taskIsRecentlyDone } from "../lib/helpers";
 import type { Task } from "../types";
 
 type Filter = "Open" | "Done";
@@ -22,10 +23,14 @@ export function TasksScreen() {
   const navigation = useNavigation<any>();
   const [filter, setFilter] = useState<Filter>("Open");
   const [sort, setSort] = useState<Sort>("Due");
+  const [captureOpen, setCaptureOpen] = useState(false);
 
   const tasks = useMemo(() => {
-    // Archived (done/canceled) tasks are browsed on web Settings → Archives only.
-    if (filter === "Done") return [];
+    if (filter === "Done") {
+      return workspace.tasks
+        .filter((task) => taskIsRecentlyDone(task, 10))
+        .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
+    }
     const sorted = workspace.tasks.filter(taskIsOpen);
     if (sort === "Due") sorted.sort((a, b) => dueRank(a.due) - dueRank(b.due));
     if (sort === "Priority") sorted.sort((a, b) => PRIORITY_RANK[a.priority ?? "Medium"] - PRIORITY_RANK[b.priority ?? "Medium"]);
@@ -50,7 +55,17 @@ export function TasksScreen() {
     );
   };
 
-  const createTask = (patch: Partial<Task> & { title: string }) => {
+  const restoreTask = (id: number) => {
+    updateTasks(
+      workspace.tasks.map((task) =>
+        task.id === id
+          ? { ...task, done: false, canceled: false, status: "Not started", completedAt: undefined }
+          : task
+      )
+    );
+  };
+
+  const createTask = (patch: Partial<Task> & { title: string }, openEditor = false) => {
     const id = Date.now();
     const task: Task = {
       id,
@@ -65,45 +80,7 @@ export function TasksScreen() {
       title: patch.title.trim() || "New task",
     };
     void updateTasks([...workspace.tasks, task]);
-    navigation.navigate("TaskDetail", { taskId: id });
-  };
-
-  /** Web `/t` — full task, open editor to fill details. */
-  const createDetailedTask = () => {
-    createTask({ title: "New task" });
-  };
-
-  /** Web `/tm` — low-energy errand. */
-  const createMinorTask = () => {
-    const finish = (value?: string) => {
-      createTask({
-        title: (value || "").trim() || "New minor task",
-        priority: "Low",
-        energy: "Low",
-        focusMinutes: 5,
-      });
-    };
-    if (Platform.OS === "ios" && typeof Alert.prompt === "function") {
-      Alert.prompt(
-        "Minor task",
-        "Low-energy errand — water, charge, quick chore",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Add", onPress: finish },
-        ],
-        "plain-text",
-      );
-      return;
-    }
-    finish();
-  };
-
-  const openNewTaskMenu = () => {
-    Alert.alert("New task", "Minor is a quick low-energy errand. Detailed opens the full editor.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Minor task", onPress: createMinorTask },
-      { text: "Detailed task", onPress: createDetailedTask },
-    ]);
+    if (openEditor) navigation.navigate("TaskDetail", { taskId: id });
   };
 
   return (
@@ -117,7 +94,7 @@ export function TasksScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="New task"
-          onPress={openNewTaskMenu}
+          onPress={() => setCaptureOpen(true)}
           style={[styles.addButton, { backgroundColor: theme.text }]}
         >
           <Feather name="plus" size={18} color={theme.surface} />
@@ -158,17 +135,30 @@ export function TasksScreen() {
             task={item}
             onPress={() => navigation.navigate("TaskDetail", { taskId: item.id })}
             onToggleDone={() => toggleDone(item.id)}
+            onRestore={filter === "Done" ? () => restoreTask(item.id) : undefined}
             onDelete={() => updateTasks(workspace.tasks.filter((t) => t.id !== item.id))}
           />
         )}
         ListEmptyComponent={
           filter === "Done" ? (
             <Empty
-              title="Archived on the web"
-              body="Go to the web to see archived tasks — Settings → Archives in LifeOS."
+              title="Nothing finished in the last 10 days."
+              body="Completed tasks land here for ten days. Restore one if you need to follow up."
             />
           ) : (
             <Empty title="Nothing here." body="Tasks you create or capture will show up in this list." />
+          )
+        }
+      />
+      <TaskCaptureModal
+        visible={captureOpen}
+        onClose={() => setCaptureOpen(false)}
+        onCreate={(title, options) =>
+          createTask(
+            options?.minor
+              ? { title, priority: "Low", energy: "Low", focusMinutes: 5 }
+              : { title },
+            Boolean(options?.openEditor),
           )
         }
       />

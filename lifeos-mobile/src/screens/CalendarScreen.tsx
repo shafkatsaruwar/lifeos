@@ -171,15 +171,10 @@ export function CalendarScreen() {
   );
 
   const upcomingItems = useMemo(() => {
-    const horizon = new Date();
-    horizon.setDate(horizon.getDate() + 6);
-    const horizonKey = toDateKey(horizon);
-    const evItems = events
-      .filter((e) => {
-        const start = e.start.slice(0, 10);
-        const end = (e.end ?? e.start).slice(0, 10);
-        return end >= todayKey && start <= horizonKey;
-      })
+    return events
+      .filter((e) => (e.end ?? e.start).slice(0, 10) >= todayKey)
+      .sort((a, b) => a.start.localeCompare(b.start))
+      .slice(0, 7)
       .map((e) => {
         const cal = findCalendar(calendars, eventCalendarId(e));
         const series = e.repeat && e.repeat !== "never" ? ` · ${repeatLabel(e.repeat)}` : "";
@@ -192,11 +187,7 @@ export function CalendarScreen() {
           meta: `${formatEventRange(e)} · ${cal?.name || e.source || "LifeOS"}${series}`,
         };
       });
-    const taskItems = workspace.tasks
-      .filter((t) => !t.done && !t.canceled && t.due && /^\d{4}-\d{2}-\d{2}$/.test(t.due) && t.due >= todayKey && t.due <= horizonKey)
-      .map((t) => ({ id: String(t.id), kind: "task" as const, title: t.title, date: `${t.due}T${t.startTime || "09:00"}`, color: t.color || theme.accent, meta: `Task · due ${t.due === todayKey ? "today" : t.due} · ${t.focusMinutes ?? 30}m` }));
-    return [...evItems, ...taskItems].sort((a, b) => a.date.localeCompare(b.date));
-  }, [events, calendars, workspace.tasks, todayKey, theme.accent]);
+  }, [events, calendars, todayKey]);
 
   const readyToPlace = workspace.tasks
     .filter((t) => !t.done && !t.canceled && (!t.startTime || t.due !== selected))
@@ -444,12 +435,7 @@ export function CalendarScreen() {
         </View>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.calFilterRow}
-        style={styles.calFilterScroll}
-      >
+      <View style={styles.calFilterRow}>
         {calendars.map((cal) => {
           const on = cal.visible !== false;
           return (
@@ -471,7 +457,7 @@ export function CalendarScreen() {
             </Pressable>
           );
         })}
-      </ScrollView>
+      </View>
 
       <View style={styles.segmentWrap}>
         <SegmentedControl
@@ -491,12 +477,8 @@ export function CalendarScreen() {
             return (
               <Pressable
                 onPress={() => {
-                  if (item.kind === "event") {
-                    const event = events.find((e) => e.id === item.id);
-                    if (event) openComposer(event);
-                    return;
-                  }
-                  navigation.navigate("TasksTab", { screen: "TaskDetail", params: { taskId: item.id } });
+                  const event = events.find((e) => e.id === item.id);
+                  if (event) openComposer(event);
                 }}
                 style={[styles.upcomingRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
               >
@@ -506,14 +488,14 @@ export function CalendarScreen() {
                 </View>
                 <View style={[styles.eventDot, { backgroundColor: item.color }]} />
                 <View style={styles.grow}>
-                  <Text style={[styles.kindLabel, { color: theme.muted }]}>{item.kind === "event" ? "Calendar event" : "Task"}</Text>
+                  <Text style={[styles.kindLabel, { color: theme.muted }]}>Calendar event</Text>
                   <Text style={[styles.upcomingTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
                   <Text style={[styles.upcomingMeta, { color: theme.muted }]} numberOfLines={1}>{item.meta}</Text>
                 </View>
               </Pressable>
             );
           }}
-          ListEmptyComponent={<Empty title="Nothing upcoming yet." body="Tap + to schedule an event, or give a task a due date." />}
+          ListEmptyComponent={<Empty title="Nothing upcoming yet." body="Tap + to schedule an event." />}
         />
       ) : mode === "month" ? (
         <ScrollView contentContainerStyle={styles.list}>
@@ -950,16 +932,25 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, paddingTop: 8, gap: 12 },
   headerActions: { flexDirection: "row", gap: 8 },
   grow: { flex: 1 },
-  calFilterScroll: { maxHeight: 44, marginTop: 12 },
-  calFilterRow: { paddingHorizontal: 20, gap: 8, alignItems: "center" },
+  calFilterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 20,
+    paddingRight: 28,
+    marginTop: 12,
+    gap: 8,
+    alignItems: "center",
+  },
   calFilterChip: {
     flexDirection: "row",
     alignItems: "center",
+    flexShrink: 0,
     gap: 6,
     borderWidth: 1.5,
     borderRadius: 999,
     paddingHorizontal: 12,
-    minHeight: 34,
+    paddingVertical: 8,
+    minHeight: 36,
   },
   calFilterDot: { width: 8, height: 8, borderRadius: 4 },
   calPickRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4, marginBottom: 4 },

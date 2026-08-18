@@ -5,7 +5,7 @@ import {
   initializeAuth,
   type Auth,
 } from "firebase/auth";
-import { get, getDatabase, ref, remove, set } from "firebase/database";
+import { get, getDatabase, onValue, ref, remove, set, type Unsubscribe } from "firebase/database";
 import type { NotebookHub, NotebookPage, Workspace } from "../types";
 import { normalizeCalendars } from "./calendars";
 import { emptyNotebookHub } from "./notebooks";
@@ -182,6 +182,17 @@ export async function saveWorkspacePart<K extends keyof Workspace>(
 ) {
   const serializable = JSON.parse(JSON.stringify(value)) as Workspace[K];
   await set(ref(database, `users/${userId}/${key}`), serializable);
+}
+
+export function subscribeWorkspacePart<K extends keyof Workspace>(
+  userId: string,
+  key: K,
+  onData: (value: Workspace[K]) => void,
+): Unsubscribe {
+  return onValue(ref(database, `users/${userId}/${key}`), (snapshot) => {
+    if (!snapshot.exists()) return;
+    onData(snapshot.val() as Workspace[K]);
+  });
 }
 
 /** Per-page write so stroke autosave does not rewrite the whole library. */

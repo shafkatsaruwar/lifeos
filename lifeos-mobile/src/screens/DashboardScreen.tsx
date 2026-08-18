@@ -190,7 +190,7 @@ export function DashboardScreen() {
         <Card>
           <View style={styles.cardHead}>
             <View style={[styles.sectionIcon, { backgroundColor: "#31926A22" }]}><Feather name="cpu" size={13} color="#31926A" /></View>
-            <Text style={[styles.cardTitle, { color: theme.text }]}>Brain inbox</Text>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>MindDump</Text>
             <Pressable onPress={() => navigation.navigate("LibraryTab", { screen: "Brain" })} style={styles.grow}>
               <Text style={[styles.cardAction, { color: theme.accent, textAlign: "right" }]}>{workspace.brain.length} uncategorized →</Text>
             </Pressable>

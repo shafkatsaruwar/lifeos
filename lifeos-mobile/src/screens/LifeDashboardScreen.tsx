@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: { color: "#FFF", fontSize: 9, fontWeight: "800" },
-  quickRow: { flexGrow: 1, justifyContent: "flex-start", alignItems: "center", gap: 14, paddingRight: 8 },
+  quickRow: { flexGrow: 1, justifyContent: "center", alignItems: "center", gap: 14 },
   areaGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingVertical: 6 },
   areaCard: {
     width: "48.5%",

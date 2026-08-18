@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, AppState as RNAppState, StyleSheet, Text, useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { auth, deleteNotebookPageRemote, loadWorkspace, saveNotebookPage, saveWorkspacePart } from "./src/lib/firebase";
+import { auth, deleteNotebookPageRemote, loadWorkspace, saveNotebookPage, saveWorkspacePart, subscribeWorkspacePart } from "./src/lib/firebase";
 import { clearCachedPageInk } from "./src/lib/inkCache";
-import type { NotebookPage, Workspace } from "./src/types";
+import type { NotebookPage, Task, Workspace } from "./src/types";
 import { LifeOSContext, type AppState } from "./src/lib/LifeOSContext";
 import { migrateLegacyNotesToNotebooks } from "./src/lib/notebooks";
 import { applyOtaUpdateIfAvailable } from "./src/lib/ota";
@@ -152,6 +152,21 @@ export default function App() {
         }
       })
       .catch((error) => Alert.alert("Could not load LifeOS", error.message));
+  }, [user]);
+
+  // Focus pause/resume must land on the other device immediately — polling
+  // every 60s left the web timer running after an iPhone pause.
+  useEffect(() => {
+    if (!user) return;
+    return subscribeWorkspacePart(user.uid, "tasks", (value) => {
+      if (pendingWrites.current > 0) return;
+      const tasks: Task[] = Array.isArray(value)
+        ? value
+        : value && typeof value === "object"
+          ? Object.values(value as Record<string, Task>)
+          : [];
+      setWorkspace((current) => (current ? { ...current, tasks } : current));
+    });
   }, [user]);
 
   // Keep phone + web in step: refresh from Firebase every 60s while active,

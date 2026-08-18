@@ -1,0 +1,96 @@
+diff --git a/scripts/replace-rncore-version.js b/scripts/replace-rncore-version.js
+--- a/scripts/replace-rncore-version.js
++++ b/scripts/replace-rncore-version.js
+@@ -33,7 +33,10 @@
+ 
+   if (fileExists) {
+     console.log(`Found ${LAST_BUILD_FILENAME} file`);
+-    const oldConfiguration = fs.readFileSync(LAST_BUILD_FILENAME).toString();
++    const oldConfiguration = fs
++      .readFileSync(LAST_BUILD_FILENAME)
++      .toString()
++      .trim();
+     if (oldConfiguration === configuration) {
+       console.log(
+         'Same config of the previous build. No need to replace React-Core-prebuilt',
+@@ -42,14 +45,8 @@
+     }
+   }
+ 
+-  // Assumption: if there is no stored last build, we assume that it was build for debug.
+-  if (!fileExists && configuration === 'Debug') {
+-    console.log(
+-      'No previous build detected, but Debug Configuration. No need to replace React-Core-prebuilt',
+-    );
+-    return false;
+-  }
+-
++  // pod install extracts the Release core by default. A missing marker must
++  // not skip a Debug swap — otherwise Debug apps link against Release RNCore.
+   return true;
+ }
+ 
+diff --git a/sdks/hermes-engine/utils/replace_hermes_version.js b/sdks/hermes-engine/utils/replace_hermes_version.js
+--- a/sdks/hermes-engine/utils/replace_hermes_version.js
++++ b/sdks/hermes-engine/utils/replace_hermes_version.js
+@@ -33,7 +33,10 @@
+ 
+   if (fileExists) {
+     console.log(`Found ${LAST_BUILD_FILENAME} file`);
+-    const oldConfiguration = fs.readFileSync(LAST_BUILD_FILENAME).toString();
++    const oldConfiguration = fs
++      .readFileSync(LAST_BUILD_FILENAME)
++      .toString()
++      .trim();
+     if (oldConfiguration === configuration) {
+       console.log(
+         'Same config of the previous build. No need to replace Hermes engine',
+@@ -42,14 +45,8 @@
+     }
+   }
+ 
+-  // Assumption: if there is no stored last build, we assume that it was build for debug.
+-  if (!fileExists && configuration === 'Debug') {
+-    console.log(
+-      'No previous build detected, but Debug Configuration. No need to replace Hermes engine',
+-    );
+-    return false;
+-  }
+-
++  // pod install extracts the Release engine by default. A missing marker must
++  // not skip a Debug swap.
+   return true;
+ }
+ 
+diff --git a/third-party-podspecs/replace_dependencies_version.js b/third-party-podspecs/replace_dependencies_version.js
+--- a/third-party-podspecs/replace_dependencies_version.js
++++ b/third-party-podspecs/replace_dependencies_version.js
+@@ -33,7 +33,10 @@
+ 
+   if (fileExists) {
+     console.log(`Found ${LAST_BUILD_FILENAME} file`);
+-    const oldConfiguration = fs.readFileSync(LAST_BUILD_FILENAME).toString();
++    const oldConfiguration = fs
++      .readFileSync(LAST_BUILD_FILENAME)
++      .toString()
++      .trim();
+     if (oldConfiguration === configuration) {
+       console.log(
+         'Same config of the previous build. No need to replace RNDeps',
+@@ -42,14 +45,8 @@
+     }
+   }
+ 
+-  // Assumption: if there is no stored last build, we assume that it was build for debug.
+-  if (!fileExists && configuration === 'Debug') {
+-    console.log(
+-      'No previous build detected, but Debug Configuration. No need to replace RNDeps',
+-    );
+-    return false;
+-  }
+-
++  // pod install extracts the Release deps by default. A missing marker must
++  // not skip a Debug swap.
+   return true;
+ }
+ 

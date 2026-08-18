@@ -41,7 +41,7 @@ const MOVES: {
   desc: string;
   icon: keyof typeof Feather.glyphMap;
 }[] = [
-  { id: "thought", label: "Capture a thought", desc: "Drop something into Brain", icon: "cloud" },
+  { id: "thought", label: "Capture a thought", desc: "Drop something into MindDump", icon: "cloud" },
   { id: "priority", label: "Add a priority", desc: "Create your first task", icon: "check-circle" },
   { id: "note", label: "Start a note", desc: "Open a blank page to write", icon: "book-open" },
   { id: "explore", label: "Explore on my own", desc: "Jump straight into Now", icon: "compass" },
