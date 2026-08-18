@@ -1,6 +1,7 @@
-diff --git a/scripts/replace-rncore-version.js b/scripts/replace-rncore-version.js
---- a/scripts/replace-rncore-version.js
-+++ b/scripts/replace-rncore-version.js
+diff --git a/node_modules/react-native/scripts/replace-rncore-version.js b/node_modules/react-native/scripts/replace-rncore-version.js
+index 1111111..2222222 100644
+--- a/node_modules/react-native/scripts/replace-rncore-version.js
++++ b/node_modules/react-native/scripts/replace-rncore-version.js
 @@ -33,7 +33,10 @@
  
    if (fileExists) {
@@ -26,13 +27,14 @@ diff --git a/scripts/replace-rncore-version.js b/scripts/replace-rncore-version.
 -  }
 -
 +  // pod install extracts the Release core by default. A missing marker must
-+  // not skip a Debug swap — otherwise Debug apps link against Release RNCore.
++  // not skip a Debug swap; otherwise Debug apps link against Release RNCore.
    return true;
  }
  
-diff --git a/sdks/hermes-engine/utils/replace_hermes_version.js b/sdks/hermes-engine/utils/replace_hermes_version.js
---- a/sdks/hermes-engine/utils/replace_hermes_version.js
-+++ b/sdks/hermes-engine/utils/replace_hermes_version.js
+diff --git a/node_modules/react-native/sdks/hermes-engine/utils/replace_hermes_version.js b/node_modules/react-native/sdks/hermes-engine/utils/replace_hermes_version.js
+index 1111111..2222222 100644
+--- a/node_modules/react-native/sdks/hermes-engine/utils/replace_hermes_version.js
++++ b/node_modules/react-native/sdks/hermes-engine/utils/replace_hermes_version.js
 @@ -33,7 +33,10 @@
  
    if (fileExists) {
@@ -62,9 +64,10 @@ diff --git a/sdks/hermes-engine/utils/replace_hermes_version.js b/sdks/hermes-en
    return true;
  }
  
-diff --git a/third-party-podspecs/replace_dependencies_version.js b/third-party-podspecs/replace_dependencies_version.js
---- a/third-party-podspecs/replace_dependencies_version.js
-+++ b/third-party-podspecs/replace_dependencies_version.js
+diff --git a/node_modules/react-native/third-party-podspecs/replace_dependencies_version.js b/node_modules/react-native/third-party-podspecs/replace_dependencies_version.js
+index 1111111..2222222 100644
+--- a/node_modules/react-native/third-party-podspecs/replace_dependencies_version.js
++++ b/node_modules/react-native/third-party-podspecs/replace_dependencies_version.js
 @@ -33,7 +33,10 @@
  
    if (fileExists) {
