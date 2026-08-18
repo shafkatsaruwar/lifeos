@@ -79,15 +79,15 @@ function ensureWidgetSources(root) {
 
   if (!fs.existsSync(liveDir)) {
     console.log("[widgets] ios/LiveActivity missing — skip Swift inject");
-    return;
+    return false;
   }
   if (!fs.existsSync(source)) {
     console.error(`[widgets] missing widget source: ${source}`);
-    process.exit(1);
+    throw new Error(`missing widget source: ${source}`);
   }
   if (!fs.existsSync(hostPath)) {
     console.error(`[widgets] missing host file: ${hostPath}`);
-    process.exit(1);
+    throw new Error(`missing host file: ${hostPath}`);
   }
 
   let widgets = stripMainBundle(fs.readFileSync(source, "utf8"));
@@ -106,8 +106,7 @@ function ensureWidgetSources(root) {
     "LifeOSTodayWidget",
   ]) {
     if (!widgets.includes(`struct ${name}`)) {
-      console.error(`[widgets] missing ${name} in source`);
-      process.exit(1);
+      throw new Error(`[widgets] missing ${name} in source`);
     }
   }
 
@@ -125,6 +124,7 @@ function ensureWidgetSources(root) {
     "// Generated placeholder — home widgets live in LiveActivityWidget.swift\n",
   );
   console.log(`[widgets] neutralized ${orphanPath}`);
+  return true;
 }
 
 function removeHomeWidgetsFromPbxproj(root) {
@@ -143,29 +143,40 @@ function removeHomeWidgetsFromPbxproj(root) {
   }
 }
 
-const root = process.cwd();
-ensureEntitlements(path.join(root, "ios/LiveActivity/LiveActivity.entitlements"));
-ensureWidgetSources(root);
-removeHomeWidgetsFromPbxproj(root);
+function applyLifeOSWidgets(root) {
+  ensureEntitlements(path.join(root, "ios/LiveActivity/LiveActivity.entitlements"));
+  ensureWidgetSources(root);
+  removeHomeWidgetsFromPbxproj(root);
 
-const mainEnt = path.join(root, "ios/LifeOS/LifeOS.entitlements");
-if (fs.existsSync(mainEnt)) {
-  let xml = fs.readFileSync(mainEnt, "utf8");
-  if (!xml.includes(APP_GROUP)) {
-    if (xml.includes("<dict/>") || /<dict>\s*<\/dict>/.test(xml)) {
-      fs.writeFileSync(mainEnt, ENTITLEMENTS);
-      console.log(`[widgets] rewrote empty main entitlements → ${mainEnt}`);
-    } else if (xml.includes("</dict>")) {
-      xml = xml.replace(
-        "</dict>",
-        `    <key>com.apple.security.application-groups</key>
+  const mainEnt = path.join(root, "ios/LifeOS/LifeOS.entitlements");
+  if (fs.existsSync(mainEnt)) {
+    let xml = fs.readFileSync(mainEnt, "utf8");
+    if (!xml.includes(APP_GROUP)) {
+      if (xml.includes("<dict/>") || /<dict>\s*<\/dict>/.test(xml)) {
+        fs.writeFileSync(mainEnt, ENTITLEMENTS);
+        console.log(`[widgets] rewrote empty main entitlements → ${mainEnt}`);
+      } else if (xml.includes("</dict>")) {
+        xml = xml.replace(
+          "</dict>",
+          `    <key>com.apple.security.application-groups</key>
     <array>
       <string>${APP_GROUP}</string>
     </array>
   </dict>`,
-      );
-      fs.writeFileSync(mainEnt, xml);
-      console.log(`[widgets] injected App Group into ${mainEnt}`);
+        );
+        fs.writeFileSync(mainEnt, xml);
+        console.log(`[widgets] injected App Group into ${mainEnt}`);
+      }
     }
   }
+}
+
+module.exports = {
+  APP_GROUP,
+  applyLifeOSWidgets,
+  ensureWidgetSources,
+};
+
+if (require.main === module) {
+  applyLifeOSWidgets(process.cwd());
 }
