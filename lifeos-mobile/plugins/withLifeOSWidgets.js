@@ -3,7 +3,11 @@
  * (injected into LiveActivityWidget.swift so EAS always compiles it) and
  * ensures App Group entitlements exist on both targets.
  */
-const { createRunOncePlugin, withDangerousMod, withEntitlementsPlist } = require("@expo/config-plugins");
+const {
+  createRunOncePlugin,
+  withEntitlementsPlist,
+  withFinalizedMod,
+} = require("@expo/config-plugins");
 const { APP_GROUP, applyLifeOSWidgets } = require("../scripts/ensure-widget-app-group");
 
 function withLifeOSWidgets(config) {
@@ -15,7 +19,9 @@ function withLifeOSWidgets(config) {
     return cfg;
   });
 
-  config = withDangerousMod(config, [
+  // finalized runs after expo-live-activity's withXcodeProject copies ios-files.
+  // dangerous mods run first, so injecting there skips on a clean EAS prebuild.
+  config = withFinalizedMod(config, [
     "ios",
     async (cfg) => {
       applyLifeOSWidgets(cfg.modRequest.projectRoot);
@@ -26,4 +32,4 @@ function withLifeOSWidgets(config) {
   return config;
 }
 
-module.exports = createRunOncePlugin(withLifeOSWidgets, "withLifeOSWidgets", "1.1.0");
+module.exports = createRunOncePlugin(withLifeOSWidgets, "withLifeOSWidgets", "1.2.0");
