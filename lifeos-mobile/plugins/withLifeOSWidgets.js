@@ -10,7 +10,63 @@ const {
 } = require("@expo/config-plugins");
 const { APP_GROUP, applyLifeOSWidgets } = require("../scripts/ensure-widget-app-group");
 
+function withLiveActivityAppGroupConfig(config) {
+  const bundleIdentifier = `${config.ios?.bundleIdentifier}.LiveActivity`;
+  const extra = config.extra ?? {};
+  const eas = extra.eas ?? {};
+  const build = eas.build ?? {};
+  const experimental = build.experimental ?? {};
+  const iosExp = experimental.ios ?? {};
+  const appExtensions = [...(iosExp.appExtensions ?? [])];
+
+  const stamp = (ext) => {
+    ext.entitlements = {
+      ...(ext.entitlements ?? {}),
+      "com.apple.security.application-groups": [APP_GROUP],
+    };
+    return ext;
+  };
+
+  let found = false;
+  for (const ext of appExtensions) {
+    if (ext.targetName === "LiveActivity" || ext.bundleIdentifier === bundleIdentifier) {
+      stamp(ext);
+      found = true;
+    }
+  }
+  if (!found) {
+    appExtensions.push(
+      stamp({
+        targetName: "LiveActivity",
+        bundleIdentifier,
+      }),
+    );
+  }
+
+  config.extra = {
+    ...extra,
+    eas: {
+      ...eas,
+      build: {
+        ...build,
+        experimental: {
+          ...experimental,
+          ios: {
+            ...iosExp,
+            appExtensions,
+          },
+        },
+      },
+    },
+  };
+  return config;
+}
+
 function withLifeOSWidgets(config) {
+  // Runs after expo-live-activity. Stamp App Groups onto every LiveActivity
+  // appExtensions entry so EAS does not treat a duplicate as "turn App Groups off".
+  config = withLiveActivityAppGroupConfig(config);
+
   config = withEntitlementsPlist(config, (cfg) => {
     const groups = cfg.modResults["com.apple.security.application-groups"] || [];
     if (!groups.includes(APP_GROUP)) {
@@ -32,4 +88,4 @@ function withLifeOSWidgets(config) {
   return config;
 }
 
-module.exports = createRunOncePlugin(withLifeOSWidgets, "withLifeOSWidgets", "1.2.0");
+module.exports = createRunOncePlugin(withLifeOSWidgets, "withLifeOSWidgets", "1.3.0");
