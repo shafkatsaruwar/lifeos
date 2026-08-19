@@ -2,6 +2,7 @@
   "expo": {
     "name": "LifeOS",
     "slug": "lifeos-mobile",
+    "owner": "mohammedsaruwars-organization",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
