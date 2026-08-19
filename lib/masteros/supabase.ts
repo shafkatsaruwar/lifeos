@@ -26,6 +26,7 @@ export async function fetchMasterOSState(): Promise<MasterOSState> {
   throw new Error("Supabase is not connected yet. Use the local MasterOSProvider.");
 }
 
-export async function persistMasterOSState(_state: MasterOSState): Promise<void> {
+export async function persistMasterOSState(state: MasterOSState): Promise<void> {
+  void state;
   throw new Error("Supabase is not connected yet.");
 }

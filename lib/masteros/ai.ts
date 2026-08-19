@@ -18,14 +18,17 @@ export type AIQuestionDraft = {
   difficulty?: string;
 };
 
-export async function generateLessonPlan(_input: { skillIds: string[]; studentId: string }): Promise<AILessonDraft> {
+export async function generateLessonPlan(input: { skillIds: string[]; studentId: string }): Promise<AILessonDraft> {
+  void input;
   throw new Error("AI lesson generation is not enabled in v1.");
 }
 
-export async function generatePracticeQuestions(_input: { skillId: string; count: number }): Promise<AIQuestionDraft[]> {
+export async function generatePracticeQuestions(input: { skillId: string; count: number }): Promise<AIQuestionDraft[]> {
+  void input;
   throw new Error("AI question generation is not enabled in v1.");
 }
 
-export async function analyzeErrorPatterns(_studentId: string): Promise<{ insight: string }> {
+export async function analyzeErrorPatterns(studentId: string): Promise<{ insight: string }> {
+  void studentId;
   throw new Error("AI error analysis is not enabled in v1.");
 }
