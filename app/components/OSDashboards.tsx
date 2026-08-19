@@ -496,6 +496,7 @@ export function SchoolDashboard({ tasks, classes, notes, school, schoolView: con
       <QuickAction icon={ListTodo} label="School task" onClick={onNewAcademic} />
       <QuickAction icon={NotebookPen} label="Lecture note" onClick={onNewLecture} />
       <QuickAction icon={Database} label="New topic" onClick={() => onOpenCollection("topics", true)} />
+      <a className="os-quick-action" href="/masteros"><GraduationCap size={16} /> MasterOS</a>
     </div>
 
     {schoolView !== "dashboard" && (
