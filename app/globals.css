@@ -18,6 +18,8 @@ button,input,textarea { font:inherit; color:inherit; } button { cursor:pointer; 
 .nav-item { border:0; background:transparent; width:100%; height:38px; border-radius:8px; padding:0 10px; display:flex; align-items:center; gap:10px; color:var(--muted); font-size:13px; margin:1px 0; }
 .nav-item:hover { background:color-mix(in srgb,var(--ink) 4%, transparent); color:var(--ink); }.nav-item.active { background:var(--panel); color:var(--ink); box-shadow:0 1px 4px rgba(0,0,0,.05); font-weight:600; }
 .nav-item em { margin-left:auto; background:color-mix(in srgb,var(--ink) 7%, transparent); border-radius:10px; padding:1px 6px; font-style:normal; font-size:10px; }
+a.nav-item { text-decoration:none; cursor:pointer; }
+.nav-item .nav-external-icon { margin-left:auto; opacity:.45; flex-shrink:0; }
 .sidebar-bottom { margin-top:auto; }.profile { border:0; background:transparent; width:100%; border-top:1px solid var(--line); margin-top:7px; padding:15px 7px 2px; display:flex; align-items:center; gap:9px; text-align:left; }
 .avatar { width:29px; height:29px; background:linear-gradient(145deg,#4c5360,#191b20); color:white; border-radius:9px; display:grid; place-items:center; font-size:9px; font-weight:700; }
 .profile div:nth-child(2){flex:1}.profile strong,.profile small{display:block}.profile strong{font-size:11px}.profile small{font-size:9px;color:var(--muted);margin-top:2px}
