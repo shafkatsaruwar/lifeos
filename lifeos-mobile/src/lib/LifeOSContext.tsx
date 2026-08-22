@@ -4,6 +4,7 @@ import type {
   BrainItem,
   CalendarEvent,
   ClassRecord,
+  UserCalendar,
   LifeHubState,
   Note,
   NotebookHub,
@@ -13,6 +14,7 @@ import type {
   SettingsState,
   SchoolHubState,
   Task,
+  WorkHubState,
   Workspace,
 } from "../types";
 import type { Theme } from "./theme";
@@ -29,14 +31,20 @@ export type AppState = {
   updateSettings: (next: SettingsState) => Promise<void>;
   updateClasses: (next: ClassRecord[]) => Promise<void>;
   updateCalendar: (next: CalendarEvent[]) => Promise<void>;
+  updateCalendars: (next: UserCalendar[]) => Promise<void>;
   updateBrain: (next: BrainItem[]) => Promise<void>;
   updateResources: (next: Resource[]) => Promise<void>;
   updateLife: (next: LifeHubState) => Promise<void>;
   updateSchool: (next: SchoolHubState) => Promise<void>;
+  updateWork: (next: WorkHubState) => Promise<void>;
   updateNotebookHub: (next: NotebookHub) => Promise<void>;
   /** Optimistic local merge + single-page RTDB write */
   upsertNotebookPage: (page: NotebookPage) => Promise<void>;
   deleteNotebookPage: (pageId: string) => Promise<void>;
+  /** Local-only: Settings → Show intro again (survives Firebase silent sync). */
+  onboardingReplay: boolean;
+  startOnboardingReplay: () => void;
+  clearOnboardingReplay: () => void;
 };
 
 export const LifeOSContext = createContext<AppState | null>(null);

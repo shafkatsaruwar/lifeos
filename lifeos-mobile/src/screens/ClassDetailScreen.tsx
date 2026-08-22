@@ -5,6 +5,7 @@ import { Card, Empty, Page } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { PRIORITY_COLOR } from "../lib/theme";
 import { dueRank, formatDueDate, formatResourceSize } from "../lib/helpers";
+import { primaryPageForNotebook } from "../lib/notebooks";
 
 export function ClassDetailScreen() {
   const { theme, workspace } = useLifeOS();
@@ -22,12 +23,13 @@ export function ClassDetailScreen() {
   const classTasks = workspace.tasks.filter((t) => t.classId === cls.id);
   const active = classTasks.filter((t) => !t.done && !t.canceled).sort((a, b) => dueRank(a.due) - dueRank(b.due));
   const completed = classTasks.filter((t) => t.done || t.canceled);
-  const classNotes = workspace.notes.filter((n) => n.classId === cls.id);
+  const textNotes = workspace.notes.filter((n) => n.classId === cls.id);
+  const pageNotes = workspace.notebookHub.notebooks.filter((n) => n.context?.classId === cls.id);
   const classResources = workspace.resources.filter((r) => r.classId === cls.id);
   const color = cls.color || theme.accent;
 
   return (
-    <Page edges={["bottom"]}>
+    <Page edges={["top", "bottom"]}>
       <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
         <Feather name="chevron-left" size={22} color={theme.text} />
         <Text style={{ color: theme.text, fontWeight: "700" }}>Courses</Text>
@@ -87,36 +89,59 @@ export function ClassDetailScreen() {
           </>
         ) : null}
 
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Notebooks</Text>
-        {workspace.notebookHub.notebooks.filter((n) => n.context?.classId === cls.id).length ? (
-          workspace.notebookHub.notebooks
-            .filter((n) => n.context?.classId === cls.id)
-            .map((nb) => (
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>Notes</Text>
+        {pageNotes.length || textNotes.length ? (
+          <>
+            {pageNotes.map((nb) => (
               <Pressable
                 key={nb.id}
-                onPress={() => navigation.navigate("LibraryTab", { screen: "NotebookDetail", params: { notebookId: nb.id } })}
+                onPress={() => {
+                  const page = primaryPageForNotebook(workspace.notebookPages, nb.id);
+                  if (page) {
+                    navigation.navigate("LibraryTab", {
+                      screen: "PageCanvas",
+                      params: { notebookId: nb.id, pageId: page.id },
+                    });
+                  } else {
+                    navigation.navigate("LibraryTab", { screen: "NotebookDetail", params: { notebookId: nb.id } });
+                  }
+                }}
                 style={[styles.simpleRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
               >
-                <Feather name="book" size={15} color={theme.accent} />
+                <Feather name="edit-3" size={15} color={theme.accent} />
                 <Text style={{ color: theme.text, fontWeight: "700", flex: 1 }} numberOfLines={1}>{nb.name}</Text>
                 <Feather name="chevron-right" size={16} color={theme.muted} />
               </Pressable>
-            ))
+            ))}
+            {textNotes.map((note) => (
+              <Pressable
+                key={note.id}
+                onPress={() => {
+                  const nb = workspace.notebookHub.notebooks.find((n) => n.context?.legacyNoteId === note.id);
+                  const page = nb
+                    ? Object.values(workspace.notebookPages).find((p) => p.notebookId === nb.id)
+                    : undefined;
+                  if (nb && page) {
+                    navigation.navigate("LibraryTab", {
+                      screen: "PageCanvas",
+                      params: { notebookId: nb.id, pageId: page.id },
+                    });
+                  } else {
+                    navigation.navigate("LibraryTab", { screen: "NotebooksList" });
+                  }
+                }}
+                style={[styles.simpleRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              >
+                <Feather name="file-text" size={15} color={theme.accent} />
+                <Text style={{ color: theme.text, fontWeight: "700", flex: 1 }} numberOfLines={1}>
+                  {note.title || "Untitled note"}
+                </Text>
+                <Text style={{ color: theme.muted, fontSize: 11 }}>{new Date(note.updatedAt).toLocaleDateString()}</Text>
+              </Pressable>
+            ))}
+          </>
         ) : (
-          <Card><Empty title="No class notebooks." body="Create one in Library → Notebooks and link it to this class." /></Card>
-        )}
-
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Class notes</Text>
-        {classNotes.length ? (
-          classNotes.map((note) => (
-            <Pressable key={note.id} onPress={() => navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } })} style={[styles.simpleRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Feather name="file-text" size={15} color={theme.accent} />
-              <Text style={{ color: theme.text, fontWeight: "700", flex: 1 }} numberOfLines={1}>{note.title || "Untitled note"}</Text>
-              <Text style={{ color: theme.muted, fontSize: 11 }}>{new Date(note.updatedAt).toLocaleDateString()}</Text>
-            </Pressable>
-          ))
-        ) : (
-          <Card><Empty title="No notes yet." body="Start a class note from the Notes tab." /></Card>
+          <Card><Empty title="No notes yet." body="Create one in Library → Notes and link this class." /></Card>
         )}
 
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Class resources</Text>

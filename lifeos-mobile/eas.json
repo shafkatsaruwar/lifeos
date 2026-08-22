@@ -32,12 +32,23 @@
     "preview": {
       "extends": "base",
       "distribution": "internal",
-      "config": "ios-ensure-expo.yml"
+      "config": "ios-ensure-expo.yml",
+      "channel": "preview",
+      "environment": "preview"
     },
     "production": {
       "extends": "base",
       "autoIncrement": true,
-      "config": "ios-ensure-expo.yml"
+      "config": "ios-ensure-expo.yml",
+      "channel": "production",
+      "environment": "production"
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6799313778"
+      }
     }
   }
 }

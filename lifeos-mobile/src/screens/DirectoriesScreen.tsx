@@ -1,6 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { Empty, Page } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { taskIsOpen } from "../lib/helpers";
@@ -27,10 +27,27 @@ export function ProjectsDirectoryScreen() {
   const { theme, workspace, updateProjects } = useLifeOS();
   const navigation = useNavigation<any>();
 
-  const add = async () => {
-    const name = `New project ${workspace.projects.length + 1}`;
-    await updateProjects([...workspace.projects, { name, color: theme.accent, kind: "finishable" }]);
-    navigation.navigate("ProjectDetail", { projectName: name });
+  const add = () => {
+    Alert.prompt(
+      "New project",
+      "Give this project a name",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Create",
+          onPress: async (value?: string) => {
+            const name = (value || "").trim() || `New project ${workspace.projects.length + 1}`;
+            if (workspace.projects.some((p) => p.name === name)) {
+              Alert.alert("Name taken", "Another project already uses that name.");
+              return;
+            }
+            await updateProjects([...workspace.projects, { name, color: theme.accent, kind: "finishable" }]);
+            navigation.navigate("ProjectDetail", { projectName: name });
+          },
+        },
+      ],
+      "plain-text",
+    );
   };
 
   return (

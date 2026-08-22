@@ -2,6 +2,7 @@
   "expo": {
     "name": "LifeOS",
     "slug": "lifeos-mobile",
+    "owner": "mohammedsaruwars-organization",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -11,18 +12,68 @@
       "supportsTablet": true,
       "requireFullScreen": false,
       "bundleIdentifier": "com.shafkatsaruwar.lifeos",
+      "buildNumber": "14",
+      "usesAppleSignIn": true,
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.shafkatsaruwar.lifeos"
+        ]
+      },
       "infoPlist": {
+        "NSSupportsLiveActivities": true,
+        "NSSiriUsageDescription": "LifeOS uses Siri so you can add tasks with your voice.",
+        "UIApplicationSceneManifest": {
+          "UIApplicationSupportsMultipleScenes": false,
+          "UISceneConfigurations": {
+            "UIWindowSceneSessionRoleApplication": [
+              {
+                "UISceneConfigurationName": "Default Configuration",
+                "UISceneDelegateClassName": "$(PRODUCT_MODULE_NAME).SceneDelegate"
+              }
+            ]
+          }
+        },
         "UISupportedInterfaceOrientations~ipad": [
           "UIInterfaceOrientationPortrait",
           "UIInterfaceOrientationPortraitUpsideDown",
           "UIInterfaceOrientationLandscapeLeft",
           "UIInterfaceOrientationLandscapeRight"
+        ],
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "iCalendar",
+            "LSHandlerRank": "Alternate",
+            "CFBundleTypeRole": "Viewer",
+            "LSItemContentTypes": [
+              "com.apple.ical.ics",
+              "public.calendar-event"
+            ]
+          }
+        ],
+        "UTImportedTypeDeclarations": [
+          {
+            "UTTypeIdentifier": "com.apple.ical.ics",
+            "UTTypeDescription": "iCalendar file",
+            "UTTypeConformsTo": [
+              "public.data",
+              "public.text"
+            ],
+            "UTTypeTagSpecification": {
+              "public.filename-extension": [
+                "ics"
+              ],
+              "public.mime-type": [
+                "text/calendar"
+              ]
+            }
+          }
         ]
       }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#000000",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -41,7 +92,53 @@
         {
           "photosPermission": "Allow LifeOS to place photos on notebook pages."
         }
+      ],
+      "expo-live-activity",
+      "expo-notifications",
+      "expo-updates",
+      "expo-apple-authentication",
+      "@react-native-community/datetimepicker",
+      "./plugins/withLifeOSWidgets.js",
+      "./plugins/withLifeOSSiri.js",
+      "./plugins/withLifeOSSceneLifecycle.js",
+      "@bacons/apple-targets",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "LifeOS uses the microphone so you can dump thoughts, capture day memories, and dictate tasks.",
+          "speechRecognitionPermission": "LifeOS converts what you say into text for MindDump, day memories, and new tasks."
+        }
       ]
-    ]
+    ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6021a343-7ac2-421d-a247-35279744602d",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "extra": {
+      "eas": {
+        "projectId": "6021a343-7ac2-421d-a247-35279744602d",
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "LiveActivity",
+                  "bundleIdentifier": "com.shafkatsaruwar.lifeos.LiveActivity",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.shafkatsaruwar.lifeos"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
   }
 }

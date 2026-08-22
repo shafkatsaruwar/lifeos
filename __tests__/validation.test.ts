@@ -158,5 +158,19 @@ describe('Data Validation', () => {
       const result = validateCalendarEvents(events);
       expect(result.success).toBe(false);
     });
+
+    it('accepts Synapse source', () => {
+      const events = [
+        {
+          id: 'synapse-med-1-2026-07-10-0',
+          title: 'Hydrocortisone',
+          start: '2026-07-10T08:00',
+          source: 'Synapse',
+          color: '#4b8bdc',
+        },
+      ];
+      const result = validateCalendarEvents(events);
+      expect(result.success).toBe(true);
+    });
   });
 });

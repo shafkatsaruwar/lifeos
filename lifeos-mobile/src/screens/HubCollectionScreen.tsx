@@ -15,13 +15,22 @@ import {
 import { Empty, Page, SegmentedControl } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { toDateKey, uid } from "../lib/helpers";
-import type { HubRecord, LifeHubState, SchoolHubState } from "../types";
+import {
+  bumpHabit,
+  defaultTargetForKind,
+  defaultUnitForKind,
+  habitKind,
+  habitProgressLabel,
+  isHabitDone,
+  toggleHabitCheck,
+} from "../lib/habits";
+import type { HabitKind, HabitSchedule, HubRecord, LifeHubState, SchoolHubState } from "../types";
 
 type LifeKey = keyof LifeHubState;
 type SchoolKey = Exclude<keyof SchoolHubState, "profile">;
 
 const CONFIG: Record<string, { title: string; subtitle: string; icon: keyof typeof Feather.glyphMap }> = {
-  habits: { title: "Habits", subtitle: "Small actions worth repeating.", icon: "check-circle" },
+  habits: { title: "Habits", subtitle: "Checks, counts, time, and scales — tap + to log.", icon: "check-circle" },
   recipes: { title: "Recipes", subtitle: "Meals you want to make again.", icon: "coffee" },
   food: { title: "Food storage", subtitle: "What is on hand and what needs restocking.", icon: "archive" },
   exercises: { title: "Exercises", subtitle: "A reusable movement library.", icon: "activity" },
@@ -54,6 +63,10 @@ export function HubCollectionScreen() {
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [url, setUrl] = useState("");
+  const [habitKindChoice, setHabitKindChoice] = useState<HabitKind>("check");
+  const [habitScheduleChoice, setHabitScheduleChoice] = useState<HabitSchedule>("daily");
+  const [habitTargetText, setHabitTargetText] = useState("8");
+  const [habitUnitText, setHabitUnitText] = useState("cups");
   const [category, setCategory] = useState(
     collection === "media" ? "Reading" : collection === "goals" ? "This week" : "",
   );
@@ -69,11 +82,23 @@ export function HubCollectionScreen() {
     setTitle("");
     setSubtitle("");
     setUrl("");
+    setHabitKindChoice("check");
+    setHabitScheduleChoice("daily");
+    setHabitTargetText("8");
+    setHabitUnitText("cups");
     setAdding(false);
+  };
+
+  const onHabitKindChange = (next: HabitKind) => {
+    setHabitKindChoice(next);
+    setHabitTargetText(String(defaultTargetForKind(next)));
+    setHabitUnitText(defaultUnitForKind(next) ?? "");
   };
 
   const addRecord = async () => {
     if (!title.trim()) return;
+    const isHabit = collection === "habits";
+    const targetNum = Math.max(1, Number(habitTargetText) || defaultTargetForKind(habitKindChoice));
     const record: HubRecord = {
       id: uid(),
       title: title.trim(),
@@ -81,18 +106,30 @@ export function HubCollectionScreen() {
       category: category || undefined,
       url: collection === "tools" || collection === "media" || collection === "documents" || collection === "vault" ? url.trim() || undefined : undefined,
       imageUrl: collection === "vision" || collection === "gallery" ? url.trim() || undefined : undefined,
-      completedDates: collection === "habits" ? [] : undefined,
+      completedDates: isHabit ? [] : undefined,
+      kind: isHabit ? habitKindChoice : undefined,
+      schedule: isHabit ? habitScheduleChoice : undefined,
+      target: isHabit && habitKindChoice !== "check" ? targetNum : undefined,
+      unit: isHabit && habitKindChoice !== "check" ? habitUnitText.trim() || defaultUnitForKind(habitKindChoice) : undefined,
+      progressByDate: isHabit && habitKindChoice !== "check" ? {} : undefined,
       createdAt: new Date().toISOString(),
     };
     await saveRecords([record, ...records]);
     reset();
   };
 
-  const toggleHabit = (record: HubRecord) => {
+  const applyHabit = (record: HubRecord, next: HubRecord) => {
+    saveRecords(records.map((item) => (item.id === record.id ? next : item)));
+  };
+
+  const onHabitPress = (record: HubRecord) => {
     const today = toDateKey(new Date());
-    const dates = record.completedDates ?? [];
-    const nextDates = dates.includes(today) ? dates.filter((date) => date !== today) : [...dates, today];
-    saveRecords(records.map((item) => (item.id === record.id ? { ...item, completedDates: nextDates } : item)));
+    const kind = habitKind(record);
+    if (kind === "check") {
+      applyHabit(record, toggleHabitCheck(record, today));
+      return;
+    }
+    applyHabit(record, bumpHabit(record, today, 1));
   };
 
   const remove = (record: HubRecord) => {
@@ -112,7 +149,7 @@ export function HubCollectionScreen() {
           <Feather name="chevron-left" size={22} color={theme.text} />
         </Pressable>
         <View style={styles.grow}>
-          <Text style={[styles.eyebrow, { color: theme.muted }]}>{scope === "life" ? "LIFE OS" : "SCHOOL OS"}</Text>
+          <Text style={[styles.eyebrow, { color: theme.muted }]}>{scope === "life" ? "HOME OS" : "SCHOOL OS"}</Text>
           <Text style={[styles.title, { color: theme.text }]}>{config.title}</Text>
           <Text style={[styles.subtitle, { color: theme.muted }]}>{config.subtitle}</Text>
         </View>
@@ -146,6 +183,53 @@ export function HubCollectionScreen() {
               placeholderTextColor={theme.muted}
               style={[styles.input, { color: theme.text, borderColor: theme.border }]}
             />
+            {collection === "habits" ? (
+              <>
+                <Text style={[styles.fieldLabel, { color: theme.muted }]}>Type</Text>
+                <SegmentedControl
+                  value={habitKindChoice}
+                  onChange={onHabitKindChange}
+                  options={[
+                    { key: "check", label: "Check" },
+                    { key: "count", label: "Count" },
+                    { key: "duration", label: "Time" },
+                    { key: "scale", label: "Scale" },
+                  ]}
+                />
+                <Text style={[styles.fieldLabel, { color: theme.muted }]}>Schedule</Text>
+                <SegmentedControl
+                  value={habitScheduleChoice}
+                  onChange={setHabitScheduleChoice}
+                  options={[
+                    { key: "daily", label: "Daily" },
+                    { key: "weekly", label: "Weekly" },
+                  ]}
+                />
+                {habitKindChoice !== "check" ? (
+                  <>
+                    <Text style={[styles.fieldLabel, { color: theme.muted }]}>
+                      {habitKindChoice === "scale" ? "Max (e.g. 100)" : habitKindChoice === "duration" ? "Goal minutes" : "Goal count"}
+                    </Text>
+                    <TextInput
+                      value={habitTargetText}
+                      onChangeText={setHabitTargetText}
+                      keyboardType="number-pad"
+                      placeholder={String(defaultTargetForKind(habitKindChoice))}
+                      placeholderTextColor={theme.muted}
+                      style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+                    />
+                    <Text style={[styles.fieldLabel, { color: theme.muted }]}>Unit</Text>
+                    <TextInput
+                      value={habitUnitText}
+                      onChangeText={setHabitUnitText}
+                      placeholder={defaultUnitForKind(habitKindChoice) || "unit"}
+                      placeholderTextColor={theme.muted}
+                      style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+                    />
+                  </>
+                ) : null}
+              </>
+            ) : null}
             {collection === "media" ? (
               <SegmentedControl
                 value={category}
@@ -214,11 +298,18 @@ export function HubCollectionScreen() {
           ) : (
             <View style={[styles.list, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               {records.map((record, index) => {
-                const complete = record.completedDates?.includes(today);
+                const complete = collection === "habits" ? isHabitDone(record, today) : record.completedDates?.includes(today);
+                const kind = collection === "habits" ? habitKind(record) : "check";
                 return (
                   <Pressable
                     key={record.id}
-                    onPress={() => collection === "habits" ? toggleHabit(record) : record.url ? Linking.openURL(record.url) : undefined}
+                    onPress={() =>
+                      collection === "habits"
+                        ? onHabitPress(record)
+                        : record.url
+                          ? Linking.openURL(record.url)
+                          : undefined
+                    }
                     style={[styles.row, index > 0 && { borderTopColor: theme.border, borderTopWidth: StyleSheet.hairlineWidth }]}
                   >
                     <View style={[
@@ -232,11 +323,35 @@ export function HubCollectionScreen() {
                       />
                     </View>
                     <View style={styles.grow}>
-                      <Text style={[styles.rowTitle, { color: theme.text }, complete && styles.done]}>{record.title}</Text>
+                      <Text style={[styles.rowTitle, { color: theme.text }, complete && kind === "check" && styles.done]}>
+                        {record.title}
+                      </Text>
                       <Text style={[styles.rowMeta, { color: theme.muted }]} numberOfLines={2}>
-                        {[record.category, record.subtitle].filter(Boolean).join(" · ") || "No details yet"}
+                        {collection === "habits"
+                          ? habitProgressLabel(record, today)
+                          : [record.category, record.subtitle].filter(Boolean).join(" · ") || "No details yet"}
                       </Text>
                     </View>
+                    {collection === "habits" && kind !== "check" ? (
+                      <View style={styles.habitSteppers}>
+                        <Pressable
+                          accessibilityLabel={`Decrease ${record.title}`}
+                          hitSlop={8}
+                          onPress={() => applyHabit(record, bumpHabit(record, today, -1))}
+                          style={[styles.stepBtn, { borderColor: theme.border }]}
+                        >
+                          <Feather name="minus" size={14} color={theme.text} />
+                        </Pressable>
+                        <Pressable
+                          accessibilityLabel={`Increase ${record.title}`}
+                          hitSlop={8}
+                          onPress={() => applyHabit(record, bumpHabit(record, today, kind === "scale" ? 5 : 1))}
+                          style={[styles.stepBtn, { borderColor: theme.border, backgroundColor: theme.soft }]}
+                        >
+                          <Feather name="plus" size={14} color={theme.accent} />
+                        </Pressable>
+                      </View>
+                    ) : null}
                     {record.url ? <Feather name="external-link" size={16} color={theme.muted} /> : null}
                     <Pressable
                       accessibilityLabel={`Delete ${record.title}`}
@@ -283,6 +398,15 @@ const styles = StyleSheet.create({
   rowMeta: { fontSize: 12, lineHeight: 16, marginTop: 2 },
   done: { textDecorationLine: "line-through", opacity: 0.65 },
   deleteButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -10 },
+  habitSteppers: { flexDirection: "row", gap: 6 },
+  stepBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   emptyWrap: { borderWidth: 1, borderRadius: 8, padding: 20 },
   visionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   visionTile: { width: "48.5%", aspectRatio: 0.9, borderWidth: 1, borderRadius: 8, overflow: "hidden", alignItems: "center", justifyContent: "center" },

@@ -2,7 +2,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useLifeOS } from "../lib/LifeOSContext";
-import { formatAmbientDuration, uid } from "../lib/helpers";
+import { formatAmbientDuration } from "../lib/helpers";
 import type { AmbientActivity } from "../types";
 
 // Mirrors web's AmbientStartModal ("I'm doing something Fn W"). Persists into
@@ -88,14 +88,14 @@ export function AmbientStartModal({ visible, onClose }: { visible: boolean; onCl
 
 // Mirrors web's AmbientWrapupModal — decide what happens to the tracked time.
 export function AmbientWrapupModal({ visible, activity, onClose }: { visible: boolean; activity: AmbientActivity | null; onClose: () => void }) {
-  const { theme, workspace, updateSettings, updateTasks, updateNotes } = useLifeOS();
+  const { theme, workspace, updateSettings, updateTasks, updateNotebookHub, upsertNotebookPage } = useLifeOS();
   const [note, setNote] = useState("");
 
   useEffect(() => { if (visible) setNote(""); }, [visible]);
 
   if (!activity) return null;
 
-  const finish = (outcome: "task" | "note" | "dismiss") => {
+  const finish = async (outcome: "task" | "note" | "dismiss") => {
     if (outcome === "task") {
       updateTasks([
         ...workspace.tasks,
@@ -115,10 +115,17 @@ export function AmbientWrapupModal({ visible, activity, onClose }: { visible: bo
         },
       ]);
     } else if (outcome === "note") {
-      updateNotes([
-        { id: uid(), title: activity.title, body: note.trim() || "Unplanned work session.", projectName: activity.spaceName, updatedAt: new Date().toISOString() },
-        ...workspace.notes,
-      ]);
+      const { createNotebookFromText } = await import("../lib/notebooks");
+      const { notebook, page } = createNotebookFromText(
+        activity.title,
+        note.trim() || "Unplanned work session.",
+        { projectName: activity.spaceName },
+      );
+      await updateNotebookHub({
+        ...workspace.notebookHub,
+        notebooks: [notebook, ...workspace.notebookHub.notebooks],
+      });
+      await upsertNotebookPage(page);
     }
     updateSettings({ ...workspace.settings, ambientActivity: null });
     onClose();

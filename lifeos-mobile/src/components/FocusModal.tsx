@@ -1,10 +1,26 @@
 import Feather from "@expo/vector-icons/Feather";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AppState,
+  type AppStateStatus,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { endFocusLiveActivity, syncFocusLiveActivity } from "../lib/focusLiveActivity";
 import { durationText, taskRemaining } from "../lib/helpers";
+import {
+  cancelFocusNotifications,
+  resolveNotificationPrefs,
+  scheduleFocusNotifications,
+} from "../lib/notifications";
 import type { Task } from "../types";
 
 // Checklist templates ported from web's focusChecklistTemplates.
@@ -21,37 +37,114 @@ export function FocusModal({ visible, task, onClose }: { visible: boolean; task:
   const { workspace, theme, updateTasks } = useLifeOS();
   const [remaining, setRemaining] = useState(taskRemaining(task));
   const [running, setRunning] = useState(Boolean(task.focusSessionRunning));
+  const [started, setStarted] = useState(Boolean(task.focusSessionStarted));
   const [checklist, setChecklist] = useState<string[]>(task.checklist ?? []);
   const [checks, setChecks] = useState<boolean[]>(task.checklistProgress ?? []);
+  const taskRef = useRef(task);
+  taskRef.current = task;
+
+  const persist = useCallback(
+    (patch: Partial<Task>) =>
+      updateTasks(
+        workspace.tasks.map((item) =>
+          item.id === task.id ? { ...item, ...patch, focusUpdatedAt: new Date().toISOString() } : item,
+        ),
+      ),
+    [task.id, updateTasks, workspace.tasks],
+  );
 
   useEffect(() => {
-    setRemaining(taskRemaining(task));
-    setRunning(Boolean(task.focusSessionRunning));
+    if (!visible) return;
+    const fresh = taskRemaining(task);
+    const isRunning = Boolean(task.focusSessionRunning);
+    setRemaining(fresh);
+    setRunning(isRunning);
+    setStarted(Boolean(task.focusSessionStarted));
     setChecklist(task.checklist ?? []);
     setChecks(task.checklistProgress ?? []);
-  }, [task.id, visible]);
+    // Sync with wall-clock remaining — never the stale pre-reset state.
+    syncFocusLiveActivity(task, fresh, isRunning);
+  }, [task.id, task.focusUpdatedAt, task.focusSessionRunning, task.focusSessionStarted, visible]);
+
+  // Wall-clock ticks: JS intervals freeze in background, so never decrement a local
+  // counter — always derive remaining from focusUpdatedAt + focusRemainingSeconds.
+  useEffect(() => {
+    if (!visible || !running) return;
+
+    const syncFromClock = (persistCatchUp = false) => {
+      const current = taskRef.current;
+      const fresh = taskRemaining(current);
+      setRemaining(fresh);
+      if (persistCatchUp) {
+        persist({ focusRemainingSeconds: fresh, focusSessionRunning: fresh > 0 });
+        syncFocusLiveActivity(current, fresh, fresh > 0);
+      }
+      return fresh;
+    };
+
+    syncFromClock(false);
+    const id = setInterval(() => {
+      syncFromClock(false);
+    }, 1000);
+
+    const onAppState = (state: AppStateStatus) => {
+      if (state !== "active") return;
+      // Catch up after background/lock — Live Activity already used wall-clock.
+      const current = taskRef.current;
+      const fresh = syncFromClock(true);
+      if (fresh <= 0) {
+        setRunning(false);
+        endFocusLiveActivity(current, 0);
+        void cancelFocusNotifications(current.id);
+      }
+    };
+    const sub = AppState.addEventListener("change", onAppState);
+
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
+  }, [visible, running, persist]);
 
   useEffect(() => {
-    if (!running) return;
-    const id = setInterval(() => setRemaining((value) => Math.max(0, value - 1)), 1000);
-    return () => clearInterval(id);
-  }, [running]);
+    if (remaining === 0 && running) {
+      setRunning(false);
+      persist({ focusRemainingSeconds: 0, focusSessionRunning: false });
+      endFocusLiveActivity(task, 0);
+      void cancelFocusNotifications(task.id);
+    }
+  }, [remaining, running, persist, task]);
 
-  useEffect(() => {
-    if (remaining === 0 && running) setRunning(false);
-  }, [remaining, running]);
-
-  const persist = (patch: Partial<Task>) =>
-    updateTasks(workspace.tasks.map((item) => (item.id === task.id ? { ...item, ...patch, focusUpdatedAt: new Date().toISOString() } : item)));
+  const focusAlertsOn = () => {
+    const prefs = resolveNotificationPrefs(workspace.settings);
+    return prefs.enabled && prefs.focus;
+  };
 
   const toggle = () => {
     const next = !running;
     setRunning(next);
+    if (next) setStarted(true);
     persist({ focusRemainingSeconds: remaining, focusSessionRunning: next, focusSessionStarted: true });
+    // pause→resume restarts ActivityKit via syncFocusLiveActivity
+    syncFocusLiveActivity(task, remaining, next);
+    if (next) {
+      void scheduleFocusNotifications(task.id, remaining, focusAlertsOn());
+    } else {
+      void cancelFocusNotifications(task.id);
+    }
   };
 
   const finish = () => {
-    persist({ done: true, status: "Done", focusSessionRunning: false, focusRemainingSeconds: remaining, checklist, checklistProgress: checks });
+    persist({
+      done: true,
+      status: "Done",
+      focusSessionRunning: false,
+      focusRemainingSeconds: remaining,
+      checklist,
+      checklistProgress: checks,
+    });
+    endFocusLiveActivity(task, remaining);
+    void cancelFocusNotifications(task.id);
     onClose();
   };
 
@@ -88,7 +181,7 @@ export function FocusModal({ visible, task, onClose }: { visible: boolean; task:
         <StatusBar style="light" />
         <View style={styles.focusHeader}>
           <Pressable onPress={onClose} style={styles.closeButton}><Feather name="chevron-down" color="#FFF" size={24} /></Pressable>
-          <Text style={styles.focusHeaderText}>Focus in progress</Text>
+          <Text style={styles.focusHeaderText}>{running ? "Focus in progress" : started ? "Focus paused" : "Focus"}</Text>
           <View style={{ width: 44 }} />
         </View>
         <ScrollView contentContainerStyle={styles.focusBody}>
@@ -97,11 +190,13 @@ export function FocusModal({ visible, task, onClose }: { visible: boolean; task:
           <Text style={styles.focusSub}>Stay with this one thing. You can leave this screen without pausing the timer.</Text>
           <View style={[styles.timerRing, { borderColor: theme.accent }]}>
             <Text style={styles.timer}>{durationText(remaining)}</Text>
-            <Text style={styles.timerSub}>{running ? "In progress" : "Paused"}</Text>
+            <Text style={styles.timerSub}>{running ? "In progress" : started ? "Paused" : "Ready"}</Text>
           </View>
           <Pressable onPress={toggle} style={[styles.focusMainButton, { backgroundColor: theme.accent }]}>
             <Feather name={running ? "pause" : "play"} size={20} color="#FFF" />
-            <Text style={styles.focusMainText}>{running ? "Pause & save" : "Resume focus"}</Text>
+            <Text style={styles.focusMainText}>
+              {running ? "Pause & save" : started ? "Resume focus" : "Start focus"}
+            </Text>
           </Pressable>
           <Pressable onPress={finish} style={styles.focusDoneButton}>
             <Feather name="check" size={18} color="#78E0AF" />

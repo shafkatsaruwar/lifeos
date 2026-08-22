@@ -176,7 +176,7 @@ function SchoolTaskRow({ task, course, today, onComplete, onOpen }: {
   );
 }
 
-export function SchoolDashboard({ tasks, classes, notes, school, schoolView: controlledView, onChangeView, schoolFocusTaskId, onSelectFocusTask, onComplete, onOpenTask, onOpenClass, onOpenNote, onNewCourse, onNewAcademic, onNewLecture, onOpenCollection, onOpenProfile, onFocus, onOpenCalendar, onUpdateTaskStatus }: {
+export function SchoolDashboard({ tasks, classes, notes, school, schoolView: controlledView, onChangeView, schoolFocusTaskId, onSelectFocusTask, onComplete, onOpenTask, onOpenClass, onOpenNote, onNewCourse, onNewAcademic, onNewLecture, onOpenCollection, onOpenProfile, onFocus, onOpenCalendar, onUpdateTaskStatus, enableMasterOS = true }: {
   tasks: DashboardTask[];
   classes: DashboardClass[];
   notes: DashboardNote[];
@@ -197,6 +197,7 @@ export function SchoolDashboard({ tasks, classes, notes, school, schoolView: con
   onFocus: (id: number) => void;
   onOpenCalendar?: () => void;
   onUpdateTaskStatus?: (id: number, status: "Not started" | "In progress" | "Blocked" | "Done") => void;
+  enableMasterOS?: boolean;
 }) {
   const [internalView, setInternalView] = useState<SchoolView>("dashboard");
   const [taskFilter, setTaskFilter] = useState<"all" | "high" | "medium" | "low" | "blocked" | "completed">("all");
@@ -496,6 +497,7 @@ export function SchoolDashboard({ tasks, classes, notes, school, schoolView: con
       <QuickAction icon={ListTodo} label="School task" onClick={onNewAcademic} />
       <QuickAction icon={NotebookPen} label="Lecture note" onClick={onNewLecture} />
       <QuickAction icon={Database} label="New topic" onClick={() => onOpenCollection("topics", true)} />
+      {enableMasterOS && <a className="os-quick-action" href="/masteros"><GraduationCap size={16} /> MasterOS</a>}
     </div>
 
     {schoolView !== "dashboard" && (

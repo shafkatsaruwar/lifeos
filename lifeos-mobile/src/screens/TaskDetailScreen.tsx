@@ -1,16 +1,72 @@
 import Feather from "@expo/vector-icons/Feather";
-import { useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { useMemo, useState } from "react";
+import {
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useColorScheme,
+  View,
+} from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { ActionButton, Card, Page, SegmentedControl } from "../components/UI";
 import { FocusModal } from "../components/FocusModal";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { PRIORITY_COLOR } from "../lib/theme";
-import type { EnergyLevel, Priority, TaskStatus } from "../types";
+import type { EnergyLevel, Priority, Task, TaskStatus } from "../types";
+
+function parseDueDate(due?: string): Date {
+  if (due && /^\d{4}-\d{2}-\d{2}$/.test(due)) {
+    const [y, m, d] = due.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return new Date();
+}
+
+function formatDueDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function parseStartTime(startTime?: string): Date {
+  const date = new Date();
+  if (startTime && /^\d{1,2}:\d{2}$/.test(startTime)) {
+    const [h, m] = startTime.split(":").map(Number);
+    date.setHours(h, m, 0, 0);
+    return date;
+  }
+  date.setHours(9, 0, 0, 0);
+  return date;
+}
+
+function formatStartTime(date: Date): string {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
 
 const STATUS_OPTIONS: TaskStatus[] = ["Not started", "In progress", "Waiting", "Blocked", "Done", "Canceled"];
 const PRIORITY_OPTIONS: Priority[] = ["High", "Medium", "Low"];
 const ENERGY_OPTIONS: EnergyLevel[] = ["Low", "Medium", "High"];
+
+type SpaceOption = {
+  key: string;
+  label: string;
+  color: string;
+  kind: "inbox" | "project" | "class";
+  project: string;
+  classId?: string;
+};
+
+function spaceKeyForTask(task: Task) {
+  if (task.classId) return `class:${task.classId}`;
+  if (!task.project || task.project === "Inbox") return "inbox";
+  return `project:${task.project}`;
+}
 
 export function TaskDetailScreen() {
   const { workspace, theme, updateTasks, updateSettings } = useLifeOS();
@@ -19,6 +75,35 @@ export function TaskDetailScreen() {
   const taskId = route.params?.taskId as number;
   const task = workspace.tasks.find((t) => t.id === taskId);
   const [focusOpen, setFocusOpen] = useState(false);
+  const [showDuePicker, setShowDuePicker] = useState(false);
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const colorScheme = useColorScheme();
+  const pickerTheme = colorScheme === "dark" ? "dark" : "light";
+
+  const spaces = useMemo<SpaceOption[]>(() => {
+    const projectSpaces = workspace.projects.map((project) => ({
+      key: `project:${project.name}`,
+      label: project.name,
+      color: project.color || theme.accent,
+      kind: "project" as const,
+      project: project.name,
+    }));
+    const classSpaces = workspace.classes
+      .filter((course) => !course.archived)
+      .map((course) => ({
+        key: `class:${course.id}`,
+        label: course.code,
+        color: course.color || theme.accent,
+        kind: "class" as const,
+        project: course.code,
+        classId: course.id,
+      }));
+    return [
+      { key: "inbox", label: "Inbox", color: theme.muted, kind: "inbox", project: "Inbox" },
+      ...projectSpaces,
+      ...classSpaces,
+    ];
+  }, [theme.accent, theme.muted, workspace.classes, workspace.projects]);
 
   if (!task) {
     return (
@@ -29,6 +114,35 @@ export function TaskDetailScreen() {
   }
 
   const persist = (patch: Partial<typeof task>) => updateTasks(workspace.tasks.map((t) => (t.id === taskId ? { ...t, ...patch } : t)));
+  const activeSpaceKey = spaceKeyForTask(task);
+  const spaceOptions =
+    activeSpaceKey.startsWith("project:") && !spaces.some((space) => space.key === activeSpaceKey)
+      ? [
+          ...spaces,
+          {
+            key: activeSpaceKey,
+            label: task.project || "Space",
+            color: task.color || theme.accent,
+            kind: "project" as const,
+            project: task.project || "Inbox",
+          },
+        ]
+      : spaces;
+  const activeSpace = spaceOptions.find((space) => space.key === activeSpaceKey);
+  const spaceLabel = activeSpace?.label ?? task.project ?? "Inbox";
+  const spaceColor = activeSpace?.color ?? task.color ?? theme.accent;
+
+  const routeToSpace = (space: SpaceOption) => {
+    if (space.kind === "inbox") {
+      persist({ project: "Inbox", classId: undefined, color: theme.accent });
+      return;
+    }
+    if (space.kind === "project") {
+      persist({ project: space.project, classId: undefined, color: space.color });
+      return;
+    }
+    persist({ project: space.project, classId: space.classId, color: space.color });
+  };
 
   const deleteTask = () => {
     Alert.alert("Delete task", `Delete "${task.title}"? This can't be undone.`, [
@@ -50,12 +164,22 @@ export function TaskDetailScreen() {
   };
 
   return (
-    <Page edges={["bottom"]}>
+    <Page edges={["top", "bottom"]}>
       <View style={styles.headRow}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
+        <Pressable
+          accessibilityLabel="Back"
+          accessibilityRole="button"
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
           <Feather name="chevron-left" size={22} color={theme.text} />
         </Pressable>
-        <Pressable onPress={deleteTask} style={styles.backButton}>
+        <Pressable
+          accessibilityLabel="Delete task"
+          accessibilityRole="button"
+          onPress={deleteTask}
+          style={styles.backButton}
+        >
           <Feather name="trash-2" size={19} color={theme.danger} />
         </Pressable>
       </View>
@@ -69,12 +193,45 @@ export function TaskDetailScreen() {
           placeholder="Task title"
           placeholderTextColor={theme.muted}
         />
-        <Text style={[styles.spaceLabel, { color: theme.muted }]}>{task.project || "Inbox"}</Text>
+        <View style={styles.spaceLabelRow}>
+          <View style={[styles.spaceDot, { backgroundColor: spaceColor }]} />
+          <Text style={[styles.spaceLabel, { color: theme.muted }]}>{spaceLabel}</Text>
+        </View>
 
         <View style={styles.row}>
           <ActionButton label="Set as Now" icon="target" quiet onPress={() => updateSettings({ ...workspace.settings, nowTaskId: task.id })} />
           <ActionButton label="Focus" icon="play" onPress={() => setFocusOpen(true)} />
         </View>
+
+        <Card>
+          <Text style={[styles.cardLabel, { color: theme.text }]}>Space</Text>
+          <Text style={[styles.spaceHint, { color: theme.muted }]}>Route this task to a project or class.</Text>
+          <View style={styles.chipWrap}>
+            {spaceOptions.map((space) => {
+              const active = space.key === activeSpaceKey;
+              return (
+                <Pressable
+                  key={space.key}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={`Move to ${space.label}`}
+                  onPress={() => routeToSpace(space)}
+                  style={[
+                    styles.chip,
+                    styles.spaceChip,
+                    {
+                      borderColor: active ? space.color : theme.border,
+                      backgroundColor: active ? `${space.color}22` : "transparent",
+                    },
+                  ]}
+                >
+                  <View style={[styles.spaceDot, { backgroundColor: space.color }]} />
+                  <Text style={{ color: theme.text, fontSize: 12, fontWeight: "700" }}>{space.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Card>
 
         <Card>
           <Text style={[styles.cardLabel, { color: theme.text }]}>Status</Text>
@@ -105,14 +262,137 @@ export function TaskDetailScreen() {
         </Card>
 
         <Card>
-          <Text style={[styles.cardLabel, { color: theme.text }]}>Due date</Text>
-          <TextInput
-            value={task.due ?? ""}
-            onChangeText={(v) => persist({ due: v })}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={theme.muted}
-            style={[styles.input, { color: theme.text, borderColor: theme.border }]}
-          />
+          <View style={styles.cardHeadRow}>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Due date</Text>
+            {task.due ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear due date"
+                onPress={() => {
+                  setShowDuePicker(false);
+                  persist({ due: undefined });
+                }}
+              >
+                <Text style={[styles.clearText, { color: theme.muted }]}>Clear</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {Platform.OS === "ios" && task.due ? (
+            <View style={styles.pickerRow}>
+              <DateTimePicker
+                value={parseDueDate(task.due)}
+                mode="date"
+                display="compact"
+                themeVariant={pickerTheme}
+                onChange={(_, date) => {
+                  if (date) persist({ due: formatDueDate(date) });
+                }}
+              />
+            </View>
+          ) : Platform.OS === "ios" ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Pick due date"
+              onPress={() => persist({ due: formatDueDate(new Date()) })}
+              style={[styles.pickerButton, { borderColor: theme.border }]}
+            >
+              <Feather name="calendar" size={16} color={theme.accent} />
+              <Text style={{ color: theme.muted, fontSize: 15, fontWeight: "600" }}>Pick a date</Text>
+            </Pressable>
+          ) : (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Pick due date"
+                onPress={() => setShowDuePicker(true)}
+                style={[styles.pickerButton, { borderColor: theme.border }]}
+              >
+                <Feather name="calendar" size={16} color={theme.accent} />
+                <Text style={{ color: task.due ? theme.text : theme.muted, fontSize: 15, fontWeight: "600" }}>
+                  {task.due || "Pick a date"}
+                </Text>
+              </Pressable>
+              {showDuePicker ? (
+                <DateTimePicker
+                  value={parseDueDate(task.due)}
+                  mode="date"
+                  display="default"
+                  onChange={(event, date) => {
+                    setShowDuePicker(false);
+                    if (event.type !== "dismissed" && date) persist({ due: formatDueDate(date) });
+                  }}
+                />
+              ) : null}
+            </>
+          )}
+        </Card>
+
+        <Card>
+          <View style={styles.cardHeadRow}>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Start time</Text>
+            {task.startTime ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear start time"
+                onPress={() => {
+                  setShowStartPicker(false);
+                  persist({ startTime: undefined });
+                }}
+              >
+                <Text style={[styles.clearText, { color: theme.muted }]}>Clear</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {Platform.OS === "ios" && task.startTime ? (
+            <View style={styles.pickerRow}>
+              <DateTimePicker
+                value={parseStartTime(task.startTime)}
+                mode="time"
+                display="compact"
+                minuteInterval={5}
+                themeVariant={pickerTheme}
+                onChange={(_, date) => {
+                  if (date) persist({ startTime: formatStartTime(date) });
+                }}
+              />
+            </View>
+          ) : Platform.OS === "ios" ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Pick start time"
+              onPress={() => persist({ startTime: formatStartTime(parseStartTime()) })}
+              style={[styles.pickerButton, { borderColor: theme.border }]}
+            >
+              <Feather name="clock" size={16} color={theme.accent} />
+              <Text style={{ color: theme.muted, fontSize: 15, fontWeight: "600" }}>Pick a time</Text>
+            </Pressable>
+          ) : (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Pick start time"
+                onPress={() => setShowStartPicker(true)}
+                style={[styles.pickerButton, { borderColor: theme.border }]}
+              >
+                <Feather name="clock" size={16} color={theme.accent} />
+                <Text style={{ color: task.startTime ? theme.text : theme.muted, fontSize: 15, fontWeight: "600" }}>
+                  {task.startTime || "Pick a time"}
+                </Text>
+              </Pressable>
+              {showStartPicker ? (
+                <DateTimePicker
+                  value={parseStartTime(task.startTime)}
+                  mode="time"
+                  display="default"
+                  minuteInterval={5}
+                  onChange={(event, date) => {
+                    setShowStartPicker(false);
+                    if (event.type !== "dismissed" && date) persist({ startTime: formatStartTime(date) });
+                  }}
+                />
+              ) : null}
+            </>
+          )}
         </Card>
 
         <Card>
@@ -171,10 +451,22 @@ export function TaskDetailScreen() {
 const styles = StyleSheet.create({
   screen: { padding: 20, paddingTop: 4, paddingBottom: 28, gap: 14 },
   missing: { flex: 1, alignItems: "center", justifyContent: "center" },
-  headRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 12, paddingTop: 4 },
-  backButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  headRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingTop: 4,
+    paddingBottom: 2,
+    minHeight: 44,
+  },
+  backButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   titleInput: { fontSize: 26, fontWeight: "700", lineHeight: 32 },
-  spaceLabel: { fontSize: 13, fontWeight: "700", marginTop: -6 },
+  spaceLabelRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: -6 },
+  spaceLabel: { fontSize: 13, fontWeight: "700" },
+  spaceHint: { fontSize: 12, lineHeight: 17, marginBottom: 8, marginTop: -2 },
+  spaceDot: { width: 8, height: 8, borderRadius: 4 },
+  spaceChip: { flexDirection: "row", alignItems: "center", gap: 7 },
   row: { flexDirection: "row", gap: 10 },
   cardLabel: { fontSize: 13, fontWeight: "800", marginBottom: 4 },
   priorityHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
@@ -183,6 +475,17 @@ const styles = StyleSheet.create({
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   input: { minHeight: 44, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, fontSize: 15 },
+  pickerRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 36 },
+  pickerButton: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  clearText: { fontSize: 13, fontWeight: "700", paddingVertical: 2 },
   textarea: { minHeight: 90, borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 15, textAlignVertical: "top" },
   checkRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
   checkBox: { width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },

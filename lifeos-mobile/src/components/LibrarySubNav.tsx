@@ -3,21 +3,20 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useLifeOS } from "../lib/LifeOSContext";
 
-type Tab = "notebooks" | "notes" | "brain" | "resources";
+type Tab = "notes" | "brain" | "resources";
 
 const TABS: { key: Tab; label: string; icon: keyof typeof Feather.glyphMap; route: string }[] = [
-  { key: "notebooks", label: "Notebooks", icon: "book", route: "NotebooksList" },
-  { key: "notes", label: "Notes", icon: "file-text", route: "NotesList" },
-  { key: "brain", label: "Brain", icon: "zap", route: "Brain" },
+  { key: "notes", label: "Notes", icon: "edit-3", route: "NotebooksList" },
+  { key: "brain", label: "MindDump", icon: "mic", route: "Brain" },
   { key: "resources", label: "Files", icon: "paperclip", route: "Resources" },
 ];
 
-export function LibrarySubNav({ active }: { active: Tab }) {
+export function LibrarySubNav({ active, compact = false }: { active: Tab; compact?: boolean }) {
   const { theme } = useLifeOS();
   const navigation = useNavigation<any>();
 
   return (
-    <View style={styles.subNav}>
+    <View style={[styles.subNav, compact ? styles.subNavCompact : styles.subNavPage]}>
       {TABS.map((tab) => {
         const on = tab.key === active;
         return (
@@ -45,8 +44,10 @@ export function LibrarySubNav({ active }: { active: Tab }) {
 }
 
 const styles = StyleSheet.create({
-  subNav: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 20, marginTop: 14 },
-  pill: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  subNav: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  subNavPage: { paddingHorizontal: 20, marginTop: 14 },
+  subNavCompact: { paddingHorizontal: 6, marginTop: 2 },
+  pill: { flexDirection: "row", alignItems: "center", flexShrink: 0, gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, minHeight: 36 },
   pillActive: { borderWidth: 1.5 },
   text: { fontSize: 12, fontWeight: "800" },
 });

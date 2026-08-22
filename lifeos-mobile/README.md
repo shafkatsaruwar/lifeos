@@ -26,9 +26,10 @@ npx expo start -c
 
 1. Use **Expo Go compatible with SDK 54** (same major as this project)
 2. Force-quit Expo Go, then scan QR (or press `i` for Simulator)
-3. Sign in with Google
-4. Land on **Now** — Tasks, Calendar, Life, School, Library in the tab bar
+3. Sign in with Google or **Sign in with Apple** (iOS — enable the Apple provider in Firebase Console + Apple Developer)
+4. Land on **Now** — Tasks, Calendar, Life, School, Work, Library in the tab bar
 5. Settings is the gear on Now
+6. Home-screen widgets: copy `native/LifeOSWidgets` into the iOS project after prebuild (see that folder’s README)
 
 ### If you see `PlatformConstants` / TurboModuleRegistry errors
 
@@ -68,6 +69,32 @@ iOS bundle ID: `com.shafkatsaruwar.lifeos`
 | Life | LifeOS hub |
 | School | SchoolOS hub |
 | Library | Notes, Brain, Resources |
+
+## Synapse-style auto updates (EAS Update)
+
+Cloud agents open PRs. Once a PR merges to `main`, GitHub Actions publishes an **OTA** (`eas update`) to the `production` channel. Your TestFlight / production build downloads it on the next cold start — no `git fetch`, no Metro.
+
+### One-time setup
+
+1. From `lifeos-mobile/` (logged into Expo):
+   ```bash
+   npx eas-cli login
+   npx eas-cli update:configure
+   ```
+   Copy the project UUID into `.env` as `EAS_PROJECT_ID=` (and/or commit it under `expo.extra.eas.projectId` in `app.json` if you prefer).
+2. Add GitHub repo secrets: `EXPO_TOKEN` (expo.dev → Access tokens) and `EAS_PROJECT_ID`.
+3. Ship **one new native build** so the binary is channel-aware:
+   ```bash
+   npx eas-cli build --platform ios --profile production
+   ```
+   Then submit to TestFlight as usual.
+4. (Optional) Enable auto-merge on agent PRs in GitHub if you want merge→OTA with less clicking.
+
+JS/UI changes after that: merge to `main` → wait for **EAS Update (OTA)** workflow → force-quit LifeOS → reopen.
+
+Native changes (new native module, plugin, SDK bump) still need a full EAS build.
+
+**Simulator vs TestFlight:** `npx expo start` on your Mac is Metro — live local files. TestFlight is a store binary + OTA channel. They will not match until the change is on `main`, the OTA Action is green, and the TestFlight app has relaunched (or you install a new build).
 
 ## Legacy WebView shell
 

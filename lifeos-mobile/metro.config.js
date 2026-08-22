@@ -16,6 +16,20 @@ if (!config.resolver.sourceExts.includes("cjs")) {
 }
 config.resolver.unstable_enablePackageExports = false;
 
+// Force the RN build of @firebase/auth so AsyncStorage persistence is available.
+// Without this, Metro can resolve the node/browser build and sessions reset on launch.
+const firebaseAuthRn = path.resolve(__dirname, "node_modules/@firebase/auth/dist/rn/index.js");
+const upstreamResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === "@firebase/auth" || moduleName === "@firebase/auth/dist/rn/index.js") {
+    return { filePath: firebaseAuthRn, type: "sourceFile" };
+  }
+  if (typeof upstreamResolveRequest === "function") {
+    return upstreamResolveRequest(context, moduleName, platform);
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 // Ignore the monorepo's Next.js `app/` directory if resolution ever walks up.
 const parentApp = path.resolve(__dirname, "../app");
 const previousBlockList = config.resolver.blockList;

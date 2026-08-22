@@ -2,13 +2,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import {
   getAuth,
-  // @ts-expect-error -- RN-only export; present when Metro resolves the RN auth build
-  getReactNativePersistence,
   initializeAuth,
   type Auth,
 } from "firebase/auth";
-import { get, getDatabase, ref, remove, set } from "firebase/database";
+import { get, getDatabase, onValue, ref, remove, set, type Unsubscribe } from "firebase/database";
 import type { NotebookHub, NotebookPage, Workspace } from "../types";
+import { normalizeCalendars } from "./calendars";
 import { emptyNotebookHub } from "./notebooks";
 
 /**
@@ -37,14 +36,34 @@ function createApp(): FirebaseApp {
 
 const app = createApp();
 
+/**
+ * Load getReactNativePersistence from the RN build of @firebase/auth.
+ *
+ * `firebase/auth` often resolves to the browser/node build under Metro, where
+ * getReactNativePersistence is missing — then Auth falls back to memory and
+ * users are asked to sign in again after every app restart.
+ */
+function loadReactNativePersistence() {
+  // Deep RN entry — metro.config.js also aliases @firebase/auth → this file.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const rnAuth = require("@firebase/auth/dist/rn/index.js") as {
+    getReactNativePersistence?: (storage: typeof AsyncStorage) => Parameters<typeof initializeAuth>[1] extends {
+      persistence?: infer P;
+    }
+      ? P
+      : never;
+  };
+  if (typeof rnAuth.getReactNativePersistence !== "function") {
+    throw new Error(
+      "Firebase Auth RN persistence unavailable. Check metro.config.js aliases @firebase/auth → dist/rn.",
+    );
+  }
+  return rnAuth.getReactNativePersistence;
+}
+
 function createAuth(firebaseApp: FirebaseApp): Auth {
   try {
-    if (typeof getReactNativePersistence !== "function") {
-      console.warn(
-        "Firebase Auth: getReactNativePersistence unavailable. Check metro.config.js (unstable_enablePackageExports = false) and restart with -c.",
-      );
-      return getAuth(firebaseApp);
-    }
+    const getReactNativePersistence = loadReactNativePersistence();
     return initializeAuth(firebaseApp, {
       persistence: getReactNativePersistence(AsyncStorage),
     });
@@ -53,8 +72,8 @@ function createAuth(firebaseApp: FirebaseApp): Auth {
     if (error?.code === "auth/already-initialized") {
       return getAuth(firebaseApp);
     }
-    console.warn("Firebase Auth persistence init failed; falling back to getAuth.", error?.message || error);
-    return getAuth(firebaseApp);
+    // Re-throw other failures — silent getAuth() fallback would drop persistence.
+    throw error;
   }
 }
 
@@ -65,6 +84,7 @@ export const emptyWorkspace: Workspace = {
   tasks: [],
   projects: [],
   calendar: [],
+  calendars: [],
   classes: [],
   notes: [],
   settings: {},
@@ -92,6 +112,7 @@ export const emptyWorkspace: Workspace = {
     professors: [],
     goals: [],
   },
+  work: { projects: [], deliverables: [], tasks: [], meetings: [] },
   notebookHub: emptyNotebookHub(),
   notebookPages: {},
 };
@@ -141,6 +162,14 @@ export async function loadWorkspace(userId: string): Promise<Workspace> {
       ...loaded.school,
       profile: { ...emptyWorkspace.school.profile, ...loaded.school?.profile },
     },
+    work: {
+      projects: Array.isArray(loaded.work?.projects) ? loaded.work.projects : [],
+      deliverables: Array.isArray(loaded.work?.deliverables) ? loaded.work.deliverables : [],
+      tasks: Array.isArray(loaded.work?.tasks) ? loaded.work.tasks : [],
+      meetings: Array.isArray(loaded.work?.meetings) ? loaded.work.meetings : [],
+    },
+    calendars: normalizeCalendars(loaded.calendars),
+    calendar: Array.isArray(loaded.calendar) ? loaded.calendar : [],
     notebookHub: normalizeNotebookHub(loaded.notebookHub),
     notebookPages: normalizeNotebookPages(loaded.notebookPages),
   };
@@ -153,6 +182,17 @@ export async function saveWorkspacePart<K extends keyof Workspace>(
 ) {
   const serializable = JSON.parse(JSON.stringify(value)) as Workspace[K];
   await set(ref(database, `users/${userId}/${key}`), serializable);
+}
+
+export function subscribeWorkspacePart<K extends keyof Workspace>(
+  userId: string,
+  key: K,
+  onData: (value: Workspace[K]) => void,
+): Unsubscribe {
+  return onValue(ref(database, `users/${userId}/${key}`), (snapshot) => {
+    if (!snapshot.exists()) return;
+    onData(snapshot.val() as Workspace[K]);
+  });
 }
 
 /** Per-page write so stroke autosave does not rewrite the whole library. */

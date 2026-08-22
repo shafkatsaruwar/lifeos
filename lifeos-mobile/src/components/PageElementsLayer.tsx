@@ -24,6 +24,8 @@ type Props = {
   onChangeImages: (next: PageImageElement[]) => void;
   /** When true, layer receives touches (text/image/select modes). */
   interactive: boolean;
+  /** Document zoom — pan/resize deltas are divided by this so overlays track the finger. */
+  zoomScale?: number;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -39,8 +41,10 @@ export function PageElementsLayer({
   onChangeTexts,
   onChangeImages,
   interactive,
+  zoomScale = 1,
 }: Props) {
   const { theme } = useLifeOS();
+  const zoom = zoomScale > 0.01 ? zoomScale : 1;
 
   const updateText = (id: string, patch: Partial<PageTextElement>) => {
     onChangeTexts(texts.map((t) => (t.id === id ? { ...t, ...patch } : t)));
@@ -61,9 +65,13 @@ export function PageElementsLayer({
           y={img.y}
           width={img.width}
           height={img.height}
+          rotation={img.rotation ?? 0}
+          zoomScale={zoom}
+          allowRotate
           onSelect={() => onSelect(img.id)}
           onMove={(x, y) => updateImage(img.id, { x, y })}
           onResize={(width, height) => updateImage(img.id, { width, height })}
+          onRotate={(rotation) => updateImage(img.id, { rotation })}
           borderColor={theme.accent}
         >
           <Image source={{ uri: img.uri }} style={styles.image} resizeMode="cover" />
@@ -82,6 +90,7 @@ export function PageElementsLayer({
             y={el.y}
             width={el.width}
             height={el.height}
+            zoomScale={zoom}
             onSelect={() => onSelect(el.id)}
             onMove={(x, y) => updateText(el.id, { x, y })}
             onResize={(width, height) => updateText(el.id, { width, height })}
@@ -138,9 +147,13 @@ function DraggableBox({
   y,
   width,
   height,
+  rotation = 0,
+  zoomScale = 1,
+  allowRotate = false,
   onSelect,
   onMove,
   onResize,
+  onRotate,
   borderColor,
 }: {
   children: React.ReactNode;
@@ -150,24 +163,44 @@ function DraggableBox({
   y: number;
   width: number;
   height: number;
+  rotation?: number;
+  zoomScale?: number;
+  allowRotate?: boolean;
   onSelect: () => void;
   onMove: (x: number, y: number) => void;
   onResize: (w: number, h: number) => void;
+  onRotate?: (degrees: number) => void;
   borderColor: string;
 }) {
-  const origin = useRef({ x, y, width, height });
+  const origin = useRef({ x, y, width, height, rotation });
   const live = useRef({
     x,
     y,
     width,
     height,
+    rotation,
+    zoomScale,
     interactive,
     selected,
     onSelect,
     onMove,
     onResize,
+    onRotate,
   });
-  live.current = { x, y, width, height, interactive, selected, onSelect, onMove, onResize };
+  live.current = {
+    x,
+    y,
+    width,
+    height,
+    rotation,
+    zoomScale,
+    interactive,
+    selected,
+    onSelect,
+    onMove,
+    onResize,
+    onRotate,
+  };
 
   const moveResponder = useRef(
     PanResponder.create({
@@ -179,11 +212,16 @@ function DraggableBox({
           y: live.current.y,
           width: live.current.width,
           height: live.current.height,
+          rotation: live.current.rotation,
         };
         live.current.onSelect();
       },
       onPanResponderMove: (_: GestureResponderEvent, g: PanResponderGestureState) => {
-        live.current.onMove(clamp(origin.current.x + g.dx, 0, 2000), clamp(origin.current.y + g.dy, 0, 2000));
+        const z = live.current.zoomScale > 0.01 ? live.current.zoomScale : 1;
+        live.current.onMove(
+          clamp(origin.current.x + g.dx / z, 0, 2000),
+          clamp(origin.current.y + g.dy / z, 0, 2000),
+        );
       },
     }),
   ).current;
@@ -198,13 +236,38 @@ function DraggableBox({
           y: live.current.y,
           width: live.current.width,
           height: live.current.height,
+          rotation: live.current.rotation,
         };
       },
       onPanResponderMove: (_: GestureResponderEvent, g: PanResponderGestureState) => {
+        const z = live.current.zoomScale > 0.01 ? live.current.zoomScale : 1;
         live.current.onResize(
-          clamp(origin.current.width + g.dx, 80, 600),
-          clamp(origin.current.height + g.dy, 48, 600),
+          clamp(origin.current.width + g.dx / z, 80, 600),
+          clamp(origin.current.height + g.dy / z, 48, 600),
         );
+      },
+    }),
+  ).current;
+
+  const rotateResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => live.current.interactive && live.current.selected,
+      onMoveShouldSetPanResponder: () => live.current.interactive && live.current.selected,
+      onPanResponderGrant: () => {
+        origin.current = {
+          x: live.current.x,
+          y: live.current.y,
+          width: live.current.width,
+          height: live.current.height,
+          rotation: live.current.rotation,
+        };
+      },
+      onPanResponderMove: (_: GestureResponderEvent, g: PanResponderGestureState) => {
+        if (!live.current.onRotate) return;
+        // Horizontal drag ≈ degrees; keep it snappy but not twitchy.
+        const next = Math.round(origin.current.rotation + g.dx * 0.35);
+        const normalized = ((next % 360) + 360) % 360;
+        live.current.onRotate(normalized);
       },
     }),
   ).current;
@@ -221,6 +284,7 @@ function DraggableBox({
           borderColor: selected ? borderColor : "transparent",
           borderWidth: selected ? 1.5 : 0,
           backgroundColor: selected ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.01)",
+          transform: [{ rotate: `${rotation}deg` }],
         },
       ]}
       {...(interactive ? moveResponder.panHandlers : {})}
@@ -231,6 +295,11 @@ function DraggableBox({
       {selected && interactive ? (
         <View style={styles.resizeHandle} {...resizeResponder.panHandlers}>
           <Feather name="maximize-2" size={12} color="#fff" />
+        </View>
+      ) : null}
+      {selected && interactive && allowRotate ? (
+        <View style={styles.rotateHandle} {...rotateResponder.panHandlers}>
+          <Feather name="rotate-cw" size={12} color="#fff" />
         </View>
       ) : null}
     </View>
@@ -252,6 +321,17 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     backgroundColor: "#625AF6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rotateHandle: {
+    position: "absolute",
+    right: -10,
+    top: -10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#0F172A",
     alignItems: "center",
     justifyContent: "center",
   },

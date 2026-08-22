@@ -142,13 +142,17 @@ export function DashboardScreen() {
                   <View style={[styles.eventLine, { backgroundColor: event.color || theme.accent }]} />
                   <View style={styles.grow}>
                     <Text style={[styles.eventTitle, { color: theme.text }]} numberOfLines={1}>{event.title}</Text>
-                    <Text style={[styles.eventNotes, { color: theme.muted }]} numberOfLines={1}>{event.notes || (event.source === "LifeOS" ? "Focus block" : event.source)}</Text>
+                    <Text style={[styles.eventNotes, { color: theme.muted }]} numberOfLines={1}>
+                      {event.source === "Synapse"
+                        ? event.notes || "Synapse"
+                        : event.notes || (event.source === "LifeOS" ? "Focus block" : event.source)}
+                    </Text>
                   </View>
                 </View>
               );
             })
           ) : (
-            <Empty title="No events scheduled for today" body="" />
+            <Empty title="No events scheduled for today" body="Share a day plan from Synapse → Settings → LifeOS to see meds and appointments here." />
           )}
         </Card>
 
@@ -186,7 +190,7 @@ export function DashboardScreen() {
         <Card>
           <View style={styles.cardHead}>
             <View style={[styles.sectionIcon, { backgroundColor: "#31926A22" }]}><Feather name="cpu" size={13} color="#31926A" /></View>
-            <Text style={[styles.cardTitle, { color: theme.text }]}>Brain inbox</Text>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>MindDump</Text>
             <Pressable onPress={() => navigation.navigate("LibraryTab", { screen: "Brain" })} style={styles.grow}>
               <Text style={[styles.cardAction, { color: theme.accent, textAlign: "right" }]}>{workspace.brain.length} uncategorized →</Text>
             </Pressable>

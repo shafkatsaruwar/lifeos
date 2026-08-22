@@ -32,6 +32,15 @@ export function taskIsOpen(task: Task) {
   return !task.done && !task.canceled && task.status !== "Done" && task.status !== "Canceled";
 }
 
+export function taskIsRecentlyDone(task: Task, days = 10) {
+  if (taskIsOpen(task) || task.canceled || task.status === "Canceled") return false;
+  if (!task.done && task.status !== "Done") return false;
+  if (!task.completedAt) return false;
+  const stamp = Date.parse(task.completedAt);
+  if (Number.isNaN(stamp)) return false;
+  return stamp >= Date.now() - days * 24 * 60 * 60 * 1000;
+}
+
 export function getTaskStatus(task: Task) {
   return task.status ?? (task.canceled ? "Canceled" : task.done ? "Done" : "Not started");
 }
