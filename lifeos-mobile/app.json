@@ -45,17 +45,27 @@
             "CFBundleTypeName": "iCalendar",
             "LSHandlerRank": "Alternate",
             "CFBundleTypeRole": "Viewer",
-            "LSItemContentTypes": ["com.apple.ical.ics", "public.calendar-event"]
+            "LSItemContentTypes": [
+              "com.apple.ical.ics",
+              "public.calendar-event"
+            ]
           }
         ],
         "UTImportedTypeDeclarations": [
           {
             "UTTypeIdentifier": "com.apple.ical.ics",
             "UTTypeDescription": "iCalendar file",
-            "UTTypeConformsTo": ["public.data", "public.text"],
+            "UTTypeConformsTo": [
+              "public.data",
+              "public.text"
+            ],
             "UTTypeTagSpecification": {
-              "public.filename-extension": ["ics"],
-              "public.mime-type": ["text/calendar"]
+              "public.filename-extension": [
+                "ics"
+              ],
+              "public.mime-type": [
+                "text/calendar"
+              ]
             }
           }
         ]
@@ -118,15 +128,6 @@
                 {
                   "targetName": "LiveActivity",
                   "bundleIdentifier": "com.shafkatsaruwar.lifeos.LiveActivity",
-                  "entitlements": {
-                    "com.apple.security.application-groups": [
-                      "group.com.shafkatsaruwar.lifeos"
-                    ]
-                  }
-                },
-                {
-                  "targetName": "Share",
-                  "bundleIdentifier": "com.shafkatsaruwar.lifeos.Share",
                   "entitlements": {
                     "com.apple.security.application-groups": [
                       "group.com.shafkatsaruwar.lifeos"
