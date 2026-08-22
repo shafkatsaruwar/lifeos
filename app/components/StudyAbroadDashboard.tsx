@@ -12,6 +12,7 @@ import {
   searchWorldCountries,
   type WorldCountry,
 } from "@/lib/worldCountries";
+import { buildStudyAbroadPreviewHub } from "@/lib/studyAbroadPreview";
 import {
   appendHistory,
   applicationProgram,
@@ -102,12 +103,12 @@ function Empty({
   onAction?: () => void;
 }) {
   return (
-    <div className="os-empty">
-      <Globe2 size={19} />
+    <div className="os-empty sa-empty">
+      <Globe2 size={22} />
       <div>
         <p>{children}</p>
         {action && onAction ? (
-          <button type="button" className="os-profile-button" style={{ marginTop: 12 }} onClick={onAction}>{action}</button>
+          <button type="button" className="os-profile-button" style={{ marginTop: 14 }} onClick={onAction}>{action}</button>
         ) : null}
       </div>
     </div>
@@ -695,7 +696,7 @@ function ProgramCard({
   const nextAction = programNextActionLabel(hub, program);
   const deadline = formatStudyDate(program.deadline);
   return (
-    <button type="button" className="work-project-card" onClick={onOpen}>
+    <button type="button" className="work-project-card sa-shortlist-card" onClick={onOpen}>
       <div className="work-project-head">
         <span className="work-project-icon" aria-hidden>{countryFlagEmoji(country?.code)}</span>
         <div>
@@ -704,17 +705,21 @@ function ProgramCard({
         </div>
         <span className="work-priority-tag" style={{ marginLeft: "auto" }}>{programStatusLabel(program.status)}</span>
       </div>
-      <div className="work-deliverable-row" style={{ borderTop: "1px solid var(--line)", marginTop: 8, paddingLeft: 0, paddingRight: 0 }}>
-        <span className="work-deliverable-icon"><Target size={15} /></span>
+      <div className="sa-shortlist-meta">
         <div>
-          <strong>Next</strong>
-          <small>{nextAction}</small>
+          <span>Next</span>
+          <strong>{nextAction}</strong>
+        </div>
+        <div>
+          <span>Fit</span>
+          <strong>{program.fitScore ? `${program.fitScore}/10` : "—"}</strong>
+        </div>
+        <div>
+          <span>Deadline</span>
+          <strong>{deadline?.label || "—"}</strong>
         </div>
       </div>
-      <small>
-        {program.fitScore ? `Fit ${program.fitScore}/10` : "Fit unset"}
-        {deadline ? ` · Deadline ${deadline.label}` : ""}
-      </small>
+      <small className="sa-path-cta">Open →</small>
     </button>
   );
 }
@@ -731,25 +736,39 @@ function CountryPathCard({
   const country = getCountry(hub, countryId);
   if (!country) return null;
   const programs = programsForCountry(hub, countryId);
-  const shortlisted = programs.filter((item) => item.shortlisted || item.status === "shortlisted" || item.status === "preparing").length;
+  const shortlisted = programs.filter((item) => item.shortlisted || item.status === "shortlisted" || item.status === "preparing");
   const next = nextDeadlineForCountry(hub, countryId);
-  const deadline = formatStudyDate(next?.deadline);
+  const focusProgram =
+    next?.program
+    || [...shortlisted].sort((a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0))[0]
+    || programs[0];
   const empty = programs.length === 0;
 
   return (
-    <button type="button" className="work-project-card" onClick={onOpen}>
+    <button type="button" className="work-project-card sa-path-card" onClick={onOpen}>
       <div className="work-project-head">
-        <span className="work-project-icon" aria-hidden>{countryFlagEmoji(country.code)}</span>
+        <span className="work-project-icon sa-path-flag" aria-hidden>{countryFlagEmoji(country.code)}</span>
         <div>
           <strong>{country.name}</strong>
-          <p>
-            {empty
-              ? "No programs saved yet"
-              : `${programs.length} program${programs.length === 1 ? "" : "s"} · ${shortlisted} shortlisted`}
-          </p>
         </div>
       </div>
-      {deadline ? <small>Next deadline · {deadline.label}</small> : <small>{empty ? "Explore programs →" : "Open →"}</small>}
+      {empty ? (
+        <p className="sa-path-meta">No programs saved yet.</p>
+      ) : (
+        <div className="sa-path-meta">
+          <span>{programs.length} program{programs.length === 1 ? "" : "s"}</span>
+          {shortlisted.length > 0 ? (
+            <span>{shortlisted.length} shortlisted</span>
+          ) : null}
+        </div>
+      )}
+      {!empty && focusProgram ? (
+        <div className="sa-path-next">
+          <span>Next</span>
+          <strong>{focusProgram.name}</strong>
+        </div>
+      ) : null}
+      <span className="sa-path-cta">Explore programs →</span>
     </button>
   );
 }
@@ -784,7 +803,22 @@ export function StudyAbroadDashboard({
   focusEntity?: StudyAbroadFocusEntity | null;
   onFocusEntityConsumed?: () => void;
 }) {
-  const hub = useMemo(() => ensureCountriesFromUniversities(normalizeStudyAbroadHub(rawHub)), [rawHub]);
+  // Display-only preview via ?saPreview=1|full|sparse — never written to Firebase.
+  const [previewMode, setPreviewMode] = useState<string | null>(null);
+  useEffect(() => {
+    const value = new URLSearchParams(window.location.search).get("saPreview");
+    setPreviewMode(value && value !== "0" && value !== "false" ? value : null);
+  }, []);
+  const liveHub = useMemo(() => ensureCountriesFromUniversities(normalizeStudyAbroadHub(rawHub)), [rawHub]);
+  const previewHub = useMemo(
+    () => (previewMode ? ensureCountriesFromUniversities(normalizeStudyAbroadHub(buildStudyAbroadPreviewHub(previewMode === "sparse" ? "sparse" : "full"))) : null),
+    [previewMode],
+  );
+  const hub = previewHub ?? liveHub;
+  const persistHub = (next: StudyAbroadHub) => {
+    if (previewMode) return;
+    onChange(next);
+  };
   const [internalView, setInternalView] = useState<StudyAbroadView>("dashboard");
   const studyView = controlledView ?? internalView;
   const setStudyView = (view: StudyAbroadView) => {
@@ -841,7 +875,7 @@ export function StudyAbroadDashboard({
     setSelectedProgramId(id);
     setProgramTab("overview");
     setStudyView("programs");
-    onChange({
+    persistHub({
       ...hub,
       sessionMemory: { ...hub.sessionMemory, lastProgramId: id, lastView: "programs", updatedAt: nowIso() },
     });
@@ -890,7 +924,7 @@ export function StudyAbroadDashboard({
   };
 
   const updateProgram = (id: string, patch: Partial<StudyAbroadProgram>) => {
-    onChange({
+    persistHub({
       ...hub,
       programs: hub.programs.map((item) => item.id === id ? { ...item, ...patch, updatedAt: nowIso() } : item),
     });
@@ -904,11 +938,11 @@ export function StudyAbroadDashboard({
       applications: hub.applications.map((item) => item.id === id ? { ...item, stage, updatedAt: nowIso(), submittedAt: stage === "submitted" ? nowIso() : item.submittedAt } : item),
     };
     next = appendHistory(next, `Application → ${applicationStageLabel(stage)}`, program?.name, "application", id);
-    onChange(next);
+    persistHub(next);
   };
 
   const completeTask = (id: string) => {
-    onChange({
+    persistHub({
       ...hub,
       tasks: hub.tasks.map((item) => item.id === id ? { ...item, done: true, completedAt: nowIso(), updatedAt: nowIso() } : item),
     });
@@ -1107,7 +1141,7 @@ export function StudyAbroadDashboard({
               <div className="work-stat-card"><strong>{selectedCountry.livingCostLevel || "—"}</strong><span>Living cost</span></div>
             </div>
             <label style={{ display: "grid", gap: 6, marginTop: 12 }}>Notes
-              <textarea value={selectedCountry.notes || ""} onChange={(event) => onChange({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, notes: event.target.value, updatedAt: nowIso() } : item) })} rows={4} />
+              <textarea value={selectedCountry.notes || ""} onChange={(event) => persistHub({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, notes: event.target.value, updatedAt: nowIso() } : item) })} rows={4} />
             </label>
           </Section>
         )}
@@ -1142,10 +1176,10 @@ export function StudyAbroadDashboard({
         {countryTab === "visa" && (
           <Section icon={FileText} title="Visa & living">
             <div className="soft-card" style={{ padding: 14, display: "grid", gap: 10 }}>
-              <label>Student visa notes<textarea value={selectedCountry.visaNotes || ""} onChange={(event) => onChange({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, visaNotes: event.target.value, updatedAt: nowIso() } : item) })} rows={3} /></label>
-              <label>Financial proof<textarea value={selectedCountry.financialProofNotes || ""} onChange={(event) => onChange({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, financialProofNotes: event.target.value, updatedAt: nowIso() } : item) })} rows={2} /></label>
-              <label>Residence / post-study<textarea value={selectedCountry.postStudyNotes || ""} onChange={(event) => onChange({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, postStudyNotes: event.target.value, updatedAt: nowIso() } : item) })} rows={2} /></label>
-              <label>Cost of living<textarea value={selectedCountry.costOfLivingNotes || ""} onChange={(event) => onChange({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, costOfLivingNotes: event.target.value, updatedAt: nowIso() } : item) })} rows={3} /></label>
+              <label>Student visa notes<textarea value={selectedCountry.visaNotes || ""} onChange={(event) => persistHub({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, visaNotes: event.target.value, updatedAt: nowIso() } : item) })} rows={3} /></label>
+              <label>Financial proof<textarea value={selectedCountry.financialProofNotes || ""} onChange={(event) => persistHub({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, financialProofNotes: event.target.value, updatedAt: nowIso() } : item) })} rows={2} /></label>
+              <label>Residence / post-study<textarea value={selectedCountry.postStudyNotes || ""} onChange={(event) => persistHub({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, postStudyNotes: event.target.value, updatedAt: nowIso() } : item) })} rows={2} /></label>
+              <label>Cost of living<textarea value={selectedCountry.costOfLivingNotes || ""} onChange={(event) => persistHub({ ...hub, countries: hub.countries.map((item) => item.id === selectedCountry.id ? { ...item, costOfLivingNotes: event.target.value, updatedAt: nowIso() } : item) })} rows={3} /></label>
             </div>
             {hub.costs.filter((item) => item.countryId === selectedCountry.id).map((cost) => (
               <div key={cost.id} className="work-task-row"><div><strong>{cost.title}</strong><span>{cost.amount || "—"} {cost.currency || ""}</span></div></div>
@@ -1184,11 +1218,11 @@ export function StudyAbroadDashboard({
         )) : <Empty>Programs are the application center. Add the degrees you’re considering here.</Empty>}
       </Section>
       <Section icon={NotebookPen} title="University notes">
-        <textarea value={selectedUniversity.notes || ""} onChange={(event) => onChange({ ...hub, universities: hub.universities.map((item) => item.id === selectedUniversity.id ? { ...item, notes: event.target.value, updatedAt: nowIso() } : item) })} rows={4} />
+        <textarea value={selectedUniversity.notes || ""} onChange={(event) => persistHub({ ...hub, universities: hub.universities.map((item) => item.id === selectedUniversity.id ? { ...item, notes: event.target.value, updatedAt: nowIso() } : item) })} rows={4} />
         <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-          <label>Website<input value={selectedUniversity.websiteUrl || ""} onChange={(event) => onChange({ ...hub, universities: hub.universities.map((item) => item.id === selectedUniversity.id ? { ...item, websiteUrl: event.target.value, updatedAt: nowIso() } : item) })} /></label>
-          <label>Application portal<input value={selectedUniversity.applicationPortalUrl || ""} onChange={(event) => onChange({ ...hub, universities: hub.universities.map((item) => item.id === selectedUniversity.id ? { ...item, applicationPortalUrl: event.target.value, updatedAt: nowIso() } : item) })} /></label>
-          <label>Application method<input value={selectedUniversity.applicationMethod || ""} onChange={(event) => onChange({ ...hub, universities: hub.universities.map((item) => item.id === selectedUniversity.id ? { ...item, applicationMethod: event.target.value, updatedAt: nowIso() } : item) })} placeholder="uni-assist / direct / VPD / …" /></label>
+          <label>Website<input value={selectedUniversity.websiteUrl || ""} onChange={(event) => persistHub({ ...hub, universities: hub.universities.map((item) => item.id === selectedUniversity.id ? { ...item, websiteUrl: event.target.value, updatedAt: nowIso() } : item) })} /></label>
+          <label>Application portal<input value={selectedUniversity.applicationPortalUrl || ""} onChange={(event) => persistHub({ ...hub, universities: hub.universities.map((item) => item.id === selectedUniversity.id ? { ...item, applicationPortalUrl: event.target.value, updatedAt: nowIso() } : item) })} /></label>
+          <label>Application method<input value={selectedUniversity.applicationMethod || ""} onChange={(event) => persistHub({ ...hub, universities: hub.universities.map((item) => item.id === selectedUniversity.id ? { ...item, applicationMethod: event.target.value, updatedAt: nowIso() } : item) })} placeholder="uni-assist / direct / VPD / …" /></label>
         </div>
       </Section>
     </div></div>
@@ -1286,7 +1320,7 @@ export function StudyAbroadDashboard({
             <Section icon={FileText} title="Requirements" action="Add requirement" onAction={() => {
               const title = window.prompt("Requirement title");
               if (!title?.trim()) return;
-              onChange({
+              persistHub({
                 ...hub,
                 requirements: [...hub.requirements, {
                   id: newId("req"),
@@ -1306,7 +1340,7 @@ export function StudyAbroadDashboard({
                   onClick={() => {
                     const order = ["missing", "draft", "ready", "submitted", "waived"] as const;
                     const next = order[(order.indexOf(item.status as typeof order[number]) + 1) % order.length];
-                    onChange({
+                    persistHub({
                       ...hub,
                       requirements: hub.requirements.map((req) => req.id === item.id ? { ...req, status: next, updatedAt: nowIso() } : req),
                     });
@@ -1345,7 +1379,7 @@ export function StudyAbroadDashboard({
                 <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
                   <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>Link an opportunity:</p>
                   {hub.funding.filter((item) => !linkedFunding.some((linked) => linked.id === item.id)).slice(0, 6).map((item) => (
-                    <button key={item.id} type="button" className="work-task-row" onClick={() => onChange(linkFundingToProgram(hub, selectedProgram.id, item.id))}>
+                    <button key={item.id} type="button" className="work-task-row" onClick={() => persistHub(linkFundingToProgram(hub, selectedProgram.id, item.id))}>
                       <div><strong>{item.name}</strong><span>{item.status}</span></div>
                       <Plus size={16} />
                     </button>
@@ -1373,7 +1407,7 @@ export function StudyAbroadDashboard({
                   {hub.documents.slice(0, 5).map((doc) => {
                     const app = hub.applications.find((item) => item.programId === selectedProgram.id)!;
                     return (
-                      <button key={doc.id} type="button" className="os-profile-button" onClick={() => onChange(linkDocumentToApplication(hub, app.id, doc.id))}>
+                      <button key={doc.id} type="button" className="os-profile-button" onClick={() => persistHub(linkDocumentToApplication(hub, app.id, doc.id))}>
                         Link {doc.name}
                       </button>
                     );
@@ -1481,7 +1515,7 @@ export function StudyAbroadDashboard({
                     onClick={() => {
                       const label = window.prompt("Variant label (e.g. THI UX Design Version)");
                       if (!label?.trim()) return;
-                      onChange(createDocumentVariant(hub, doc.id, label.trim()));
+                      persistHub(createDocumentVariant(hub, doc.id, label.trim()));
                     }}
                   >
                     Create program variant
@@ -1490,7 +1524,7 @@ export function StudyAbroadDashboard({
               </div>
               <select
                 value={doc.status}
-                onChange={(event) => onChange(appendHistory({
+                onChange={(event) => persistHub(appendHistory({
                   ...hub,
                   documents: hub.documents.map((item) => item.id === doc.id ? { ...item, status: event.target.value as typeof doc.status, updatedAt: nowIso() } : item),
                 }, `Document → ${event.target.value.replace(/_/g, " ")}`, doc.name, "document", doc.id))}
@@ -1521,7 +1555,7 @@ export function StudyAbroadDashboard({
             </div>
             <select
               value={item.status}
-              onChange={(event) => onChange({
+              onChange={(event) => persistHub({
                 ...hub,
                 funding: hub.funding.map((fund) => fund.id === item.id ? { ...fund, status: event.target.value as typeof item.status, updatedAt: nowIso() } : fund),
               })}
@@ -1558,7 +1592,7 @@ export function StudyAbroadDashboard({
         if (!title?.trim()) return;
         const date = window.prompt("Date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10)) || new Date().toISOString().slice(0, 10);
         const stamp = nowIso();
-        onChange(appendHistory({
+        persistHub(appendHistory({
           ...hub,
           timelineEvents: [...hub.timelineEvents, {
             id: newId("tl"),
@@ -1666,7 +1700,7 @@ export function StudyAbroadDashboard({
           hub={hub}
           close={() => setCreateKind(null)}
           save={(nextHub, created) => {
-            onChange(nextHub);
+            persistHub(nextHub);
             if (created.kind === "country") openCountry(created.id);
             else if (created.kind === "university") openUniversity(created.id);
             else if (created.kind === "program") openProgram(created.id);
