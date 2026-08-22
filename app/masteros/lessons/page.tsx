@@ -18,7 +18,7 @@ const DEFAULT_SECTIONS: { type: LessonSectionType; title: string; content: strin
 ];
 
 function LessonsInner() {
-  const { state, addLesson } = useMasterOS();
+  const { state, addLesson, deleteLesson } = useMasterOS();
   const params = useSearchParams();
   const [open, setOpen] = useState(params.get("new") === "1");
   const [title, setTitle] = useState("");
@@ -49,10 +49,22 @@ function LessonsInner() {
         const unit = state.units.find((item) => item.id === lesson.unitId);
         const course = state.courses.find((item) => item.id === unit?.courseId);
         return (
-          <Link key={lesson.id} href={`/masteros/lessons/${lesson.id}`} className="mos-entity" style={{ marginBottom: 10 }}>
-            <strong>{lesson.title}</strong>
-            <p className="mos-muted">{student?.name} · {course?.name} · {unit?.title} · {formatDate(lesson.date)} · {lesson.status.replace("_", " ")}</p>
-          </Link>
+          <article key={lesson.id} className="mos-entity" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 10 }}>
+            <Link href={`/masteros/lessons/${lesson.id}`} style={{ flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}>
+              <strong>{lesson.title}</strong>
+              <p className="mos-muted">{student?.name} · {course?.name} · {unit?.title} · {formatDate(lesson.date)} · {lesson.status.replace("_", " ")}</p>
+            </Link>
+            <button
+              className="mos-ghost"
+              type="button"
+              onClick={() => {
+                if (!window.confirm(`Delete “${lesson.title}”?`)) return;
+                deleteLesson(lesson.id);
+              }}
+            >
+              Delete
+            </button>
+          </article>
         );
       })}
       {open ? (

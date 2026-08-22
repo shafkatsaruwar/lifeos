@@ -118,6 +118,7 @@ export type AssignmentQuestion = {
   assignmentId: string;
   questionId: string;
   order: number;
+  points?: number;
 };
 
 export type QuestionResult = {
@@ -128,6 +129,7 @@ export type QuestionResult = {
   correct: boolean;
   response?: string;
   mistakeType?: MistakeType;
+  pointsEarned?: number;
 };
 
 export type Assessment = {

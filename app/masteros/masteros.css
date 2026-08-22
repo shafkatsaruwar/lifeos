@@ -62,6 +62,12 @@
 .mos-field input:focus, .mos-field select:focus, .mos-field textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
 .mos-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .mos-ghost { height: 34px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 8px; padding: 0 12px; font-size: 11px; font-weight: 700; }
+.mos-mark { display: inline-flex; align-items: center; gap: 6px; }
+.mos-mark span { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.mos-mark input {
+  width: 64px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+  padding: 0 8px; text-align: center; color: inherit; font-weight: 700;
+}
 .mos-section { border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); padding: 14px; margin-bottom: 10px; }
 .mos-section header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .mos-teach { min-height: 100vh; background: var(--canvas); padding: 28px 36px 48px; }

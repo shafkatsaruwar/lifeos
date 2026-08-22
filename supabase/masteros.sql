@@ -110,6 +110,7 @@ create table if not exists assignment_questions (
   assignment_id text not null references assignments(id) on delete cascade,
   question_id text not null references questions(id) on delete cascade,
   sort_order int not null,
+  points numeric,
   primary key (assignment_id, question_id)
 );
 
@@ -120,7 +121,8 @@ create table if not exists question_results (
   assignment_id text references assignments(id),
   correct boolean not null,
   response text,
-  mistake_type text
+  mistake_type text,
+  points_earned numeric
 );
 
 create table if not exists assessments (

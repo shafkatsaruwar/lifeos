@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { formatDate, SECTION_LABEL } from "@/lib/masteros/helpers";
 import { useMasterOS } from "@/lib/masteros/store";
 
 export default function LessonDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { state, updateLesson, updateSection, reorderSections } = useMasterOS();
+  const router = useRouter();
+  const { state, updateLesson, updateSection, reorderSections, deleteLesson } = useMasterOS();
   const lesson = state.lessons.find((item) => item.id === id);
   if (!lesson) return <div className="mos-page"><p>Lesson not found.</p></div>;
   const student = state.students.find((item) => item.id === lesson.studentId);
@@ -40,6 +41,17 @@ export default function LessonDetailPage() {
             <option value="complete">Complete</option>
           </select>
           <Link className="primary" href={`/masteros/lessons/${lesson.id}/teach`}>Start Lesson</Link>
+          <button
+            className="mos-ghost"
+            type="button"
+            onClick={() => {
+              if (!window.confirm(`Delete “${lesson.title}”? This cannot be undone.`)) return;
+              deleteLesson(lesson.id);
+              router.push("/masteros/lessons");
+            }}
+          >
+            Delete
+          </button>
         </div>
       </div>
       <section className="mos-card" style={{ marginBottom: 16 }}>

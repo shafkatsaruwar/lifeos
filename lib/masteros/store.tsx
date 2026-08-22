@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { applyQuestionResult, computeMasteryState } from "./mastery";
 import { createSeedState } from "./seed";
-import { uid } from "./helpers";
+import { questionPoints, tallyAssignmentMarks, uid } from "./helpers";
 import type {
   Assignment,
   Course,
@@ -61,6 +61,24 @@ function retallySkill(current: StudentSkill, previous: boolean, next: boolean, p
   };
 }
 
+function retallyAssignment(current: MasterOSState, assignmentId: string): MasterOSState {
+  const links = current.assignmentQuestions.filter((item) => item.assignmentId === assignmentId);
+  if (!links.length) return current;
+  const tally = tallyAssignmentMarks(links, current.questionResults, assignmentId);
+  return {
+    ...current,
+    assignments: current.assignments.map((item) => {
+      if (item.id !== assignmentId) return item;
+      return {
+        ...item,
+        totalPoints: tally.totalPoints,
+        score: tally.gradedCount ? tally.score : item.score,
+        status: tally.complete ? ("graded" as const) : item.status,
+      };
+    }),
+  };
+}
+
 type Store = {
   state: MasterOSState;
   ready: boolean;
@@ -70,16 +88,26 @@ type Store = {
   enroll: (studentId: string, courseId: string) => void;
   addLesson: (input: Omit<Lesson, "id">, sections?: Omit<LessonSection, "id" | "lessonId">[]) => string;
   updateLesson: (id: string, patch: Partial<Lesson>) => void;
+  deleteLesson: (id: string) => void;
   updateSection: (id: string, patch: Partial<LessonSection>) => void;
   reorderSections: (lessonId: string, orderedIds: string[]) => void;
   addNote: (note: Omit<TeacherNote, "id" | "createdAt">) => void;
   addQuestion: (input: Omit<Question, "id">) => string;
   addAssignment: (input: Omit<Assignment, "id">, questionIds?: string[]) => string;
   updateAssignment: (id: string, patch: Partial<Assignment>) => void;
-  addAssignmentQuestion: (assignmentId: string, questionId: string) => void;
+  addAssignmentQuestion: (assignmentId: string, questionId: string, points?: number) => void;
+  updateAssignmentQuestion: (assignmentId: string, questionId: string, patch: { points?: number }) => void;
   addUnit: (courseId: string, title: string) => string;
-  gradeAssignment: (id: string, score: number) => void;
-  recordResult: (input: { studentId: string; questionId: string; assignmentId?: string; correct: boolean; response?: string; mistakeType?: MistakeType | null }) => void;
+  gradeAssignment: (id: string, score: number, totalPoints?: number) => void;
+  recordResult: (input: {
+    studentId: string;
+    questionId: string;
+    assignmentId?: string;
+    correct: boolean;
+    response?: string;
+    mistakeType?: MistakeType | null;
+    pointsEarned?: number;
+  }) => void;
   completeLesson: (lessonId: string, wrap: { understood: string; improvedSkillIds: string[]; weakSkillIds: string[]; homework?: string; nextNotes?: string }) => void;
 };
 
@@ -146,6 +174,19 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
     updateLesson: (id, next) => {
       patch((current) => ({ ...current, lessons: current.lessons.map((item) => (item.id === id ? { ...item, ...next } : item)) }));
     },
+    deleteLesson: (id) => {
+      patch((current) => ({
+        ...current,
+        lessons: current.lessons.filter((item) => item.id !== id),
+        lessonSections: current.lessonSections.filter((item) => item.lessonId !== id),
+        assignments: current.assignments.map((item) =>
+          item.lessonId === id ? { ...item, lessonId: undefined } : item,
+        ),
+        teacherNotes: current.teacherNotes.map((item) =>
+          item.lessonId === id ? { ...item, lessonId: undefined } : item,
+        ),
+      }));
+    },
     updateSection: (id, next) => {
       patch((current) => ({
         ...current,
@@ -179,7 +220,7 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
         assignments: [...current.assignments, { ...input, id, totalPoints: input.totalPoints || questionIds.length || 10 }],
         assignmentQuestions: [
           ...current.assignmentQuestions,
-          ...questionIds.map((questionId, order) => ({ assignmentId: id, questionId, order: order + 1 })),
+          ...questionIds.map((questionId, order) => ({ assignmentId: id, questionId, order: order + 1, points: 1 })),
         ],
       }));
       return id;
@@ -190,13 +231,22 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
         assignments: current.assignments.map((item) => (item.id === id ? { ...item, ...next } : item)),
       }));
     },
-    addAssignmentQuestion: (assignmentId, questionId) => {
+    addAssignmentQuestion: (assignmentId, questionId, points = 1) => {
       patch((current) => {
         if (current.assignmentQuestions.some((item) => item.assignmentId === assignmentId && item.questionId === questionId)) {
           return current;
         }
         const order = current.assignmentQuestions.filter((item) => item.assignmentId === assignmentId).length + 1;
-        return { ...current, assignmentQuestions: [...current.assignmentQuestions, { assignmentId, questionId, order }] };
+        const assignmentQuestions = [...current.assignmentQuestions, { assignmentId, questionId, order, points }];
+        return retallyAssignment({ ...current, assignmentQuestions }, assignmentId);
+      });
+    },
+    updateAssignmentQuestion: (assignmentId, questionId, next) => {
+      patch((current) => {
+        const assignmentQuestions = current.assignmentQuestions.map((item) =>
+          item.assignmentId === assignmentId && item.questionId === questionId ? { ...item, ...next } : item,
+        );
+        return retallyAssignment({ ...current, assignmentQuestions }, assignmentId);
       });
     },
     addUnit: (courseId, title) => {
@@ -207,15 +257,25 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
       });
       return id;
     },
-    gradeAssignment: (id, score) => {
+    gradeAssignment: (id, score, totalPoints) => {
       patch((current) => ({
         ...current,
-        assignments: current.assignments.map((item) => (item.id === id ? { ...item, score, status: "graded" as const } : item)),
+        assignments: current.assignments.map((item) =>
+          item.id === id
+            ? { ...item, score, totalPoints: totalPoints ?? item.totalPoints, status: "graded" as const }
+            : item,
+        ),
       }));
     },
-    recordResult: ({ studentId, questionId, assignmentId, correct, response, mistakeType }) => {
+    recordResult: ({ studentId, questionId, assignmentId, correct, response, mistakeType, pointsEarned }) => {
       patch((current) => {
         const question = current.questions.find((item) => item.id === questionId);
+        const link = current.assignmentQuestions.find(
+          (item) => item.assignmentId === assignmentId && item.questionId === questionId,
+        );
+        const max = questionPoints(link);
+        const earned = pointsEarned != null ? Math.min(max, Math.max(0, pointsEarned)) : correct ? max : 0;
+        const nextCorrect = earned >= max && max > 0;
         const practicedAt = new Date().toISOString().slice(0, 10);
         const existingResult = current.questionResults.find(
           (item) => item.studentId === studentId && item.questionId === questionId && item.assignmentId === assignmentId,
@@ -232,8 +292,8 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
             recentAccuracy: 0,
           };
           const next = existingResult
-            ? retallySkill(base, existingResult.correct, correct, practicedAt)
-            : applyQuestionResult(base, correct, practicedAt);
+            ? retallySkill(base, existingResult.correct, nextCorrect, practicedAt)
+            : applyQuestionResult(base, nextCorrect, practicedAt);
           studentSkills = existing
             ? studentSkills.map((item) => (item === existing ? next : item))
             : [...studentSkills, next];
@@ -243,24 +303,16 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
           studentId,
           questionId,
           assignmentId,
-          correct,
+          correct: nextCorrect,
           response,
           mistakeType: mistakeType ?? undefined,
+          pointsEarned: earned,
         };
         const questionResults = existingResult
           ? current.questionResults.map((item) => (item.id === existingResult.id ? result : item))
           : [...current.questionResults, result];
-        const assignments = current.assignments.map((assignment) => {
-          if (assignment.id !== assignmentId) return assignment;
-          const links = current.assignmentQuestions.filter((item) => item.assignmentId === assignment.id);
-          const graded = questionResults.filter((item) => item.assignmentId === assignment.id);
-          if (!links.length) return assignment;
-          const correctCount = graded.filter((item) => item.correct).length;
-          const score = Math.round((correctCount / links.length) * (assignment.totalPoints || links.length));
-          const status = graded.length >= links.length ? ("graded" as const) : assignment.status;
-          return { ...assignment, score, status };
-        });
-        return { ...current, studentSkills, questionResults, assignments };
+        const nextState = { ...current, studentSkills, questionResults };
+        return assignmentId ? retallyAssignment(nextState, assignmentId) : nextState;
       });
     },
     completeLesson: (lessonId, wrap) => {

@@ -1,7 +1,7 @@
 import { applyQuestionResult, computeMasteryState, recommendNextSkill } from "@/lib/masteros/mastery";
 import { createSeedState, DEMO_COURSE_ID, DEMO_STUDENT_ID } from "@/lib/masteros/seed";
 import { attentionSkills, courseProgress } from "@/lib/masteros/selectors";
-import { assignmentStatusLabel, assignmentTypeLabel, percent } from "@/lib/masteros/helpers";
+import { assignmentStatusLabel, assignmentTypeLabel, percent, tallyAssignmentMarks } from "@/lib/masteros/helpers";
 
 describe("MasterOS mastery rules", () => {
   it("maps accuracy bands without SAT-specific logic", () => {
@@ -78,5 +78,24 @@ describe("MasterOS labels", () => {
   it("keeps assignment copy generic", () => {
     expect(assignmentTypeLabel("diagnostic")).toBe("Diagnostic");
     expect(assignmentStatusLabel("in_progress")).toBe("In Progress");
+  });
+});
+
+describe("MasterOS assignment marks", () => {
+  it("tallies custom and partial credit against question points", () => {
+    const tally = tallyAssignmentMarks(
+      [
+        { assignmentId: "asg", questionId: "q1", points: 5 },
+        { assignmentId: "asg", questionId: "q2", points: 5 },
+      ],
+      [
+        { assignmentId: "asg", questionId: "q1", correct: true, pointsEarned: 5 },
+        { assignmentId: "asg", questionId: "q2", correct: false, pointsEarned: 2.5 },
+      ],
+      "asg",
+    );
+    expect(tally.score).toBe(7.5);
+    expect(tally.totalPoints).toBe(10);
+    expect(tally.complete).toBe(true);
   });
 });

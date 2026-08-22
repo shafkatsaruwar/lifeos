@@ -100,3 +100,43 @@ export function scorePercent(score?: number, total?: number) {
   const value = percent(score, total);
   return value == null ? "—" : `${value}%`;
 }
+
+export function questionPoints(link?: { points?: number } | null) {
+  const value = link?.points;
+  return value == null || value < 0 ? 1 : value;
+}
+
+export function roundMark(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+export function earnedPoints(
+  result: { correct?: boolean; pointsEarned?: number } | undefined,
+  max = 1,
+) {
+  if (!result) return null;
+  if (result.pointsEarned != null) return roundMark(Math.min(max, Math.max(0, result.pointsEarned)));
+  return result.correct ? max : 0;
+}
+
+export function tallyAssignmentMarks(
+  links: { assignmentId: string; questionId: string; points?: number }[],
+  results: { assignmentId?: string; questionId: string; correct: boolean; pointsEarned?: number }[],
+  assignmentId: string,
+) {
+  const mine = links.filter((item) => item.assignmentId === assignmentId);
+  const totalPoints = roundMark(mine.reduce((sum, item) => sum + questionPoints(item), 0));
+  const graded = mine.map((link) =>
+    results.find((item) => item.assignmentId === assignmentId && item.questionId === link.questionId),
+  );
+  const gradedCount = graded.filter(Boolean).length;
+  const score = roundMark(
+    mine.reduce((sum, link, index) => sum + (earnedPoints(graded[index], questionPoints(link)) ?? 0), 0),
+  );
+  return {
+    score,
+    totalPoints: totalPoints || mine.length,
+    gradedCount,
+    complete: mine.length > 0 && gradedCount >= mine.length,
+  };
+}

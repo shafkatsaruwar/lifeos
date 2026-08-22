@@ -205,11 +205,11 @@ export function createSeedState(): MasterOSState {
       { id: "asg-quiz-alg", courseId: S.sat, studentId: S.wafia, title: "Algebra foundations quiz", type: "quiz", assignedDate: "2026-08-12", dueDate: "2026-08-15", status: "graded", totalPoints: 20, score: 15 },
     ],
     assignmentQuestions: [
-      { assignmentId: "asg-linear-hw", questionId: "q-lin-1", order: 1 },
-      { assignmentId: "asg-linear-hw", questionId: "q-lin-2", order: 2 },
-      { assignmentId: "asg-percent", questionId: "q-pct-1", order: 1 },
-      { assignmentId: "asg-percent", questionId: "q-pct-2", order: 2 },
-      { assignmentId: "asg-percent", questionId: "q-pct-3", order: 3 },
+      { assignmentId: "asg-linear-hw", questionId: "q-lin-1", order: 1, points: 4 },
+      { assignmentId: "asg-linear-hw", questionId: "q-lin-2", order: 2, points: 4 },
+      { assignmentId: "asg-percent", questionId: "q-pct-1", order: 1, points: 4 },
+      { assignmentId: "asg-percent", questionId: "q-pct-2", order: 2, points: 3 },
+      { assignmentId: "asg-percent", questionId: "q-pct-3", order: 3, points: 3 },
     ],
     questionResults: [
       { id: "qr-1", studentId: S.wafia, questionId: "q-lin-1", assignmentId: "asg-linear-hw", correct: true, response: "17" },
