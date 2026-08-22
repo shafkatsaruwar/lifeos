@@ -7,13 +7,15 @@
     "base": {
       "node": "20.19.4",
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EAS_NO_FROZEN_LOCKFILE": "1"
       }
     },
     "development": {
       "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
+      "config": "ios-simulator-ensure-expo.yml",
       "ios": {
         "simulator": true
       }
@@ -22,6 +24,7 @@
       "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
+      "config": "ios-ensure-expo.yml",
       "ios": {
         "simulator": false
       }
@@ -29,12 +32,14 @@
     "preview": {
       "extends": "base",
       "distribution": "internal",
+      "config": "ios-ensure-expo.yml",
       "channel": "preview",
       "environment": "preview"
     },
     "production": {
       "extends": "base",
       "autoIncrement": true,
+      "config": "ios-ensure-expo.yml",
       "channel": "production",
       "environment": "production"
     }

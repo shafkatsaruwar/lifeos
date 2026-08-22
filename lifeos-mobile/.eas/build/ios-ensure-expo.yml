@@ -1,0 +1,32 @@
+# iOS device/store build with an explicit local-expo check before prebuild.
+# Prevents `npx expo prebuild --no-install` from fetching Expo 57 when
+# node_modules/expo is missing after install.
+build:
+  name: iOS build (ensure expo before prebuild)
+  steps:
+    - eas/checkout
+    - eas/use_npm_token
+    - eas/install_node_modules
+    - run:
+        name: Ensure local expo (SDK 54) before prebuild
+        command: node ./scripts/ensure-expo-installed.js
+    - eas/resolve_build_config
+    - eas/resolve_apple_team_id_from_credentials:
+        id: resolve_apple_team_id_from_credentials
+    - eas/prebuild:
+        inputs:
+          apple_team_id: ${ steps.resolve_apple_team_id_from_credentials.apple_team_id }
+    - run:
+        name: Install pods
+        working_directory: ./ios
+        command: pod install
+    - eas/configure_eas_update:
+        inputs:
+          throw_if_not_configured: false
+    - eas/configure_ios_credentials
+    - eas/configure_ios_version
+    - eas/generate_gymfile_from_template:
+        inputs:
+          credentials: ${ eas.job.secrets.buildCredentials }
+    - eas/run_fastlane
+    - eas/find_and_upload_build_artifacts

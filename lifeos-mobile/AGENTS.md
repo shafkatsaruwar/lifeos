@@ -18,7 +18,9 @@ Read versioned docs: https://docs.expo.dev/versions/v54.0.0/
   - Architecture stubs (not faked): `notebookPdf.ts`, `handwritingRecognition.ts`, `notebookAi.ts`.
   - PencilKit **requires a native iOS build**, not Expo Go.
 - Legacy single-note Draw mode still on `NoteEditorScreen` / `note.ink`.
-- **EAS builds:** always run from `lifeos-mobile/` on latest `main`. Do not “Rebuild” a failed job (reuses old commit). After install, `eas-build-post-install` ensures `expo` is present so prebuild does not fetch Expo 57 via `npx`.
+- **EAS builds:** always run from `lifeos-mobile/` on latest `main`. Do not “Rebuild” a failed job (reuses old commit).
+  - Local `expo` must exist before prebuild; otherwise `npx` fetches Expo 57 and fails.
+  - Use npm `postinstall` + `.eas/build/*-ensure-expo.yml` (runs ensure between install and prebuild). Do **not** use `eas-build-post-install` for this — on iOS that hook runs *after* prebuild.
 - **EAS Update (OTA / Synapse-style):** JS-only changes on `main` publish via `.github/workflows/eas-update.yml` to the `production` channel. TestFlight/production binaries built with `channel: production` pick updates up on cold start — no `git fetch` / Metro restart. Native module / `app.json` plugin changes still need a new EAS binary. Requires GitHub secrets `EXPO_TOKEN` + `EAS_PROJECT_ID`, and `EAS_PROJECT_ID` (or `EXPO_PUBLIC_EAS_PROJECT_ID`) in the environment used to publish. Config: `app.config.js`, channels on `preview` / `production` in `eas.json`.
 
 ## Cursor Cloud specific instructions

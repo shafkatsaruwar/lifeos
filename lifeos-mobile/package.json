@@ -11,8 +11,7 @@
     "web": "expo start --web",
     "update:preview": "eas update --channel preview --message \"preview $(date -u +%Y-%m-%dT%H:%MZ)\" --non-interactive",
     "update:production": "eas update --channel production --message \"production $(date -u +%Y-%m-%dT%H:%MZ)\" --non-interactive",
-    "eas-build-post-install": "node ./scripts/ensure-expo-installed.js",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package && node ./scripts/ensure-expo-installed.js"
   },
   "dependencies": {
     "@bacons/apple-targets": "^5.0.0",

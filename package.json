@@ -12,7 +12,8 @@
     "test:coverage": "jest --coverage",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "npm run build && tauri build"
+    "tauri:build": "npm run build && tauri build",
+    "postinstall": "node ./scripts/eas-ensure-mobile-deps.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
