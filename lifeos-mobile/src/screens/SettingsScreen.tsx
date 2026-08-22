@@ -275,11 +275,11 @@ export function SettingsScreen() {
             <Text style={[styles.cardLabel, { color: theme.text }]}>Environments</Text>
           </View>
           <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>
-            Show or hide Life, School, and Work tabs. Data stays in sync with the web app.
+            Show or hide HomeOS, School, and Work tabs. Data stays in sync with the web app.
           </Text>
           <View style={styles.settingRow}>
             <View style={styles.grow}>
-              <Text style={{ color: theme.text, fontWeight: "800" }}>Life</Text>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>HomeOS</Text>
             </View>
             <Switch
               value={workspace.settings.enableLifeOS !== false}

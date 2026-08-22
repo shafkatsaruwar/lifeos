@@ -39,7 +39,26 @@
           "UIInterfaceOrientationLandscapeLeft",
           "UIInterfaceOrientationLandscapeRight"
         ],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "iCalendar",
+            "LSHandlerRank": "Alternate",
+            "CFBundleTypeRole": "Viewer",
+            "LSItemContentTypes": ["com.apple.ical.ics", "public.calendar-event"]
+          }
+        ],
+        "UTImportedTypeDeclarations": [
+          {
+            "UTTypeIdentifier": "com.apple.ical.ics",
+            "UTTypeDescription": "iCalendar file",
+            "UTTypeConformsTo": ["public.data", "public.text"],
+            "UTTypeTagSpecification": {
+              "public.filename-extension": ["ics"],
+              "public.mime-type": ["text/calendar"]
+            }
+          }
+        ]
       }
     },
     "android": {
@@ -72,11 +91,12 @@
       "./plugins/withLifeOSWidgets.js",
       "./plugins/withLifeOSSiri.js",
       "./plugins/withLifeOSSceneLifecycle.js",
+      "@bacons/apple-targets",
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "LifeOS uses the microphone so you can dump thoughts and tasks by speaking.",
-          "speechRecognitionPermission": "LifeOS converts what you say into text for MindDump and new tasks."
+          "microphonePermission": "LifeOS uses the microphone so you can dump thoughts, capture day memories, and dictate tasks.",
+          "speechRecognitionPermission": "LifeOS converts what you say into text for MindDump, day memories, and new tasks."
         }
       ]
     ],
@@ -98,6 +118,15 @@
                 {
                   "targetName": "LiveActivity",
                   "bundleIdentifier": "com.shafkatsaruwar.lifeos.LiveActivity",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.shafkatsaruwar.lifeos"
+                    ]
+                  }
+                },
+                {
+                  "targetName": "Share",
+                  "bundleIdentifier": "com.shafkatsaruwar.lifeos.Share",
                   "entitlements": {
                     "com.apple.security.application-groups": [
                       "group.com.shafkatsaruwar.lifeos"

@@ -111,3 +111,10 @@ export function parseIcsEvents(ics: string): CalendarEvent[] {
     })
     .filter(Boolean) as CalendarEvent[];
 }
+
+export function mergeCalendarEvents(existing: CalendarEvent[], incoming: CalendarEvent[]): CalendarEvent[] {
+  const byId = new Map<string, CalendarEvent>();
+  for (const event of existing) byId.set(event.id, event);
+  for (const event of incoming) byId.set(event.id, event);
+  return Array.from(byId.values());
+}

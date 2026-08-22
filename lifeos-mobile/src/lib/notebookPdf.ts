@@ -4,12 +4,30 @@
  */
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
-import { renderDrawingPng } from "expo-pencilkit-ui";
 import * as Sharing from "expo-sharing";
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
 import { Platform } from "react-native";
 import type { NotebookPage, PaperColor, PaperStyle } from "../types";
 import { createPage, pagesForNotebook, paperColorHex } from "./notebooks";
+
+async function renderDrawingPng(
+  base64String: string,
+  width: number,
+  height: number,
+  scale = 2,
+): Promise<string> {
+  try {
+    // Lazy: expo-pencilkit-ui must not load during app startup / before native runtime.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require("expo-pencilkit-ui") as {
+      renderDrawingPng?: (data: string, w: number, h: number, s?: number) => Promise<string>;
+    };
+    if (!mod.renderDrawingPng) return "";
+    return (await mod.renderDrawingPng(base64String, width, height, scale)) || "";
+  } catch {
+    return "";
+  }
+}
 
 export type PdfImportPlan = {
   fileName: string;

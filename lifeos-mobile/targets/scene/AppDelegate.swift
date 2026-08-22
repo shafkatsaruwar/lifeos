@@ -1,10 +1,12 @@
 import Expo
 import React
 import ReactAppDependencyProvider
+import UIKit
 
 @UIApplicationMain
 public class AppDelegate: ExpoAppDelegate {
-  var window: UIWindow?
+  /// Must be @objc so expo-dev-launcher can read `UIApplication.shared.delegate?.window`.
+  @objc public var window: UIWindow?
 
   var reactNativeDelegate: ExpoReactNativeFactoryDelegate?
   var reactNativeFactory: RCTReactNativeFactory?
@@ -21,7 +23,14 @@ public class AppDelegate: ExpoAppDelegate {
     reactNativeFactory = factory
     bindReactNativeFactory(factory)
 
-    // Window + React Native start in SceneDelegate (UIScene lifecycle required by iOS 27 SDK).
+    // expo-dev-launcher fatalErrors in didFinishLaunching if there is no key window.
+    // UIScene attaches the real window in SceneDelegate; bootstrap one first.
+    if window == nil {
+      let bootstrap = UIWindow(frame: UIScreen.main.bounds)
+      bootstrap.rootViewController = UIViewController()
+      bootstrap.makeKeyAndVisible()
+      window = bootstrap
+    }
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

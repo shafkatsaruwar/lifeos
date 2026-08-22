@@ -6,6 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OnboardingFlow } from "../components/OnboardingFlow";
+import { FloatingTabBar, FLOATING_TAB_BAR_HEIGHT } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { useLayout } from "../lib/layout";
 import { linking } from "../lib/notifications";
@@ -13,6 +14,7 @@ import type { OnboardingDestination } from "../types";
 import { navigationRef } from "./navigationRef";
 
 import { LifeDashboardScreen } from "../screens/LifeDashboardScreen";
+import { LifeDayScreen } from "../screens/LifeDayScreen";
 import { SchoolDashboardScreen } from "../screens/SchoolDashboardScreen";
 import { NowScreen } from "../screens/NowScreen";
 import { TasksScreen } from "../screens/TasksScreen";
@@ -51,7 +53,7 @@ const TAB_ICONS: Record<string, keyof typeof Feather.glyphMap> = {
   NowTab: "zap",
   TasksTab: "check-circle",
   CalendarTab: "calendar",
-  LifeTab: "heart",
+  LifeTab: "home",
   SchoolTab: "award",
   WorkTab: "briefcase",
   LibraryTab: "book-open",
@@ -84,6 +86,7 @@ function LifeStackNavigator() {
   return (
     <LifeStack.Navigator screenOptions={screenOptions}>
       <LifeStack.Screen name="LifeDashboard" component={LifeDashboardScreen} />
+      <LifeStack.Screen name="LifeDay" component={LifeDayScreen} />
       <LifeStack.Screen name="NotificationCenter" component={NotificationCenterScreen} />
       <LifeStack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
       <LifeStack.Screen name="ProjectsDirectory" component={ProjectsDirectoryScreen} />
@@ -181,7 +184,6 @@ export function RootNavigator() {
   const { theme, dark, workspace, updateSettings, onboardingReplay, clearOnboardingReplay } = useLifeOS();
   const insets = useSafeAreaInsets();
   const { isTablet } = useLayout();
-  const tabHeight = isTablet ? 64 : 56;
   const pendingDest = useRef<OnboardingDestination | null>(null);
   const migrated = useRef(false);
 
@@ -256,58 +258,23 @@ export function RootNavigator() {
         />
       ) : (
         <Tab.Navigator
+          tabBar={(props) => <FloatingTabBar {...props} />}
           screenOptions={({ route }) => ({
             headerShown: false,
             tabBarShowLabel: true,
             tabBarHideOnKeyboard: true,
             tabBarStyle: {
-              position: "relative",
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: tabHeight + insets.bottom,
-              backgroundColor: theme.surface,
-              borderTopWidth: 1,
-              borderTopColor: theme.border,
-              borderRadius: 0,
+              position: "absolute",
+              backgroundColor: "transparent",
+              borderTopWidth: 0,
               elevation: 0,
-              shadowOpacity: 0,
-              paddingTop: isTablet ? 8 : 4,
-              paddingBottom: Math.max(insets.bottom, 6),
-              paddingHorizontal: isTablet ? 16 : 0,
-            },
-            // Equal-width slots — minWidth was crushing "School" into "Sc…" and leaving gaps.
-            tabBarItemStyle: {
-              flex: 1,
-              minWidth: 0,
-              height: isTablet ? 52 : 48,
-              paddingHorizontal: 0,
-              paddingVertical: 0,
-              justifyContent: "center",
-              alignItems: "center",
-            },
-            tabBarIconStyle: {
-              marginTop: 0,
-            },
-            tabBarLabelStyle: {
-              fontSize: isTablet ? 11 : 9,
-              lineHeight: 11,
-              fontWeight: "600",
-              marginTop: 2,
-              marginBottom: 0,
+              height: FLOATING_TAB_BAR_HEIGHT + insets.bottom,
             },
             tabBarActiveTintColor: theme.accent,
             tabBarInactiveTintColor: "#8E8E93",
-            tabBarIcon: ({ color, focused }) => {
+            tabBarIcon: ({ color }) => {
               const name = TAB_ICONS[route.name];
-              return (
-                <Feather
-                  name={name}
-                  size={isTablet ? 23 : 21}
-                  color={color}
-                  style={{ opacity: focused ? 1 : 0.85 }}
-                />
-              );
+              return <Feather name={name} size={isTablet ? 22 : 20} color={color} />;
             },
           })}
         >
@@ -316,14 +283,14 @@ export function RootNavigator() {
           <Tab.Screen
             name="CalendarTab"
             component={CalendarStackNavigator}
-            options={{ title: "Calendar", tabBarLabel: isTablet ? "Calendar" : "Cal" }}
+            options={{ title: "Calendar", tabBarLabel: "Cal" }}
           />
           <Tab.Screen
             name="LifeTab"
             component={LifeStackNavigator}
             options={{
-              title: "Life",
-              tabBarLabel: "Life",
+              title: "HomeOS",
+              tabBarLabel: "Home",
               tabBarButton: showLife ? undefined : () => null,
               tabBarItemStyle: showLife
                 ? undefined

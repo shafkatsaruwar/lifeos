@@ -187,7 +187,24 @@ export type MomentumEntry = {
   title: string;
 };
 
+/** Voice / text day memory (Lifelog-style). Audio stays device-local when present. */
+export type DayMemory = {
+  id: string;
+  dayKey: string;
+  at: string;
+  transcript: string;
+  /** Short label; defaults to first line of transcript. */
+  title?: string;
+  /** Local file URI under documentDirectory — not synced across devices. */
+  localAudioUri?: string;
+  durationMs?: number;
+};
+
 export type ThemeMode = "system" | "light" | "dark";
+
+/** Habit metric type — absent on HubRecord means classic check-off. */
+export type HabitKind = "check" | "count" | "duration" | "scale";
+export type HabitSchedule = "daily" | "weekly";
 
 export type HubRecord = {
   id: string;
@@ -199,6 +216,16 @@ export type HubRecord = {
   imageUrl?: string;
   classId?: string;
   completedDates?: string[];
+  /** Habits: check | count | duration | scale (default check). */
+  kind?: HabitKind;
+  /** Habits: goal amount (cups, minutes, max scale). */
+  target?: number;
+  /** Habits: unit label e.g. cups, min. */
+  unit?: string;
+  /** Habits: daily | weekly (default daily). */
+  schedule?: HabitSchedule;
+  /** Habits: per-day numeric progress keyed by YYYY-MM-DD. */
+  progressByDate?: Record<string, number>;
   createdAt: string;
 };
 
@@ -280,6 +307,8 @@ export type SettingsState = {
   currentEnergy?: EnergyLevel;
   ambientActivity?: AmbientActivity | null;
   momentumLog?: MomentumEntry[];
+  /** Voice/text memories keyed by capture — feeds Day signals. */
+  dayMemories?: DayMemory[];
   dailyReviewDate?: string;
   weeklyReviewDate?: string;
   spaceContext?: Record<string, { lastTaskId?: number; lastFilter?: string; updatedAt?: string }>;

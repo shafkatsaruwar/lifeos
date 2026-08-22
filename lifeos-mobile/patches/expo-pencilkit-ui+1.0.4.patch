@@ -1,3 +1,72 @@
+diff --git a/node_modules/expo-pencilkit-ui/build/index.js b/node_modules/expo-pencilkit-ui/build/index.js
+--- a/node_modules/expo-pencilkit-ui/build/index.js
++++ b/node_modules/expo-pencilkit-ui/build/index.js
+@@ -1,11 +1,19 @@
+-import { requireNativeModule, requireNativeViewManager, } from "expo-modules-core";
++import { requireOptionalNativeModule, requireNativeViewManager, } from "expo-modules-core";
+ import React, { useImperativeHandle, useRef } from "react";
+ import { Platform, findNodeHandle } from "react-native";
+ let ExpoPencilKit = null;
+ let ExpoPencilKitViewManager = null;
+ if (Platform.OS === "ios") {
+-    ExpoPencilKit = requireNativeModule("ExpoPencilKitModule");
+-    ExpoPencilKitViewManager = requireNativeViewManager("ExpoPencilKitModule");
++    // Optional: top-level requireNativeModule throws "[runtime not ready]" during early bundle eval.
++    ExpoPencilKit = requireOptionalNativeModule("ExpoPencilKitModule");
++    if (ExpoPencilKit) {
++        try {
++            ExpoPencilKitViewManager = requireNativeViewManager("ExpoPencilKitModule");
++        }
++        catch {
++            ExpoPencilKitViewManager = null;
++        }
++    }
+ }
+ /**
+  * PencilKit View Component
+@@ -23,6 +31,26 @@
+                 }
+             }
+         },
++        setToolPickerVisible: async (visible) => {
++            if (Platform.OS === "ios" &&
++                ExpoPencilKit &&
++                viewRef.current) {
++                const viewTag = findNodeHandle(viewRef.current);
++                if (viewTag) {
++                    await ExpoPencilKit.setToolPickerVisible(viewTag, visible);
++                }
++            }
++        },
++        setInkTool: async (tool, colorHex, width) => {
++            if (Platform.OS === "ios" &&
++                ExpoPencilKit &&
++                viewRef.current) {
++                const viewTag = findNodeHandle(viewRef.current);
++                if (viewTag) {
++                    await ExpoPencilKit.setInkTool(viewTag, tool, colorHex ?? null, width ?? null);
++                }
++            }
++        },
+         clearDrawing: async () => {
+             if (Platform.OS === "ios" &&
+                 ExpoPencilKit &&
+@@ -148,4 +176,13 @@
+         ref: viewRef,
+     });
+ });
+-//# sourceMappingURL=index.js.map
+\ No newline at end of file
++//# sourceMappingURL=index.js.map
++/**
++ * LifeOS: render stored PKDrawing base64 → PNG base64 (no live canvas required).
++ */
++export async function renderDrawingPng(base64String, width, height, scale = 2) {
++    if (Platform.OS !== "ios" || !ExpoPencilKit || !base64String) {
++        return "";
++    }
++    return (await ExpoPencilKit.renderDrawingPng(base64String, width, height, scale)) || "";
++}
 diff --git a/node_modules/expo-pencilkit-ui/build/index.d.ts b/node_modules/expo-pencilkit-ui/build/index.d.ts
 --- a/node_modules/expo-pencilkit-ui/build/index.d.ts
 +++ b/node_modules/expo-pencilkit-ui/build/index.d.ts
@@ -31,52 +100,6 @@ diff --git a/node_modules/expo-pencilkit-ui/build/index.d.ts b/node_modules/expo
 +export declare function renderDrawingPng(base64String: string, width: number, height: number, scale?: number): Promise<string>;
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
-diff --git a/node_modules/expo-pencilkit-ui/build/index.js b/node_modules/expo-pencilkit-ui/build/index.js
---- a/node_modules/expo-pencilkit-ui/build/index.js
-+++ b/node_modules/expo-pencilkit-ui/build/index.js
-@@ -23,6 +23,26 @@
-                 }
-             }
-         },
-+        setToolPickerVisible: async (visible) => {
-+            if (Platform.OS === "ios" &&
-+                ExpoPencilKit &&
-+                viewRef.current) {
-+                const viewTag = findNodeHandle(viewRef.current);
-+                if (viewTag) {
-+                    await ExpoPencilKit.setToolPickerVisible(viewTag, visible);
-+                }
-+            }
-+        },
-+        setInkTool: async (tool, colorHex, width) => {
-+            if (Platform.OS === "ios" &&
-+                ExpoPencilKit &&
-+                viewRef.current) {
-+                const viewTag = findNodeHandle(viewRef.current);
-+                if (viewTag) {
-+                    await ExpoPencilKit.setInkTool(viewTag, tool, colorHex ?? null, width ?? null);
-+                }
-+            }
-+        },
-         clearDrawing: async () => {
-             if (Platform.OS === "ios" &&
-                 ExpoPencilKit &&
-@@ -148,4 +168,13 @@
-         ref: viewRef,
-     });
- });
--//# sourceMappingURL=index.js.map
-\ No newline at end of file
-+//# sourceMappingURL=index.js.map
-+/**
-+ * LifeOS: render stored PKDrawing base64 → PNG base64 (no live canvas required).
-+ */
-+export async function renderDrawingPng(base64String, width, height, scale = 2) {
-+    if (Platform.OS !== "ios" || !ExpoPencilKit || !base64String) {
-+        return "";
-+    }
-+    return (await ExpoPencilKit.renderDrawingPng(base64String, width, height, scale)) || "";
-+}
 diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift
 --- a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift
 +++ b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift
@@ -220,12 +243,10 @@ diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift b/node
      private func clearDrawing() {
          canvasView?.drawing = PKDrawing()
      }
-@@ -193,6 +269,27 @@
- 
-         let base64String = imageData.base64EncodedString()
+@@ -195,6 +271,27 @@
          return base64String
-+    }
-+
+     }
+ 
 +    private func renderDrawingPng(base64String: String, width: Double, height: Double, scale: Double) -> String {
 +        guard let drawingData = Data(base64Encoded: base64String) else {
 +            return ""
@@ -245,9 +266,11 @@ diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitModule.swift b/node
 +        } catch {
 +            return ""
 +        }
-     }
- 
++    }
++
      private func getCanvasDataAsBase64() -> String {
+         guard let canvasView = canvasView else {
+             return ""
 diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift
 --- a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift
 +++ b/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift
@@ -274,14 +297,16 @@ diff --git a/node_modules/expo-pencilkit-ui/ios/ExpoPencilKitView.swift b/node_m
          canvasView.bounces = false
          canvasView.bouncesZoom = false
  
-@@ -51,6 +52,17 @@
+@@ -49,8 +50,19 @@
+             canvasView.trailingAnchor.constraint(equalTo: trailingAnchor),
+             canvasView.bottomAnchor.constraint(equalTo: bottomAnchor)
          ])
- 
- 
++
++
 +    }
-+
+ 
 +    // MARK: - Props (LifeOS)
-+
+ 
 +    func setDrawingPolicy(_ policy: String?) {
 +        let value = (policy ?? "any").lowercased()
 +        if value == "pencilonly" || value == "pencil" {

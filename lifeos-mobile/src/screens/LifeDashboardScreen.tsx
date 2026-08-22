@@ -8,6 +8,13 @@ import { DashboardModule, DashboardRow, ModuleEmpty, ProgressBar, QuickAction } 
 import { Eyebrow, Page } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatDueDate, getGreeting, taskIsOpen, toDateKey } from "../lib/helpers";
+import {
+  bumpHabit,
+  habitKind,
+  habitProgressLabel,
+  isHabitDone,
+  toggleHabitCheck,
+} from "../lib/habits";
 import { buildInbox } from "../lib/notifications";
 import { createNotebook, createPage, primaryPageForNotebook } from "../lib/notebooks";
 
@@ -128,7 +135,7 @@ export function LifeDashboardScreen() {
   }, [workspace.projects, workspace.tasks, theme]);
 
   const inboxCount = buildInbox(workspace).filter((i) => i.bucket === "today").length;
-  const habitsDone = workspace.life.habits.filter((habit) => habit.completedDates?.includes(today)).length;
+  const habitsDone = workspace.life.habits.filter((habit) => isHabitDone(habit, today)).length;
   const notes = useMemo(() => {
     const pageNotes = workspace.notebookHub.notebooks
       .filter((nb) => nb.context?.type !== "class" && !nb.trashedAt)
@@ -210,12 +217,17 @@ export function LifeDashboardScreen() {
       ...workspace.life,
       habits: workspace.life.habits.map((habit) => {
         if (habit.id !== id) return habit;
-        const dates = habit.completedDates ?? [];
-        return {
-          ...habit,
-          completedDates: dates.includes(today) ? dates.filter((date) => date !== today) : [...dates, today],
-        };
+        const kind = habitKind(habit);
+        if (kind === "check") return toggleHabitCheck(habit, today);
+        return bumpHabit(habit, today, kind === "scale" ? 5 : 1);
       }),
+    });
+  };
+
+  const adjustHabit = (id: string, delta: number) => {
+    updateLife({
+      ...workspace.life,
+      habits: workspace.life.habits.map((habit) => (habit.id === id ? bumpHabit(habit, today, delta) : habit)),
     });
   };
 
@@ -230,7 +242,7 @@ export function LifeDashboardScreen() {
             <Eyebrow>
               {now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }).toUpperCase()}
             </Eyebrow>
-            <Text style={[styles.title, { color: theme.text }]}>Life</Text>
+            <Text style={[styles.title, { color: theme.text }]}>HomeOS</Text>
             <Text style={[styles.greeting, { color: theme.muted }]}>{getGreeting(now, name)}</Text>
             <Text style={[styles.subGreeting, { color: theme.muted }]}>
               A quiet look at what’s going on — execution stays in Now.
@@ -263,9 +275,30 @@ export function LifeDashboardScreen() {
           <QuickAction icon="edit-3" label="New note" onPress={createNote} />
           <QuickAction icon="check-square" label="New task" onPress={createTask} color={theme.blue} />
           <QuickAction icon="folder-plus" label="New project" onPress={createProject} color={theme.warning} />
+          <QuickAction
+            icon="calendar"
+            label="Day signals"
+            onPress={() => navigation.navigate("LifeDay")}
+            color={theme.success}
+          />
           <QuickAction icon="sun" label="Plan tomorrow" onPress={() => setPlanTomorrowOpen(true)} color={theme.accent} />
           <QuickAction icon="map" label="Trip idea" onPress={() => openCollection("trips", true)} color={theme.success} />
         </ScrollView>
+
+        <DashboardModule
+          icon="activity"
+          title="Day signals"
+          action="Open"
+          onAction={() => navigation.navigate("LifeDay")}
+        >
+          <DashboardRow
+            icon="calendar"
+            title="Day log calendar"
+            meta="Colored dots for habits, focus, memories, body, and more"
+            color={theme.accent}
+            onPress={() => navigation.navigate("LifeDay")}
+          />
+        </DashboardModule>
 
         <DashboardModule
           icon="alert-circle"
@@ -359,15 +392,28 @@ export function LifeDashboardScreen() {
             </Pressable>
           </View>
           {workspace.life.habits.slice(0, 3).map((habit) => {
-            const done = habit.completedDates?.includes(today);
+            const done = isHabitDone(habit, today);
+            const kind = habitKind(habit);
             return (
               <DashboardRow
                 key={habit.id}
-                icon={done ? "check" : "circle"}
+                icon={done ? "check" : kind === "check" ? "circle" : "plus-circle"}
                 title={habit.title}
-                meta={done ? "Done today" : "Tap to complete"}
+                meta={habitProgressLabel(habit, today)}
                 color={done ? theme.success : theme.accent}
                 onPress={() => toggleHabit(habit.id)}
+                trailing={
+                  kind !== "check" ? (
+                    <Pressable
+                      accessibilityLabel={`Add progress to ${habit.title}`}
+                      hitSlop={8}
+                      onPress={() => adjustHabit(habit.id, kind === "scale" ? 5 : 1)}
+                      style={[styles.habitPlus, { borderColor: theme.border, backgroundColor: theme.soft }]}
+                    >
+                      <Feather name="plus" size={14} color={theme.accent} />
+                    </Pressable>
+                  ) : undefined
+                }
               />
             );
           })}
@@ -498,6 +544,14 @@ const styles = StyleSheet.create({
   },
   habitCount: { fontSize: 22, fontWeight: "800", fontVariant: ["tabular-nums"] },
   habitMeta: { fontSize: 12, flex: 1 },
+  habitPlus: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   databaseGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingVertical: 8 },
   databaseButton: {
     width: "48.5%",

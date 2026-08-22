@@ -24,9 +24,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
       return
     }
 
-    let window = UIWindow(windowScene: windowScene)
+    // Reuse AppDelegate's bootstrap window (needed by expo-dev-launcher) and bind it to this scene.
+    let window = appDelegate.window ?? UIWindow(windowScene: windowScene)
+    window.windowScene = windowScene
     self.window = window
-    // Keep UIApplicationDelegate.window in sync (expo-system-ui, etc.).
     appDelegate.window = window
 
     factory.startReactNative(
@@ -34,6 +35,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
       in: window,
       launchOptions: nil
     )
+    window.makeKeyAndVisible()
 
     Self.route(urlContexts: connectionOptions.urlContexts)
     connectionOptions.userActivities.forEach { Self.route(userActivity: $0) }

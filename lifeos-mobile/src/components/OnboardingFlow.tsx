@@ -28,7 +28,7 @@ const INTERESTS: {
   desc: string;
   icon: keyof typeof Feather.glyphMap;
 }[] = [
-  { id: "life", label: "Life", desc: "Personal projects & home base", icon: "heart" },
+  { id: "life", label: "HomeOS", desc: "Personal home base — habits, day log, projects", icon: "home" },
   { id: "school", label: "School", desc: "Classes & academics", icon: "award" },
   { id: "work", label: "Work", desc: "Professional projects & deliverables", icon: "briefcase" },
   { id: "notes", label: "Notes", desc: "Handwriting & library", icon: "edit-3" },
