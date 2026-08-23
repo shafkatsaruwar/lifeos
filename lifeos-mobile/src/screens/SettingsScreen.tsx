@@ -331,7 +331,7 @@ export function SettingsScreen() {
             <Text style={[styles.cardLabel, { color: theme.text }]}>Environments</Text>
           </View>
           <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>
-            Show or hide HomeOS, School, and Work tabs. MasterOS is iPad-only — open it from Settings on iPad or use LifeOS web.
+            Show or hide HomeOS, School, and Work tabs. MasterOS opens in-app on iPad (native teaching UI).
           </Text>
           <View style={styles.settingRow}>
             <View style={styles.grow}>
@@ -371,7 +371,7 @@ export function SettingsScreen() {
             <View style={styles.grow}>
               <Text style={{ color: theme.text, fontWeight: "800" }}>MasterOS</Text>
               <Text style={{ color: theme.muted, fontSize: 12 }}>
-                {isTablet ? "Teaching on iPad — classes, lessons, gradebook" : "iPad only · use web at /masteros on desktop"}
+                {isTablet ? "Teaching on iPad — native Hub, Teach, Whiteboard, Grade" : "iPad only · use web at /masteros on desktop"}
               </Text>
             </View>
             <Switch
@@ -385,7 +385,7 @@ export function SettingsScreen() {
               <ActionButton
                 label="Open MasterOS"
                 icon="book-open"
-                onPress={() => void WebBrowser.openBrowserAsync(`${API_BASE}/masteros`)}
+                onPress={() => navigation.navigate("MasterOS")}
               />
             </View>
           ) : null}

@@ -41,6 +41,7 @@ import { WorkDashboardScreen } from "../screens/WorkDashboardScreen";
 import { FocusEnforcerSetupScreen } from "../screens/FocusEnforcerSetupScreen";
 import { FocusEnforcerSessionScreen } from "../screens/FocusEnforcerSessionScreen";
 import { FocusEnforcerHistoryScreen } from "../screens/FocusEnforcerHistoryScreen";
+import { MasterOSNavigator } from "./MasterOSNavigator";
 
 const Tab = createBottomTabNavigator();
 const NowStack = createNativeStackNavigator();
@@ -83,6 +84,11 @@ function NowStackNavigator() {
       <NowStack.Screen name="FocusEnforcerSetup" component={FocusEnforcerSetupScreen} />
       <NowStack.Screen name="FocusEnforcerSession" component={FocusEnforcerSessionScreen} />
       <NowStack.Screen name="FocusEnforcerHistory" component={FocusEnforcerHistoryScreen} />
+      <NowStack.Screen
+        name="MasterOS"
+        component={MasterOSNavigator}
+        options={{ presentation: "fullScreenModal", animation: "fade" }}
+      />
     </NowStack.Navigator>
   );
 }
@@ -97,6 +103,11 @@ function LifeStackNavigator() {
       <LifeStack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
       <LifeStack.Screen name="ProjectsDirectory" component={ProjectsDirectoryScreen} />
       <LifeStack.Screen name="HubCollection" component={HubCollectionScreen} />
+      <LifeStack.Screen
+        name="MasterOS"
+        component={MasterOSNavigator}
+        options={{ presentation: "fullScreenModal", animation: "fade" }}
+      />
     </LifeStack.Navigator>
   );
 }
