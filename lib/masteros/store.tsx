@@ -520,6 +520,7 @@ export {
   courseProgress,
   coursesForStudent,
   groupLessonsBySubject,
+  groupLessonsForList,
   compareLessonsByCurriculum,
   lessonSubject,
   selectStudent,

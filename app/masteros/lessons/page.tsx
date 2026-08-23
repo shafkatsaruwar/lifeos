@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useMemo, useState } from "react";
 import { formatDate, todayKey } from "@/lib/masteros/helpers";
-import { groupLessonsBySubject, useMasterOS } from "@/lib/masteros/store";
+import { groupLessonsForList, useMasterOS } from "@/lib/masteros/store";
 import type { LessonSectionType, LessonStatus } from "@/lib/masteros/types";
 
 const DEFAULT_SECTIONS: { type: LessonSectionType; title: string; content: string; order: number }[] = [
@@ -36,7 +36,7 @@ function LessonsInner() {
     setOpen(false); setTitle(""); setObjective("");
   };
 
-  const groups = useMemo(() => groupLessonsBySubject(state), [state]);
+  const groups = useMemo(() => groupLessonsForList(state), [state]);
 
   return (
     <div className="mos-page">
@@ -46,11 +46,14 @@ function LessonsInner() {
       </div>
       {!groups.length ? <p className="mos-empty">No lessons yet. Create one to start Teaching Mode.</p> : null}
       {groups.map((group) => (
-        <section key={group.label} className="mos-unit">
-          <h3>
-            {group.label}{" "}
-            <span className="mos-muted" style={{ fontWeight: 400 }}>({group.lessons.length})</span>
-          </h3>
+        <section key={group.key} className="mos-lesson-group">
+          <header className="mos-group-heading">
+            <div>
+              <p className="eyebrow">Unit</p>
+              <h2>{group.label}</h2>
+            </div>
+            <p className="mos-muted">{group.subtitle}</p>
+          </header>
           <div className="mos-list-page">
             {group.lessons.map((lesson) => {
               const student = state.students.find((item) => item.id === lesson.studentId);
@@ -60,7 +63,7 @@ function LessonsInner() {
                 <article key={lesson.id} className="mos-entity" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                   <Link href={`/masteros/lessons/${lesson.id}`} style={{ flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}>
                     <strong>{lesson.title}</strong>
-                    <p className="mos-muted">{student?.name} · {course?.name} · {unit?.title} · {formatDate(lesson.date)} · {lesson.status.replace("_", " ")}</p>
+                    <p className="mos-muted">{student?.name}{course ? ` · ${course.name}` : ""} · {formatDate(lesson.date)} · {lesson.status.replace("_", " ")}</p>
                   </Link>
                   <button
                     className="mos-ghost"

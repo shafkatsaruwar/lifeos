@@ -2,7 +2,7 @@ import { applyQuestionResult, computeMasteryState, recommendNextSkill } from "@/
 import { createSeedState, DEMO_COURSE_ID, DEMO_STUDENT_ID } from "@/lib/masteros/seed";
 import { attentionSkills, courseProgress } from "@/lib/masteros/selectors";
 import { removeClassFromState, removeCourseFromState, removeQuestionFromState, removeStudentFromState, removeUnitFromState } from "@/lib/masteros/store";
-import { classesForStudent, compareLessonsByCurriculum, groupLessonsBySubject, lessonSubject, studentsForClass } from "@/lib/masteros/selectors";
+import { classesForStudent, compareLessonsByCurriculum, groupLessonsBySubject, groupLessonsForList, lessonSubject, studentsForClass } from "@/lib/masteros/selectors";
 import { buildStudentReportCard } from "@/lib/masteros/reportCard";
 import { groupQuestionsForBank, prepareQuestionForBank, resolveQuestionCategory } from "@/lib/masteros/questionBank";
 import { assignmentStatusLabel, assignmentTypeLabel, percent, tallyAssignmentMarks } from "@/lib/masteros/helpers";
@@ -170,6 +170,56 @@ describe("MasterOS lesson subjects", () => {
     expect(compareLessonsByCurriculum({ ...state, lessons }, lessons[0], lessons[1])).toBeGreaterThan(0);
     const mathGroup = groupLessonsBySubject({ ...state, lessons }).find((group) => group.label === "SAT Prep");
     expect(mathGroup?.lessons.map((item) => item.id)).toEqual(["les-u1", "les-u10"]);
+  });
+
+  it("groups lessons under unit headings in curriculum order", () => {
+    const state = createSeedState();
+    const mathUnit = { id: "unit-math", courseId: DEMO_COURSE_ID, title: "MATH", order: 1 };
+    const englishUnit = { id: "unit-english", courseId: DEMO_COURSE_ID, title: "ENGLISH", order: 3 };
+    const scienceUnit = { id: "unit-science", courseId: DEMO_COURSE_ID, title: "SCIENCE", order: 2 };
+    const next = {
+      ...state,
+      units: [...state.units, mathUnit, scienceUnit, englishUnit],
+      lessons: [
+        {
+          id: "les-eng",
+          unitId: englishUnit.id,
+          studentId: DEMO_STUDENT_ID,
+          title: "Unit 1: Main idea",
+          objective: "",
+          date: "2026-08-23",
+          duration: 60,
+          status: "planned" as const,
+          skillIds: [],
+        },
+        {
+          id: "les-math-b",
+          unitId: mathUnit.id,
+          studentId: DEMO_STUDENT_ID,
+          title: "Unit 9: Polynomials",
+          objective: "",
+          date: "2026-08-23",
+          duration: 60,
+          status: "planned" as const,
+          skillIds: [],
+        },
+        {
+          id: "les-math-a",
+          unitId: mathUnit.id,
+          studentId: DEMO_STUDENT_ID,
+          title: "Unit 1: Linear Equations",
+          objective: "",
+          date: "2026-08-22",
+          duration: 60,
+          status: "planned" as const,
+          skillIds: [],
+        },
+      ],
+    };
+    const groups = groupLessonsForList(next);
+    expect(groups.map((group) => group.label)).toEqual(["1. MATH", "3. ENGLISH"]);
+    expect(groups[0].lessons.map((item) => item.id)).toEqual(["les-math-a", "les-math-b"]);
+    expect(groups.every((group) => group.kind === "unit")).toBe(true);
   });
 });
 
