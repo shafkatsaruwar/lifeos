@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { applyQuestionResult, computeMasteryState } from "./mastery";
 import { createSeedState } from "./seed";
 import { questionPoints, tallyAssignmentMarks, uid } from "./helpers";
+import { prepareQuestionForBank } from "./questionBank";
 import type {
   Assignment,
   Course,
@@ -59,6 +60,24 @@ function retallySkill(current: StudentSkill, previous: boolean, next: boolean, p
     lastPracticed: practicedAt,
     masteryState: computeMasteryState(accuracy, current.attempts, current.masteryState === "needs_review" && !next),
   };
+}
+
+export function removeQuestionFromState(current: MasterOSState, questionId: string): MasterOSState {
+  const assignmentIds = new Set(
+    current.assignmentQuestions
+      .filter((item) => item.questionId === questionId)
+      .map((item) => item.assignmentId),
+  );
+  let next: MasterOSState = {
+    ...current,
+    questions: current.questions.filter((item) => item.id !== questionId),
+    assignmentQuestions: current.assignmentQuestions.filter((item) => item.questionId !== questionId),
+    questionResults: current.questionResults.filter((item) => item.questionId !== questionId),
+  };
+  for (const assignmentId of assignmentIds) {
+    next = retallyAssignment(next, assignmentId);
+  }
+  return next;
 }
 
 export function removeStudentFromState(current: MasterOSState, studentId: string): MasterOSState {
@@ -162,6 +181,7 @@ type Store = {
   reorderSections: (lessonId: string, orderedIds: string[]) => void;
   addNote: (note: Omit<TeacherNote, "id" | "createdAt">) => void;
   addQuestion: (input: Omit<Question, "id">) => string;
+  deleteQuestion: (id: string) => void;
   addAssignment: (input: Omit<Assignment, "id">, questionIds?: string[]) => string;
   updateAssignment: (id: string, patch: Partial<Assignment>) => void;
   addAssignmentQuestion: (assignmentId: string, questionId: string, points?: number) => void;
@@ -286,8 +306,14 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
     },
     addQuestion: (input) => {
       const id = uid("q");
-      patch((current) => ({ ...current, questions: [...current.questions, { ...input, id }] }));
+      patch((current) => ({
+        ...current,
+        questions: [...current.questions, { ...prepareQuestionForBank(input, current), id }],
+      }));
       return id;
+    },
+    deleteQuestion: (id) => {
+      patch((current) => removeQuestionFromState(current, id));
     },
     addAssignment: (input, questionIds = []) => {
       const id = uid("asg");
