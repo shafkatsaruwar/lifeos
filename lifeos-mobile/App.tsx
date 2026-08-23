@@ -14,6 +14,7 @@ import { resolveTheme } from "./src/lib/theme";
 import { SignIn } from "./src/components/Auth";
 import { FocusLiveActivityBridge } from "./src/components/FocusLiveActivityBridge";
 import { NotificationsBridge } from "./src/components/NotificationsBridge";
+import { FocusEnforcerBridge } from "./src/components/FocusEnforcerBridge";
 import { SynapseImportBridge } from "./src/components/SynapseImportBridge";
 import { ShareInboxBridge } from "./src/components/ShareInboxBridge";
 import { SiriTaskBridge } from "./src/components/SiriTaskBridge";
@@ -333,6 +334,7 @@ export default function App() {
           <ShareInboxBridge />
           <FocusLiveActivityBridge />
           <NotificationsBridge />
+          <FocusEnforcerBridge />
           <WidgetsBridge />
           <SiriTaskBridge />
           <RootNavigator />

@@ -21,6 +21,7 @@
       },
       "infoPlist": {
         "NSSupportsLiveActivities": true,
+        "NSCameraUsageDescription": "LifeOS uses the camera so Focus Enforcer can verify you're on the task with a live photo.",
         "NSSiriUsageDescription": "LifeOS uses Siri so you can add tasks with your voice.",
         "UIApplicationSceneManifest": {
           "UIApplicationSupportsMultipleScenes": false,
@@ -90,7 +91,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow LifeOS to place photos on notebook pages."
+          "photosPermission": "Allow LifeOS to place photos on notebook pages.",
+          "cameraPermission": "LifeOS uses the camera so Focus Enforcer can verify you're on the task with a live photo."
         }
       ],
       "expo-live-activity",

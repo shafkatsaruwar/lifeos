@@ -103,10 +103,119 @@ async function askClaude(system: string, prompt: string) {
   return readJson(text);
 }
 
+const FOCUS_PROOF_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_FOCUS_PROOF_BASE64 = 1_500_000;
+
+type FocusVerifySoft = { match: boolean; confidence: number; reason: string };
+
+function softFocusFail(reason: string): FocusVerifySoft {
+  return { match: false, confidence: 0, reason };
+}
+
+/** Vision verify for Focus Enforcer. Never logs or echoes imageBase64. Does not store images. */
+async function verifyFocusEnforcerProof(body: {
+  taskTitle?: unknown;
+  phase?: unknown;
+  mimeType?: unknown;
+  imageBase64?: unknown;
+}): Promise<FocusVerifySoft> {
+  try {
+    const taskTitle =
+      typeof body.taskTitle === "string" && body.taskTitle.trim()
+        ? body.taskTitle.trim().slice(0, 180)
+        : "";
+    const phase =
+      body.phase === "start" || body.phase === "check" || body.phase === "complete"
+        ? body.phase
+        : "check";
+    const mimeType = typeof body.mimeType === "string" ? body.mimeType : "";
+    const imageBase64 = typeof body.imageBase64 === "string" ? body.imageBase64 : "";
+
+    if (!taskTitle) return softFocusFail("Missing task title.");
+    if (!FOCUS_PROOF_MIME.has(mimeType)) {
+      return softFocusFail("Unsupported image type. Use JPEG, PNG, or WebP.");
+    }
+    if (!imageBase64 || imageBase64.length > MAX_FOCUS_PROOF_BASE64) {
+      return softFocusFail("Photo is too large or empty. Try again or use manual override.");
+    }
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return softFocusFail("AI is not configured yet. Try again later or use manual override.");
+    }
+
+    const promptText = `You verify a LIVE camera photo for Focus Enforcer (phase: ${phase}). Task: "${taskTitle}". Decide if the photo shows plausible evidence the person is working on that task (desk/laptop/materials/context). Reply with ONLY valid JSON: {"match":boolean,"confidence":number,"reason":"short string"}. confidence is 0 to 1. Be skeptical of blank walls, ceilings, unrelated scenes, or selfies with no work evidence.`;
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
+        max_tokens: 200,
+        temperature: 0,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: mimeType,
+                  data: imageBase64,
+                },
+              },
+              { type: "text", text: promptText },
+            ],
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(25_000),
+    });
+
+    if (!response.ok) {
+      return softFocusFail("Could not verify the photo. Try again or use manual override.");
+    }
+
+    const message = await response.json();
+    const text = message.content?.find((part: { type?: string }) => part.type === "text")?.text;
+    if (!text || typeof text !== "string") {
+      return softFocusFail("Could not verify the photo. Try again or use manual override.");
+    }
+
+    const parsed = readJson(text) as { match?: unknown; confidence?: unknown; reason?: unknown };
+    return {
+      match: Boolean(parsed.match),
+      confidence:
+        typeof parsed.confidence === "number"
+          ? Math.max(0, Math.min(1, parsed.confidence))
+          : 0,
+      reason:
+        typeof parsed.reason === "string" && parsed.reason.trim()
+          ? parsed.reason.trim().slice(0, 280)
+          : parsed.match
+            ? "Looks like you're on task."
+            : "Could not confirm you're on the task.",
+    };
+  } catch {
+    return softFocusFail("Could not verify the photo. Try again or use manual override.");
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const action = body?.action;
+
+    if (action === "focus-enforcer-verify") {
+      // Soft-fail path — never throw with image data in the message.
+      const result = await verifyFocusEnforcerProof(body);
+      return NextResponse.json(result);
+    }
 
     if (action === "parse-task") {
       const input = typeof body.input === "string" ? body.input.trim().slice(0, MAX_INPUT_LENGTH) : "";

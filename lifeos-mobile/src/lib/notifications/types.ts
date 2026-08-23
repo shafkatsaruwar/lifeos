@@ -1,11 +1,11 @@
 import type { NotificationLead } from "../../types";
 
-export type NotifCategory = "task" | "deadline" | "event" | "focus" | "important";
+export type NotifCategory = "task" | "deadline" | "event" | "focus" | "important" | "focusEnforcer";
 
 /** Payload embedded in scheduled notifications for tap routing. */
 export type NotifPayload = {
   category: NotifCategory;
-  /** task id, event id, or "focus" */
+  /** task id, event id, "focus", or Focus Enforcer session id */
   targetId: string;
   path?: string;
 };

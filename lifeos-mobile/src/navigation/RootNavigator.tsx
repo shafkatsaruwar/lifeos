@@ -38,6 +38,9 @@ import { SettingsScreen } from "../screens/SettingsScreen";
 import { NotificationSettingsScreen } from "../screens/NotificationSettingsScreen";
 import { NotificationCenterScreen } from "../screens/NotificationCenterScreen";
 import { WorkDashboardScreen } from "../screens/WorkDashboardScreen";
+import { FocusEnforcerSetupScreen } from "../screens/FocusEnforcerSetupScreen";
+import { FocusEnforcerSessionScreen } from "../screens/FocusEnforcerSessionScreen";
+import { FocusEnforcerHistoryScreen } from "../screens/FocusEnforcerHistoryScreen";
 
 const Tab = createBottomTabNavigator();
 const NowStack = createNativeStackNavigator();
@@ -77,6 +80,9 @@ function NowStackNavigator() {
       <NowStack.Screen name="TaskDetail" component={TaskDetailScreen} />
       <NowStack.Screen name="Settings" component={SettingsScreen} />
       <NowStack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
+      <NowStack.Screen name="FocusEnforcerSetup" component={FocusEnforcerSetupScreen} />
+      <NowStack.Screen name="FocusEnforcerSession" component={FocusEnforcerSessionScreen} />
+      <NowStack.Screen name="FocusEnforcerHistory" component={FocusEnforcerHistoryScreen} />
     </NowStack.Navigator>
   );
 }

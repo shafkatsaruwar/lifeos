@@ -201,6 +201,17 @@ export function TaskDetailScreen() {
         <View style={styles.row}>
           <ActionButton label="Set as Now" icon="target" quiet onPress={() => updateSettings({ ...workspace.settings, nowTaskId: task.id })} />
           <ActionButton label="Focus" icon="play" onPress={() => setFocusOpen(true)} />
+          <ActionButton
+            label="Enforce focus"
+            icon="zap"
+            quiet
+            onPress={() =>
+              navigation.navigate("NowTab" as never, {
+                screen: "FocusEnforcerSetup",
+                params: { taskId: task.id },
+              } as never)
+            }
+          />
         </View>
 
         <Card>

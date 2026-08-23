@@ -1,13 +1,19 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
 import * as WebBrowser from "expo-web-browser";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { signOut } from "firebase/auth";
 import { ActionButton, Card, Eyebrow, Page, SegmentedControl, Title } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { API_BASE } from "../lib/api";
 import { auth } from "../lib/firebase";
+import {
+  DEFAULT_FOCUS_ENFORCER_PREFS,
+  loadFocusEnforcerPrefs,
+  saveFocusEnforcerPrefs,
+  type FocusEnforcerPrefs,
+} from "../lib/focusEnforcer";
 import { resolveNotificationPrefs } from "../lib/notifications";
 import { mergeSynapseCalendarEvents, parseSynapseDayPlan } from "../lib/synapseImport";
 import { SPACE_COLORS } from "../lib/theme";
@@ -20,9 +26,21 @@ export function SettingsScreen() {
   const [name, setName] = useState(workspace.settings.preferredName ?? "");
   const [synapsePaste, setSynapsePaste] = useState("");
   const [synapseBusy, setSynapseBusy] = useState(false);
+  const [fePrefs, setFePrefs] = useState<FocusEnforcerPrefs>(DEFAULT_FOCUS_ENFORCER_PREFS);
   const themeMode = workspace.settings.themeMode ?? "system";
   const accent = workspace.settings.accent?.trim() || theme.accent;
   const synapseEventCount = workspace.calendar.filter((event) => event.id.startsWith("synapse-")).length;
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    void loadFocusEnforcerPrefs(user.uid).then(setFePrefs);
+  }, [user?.uid]);
+
+  const patchFePrefs = (next: FocusEnforcerPrefs) => {
+    setFePrefs(next);
+    if (!user?.uid) return;
+    void saveFocusEnforcerPrefs(user.uid, next);
+  };
 
   const importSynapsePlan = () => {
     setSynapseBusy(true);
@@ -184,6 +202,42 @@ export function SettingsScreen() {
             keyboardType="number-pad"
             style={[styles.input, { color: theme.text, borderColor: theme.border }]}
           />
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
+              <Feather name="zap" size={14} color={theme.accent} />
+            </View>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Focus Enforcer</Text>
+          </View>
+          <View style={styles.settingRow}>
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>Enabled</Text>
+              <Text style={{ color: theme.muted, fontSize: 12 }}>
+                Schedule starts, escalate delays, and optional live-photo checks.
+              </Text>
+            </View>
+            <Switch
+              value={fePrefs.enabled}
+              onValueChange={(enabled) => patchFePrefs({ ...fePrefs, enabled })}
+              trackColor={{ true: theme.accent }}
+            />
+          </View>
+          <Text style={{ color: theme.muted, fontSize: 12, marginTop: 8 }}>
+            Escalations at +{fePrefs.escalateOffsetsMin[0]} / +{fePrefs.escalateOffsetsMin[1]} / +
+            {fePrefs.escalateOffsetsMin[2]} min (absolute from start)
+          </Text>
+          <Pressable
+            onPress={() => navigation.navigate("FocusEnforcerHistory")}
+            style={[styles.notifRow, { borderColor: theme.border, backgroundColor: theme.bg }]}
+          >
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>History</Text>
+              <Text style={{ color: theme.muted, fontSize: 12 }}>On-time rate and past sessions</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={theme.muted} />
+          </Pressable>
         </Card>
 
         <Card>
