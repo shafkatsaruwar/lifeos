@@ -49,7 +49,7 @@ function LessonsInner() {
         <section key={group.key} className="mos-lesson-group">
           <header className="mos-group-heading">
             <div>
-              <p className="eyebrow">{group.kind === "course" ? "Course" : "Subject"}</p>
+              <p className="eyebrow">Unit</p>
               <h2>{group.label}</h2>
             </div>
             <p className="mos-muted">{group.subtitle}</p>
@@ -63,7 +63,7 @@ function LessonsInner() {
                 <article key={lesson.id} className="mos-entity" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                   <Link href={`/masteros/lessons/${lesson.id}`} style={{ flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}>
                     <strong>{lesson.title}</strong>
-                    <p className="mos-muted">{student?.name} · {course?.name} · {unit?.title} · {formatDate(lesson.date)} · {lesson.status.replace("_", " ")}</p>
+                    <p className="mos-muted">{student?.name}{course ? ` · ${course.name}` : ""} · {formatDate(lesson.date)} · {lesson.status.replace("_", " ")}</p>
                   </Link>
                   <button
                     className="mos-ghost"

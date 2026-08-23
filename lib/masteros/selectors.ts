@@ -86,81 +86,56 @@ export type LessonListGroup = {
   key: string;
   label: string;
   subtitle: string;
-  kind: "course" | "subject";
+  kind: "unit";
   lessons: Lesson[];
 };
 
-/**
- * Group lessons for the list page.
- * Prefer subject (Math / English from skills or "Course - Subject" names).
- * Fall back to course when subjects would collapse everything into one bucket
- * but multiple courses are present.
- */
+/** Group lessons for the list page by curriculum unit (MATH, ENGLISH, …). */
 export function groupLessonsForList(state: MasterOSState): LessonListGroup[] {
   if (!state.lessons.length) return [];
 
-  const courseIdForLesson = (lesson: Lesson) =>
-    state.units.find((item) => item.id === lesson.unitId)?.courseId;
-
-  const courseIds = [
-    ...new Set(state.lessons.map(courseIdForLesson).filter((id): id is string => Boolean(id))),
-  ];
   const courseOrder = new Map(state.courses.map((item, index) => [item.id, index]));
-
-  const bySubject = new Map<string, Lesson[]>();
-  for (const lesson of state.lessons) {
-    const subject = lessonSubject(state, lesson.id);
-    const list = bySubject.get(subject) ?? [];
-    list.push(lesson);
-    bySubject.set(subject, list);
-  }
-
-  const useCourse =
-    bySubject.size <= 1 && courseIds.length > 1;
-
-  const buckets = new Map<string, { key: string; label: string; lessons: Lesson[] }>();
+  const buckets = new Map<string, { key: string; label: string; lessons: Lesson[]; unitOrder: number; courseOrder: number }>();
 
   for (const lesson of state.lessons) {
     const unit = state.units.find((item) => item.id === lesson.unitId);
     const course = state.courses.find((item) => item.id === unit?.courseId);
-
-    let key: string;
-    let label: string;
-
-    if (useCourse && course) {
-      key = course.id;
-      label = course.name;
-    } else {
-      const subject = lessonSubject(state, lesson.id);
-      key = subject;
-      label = subject;
-    }
-
-    const bucket = buckets.get(key) ?? { key, label, lessons: [] };
+    const key = unit?.id ?? `orphan-${lesson.id}`;
+    const label = unit
+      ? `${unit.order}. ${unit.title}`
+      : "Uncategorized";
+    const bucket = buckets.get(key) ?? {
+      key,
+      label,
+      lessons: [],
+      unitOrder: unit?.order ?? Number.MAX_SAFE_INTEGER,
+      courseOrder: courseOrder.get(course?.id ?? "") ?? Number.MAX_SAFE_INTEGER,
+    };
     bucket.lessons.push(lesson);
     buckets.set(key, bucket);
   }
 
   return [...buckets.values()]
-    .map((bucket) => {
-      const unitIds = new Set(bucket.lessons.map((item) => item.unitId));
-      return {
-        ...bucket,
-        kind: useCourse ? "course" as const : "subject" as const,
-        subtitle: `${bucket.lessons.length} lesson${bucket.lessons.length === 1 ? "" : "s"} · ${unitIds.size} unit${unitIds.size === 1 ? "" : "s"}`,
-        lessons: [...bucket.lessons].sort((a, b) => compareLessonsByCurriculum(state, a, b)),
-      };
-    })
+    .map((bucket) => ({
+      key: bucket.key,
+      label: bucket.label,
+      kind: "unit" as const,
+      subtitle: `${bucket.lessons.length} lesson${bucket.lessons.length === 1 ? "" : "s"}`,
+      lessons: [...bucket.lessons].sort((a, b) => {
+        const dateDiff = a.date.localeCompare(b.date);
+        if (dateDiff !== 0) return dateDiff;
+        return a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: "base" });
+      }),
+      courseOrder: bucket.courseOrder,
+      unitOrder: bucket.unitOrder,
+    }))
     .sort((a, b) => {
-      if (useCourse) {
-        const orderA = courseOrder.get(a.key) ?? Number.MAX_SAFE_INTEGER;
-        const orderB = courseOrder.get(b.key) ?? Number.MAX_SAFE_INTEGER;
-        if (orderA !== orderB) return orderA - orderB;
-      }
       if (a.label === "Uncategorized") return 1;
       if (b.label === "Uncategorized") return -1;
-      return a.label.localeCompare(b.label);
-    });
+      if (a.courseOrder !== b.courseOrder) return a.courseOrder - b.courseOrder;
+      return a.unitOrder - b.unitOrder;
+    })
+    .map(({ courseOrder: _c, unitOrder: _u, ...group }) => group);
 }
 
 export function unitsForCourse(state: MasterOSState, courseId: string) {
