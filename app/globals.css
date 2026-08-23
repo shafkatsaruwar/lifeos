@@ -487,3 +487,70 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .archived-task-open p{margin:2px 0 0;font-size:10px;color:var(--muted)}
 .archived-task-restore{flex-shrink:0;border:1px solid var(--line);background:var(--canvas);border-radius:8px;height:30px;padding:0 10px;font-size:10px;font-weight:700;color:var(--accent);cursor:pointer}
 .archived-task-restore:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--panel))}
+
+/* Focus Flow */
+.focus-flow-page{display:grid;gap:18px}
+.focus-flow-tabs{display:flex;flex-wrap:wrap;gap:8px}
+.focus-flow-tabs button{height:36px;padding:0 14px;border:1px solid var(--line);border-radius:999px;background:var(--panel);font-size:11px;font-weight:800;color:var(--muted);cursor:pointer}
+.focus-flow-tabs button.selected{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--panel))}
+.focus-flow-card{border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden;box-shadow:0 10px 35px rgba(20,24,35,.035)}
+.focus-flow-talk,.focus-flow-session,.focus-flow-coach,.focus-flow-strength{display:grid;gap:14px}
+.focus-flow-goal-head{display:flex;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line)}
+.focus-flow-play{width:28px;height:28px;border-radius:8px;background:color-mix(in srgb,var(--accent) 12%,var(--canvas));display:grid;place-items:center;font-size:11px;font-weight:900;color:var(--accent)}
+.focus-flow-goal-head strong{display:block;font-size:16px;font-weight:800}
+.focus-flow-goal-head p{margin:6px 0 0;font-size:12px;color:var(--muted);line-height:1.45}
+.focus-flow-task-row{display:flex;align-items:center;gap:10px;padding:12px 18px;border-top:1px solid var(--line)}
+.focus-flow-marker{width:14px;height:14px;border-radius:999px;border:1.5px solid var(--line);flex-shrink:0}
+.focus-flow-marker.milestone{border-radius:4px;background:var(--accent);border-color:var(--accent)}
+.focus-flow-task-title{flex:1;font-size:13px;font-weight:700}
+.focus-flow-badge{height:22px;padding:0 8px;border-radius:999px;font-size:9px;font-weight:800;display:inline-flex;align-items:center;background:var(--canvas);color:var(--muted)}
+.focus-flow-badge.tone-first-milestone,.focus-flow-badge.tone-next-task{background:color-mix(in srgb,var(--accent) 12%,var(--panel));color:var(--accent)}
+.focus-flow-recorder{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:14px;display:grid;gap:10px}
+.focus-flow-recorder textarea{width:100%;border:1px solid var(--line);border-radius:12px;background:var(--canvas);padding:12px;font:inherit;resize:vertical;min-height:72px}
+.focus-flow-waveform{display:flex;gap:3px;justify-content:center;align-items:center;min-height:28px}
+.focus-flow-waveform span{width:3px;border-radius:2px;background:var(--muted);opacity:.55}
+.focus-flow-recorder-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.focus-flow-recorder-buttons{display:flex;gap:8px;align-items:center}
+.focus-flow-recorder-buttons button{height:36px;border:1px solid var(--line);border-radius:10px;background:var(--canvas);padding:0 12px;font-size:11px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.focus-flow-recorder-buttons button.selected{border-color:var(--accent);background:var(--accent);color:#fff}
+.focus-flow-recorder-buttons button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+.focus-flow-muted,.focus-flow-error{font-size:12px;color:var(--muted);line-height:1.45;margin:0}
+.focus-flow-error{color:#cf625a}
+.focus-flow-empty-plan{padding:28px 18px;text-align:center;color:var(--muted);display:grid;gap:8px;justify-items:center}
+.focus-flow-commit{display:flex;justify-content:flex-end}
+.focus-flow-session-top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;padding:18px;border-bottom:1px solid var(--line)}
+.focus-flow-timer{font-size:36px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+.focus-flow-session-actions{display:flex;gap:8px}
+.focus-flow-session-actions button{height:36px;padding:0 12px;border-radius:10px;font-size:10px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.focus-flow-session-actions .ghost{border:1px solid var(--line);background:var(--canvas);color:var(--muted)}
+.focus-flow-session-actions .primary{border:0;background:var(--ink);color:#fff}
+.focus-flow-session-task{padding:16px 18px;border-bottom:1px solid var(--line);display:grid;gap:8px}
+.focus-flow-session-task strong{font-size:17px}
+.focus-flow-allowed{display:flex;flex-wrap:wrap;gap:8px}
+.focus-flow-allowed span{height:24px;padding:0 10px;border-radius:999px;border:1px solid var(--line);font-size:10px;font-weight:800;display:inline-flex;align-items:center;color:var(--muted)}
+.focus-flow-allowed span.active{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--panel))}
+.focus-flow-notes-block{padding:14px 18px;border-bottom:1px solid var(--line);display:grid;gap:8px}
+.focus-flow-notes-block textarea{width:100%;min-height:72px;border:1px solid var(--line);border-radius:12px;background:var(--canvas);padding:10px;font:inherit;resize:vertical}
+.focus-flow-check-row{width:100%;display:flex;align-items:center;gap:10px;padding:12px 18px;border:0;border-top:1px solid var(--line);background:transparent;text-align:left;cursor:pointer;color:inherit;font-size:13px}
+.focus-flow-check-row.done{color:var(--muted);text-decoration:line-through}
+.focus-flow-check{width:16px;height:16px;border:1.5px solid var(--line);border-radius:999px;display:grid;place-items:center;color:var(--accent)}
+.focus-flow-coach-grid{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);gap:14px}
+.focus-flow-coach-head{padding:14px 16px;border-bottom:1px solid var(--line);display:grid;gap:6px}
+.focus-flow-calendar-block{margin:10px 12px;padding:10px 12px;border-left:3px solid var(--accent);border-radius:10px;background:color-mix(in srgb,var(--canvas) 70%,transparent);display:grid;gap:4px}
+.focus-flow-calendar-block small{color:var(--muted);font-size:10px}
+.focus-flow-rec-row{display:flex;gap:10px;align-items:flex-start;padding:10px 16px;border-top:1px solid var(--line)}
+.focus-flow-rec-row span{flex:1;font-size:12px;line-height:1.45;color:var(--muted)}
+.focus-flow-rec-row button{flex-shrink:0;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:10px;font-weight:800;cursor:pointer}
+.focus-flow-strength-top{display:flex;justify-content:space-between;align-items:flex-start;padding:16px 18px 0}
+.focus-flow-strength-badge{height:24px;padding:0 10px;border-radius:999px;font-size:10px;font-weight:900;display:inline-flex;align-items:center}
+.focus-flow-strength-badge.tone-success{background:#47a47b22;color:#47a47b}
+.focus-flow-strength-badge.tone-steady{background:#d99b3822;color:#d99b38}
+.focus-flow-strength-badge.tone-drifting{background:#cf625a22;color:#cf625a}
+.focus-flow-strength-headline{display:block;padding:8px 18px 0;font-size:18px;font-weight:800}
+.focus-flow-strength .focus-flow-muted{padding:0 18px}
+.focus-flow-alignment{padding:12px 18px 16px;display:grid;gap:8px}
+.focus-flow-alignment-label{display:flex;justify-content:space-between;font-size:11px;font-weight:800;color:var(--muted)}
+.focus-flow-alignment-bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden}
+.focus-flow-alignment-bar i{display:block;height:100%;border-radius:99px;background:var(--accent)}
+.focus-flow-coach .linkish{margin:0 16px 14px;border:0;background:transparent;color:var(--accent);font-size:11px;font-weight:800;cursor:pointer;text-align:left;padding:0}
+@media(max-width:900px){.focus-flow-coach-grid{grid-template-columns:1fr}}
