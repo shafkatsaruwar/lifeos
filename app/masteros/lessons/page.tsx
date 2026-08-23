@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useState } from "react";
+import { FormEvent, Suspense, useMemo, useState } from "react";
 import { formatDate, todayKey } from "@/lib/masteros/helpers";
-import { useMasterOS } from "@/lib/masteros/store";
+import { groupLessonsBySubject, useMasterOS } from "@/lib/masteros/store";
 import type { LessonSectionType, LessonStatus } from "@/lib/masteros/types";
 
 const DEFAULT_SECTIONS: { type: LessonSectionType; title: string; content: string; order: number }[] = [
@@ -36,7 +36,7 @@ function LessonsInner() {
     setOpen(false); setTitle(""); setObjective("");
   };
 
-  const lessons = [...state.lessons].sort((a, b) => b.date.localeCompare(a.date));
+  const groups = useMemo(() => groupLessonsBySubject(state), [state]);
 
   return (
     <div className="mos-page">
@@ -44,29 +44,40 @@ function LessonsInner() {
         <div><p className="eyebrow">Teach</p><h1>Lessons</h1><p>Warm-up, teach, practice, exit ticket — then start Teaching Mode beside the board.</p></div>
         <button className="primary" onClick={() => setOpen(true)}>New lesson</button>
       </div>
-      {lessons.map((lesson) => {
-        const student = state.students.find((item) => item.id === lesson.studentId);
-        const unit = state.units.find((item) => item.id === lesson.unitId);
-        const course = state.courses.find((item) => item.id === unit?.courseId);
-        return (
-          <article key={lesson.id} className="mos-entity" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 10 }}>
-            <Link href={`/masteros/lessons/${lesson.id}`} style={{ flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}>
-              <strong>{lesson.title}</strong>
-              <p className="mos-muted">{student?.name} · {course?.name} · {unit?.title} · {formatDate(lesson.date)} · {lesson.status.replace("_", " ")}</p>
-            </Link>
-            <button
-              className="mos-ghost"
-              type="button"
-              onClick={() => {
-                if (!window.confirm(`Delete “${lesson.title}”?`)) return;
-                deleteLesson(lesson.id);
-              }}
-            >
-              Delete
-            </button>
-          </article>
-        );
-      })}
+      {!groups.length ? <p className="mos-empty">No lessons yet. Create one to start Teaching Mode.</p> : null}
+      {groups.map((group) => (
+        <section key={group.label} className="mos-unit">
+          <h3>
+            {group.label}{" "}
+            <span className="mos-muted" style={{ fontWeight: 400 }}>({group.lessons.length})</span>
+          </h3>
+          <div className="mos-list-page">
+            {group.lessons.map((lesson) => {
+              const student = state.students.find((item) => item.id === lesson.studentId);
+              const unit = state.units.find((item) => item.id === lesson.unitId);
+              const course = state.courses.find((item) => item.id === unit?.courseId);
+              return (
+                <article key={lesson.id} className="mos-entity" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <Link href={`/masteros/lessons/${lesson.id}`} style={{ flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}>
+                    <strong>{lesson.title}</strong>
+                    <p className="mos-muted">{student?.name} · {course?.name} · {unit?.title} · {formatDate(lesson.date)} · {lesson.status.replace("_", " ")}</p>
+                  </Link>
+                  <button
+                    className="mos-ghost"
+                    type="button"
+                    onClick={() => {
+                      if (!window.confirm(`Delete “${lesson.title}”?`)) return;
+                      deleteLesson(lesson.id);
+                    }}
+                  >
+                    Delete
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ))}
       {open ? (
         <div className="mos-modal" onClick={() => setOpen(false)}>
           <form onClick={(e) => e.stopPropagation()} onSubmit={submit}>

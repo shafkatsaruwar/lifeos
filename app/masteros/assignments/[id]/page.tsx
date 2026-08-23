@@ -14,6 +14,7 @@ import {
   questionPoints,
   scorePercent,
 } from "@/lib/masteros/helpers";
+import { groupQuestionsForBank } from "@/lib/masteros/questionBank";
 import type { AssignmentStatus, Difficulty, MistakeType, Question, QuestionType, Skill } from "@/lib/masteros/types";
 
 const STATUSES: AssignmentStatus[] = ["assigned", "in_progress", "submitted", "graded"];
@@ -49,6 +50,14 @@ export default function AssignmentDetailPage() {
       .filter((row) => row.question);
   }, [assignment, state]);
 
+  const bankGroups = useMemo(() => {
+    if (!assignment) return [];
+    const unused = state.questions.filter(
+      (item) => item.courseId === assignment.courseId && !questions.some((row) => row.question?.id === item.id),
+    );
+    return groupQuestionsForBank(unused, state);
+  }, [assignment, questions, state]);
+
   if (!assignment) {
     return (
       <div className="mos-page">
@@ -60,9 +69,6 @@ export default function AssignmentDetailPage() {
 
   const student = state.students.find((item) => item.id === assignment.studentId);
   const course = state.courses.find((item) => item.id === assignment.courseId);
-  const unused = state.questions.filter(
-    (item) => item.courseId === assignment.courseId && !questions.some((row) => row.question?.id === item.id),
-  );
   const courseSkills = state.skills.filter((item) => item.courseId === assignment.courseId);
 
   const submitNote = (event: FormEvent) => {
@@ -194,7 +200,13 @@ export default function AssignmentDetailPage() {
           <div className="mos-actions" style={{ marginTop: 8 }}>
             <select className="mos-ghost" value={addId} onChange={(e) => setAddId(e.target.value)}>
               <option value="">Add question from bank…</option>
-              {unused.map((item) => <option key={item.id} value={item.id}>{item.text.slice(0, 80)}</option>)}
+              {bankGroups.map((group) => (
+                <optgroup key={group.key} label={group.label}>
+                  {group.questions.map((item) => (
+                    <option key={item.id} value={item.id}>{item.text.slice(0, 80)}</option>
+                  ))}
+                </optgroup>
+              ))}
             </select>
             <button className="mos-ghost" type="button" disabled={!addId} onClick={() => { addAssignmentQuestion(assignment.id, addId); setAddId(""); }}>
               Add from bank
@@ -203,6 +215,7 @@ export default function AssignmentDetailPage() {
 
           <CustomQuestionForm
             courseId={assignment.courseId}
+            assignmentLabel={ASSIGNMENT_LABEL[assignment.type]}
             skills={courseSkills}
             onAdd={(question, points) => {
               const questionId = addQuestion(question);
@@ -271,10 +284,12 @@ function OverallMark({
 
 function CustomQuestionForm({
   courseId,
+  assignmentLabel,
   skills,
   onAdd,
 }: {
   courseId: string;
+  assignmentLabel: string;
   skills: Skill[];
   onAdd: (question: Omit<Question, "id">, points: number) => void;
 }) {
@@ -301,6 +316,7 @@ function CustomQuestionForm({
       difficulty,
       questionType,
       source: "custom",
+      category: skillId ? undefined : assignmentLabel,
     }, Number.isFinite(worth) && worth >= 0 ? worth : 1);
     setText("");
     setAnswer("");
@@ -320,6 +336,7 @@ function CustomQuestionForm({
   return (
     <form onSubmit={submit} style={{ marginTop: 14 }}>
       <h3 style={{ margin: "0 0 8px", fontSize: 13 }}>Custom question</h3>
+      <p className="mos-muted" style={{ marginBottom: 12 }}>Saved to your question bank for reuse on future assignments.</p>
       <label className="mos-field"><span>Question</span><textarea value={text} onChange={(e) => setText(e.target.value)} /></label>
       <label className="mos-field"><span>Answer</span><input value={answer} onChange={(e) => setAnswer(e.target.value)} /></label>
       <label className="mos-field"><span>Explanation</span><textarea value={explanation} onChange={(e) => setExplanation(e.target.value)} /></label>
@@ -348,7 +365,7 @@ function CustomQuestionForm({
       </label>
       <div className="mos-actions">
         <button className="mos-ghost" type="button" onClick={() => setOpen(false)}>Cancel</button>
-        <button className="primary">Add to assignment</button>
+        <button className="primary">Add to assignment & bank</button>
       </div>
     </form>
   );

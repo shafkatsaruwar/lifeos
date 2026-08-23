@@ -37,6 +37,17 @@ export type Course = {
 
 export type Enrollment = { studentId: string; courseId: string };
 
+/** A teaching group — one tutor session with multiple students (1:1 or small group). */
+export type TeachingClass = {
+  id: string;
+  name: string;
+  courseId?: string;
+  studentIds: string[];
+  schedule?: string;
+  notes?: string;
+  createdAt: string;
+};
+
 export type Unit = {
   id: string;
   courseId: string;
@@ -96,6 +107,7 @@ export type Question = {
   courseId?: string;
   subject?: string;
   source?: string;
+  category?: string;
   choices?: string[];
   notes?: string;
 };
@@ -158,6 +170,7 @@ export type TeacherNote = {
 export type MasterOSState = {
   students: Student[];
   courses: Course[];
+  classes: TeachingClass[];
   enrollments: Enrollment[];
   units: Unit[];
   lessons: Lesson[];

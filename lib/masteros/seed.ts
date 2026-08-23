@@ -3,7 +3,10 @@ import { computeMasteryState } from "./mastery";
 
 const S = {
   wafia: "stu-wafia",
+  omar: "stu-omar",
+  layla: "stu-layla",
   sat: "crs-sat-prep",
+  satGroup: "cls-sat-saturday",
 };
 
 const units = [
@@ -70,7 +73,11 @@ function skillRow(skillId: string, accuracy: number, attempts: number, lastPract
 
 export function createSeedState(): MasterOSState {
   return {
-    students: [{ id: S.wafia, name: "Wafia", gradeLevel: "11", notes: "Thoughtful, careful with reading. Algebra setup is the current bottleneck.", createdAt: "2026-07-01T12:00:00.000Z" }],
+    students: [
+      { id: S.wafia, name: "Wafia", gradeLevel: "11", notes: "Thoughtful, careful with reading. Algebra setup is the current bottleneck.", createdAt: "2026-07-01T12:00:00.000Z" },
+      { id: S.omar, name: "Omar", gradeLevel: "11", notes: "Strong mental math; needs reading pacing.", createdAt: "2026-07-15T12:00:00.000Z" },
+      { id: S.layla, name: "Layla", gradeLevel: "10", notes: "Motivated in group settings; shy one-on-one.", createdAt: "2026-08-01T12:00:00.000Z" },
+    ],
     courses: [{
       id: S.sat,
       name: "SAT Prep",
@@ -79,7 +86,20 @@ export function createSeedState(): MasterOSState {
       startDate: "2026-08-04",
       targetDate: "2026-12-05",
     }],
-    enrollments: [{ studentId: S.wafia, courseId: S.sat }],
+    classes: [{
+      id: S.satGroup,
+      name: "SAT Saturday Group",
+      courseId: S.sat,
+      studentIds: [S.wafia, S.omar, S.layla],
+      schedule: "Sat 10:00",
+      notes: "Small group · percent and algebra focus",
+      createdAt: "2026-08-04T12:00:00.000Z",
+    }],
+    enrollments: [
+      { studentId: S.wafia, courseId: S.sat },
+      { studentId: S.omar, courseId: S.sat },
+      { studentId: S.layla, courseId: S.sat },
+    ],
     units,
     lessons: [
       {

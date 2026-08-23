@@ -1,5 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
+import * as WebBrowser from "expo-web-browser";
 import { useMemo } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { PlanTomorrowModal } from "../components/PlanTomorrowModal";
@@ -16,6 +17,8 @@ import {
   toggleHabitCheck,
 } from "../lib/habits";
 import { buildInbox } from "../lib/notifications";
+import { API_BASE } from "../lib/api";
+import { useLayout } from "../lib/layout";
 import { createNotebook, createPage, primaryPageForNotebook } from "../lib/notebooks";
 
 function periodProgress(now: Date) {
@@ -43,6 +46,7 @@ export function LifeDashboardScreen() {
   const { theme, workspace, updateTasks, updateNotebookHub, upsertNotebookPage, updateProjects, updateLife } =
     useLifeOS();
   const navigation = useNavigation<any>();
+  const { isTablet } = useLayout();
   const [planTomorrowOpen, setPlanTomorrowOpen] = useState(false);
   const now = new Date();
   const today = toDateKey(now);
@@ -283,6 +287,14 @@ export function LifeDashboardScreen() {
           />
           <QuickAction icon="sun" label="Plan tomorrow" onPress={() => setPlanTomorrowOpen(true)} color={theme.accent} />
           <QuickAction icon="map" label="Trip idea" onPress={() => openCollection("trips", true)} color={theme.success} />
+          {isTablet && workspace.settings.enableMasterOS !== false ? (
+            <QuickAction
+              icon="book-open"
+              label="MasterOS"
+              onPress={() => void WebBrowser.openBrowserAsync(`${API_BASE}/masteros`)}
+              color={theme.blue}
+            />
+          ) : null}
         </ScrollView>
 
         <DashboardModule

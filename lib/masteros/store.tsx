@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { applyQuestionResult, computeMasteryState } from "./mastery";
 import { createSeedState } from "./seed";
 import { questionPoints, tallyAssignmentMarks, uid } from "./helpers";
+import { prepareQuestionForBank } from "./questionBank";
 import type {
   Assignment,
   Course,
@@ -15,6 +16,7 @@ import type {
   Student,
   StudentSkill,
   TeacherNote,
+  TeachingClass,
 } from "./types";
 
 const STORAGE_KEY = "masteros.v1";
@@ -23,6 +25,7 @@ function emptyState(): MasterOSState {
   return {
     students: [],
     courses: [],
+    classes: [],
     enrollments: [],
     units: [],
     lessons: [],
@@ -61,6 +64,105 @@ function retallySkill(current: StudentSkill, previous: boolean, next: boolean, p
   };
 }
 
+export function removeQuestionFromState(current: MasterOSState, questionId: string): MasterOSState {
+  const assignmentIds = new Set(
+    current.assignmentQuestions
+      .filter((item) => item.questionId === questionId)
+      .map((item) => item.assignmentId),
+  );
+  let next: MasterOSState = {
+    ...current,
+    questions: current.questions.filter((item) => item.id !== questionId),
+    assignmentQuestions: current.assignmentQuestions.filter((item) => item.questionId !== questionId),
+    questionResults: current.questionResults.filter((item) => item.questionId !== questionId),
+  };
+  for (const assignmentId of assignmentIds) {
+    next = retallyAssignment(next, assignmentId);
+  }
+  return next;
+}
+
+export function removeStudentFromState(current: MasterOSState, studentId: string): MasterOSState {
+  const lessonIds = new Set(current.lessons.filter((item) => item.studentId === studentId).map((item) => item.id));
+  const assignmentIds = new Set(current.assignments.filter((item) => item.studentId === studentId).map((item) => item.id));
+
+  return {
+    ...current,
+    students: current.students.filter((item) => item.id !== studentId),
+    enrollments: current.enrollments.filter((item) => item.studentId !== studentId),
+    lessons: current.lessons.filter((item) => item.studentId !== studentId),
+    lessonSections: current.lessonSections.filter((item) => !lessonIds.has(item.lessonId)),
+    studentSkills: current.studentSkills.filter((item) => item.studentId !== studentId),
+    assignments: current.assignments.filter((item) => item.studentId !== studentId),
+    assignmentQuestions: current.assignmentQuestions.filter((item) => !assignmentIds.has(item.assignmentId)),
+    questionResults: current.questionResults.filter((item) => item.studentId !== studentId),
+    assessments: current.assessments.filter((item) => item.studentId !== studentId),
+    teacherNotes: current.teacherNotes.filter((item) => item.studentId !== studentId),
+    classes: current.classes.map((item) => ({
+      ...item,
+      studentIds: item.studentIds.filter((id) => id !== studentId),
+    })),
+  };
+}
+
+export function removeClassFromState(current: MasterOSState, classId: string): MasterOSState {
+  return {
+    ...current,
+    classes: current.classes.filter((item) => item.id !== classId),
+  };
+}
+
+export function removeUnitFromState(current: MasterOSState, unitId: string): MasterOSState {
+  const lessonIds = new Set(current.lessons.filter((item) => item.unitId === unitId).map((item) => item.id));
+  return {
+    ...current,
+    units: current.units.filter((item) => item.id !== unitId),
+    lessons: current.lessons.filter((item) => item.unitId !== unitId),
+    lessonSections: current.lessonSections.filter((item) => !lessonIds.has(item.lessonId)),
+    assignments: current.assignments.map((item) =>
+      item.lessonId && lessonIds.has(item.lessonId) ? { ...item, lessonId: undefined } : item,
+    ),
+    teacherNotes: current.teacherNotes.map((item) =>
+      item.lessonId && lessonIds.has(item.lessonId) ? { ...item, lessonId: undefined } : item,
+    ),
+  };
+}
+
+export function removeCourseFromState(current: MasterOSState, courseId: string): MasterOSState {
+  const unitIds = new Set(current.units.filter((item) => item.courseId === courseId).map((item) => item.id));
+  const lessonIds = new Set(current.lessons.filter((item) => unitIds.has(item.unitId)).map((item) => item.id));
+  const skillIds = new Set(current.skills.filter((item) => item.courseId === courseId).map((item) => item.id));
+  const questionIds = new Set(current.questions.filter((item) => item.courseId === courseId).map((item) => item.id));
+  const assignmentIds = new Set(current.assignments.filter((item) => item.courseId === courseId).map((item) => item.id));
+
+  return {
+    ...current,
+    courses: current.courses.filter((item) => item.id !== courseId),
+    enrollments: current.enrollments.filter((item) => item.courseId !== courseId),
+    units: current.units.filter((item) => item.courseId !== courseId),
+    lessons: current.lessons.filter((item) => !unitIds.has(item.unitId)),
+    lessonSections: current.lessonSections.filter((item) => !lessonIds.has(item.lessonId)),
+    skills: current.skills.filter((item) => item.courseId !== courseId),
+    studentSkills: current.studentSkills.filter((item) => !skillIds.has(item.skillId)),
+    questions: current.questions.filter((item) => item.courseId !== courseId),
+    assignments: current.assignments.filter((item) => item.courseId !== courseId),
+    assignmentQuestions: current.assignmentQuestions.filter((item) => !assignmentIds.has(item.assignmentId)),
+    questionResults: current.questionResults.filter(
+      (item) =>
+        (!item.assignmentId || !assignmentIds.has(item.assignmentId))
+        && !questionIds.has(item.questionId),
+    ),
+    assessments: current.assessments.filter((item) => item.courseId !== courseId),
+    teacherNotes: current.teacherNotes
+      .filter((item) => item.courseId !== courseId)
+      .map((item) => (item.lessonId && lessonIds.has(item.lessonId) ? { ...item, lessonId: undefined } : item))
+      .map((item) => (item.skillId && skillIds.has(item.skillId) ? { ...item, skillId: undefined } : item)),
+    classes: current.classes.map((item) =>
+      item.courseId === courseId ? { ...item, courseId: undefined } : item,
+    ),
+  };
+}
+
 function retallyAssignment(current: MasterOSState, assignmentId: string): MasterOSState {
   const links = current.assignmentQuestions.filter((item) => item.assignmentId === assignmentId);
   if (!links.length) return current;
@@ -84,7 +186,12 @@ type Store = {
   ready: boolean;
   resetDemo: () => void;
   addStudent: (input: Pick<Student, "name" | "gradeLevel" | "notes">) => string;
+  deleteStudent: (id: string) => void;
+  addClass: (input: Pick<TeachingClass, "name" | "courseId" | "schedule" | "notes" | "studentIds">) => string;
+  updateClass: (id: string, patch: Partial<TeachingClass>) => void;
+  deleteClass: (id: string) => void;
   addCourse: (input: Pick<Course, "name" | "description" | "status" | "startDate" | "targetDate">, studentId?: string) => string;
+  deleteCourse: (id: string) => void;
   enroll: (studentId: string, courseId: string) => void;
   addLesson: (input: Omit<Lesson, "id">, sections?: Omit<LessonSection, "id" | "lessonId">[]) => string;
   updateLesson: (id: string, patch: Partial<Lesson>) => void;
@@ -93,11 +200,13 @@ type Store = {
   reorderSections: (lessonId: string, orderedIds: string[]) => void;
   addNote: (note: Omit<TeacherNote, "id" | "createdAt">) => void;
   addQuestion: (input: Omit<Question, "id">) => string;
+  deleteQuestion: (id: string) => void;
   addAssignment: (input: Omit<Assignment, "id">, questionIds?: string[]) => string;
   updateAssignment: (id: string, patch: Partial<Assignment>) => void;
   addAssignmentQuestion: (assignmentId: string, questionId: string, points?: number) => void;
   updateAssignmentQuestion: (assignmentId: string, questionId: string, patch: { points?: number }) => void;
   addUnit: (courseId: string, title: string) => string;
+  deleteUnit: (id: string) => void;
   gradeAssignment: (id: string, score: number, totalPoints?: number) => void;
   recordResult: (input: {
     studentId: string;
@@ -144,6 +253,26 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
       patch((current) => ({ ...current, students: [...current.students, { ...input, id, createdAt: new Date().toISOString() }] }));
       return id;
     },
+    deleteStudent: (id) => {
+      patch((current) => removeStudentFromState(current, id));
+    },
+    addClass: (input) => {
+      const id = uid("cls");
+      patch((current) => ({
+        ...current,
+        classes: [...current.classes, { ...input, id, studentIds: input.studentIds ?? [], createdAt: new Date().toISOString() }],
+      }));
+      return id;
+    },
+    updateClass: (id, next) => {
+      patch((current) => ({
+        ...current,
+        classes: current.classes.map((item) => (item.id === id ? { ...item, ...next } : item)),
+      }));
+    },
+    deleteClass: (id) => {
+      patch((current) => removeClassFromState(current, id));
+    },
     addCourse: (input, studentId) => {
       const id = uid("crs");
       patch((current) => ({
@@ -152,6 +281,9 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
         enrollments: studentId ? [...current.enrollments, { studentId, courseId: id }] : current.enrollments,
       }));
       return id;
+    },
+    deleteCourse: (id) => {
+      patch((current) => removeCourseFromState(current, id));
     },
     enroll: (studentId, courseId) => {
       patch((current) => {
@@ -210,8 +342,14 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
     },
     addQuestion: (input) => {
       const id = uid("q");
-      patch((current) => ({ ...current, questions: [...current.questions, { ...input, id }] }));
+      patch((current) => ({
+        ...current,
+        questions: [...current.questions, { ...prepareQuestionForBank(input, current), id }],
+      }));
       return id;
+    },
+    deleteQuestion: (id) => {
+      patch((current) => removeQuestionFromState(current, id));
     },
     addAssignment: (input, questionIds = []) => {
       const id = uid("asg");
@@ -256,6 +394,9 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
         return { ...current, units: [...current.units, { id, courseId, title, order }] };
       });
       return id;
+    },
+    deleteUnit: (id) => {
+      patch((current) => removeUnitFromState(current, id));
     },
     gradeAssignment: (id, score, totalPoints) => {
       patch((current) => ({
@@ -375,9 +516,14 @@ export function useMasterOS() {
 
 export {
   attentionSkills,
+  classesForStudent,
   courseProgress,
   coursesForStudent,
+  groupLessonsBySubject,
+  compareLessonsByCurriculum,
+  lessonSubject,
   selectStudent,
+  studentsForClass,
   studentsForCourse,
   unitsForCourse,
 } from "./selectors";

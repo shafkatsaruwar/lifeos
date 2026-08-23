@@ -7,6 +7,7 @@ import { signOut } from "firebase/auth";
 import { ActionButton, Card, Eyebrow, Page, SegmentedControl, Title } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { API_BASE } from "../lib/api";
+import { useLayout } from "../lib/layout";
 import { auth } from "../lib/firebase";
 import {
   DEFAULT_FOCUS_ENFORCER_PREFS,
@@ -22,6 +23,7 @@ import type { EnergyLevel, ThemeMode } from "../types";
 export function SettingsScreen() {
   const navigation = useNavigation<any>();
   const { user, workspace, theme, dark, updateSettings, updateCalendar, sync, startOnboardingReplay } = useLifeOS();
+  const { isTablet } = useLayout();
   const notifPrefs = resolveNotificationPrefs(workspace.settings);
   const [name, setName] = useState(workspace.settings.preferredName ?? "");
   const [synapsePaste, setSynapsePaste] = useState("");
@@ -329,7 +331,7 @@ export function SettingsScreen() {
             <Text style={[styles.cardLabel, { color: theme.text }]}>Environments</Text>
           </View>
           <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>
-            Show or hide HomeOS, School, and Work tabs. Data stays in sync with the web app.
+            Show or hide HomeOS, School, and Work tabs. MasterOS is iPad-only — open it from Settings on iPad or use LifeOS web.
           </Text>
           <View style={styles.settingRow}>
             <View style={styles.grow}>
@@ -364,6 +366,29 @@ export function SettingsScreen() {
               trackColor={{ true: theme.accent }}
             />
           </View>
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <View style={styles.settingRow}>
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>MasterOS</Text>
+              <Text style={{ color: theme.muted, fontSize: 12 }}>
+                {isTablet ? "Teaching on iPad — classes, lessons, gradebook" : "iPad only · use web at /masteros on desktop"}
+              </Text>
+            </View>
+            <Switch
+              value={workspace.settings.enableMasterOS !== false}
+              onValueChange={(value) => patchSettings({ enableMasterOS: value })}
+              trackColor={{ true: theme.accent }}
+            />
+          </View>
+          {workspace.settings.enableMasterOS !== false && isTablet ? (
+            <View style={{ marginTop: 12 }}>
+              <ActionButton
+                label="Open MasterOS"
+                icon="book-open"
+                onPress={() => void WebBrowser.openBrowserAsync(`${API_BASE}/masteros`)}
+              />
+            </View>
+          ) : null}
         </Card>
 
         <Card>

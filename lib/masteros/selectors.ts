@@ -1,4 +1,4 @@
-import type { MasterOSState } from "./types";
+import type { Lesson, MasterOSState } from "./types";
 
 export function selectStudent(state: MasterOSState, id: string) {
   return state.students.find((item) => item.id === id);
@@ -12,6 +12,74 @@ export function coursesForStudent(state: MasterOSState, studentId: string) {
 export function studentsForCourse(state: MasterOSState, courseId: string) {
   const ids = new Set(state.enrollments.filter((item) => item.courseId === courseId).map((item) => item.studentId));
   return state.students.filter((item) => ids.has(item.id));
+}
+
+export function studentsForClass(state: MasterOSState, classId: string) {
+  const teachingClass = state.classes.find((item) => item.id === classId);
+  if (!teachingClass) return [];
+  const ids = new Set(teachingClass.studentIds);
+  return state.students.filter((item) => ids.has(item.id));
+}
+
+export function classesForStudent(state: MasterOSState, studentId: string) {
+  return state.classes.filter((item) => item.studentIds.includes(studentId));
+}
+
+/** Subject label for a lesson: skill domain when known, otherwise course name. */
+export function lessonSubject(state: MasterOSState, lessonId: string): string {
+  const lesson = state.lessons.find((item) => item.id === lessonId);
+  if (!lesson) return "Uncategorized";
+  const domainCounts = new Map<string, number>();
+  for (const skillId of lesson.skillIds) {
+    const domain = state.skills.find((item) => item.id === skillId)?.domain?.trim();
+    if (!domain) continue;
+    domainCounts.set(domain, (domainCounts.get(domain) ?? 0) + 1);
+  }
+  if (domainCounts.size) {
+    return [...domainCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
+  }
+  const unit = state.units.find((item) => item.id === lesson.unitId);
+  const course = state.courses.find((item) => item.id === unit?.courseId);
+  const courseName = course?.name?.trim();
+  if (!courseName) return "Uncategorized";
+  // "SAT PREP - MATH" → group under Math; keep full name when no subject suffix.
+  const dash = courseName.lastIndexOf(" - ");
+  if (dash > 0) {
+    const suffix = courseName.slice(dash + 3).trim();
+    if (suffix) return suffix;
+  }
+  return courseName;
+}
+
+/** Curriculum order: unit sequence, then date, then natural title sort. */
+export function compareLessonsByCurriculum(state: MasterOSState, a: Lesson, b: Lesson): number {
+  const unitA = state.units.find((item) => item.id === a.unitId);
+  const unitB = state.units.find((item) => item.id === b.unitId);
+  const orderDiff = (unitA?.order ?? Number.MAX_SAFE_INTEGER) - (unitB?.order ?? Number.MAX_SAFE_INTEGER);
+  if (orderDiff !== 0) return orderDiff;
+  const dateDiff = a.date.localeCompare(b.date);
+  if (dateDiff !== 0) return dateDiff;
+  return a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: "base" });
+}
+
+export function groupLessonsBySubject(state: MasterOSState) {
+  const groups = new Map<string, typeof state.lessons>();
+  for (const lesson of state.lessons) {
+    const subject = lessonSubject(state, lesson.id);
+    const list = groups.get(subject) ?? [];
+    list.push(lesson);
+    groups.set(subject, list);
+  }
+  return [...groups.entries()]
+    .map(([label, lessons]) => ({
+      label,
+      lessons: [...lessons].sort((a, b) => compareLessonsByCurriculum(state, a, b)),
+    }))
+    .sort((a, b) => {
+      if (a.label === "Uncategorized") return 1;
+      if (b.label === "Uncategorized") return -1;
+      return a.label.localeCompare(b.label);
+    });
 }
 
 export function unitsForCourse(state: MasterOSState, courseId: string) {
