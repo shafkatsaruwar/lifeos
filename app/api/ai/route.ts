@@ -277,6 +277,79 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    if (action === "parse-goal") {
+      const input = typeof body.input === "string" ? body.input.trim().slice(0, MAX_INPUT_LENGTH) : "";
+      const spaces = Array.isArray(body.spaces) ? body.spaces.filter((item: unknown) => typeof item === "string").slice(0, 50) : [];
+      if (!input) return NextResponse.json({ error: "Describe the goal first." }, { status: 400 });
+      const parsed = await askClaude(
+        `Turn a spoken or written goal into a structured LifeOS plan. Reply with ONLY valid JSON: {"goal":"string","summary":"string","projectName":"string","tasks":[{"title":"string","badge":"First milestone|Next task|This week|For later","focusMinutes":number,"priority":"High|Medium|Low","energy":"Low|Medium|High"}]}. Produce 3 to 6 tasks in execution order. First task badge should be "First milestone" or "Next task". Use a listed space when obvious; otherwise "Inbox". focusMinutes 15-90.`,
+        input,
+      );
+      const badges = new Set(["First milestone", "Next task", "This week", "For later"]);
+      const tasks = Array.isArray(parsed.tasks)
+        ? parsed.tasks
+          .filter((task: { title?: unknown }) => typeof task?.title === "string" && task.title.trim())
+          .slice(0, 6)
+          .map((task: { title: string; badge?: string; focusMinutes?: number; priority?: string; energy?: string }) => ({
+            title: task.title.trim().slice(0, 180),
+            badge: badges.has(task.badge ?? "") ? task.badge : "This week",
+            focusMinutes: Math.max(15, Math.min(90, Number(task.focusMinutes) || 30)),
+            priority: asPriority(task.priority),
+            energy: asEnergy(task.energy),
+          }))
+        : [];
+      if (!tasks.length) throw new Error("AI did not return usable tasks. Please try again.");
+      const requestedProject = typeof parsed.projectName === "string" ? parsed.projectName.trim().slice(0, 100) : "Inbox";
+      return NextResponse.json({
+        plan: {
+          goal: typeof parsed.goal === "string" && parsed.goal.trim() ? parsed.goal.trim().slice(0, 180) : input.slice(0, 180),
+          summary: typeof parsed.summary === "string" ? parsed.summary.trim().slice(0, 400) : "",
+          projectName: spaces.includes(requestedProject) ? requestedProject : requestedProject || "Inbox",
+          tasks,
+        },
+      });
+    }
+
+    if (action === "coach-day") {
+      const today = asDate(body.today) || new Date().toISOString().slice(0, 10);
+      const context = body.context && typeof body.context === "object" ? body.context : {};
+      const taskIds = Array.isArray(context.tasks) ? context.tasks.map((task: { id?: unknown }) => Number(task?.id)) : [];
+      const parsed = await askClaude(
+        'You are LifeOS daily coach. Use only supplied context. Reply with ONLY valid JSON: {"headline":"string","summary":"string","recommendations":[{"id":"string","text":"string","action":"rename_task|add_event|weekly_plan|choose_task|focus_task","taskId":number|null,"newTitle":"string|null","eventTitle":"string|null","eventStart":"YYYY-MM-DDTHH:MM|null","eventEnd":"YYYY-MM-DDTHH:MM|null","weeklyDay":number|null,"weeklyText":"string|null"}],"looksGood":["string"],"needsWork":["string"]}. Give 2-4 specific recommendations with Apply buttons. Only use taskId values from context.tasks.',
+        JSON.stringify({ today, context }),
+      );
+      const validActions = new Set(["rename_task", "add_event", "weekly_plan", "choose_task", "focus_task"]);
+      const recommendations = Array.isArray(parsed.recommendations)
+        ? parsed.recommendations
+          .filter((item: { text?: unknown; action?: unknown }) => typeof item?.text === "string" && typeof item?.action === "string" && validActions.has(item.action))
+          .slice(0, 4)
+          .map((item: Record<string, unknown>, index: number) => {
+            const taskId = Number(item.taskId);
+            return {
+              id: typeof item.id === "string" ? item.id : `rec-${index}`,
+              text: String(item.text).slice(0, 220),
+              action: item.action,
+              taskId: Number.isFinite(taskId) && taskIds.includes(taskId) ? taskId : undefined,
+              newTitle: typeof item.newTitle === "string" ? item.newTitle.slice(0, 180) : undefined,
+              eventTitle: typeof item.eventTitle === "string" ? item.eventTitle.slice(0, 120) : undefined,
+              eventStart: typeof item.eventStart === "string" ? item.eventStart : undefined,
+              eventEnd: typeof item.eventEnd === "string" ? item.eventEnd : undefined,
+              weeklyDay: Number.isFinite(Number(item.weeklyDay)) ? Number(item.weeklyDay) : undefined,
+              weeklyText: typeof item.weeklyText === "string" ? item.weeklyText.slice(0, 120) : undefined,
+            };
+          })
+        : [];
+      return NextResponse.json({
+        coach: {
+          headline: typeof parsed.headline === "string" ? parsed.headline.slice(0, 120) : "Tune your afternoon",
+          summary: typeof parsed.summary === "string" ? parsed.summary.slice(0, 400) : "",
+          recommendations,
+          looksGood: Array.isArray(parsed.looksGood) ? parsed.looksGood.filter((item: unknown) => typeof item === "string").slice(0, 4) : [],
+          needsWork: Array.isArray(parsed.needsWork) ? parsed.needsWork.filter((item: unknown) => typeof item === "string").slice(0, 4) : [],
+        },
+      });
+    }
+
     return NextResponse.json({ error: "Unknown AI action." }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Something went wrong with AI.";
