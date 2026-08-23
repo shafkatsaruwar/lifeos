@@ -82,6 +82,72 @@ export function groupLessonsBySubject(state: MasterOSState) {
     });
 }
 
+export type LessonListGroup = {
+  key: string;
+  label: string;
+  subtitle: string;
+  kind: "course" | "subject";
+  lessons: Lesson[];
+};
+
+/** Group lessons for the list page: by course when multiple courses appear, otherwise by subject. */
+export function groupLessonsForList(state: MasterOSState): LessonListGroup[] {
+  if (!state.lessons.length) return [];
+
+  const courseIdForLesson = (lesson: Lesson) =>
+    state.units.find((item) => item.id === lesson.unitId)?.courseId;
+
+  const courseIds = new Set(
+    state.lessons.map(courseIdForLesson).filter((id): id is string => Boolean(id)),
+  );
+  const groupByCourse = courseIds.size > 1;
+  const courseOrder = new Map(state.courses.map((item, index) => [item.id, index]));
+
+  const buckets = new Map<string, { key: string; label: string; lessons: Lesson[] }>();
+
+  for (const lesson of state.lessons) {
+    const unit = state.units.find((item) => item.id === lesson.unitId);
+    const course = state.courses.find((item) => item.id === unit?.courseId);
+
+    let key: string;
+    let label: string;
+
+    if (groupByCourse && course) {
+      key = course.id;
+      label = course.name;
+    } else {
+      const subject = lessonSubject(state, lesson.id);
+      key = subject;
+      label = subject;
+    }
+
+    const bucket = buckets.get(key) ?? { key, label, lessons: [] };
+    bucket.lessons.push(lesson);
+    buckets.set(key, bucket);
+  }
+
+  return [...buckets.values()]
+    .map((bucket) => {
+      const unitIds = new Set(bucket.lessons.map((item) => item.unitId));
+      return {
+        ...bucket,
+        kind: groupByCourse ? "course" as const : "subject" as const,
+        subtitle: `${bucket.lessons.length} lesson${bucket.lessons.length === 1 ? "" : "s"} · ${unitIds.size} unit${unitIds.size === 1 ? "" : "s"}`,
+        lessons: [...bucket.lessons].sort((a, b) => compareLessonsByCurriculum(state, a, b)),
+      };
+    })
+    .sort((a, b) => {
+      if (groupByCourse) {
+        const orderA = courseOrder.get(a.key) ?? Number.MAX_SAFE_INTEGER;
+        const orderB = courseOrder.get(b.key) ?? Number.MAX_SAFE_INTEGER;
+        if (orderA !== orderB) return orderA - orderB;
+      }
+      if (a.label === "Uncategorized") return 1;
+      if (b.label === "Uncategorized") return -1;
+      return a.label.localeCompare(b.label);
+    });
+}
+
 export function unitsForCourse(state: MasterOSState, courseId: string) {
   return state.units.filter((item) => item.courseId === courseId).sort((a, b) => a.order - b.order);
 }

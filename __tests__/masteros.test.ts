@@ -2,7 +2,7 @@ import { applyQuestionResult, computeMasteryState, recommendNextSkill } from "@/
 import { createSeedState, DEMO_COURSE_ID, DEMO_STUDENT_ID } from "@/lib/masteros/seed";
 import { attentionSkills, courseProgress } from "@/lib/masteros/selectors";
 import { removeClassFromState, removeCourseFromState, removeQuestionFromState, removeStudentFromState, removeUnitFromState } from "@/lib/masteros/store";
-import { classesForStudent, compareLessonsByCurriculum, groupLessonsBySubject, lessonSubject, studentsForClass } from "@/lib/masteros/selectors";
+import { classesForStudent, compareLessonsByCurriculum, groupLessonsBySubject, groupLessonsForList, lessonSubject, studentsForClass } from "@/lib/masteros/selectors";
 import { buildStudentReportCard } from "@/lib/masteros/reportCard";
 import { groupQuestionsForBank, prepareQuestionForBank, resolveQuestionCategory } from "@/lib/masteros/questionBank";
 import { assignmentStatusLabel, assignmentTypeLabel, percent, tallyAssignmentMarks } from "@/lib/masteros/helpers";
@@ -170,6 +170,59 @@ describe("MasterOS lesson subjects", () => {
     expect(compareLessonsByCurriculum({ ...state, lessons }, lessons[0], lessons[1])).toBeGreaterThan(0);
     const mathGroup = groupLessonsBySubject({ ...state, lessons }).find((group) => group.label === "SAT Prep");
     expect(mathGroup?.lessons.map((item) => item.id)).toEqual(["les-u1", "les-u10"]);
+  });
+
+  it("groups lessons by course when multiple courses appear on the list", () => {
+    const state = createSeedState();
+    const mathCourse = {
+      id: "crs-sat-math",
+      name: "SAT PREP - MATH",
+      description: "",
+      status: "active" as const,
+      startDate: "2026-08-04",
+    };
+    const englishCourse = {
+      id: "crs-sat-english",
+      name: "SAT PREP - ENGLISH",
+      description: "",
+      status: "active" as const,
+      startDate: "2026-08-04",
+    };
+    const mathUnit = { id: "unit-m1", courseId: mathCourse.id, title: "Polynomials", order: 9 };
+    const englishUnit = { id: "unit-e1", courseId: englishCourse.id, title: "Reading", order: 1 };
+    const next = {
+      ...state,
+      courses: [...state.courses, mathCourse, englishCourse],
+      units: [...state.units, mathUnit, englishUnit],
+      lessons: [
+        {
+          id: "les-math",
+          unitId: mathUnit.id,
+          studentId: DEMO_STUDENT_ID,
+          title: "Unit 9: Polynomials",
+          objective: "",
+          date: "2026-08-23",
+          duration: 60,
+          status: "planned" as const,
+          skillIds: [],
+        },
+        {
+          id: "les-english",
+          unitId: englishUnit.id,
+          studentId: DEMO_STUDENT_ID,
+          title: "Unit 1: Main idea",
+          objective: "",
+          date: "2026-08-23",
+          duration: 60,
+          status: "planned" as const,
+          skillIds: [],
+        },
+      ],
+    };
+    const groups = groupLessonsForList(next);
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toMatchObject({ label: "SAT PREP - MATH", kind: "course" });
+    expect(groups[1]).toMatchObject({ label: "SAT PREP - ENGLISH", kind: "course" });
   });
 });
 
