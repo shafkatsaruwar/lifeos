@@ -96,6 +96,7 @@ export type Question = {
   courseId?: string;
   subject?: string;
   source?: string;
+  category?: string;
   choices?: string[];
   notes?: string;
 };

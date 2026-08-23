@@ -89,6 +89,7 @@ create table if not exists questions (
   course_id text references courses(id),
   subject text,
   source text,
+  category text,
   notes text
 );
 

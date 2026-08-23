@@ -21,10 +21,11 @@ const NAV = [
 export function MasterOSShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const teaching = pathname?.includes("/teach");
+  const report = pathname?.includes("/report");
 
   return (
     <MasterOSProvider>
-      {teaching ? (
+      {teaching || report ? (
         children
       ) : (
         <div className="mos-shell">

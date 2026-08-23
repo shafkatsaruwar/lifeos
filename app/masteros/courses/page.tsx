@@ -6,7 +6,7 @@ import { FormEvent, Suspense, useState } from "react";
 import { courseProgress, studentsForCourse, useMasterOS } from "@/lib/masteros/store";
 
 function CoursesInner() {
-  const { state, addCourse } = useMasterOS();
+  const { state, addCourse, deleteCourse } = useMasterOS();
   const params = useSearchParams();
   const [open, setOpen] = useState(params.get("new") === "1");
   const [name, setName] = useState("");
@@ -32,12 +32,24 @@ function CoursesInner() {
           const progress = students[0] ? courseProgress(state, students[0].id, course.id) : 0;
           const units = state.units.filter((item) => item.courseId === course.id).length;
           return (
-            <Link key={course.id} href={`/masteros/courses/${course.id}`} className="mos-entity">
-              <strong>{course.name}</strong>
-              <p className="mos-muted">{course.description}</p>
-              <p className="mos-muted" style={{ marginTop: 8 }}>{students.map((item) => item.name).join(", ") || "No students"} · {units} units · {course.status} · {progress}%</p>
-              <div className="mos-bar" style={{ marginTop: 10 }}><i style={{ width: `${progress}%` }} /></div>
-            </Link>
+            <article key={course.id} className="mos-entity" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <Link href={`/masteros/courses/${course.id}`} style={{ flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}>
+                <strong>{course.name}</strong>
+                <p className="mos-muted">{course.description}</p>
+                <p className="mos-muted" style={{ marginTop: 8 }}>{students.map((item) => item.name).join(", ") || "No students"} · {units} units · {course.status} · {progress}%</p>
+                <div className="mos-bar" style={{ marginTop: 10 }}><i style={{ width: `${progress}%` }} /></div>
+              </Link>
+              <button
+                className="mos-ghost"
+                type="button"
+                onClick={() => {
+                  if (!window.confirm(`Delete “${course.name}” and all its units, lessons, and assignments?`)) return;
+                  deleteCourse(course.id);
+                }}
+              >
+                Delete
+              </button>
+            </article>
           );
         })}
       </div>

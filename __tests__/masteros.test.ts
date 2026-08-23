@@ -1,6 +1,9 @@
 import { applyQuestionResult, computeMasteryState, recommendNextSkill } from "@/lib/masteros/mastery";
 import { createSeedState, DEMO_COURSE_ID, DEMO_STUDENT_ID } from "@/lib/masteros/seed";
 import { attentionSkills, courseProgress } from "@/lib/masteros/selectors";
+import { removeCourseFromState, removeQuestionFromState, removeStudentFromState, removeUnitFromState } from "@/lib/masteros/store";
+import { buildStudentReportCard } from "@/lib/masteros/reportCard";
+import { groupQuestionsForBank, prepareQuestionForBank, resolveQuestionCategory } from "@/lib/masteros/questionBank";
 import { assignmentStatusLabel, assignmentTypeLabel, percent, tallyAssignmentMarks } from "@/lib/masteros/helpers";
 
 describe("MasterOS mastery rules", () => {
@@ -78,6 +81,81 @@ describe("MasterOS labels", () => {
   it("keeps assignment copy generic", () => {
     expect(assignmentTypeLabel("diagnostic")).toBe("Diagnostic");
     expect(assignmentStatusLabel("in_progress")).toBe("In Progress");
+  });
+});
+
+describe("MasterOS course and unit deletion", () => {
+  it("removes a unit and its lessons", () => {
+    const state = createSeedState();
+    const next = removeUnitFromState(state, "unit-4");
+    expect(next.units.some((item) => item.id === "unit-4")).toBe(false);
+    expect(next.lessons.some((item) => item.unitId === "unit-4")).toBe(false);
+    expect(next.lessonSections.some((item) => item.lessonId === "les-percent")).toBe(false);
+  });
+
+  it("removes a course and its curriculum graph", () => {
+    const state = createSeedState();
+    const next = removeCourseFromState(state, DEMO_COURSE_ID);
+    expect(next.courses.some((item) => item.id === DEMO_COURSE_ID)).toBe(false);
+    expect(next.units.some((item) => item.courseId === DEMO_COURSE_ID)).toBe(false);
+    expect(next.assignments.some((item) => item.courseId === DEMO_COURSE_ID)).toBe(false);
+    expect(next.questions.some((item) => item.courseId === DEMO_COURSE_ID)).toBe(false);
+  });
+
+  it("removes a student and their progress without deleting courses", () => {
+    const state = createSeedState();
+    const next = removeStudentFromState(state, DEMO_STUDENT_ID);
+    expect(next.students.some((item) => item.id === DEMO_STUDENT_ID)).toBe(false);
+    expect(next.assignments.some((item) => item.studentId === DEMO_STUDENT_ID)).toBe(false);
+    expect(next.courses.some((item) => item.id === DEMO_COURSE_ID)).toBe(true);
+  });
+});
+
+describe("MasterOS report card", () => {
+  it("builds parent-facing course sections for an enrolled student", () => {
+    const state = createSeedState();
+    const report = buildStudentReportCard(state, DEMO_STUDENT_ID);
+    expect(report).toHaveLength(1);
+    expect(report[0]?.courseName).toBe("SAT Prep");
+    expect(report[0]?.progress).toBeGreaterThan(0);
+    expect(report[0]?.skills.length).toBeGreaterThan(0);
+  });
+});
+
+describe("MasterOS question bank", () => {
+  it("auto-categorizes questions from skill or course", () => {
+    const state = createSeedState();
+    const prepared = prepareQuestionForBank({
+      text: "Test",
+      answer: "1",
+      difficulty: "easy",
+      questionType: "short_answer",
+      courseId: DEMO_COURSE_ID,
+      skillId: "sk-percent",
+    }, state);
+    expect(prepared.category).toBe("Math: Percentages");
+  });
+
+  it("splits large categories for tidy browsing", () => {
+    const state = createSeedState();
+    const extras = Array.from({ length: 8 }, (_, index) => ({
+      id: `q-extra-${index}`,
+      text: `Extra ${index}`,
+      answer: String(index),
+      difficulty: "easy" as const,
+      questionType: "short_answer" as const,
+      courseId: DEMO_COURSE_ID,
+      category: "SAT Prep",
+    }));
+    const groups = groupQuestionsForBank([...state.questions.filter((item) => item.courseId === DEMO_COURSE_ID), ...extras], state);
+    expect(groups.some((group) => group.label.includes("SAT Prep ·"))).toBe(true);
+  });
+
+  it("removes a bank question and unlinks it from assignments", () => {
+    const state = createSeedState();
+    const next = removeQuestionFromState(state, "q-pct-1");
+    expect(next.questions.some((item) => item.id === "q-pct-1")).toBe(false);
+    expect(next.assignmentQuestions.some((item) => item.questionId === "q-pct-1")).toBe(false);
   });
 });
 

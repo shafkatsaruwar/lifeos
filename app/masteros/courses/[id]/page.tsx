@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { formatDate } from "@/lib/masteros/helpers";
 import { studentsForCourse, unitsForCourse, useMasterOS } from "@/lib/masteros/store";
 
 export default function CourseDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { state, addUnit, addNote } = useMasterOS();
+  const router = useRouter();
+  const { state, addUnit, deleteUnit, deleteCourse, addNote } = useMasterOS();
   const course = state.courses.find((item) => item.id === id);
   const [unitTitle, setUnitTitle] = useState("");
   const [note, setNote] = useState("");
@@ -40,14 +41,42 @@ export default function CourseDetailPage() {
           <h1>{course.name}</h1>
           <p>{course.description}</p>
         </div>
-        <Link className="primary" href="/masteros/lessons?new=1">New lesson</Link>
+        <div className="mos-actions">
+          <Link className="primary" href="/masteros/lessons?new=1">New lesson</Link>
+          <button
+            className="mos-ghost"
+            type="button"
+            onClick={() => {
+              if (!window.confirm(`Delete “${course.name}” and all its units, lessons, and assignments?`)) return;
+              deleteCourse(course.id);
+              router.push("/masteros/courses");
+            }}
+          >
+            Delete course
+          </button>
+        </div>
       </div>
       <p className="mos-muted" style={{ marginBottom: 18 }}>{students.map((item) => item.name).join(", ")} · {course.startDate}{course.targetDate ? ` → ${course.targetDate}` : ""} · {course.status}</p>
       {units.map((unit) => {
         const lessons = state.lessons.filter((item) => item.unitId === unit.id);
         return (
           <section key={unit.id} className="mos-unit">
-            <h3>{unit.order}. {unit.title}</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 8 }}>
+              <h3 style={{ margin: 0 }}>{unit.order}. {unit.title}</h3>
+              <button
+                className="mos-ghost"
+                type="button"
+                onClick={() => {
+                  const detail = lessons.length
+                    ? `Delete “${unit.title}” and its ${lessons.length} lesson${lessons.length === 1 ? "" : "s"}?`
+                    : `Delete “${unit.title}”?`;
+                  if (!window.confirm(detail)) return;
+                  deleteUnit(unit.id);
+                }}
+              >
+                Delete unit
+              </button>
+            </div>
             {lessons.length ? lessons.map((lesson) => (
               <Link key={lesson.id} href={`/masteros/lessons/${lesson.id}`} className="mos-entity" style={{ marginBottom: 8 }}>
                 <strong>{lesson.title}</strong>
