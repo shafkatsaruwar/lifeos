@@ -61,6 +61,73 @@ function retallySkill(current: StudentSkill, previous: boolean, next: boolean, p
   };
 }
 
+export function removeStudentFromState(current: MasterOSState, studentId: string): MasterOSState {
+  const lessonIds = new Set(current.lessons.filter((item) => item.studentId === studentId).map((item) => item.id));
+  const assignmentIds = new Set(current.assignments.filter((item) => item.studentId === studentId).map((item) => item.id));
+
+  return {
+    ...current,
+    students: current.students.filter((item) => item.id !== studentId),
+    enrollments: current.enrollments.filter((item) => item.studentId !== studentId),
+    lessons: current.lessons.filter((item) => item.studentId !== studentId),
+    lessonSections: current.lessonSections.filter((item) => !lessonIds.has(item.lessonId)),
+    studentSkills: current.studentSkills.filter((item) => item.studentId !== studentId),
+    assignments: current.assignments.filter((item) => item.studentId !== studentId),
+    assignmentQuestions: current.assignmentQuestions.filter((item) => !assignmentIds.has(item.assignmentId)),
+    questionResults: current.questionResults.filter((item) => item.studentId !== studentId),
+    assessments: current.assessments.filter((item) => item.studentId !== studentId),
+    teacherNotes: current.teacherNotes.filter((item) => item.studentId !== studentId),
+  };
+}
+
+export function removeUnitFromState(current: MasterOSState, unitId: string): MasterOSState {
+  const lessonIds = new Set(current.lessons.filter((item) => item.unitId === unitId).map((item) => item.id));
+  return {
+    ...current,
+    units: current.units.filter((item) => item.id !== unitId),
+    lessons: current.lessons.filter((item) => item.unitId !== unitId),
+    lessonSections: current.lessonSections.filter((item) => !lessonIds.has(item.lessonId)),
+    assignments: current.assignments.map((item) =>
+      item.lessonId && lessonIds.has(item.lessonId) ? { ...item, lessonId: undefined } : item,
+    ),
+    teacherNotes: current.teacherNotes.map((item) =>
+      item.lessonId && lessonIds.has(item.lessonId) ? { ...item, lessonId: undefined } : item,
+    ),
+  };
+}
+
+export function removeCourseFromState(current: MasterOSState, courseId: string): MasterOSState {
+  const unitIds = new Set(current.units.filter((item) => item.courseId === courseId).map((item) => item.id));
+  const lessonIds = new Set(current.lessons.filter((item) => unitIds.has(item.unitId)).map((item) => item.id));
+  const skillIds = new Set(current.skills.filter((item) => item.courseId === courseId).map((item) => item.id));
+  const questionIds = new Set(current.questions.filter((item) => item.courseId === courseId).map((item) => item.id));
+  const assignmentIds = new Set(current.assignments.filter((item) => item.courseId === courseId).map((item) => item.id));
+
+  return {
+    ...current,
+    courses: current.courses.filter((item) => item.id !== courseId),
+    enrollments: current.enrollments.filter((item) => item.courseId !== courseId),
+    units: current.units.filter((item) => item.courseId !== courseId),
+    lessons: current.lessons.filter((item) => !unitIds.has(item.unitId)),
+    lessonSections: current.lessonSections.filter((item) => !lessonIds.has(item.lessonId)),
+    skills: current.skills.filter((item) => item.courseId !== courseId),
+    studentSkills: current.studentSkills.filter((item) => !skillIds.has(item.skillId)),
+    questions: current.questions.filter((item) => item.courseId !== courseId),
+    assignments: current.assignments.filter((item) => item.courseId !== courseId),
+    assignmentQuestions: current.assignmentQuestions.filter((item) => !assignmentIds.has(item.assignmentId)),
+    questionResults: current.questionResults.filter(
+      (item) =>
+        (!item.assignmentId || !assignmentIds.has(item.assignmentId))
+        && !questionIds.has(item.questionId),
+    ),
+    assessments: current.assessments.filter((item) => item.courseId !== courseId),
+    teacherNotes: current.teacherNotes
+      .filter((item) => item.courseId !== courseId)
+      .map((item) => (item.lessonId && lessonIds.has(item.lessonId) ? { ...item, lessonId: undefined } : item))
+      .map((item) => (item.skillId && skillIds.has(item.skillId) ? { ...item, skillId: undefined } : item)),
+  };
+}
+
 function retallyAssignment(current: MasterOSState, assignmentId: string): MasterOSState {
   const links = current.assignmentQuestions.filter((item) => item.assignmentId === assignmentId);
   if (!links.length) return current;
@@ -84,7 +151,9 @@ type Store = {
   ready: boolean;
   resetDemo: () => void;
   addStudent: (input: Pick<Student, "name" | "gradeLevel" | "notes">) => string;
+  deleteStudent: (id: string) => void;
   addCourse: (input: Pick<Course, "name" | "description" | "status" | "startDate" | "targetDate">, studentId?: string) => string;
+  deleteCourse: (id: string) => void;
   enroll: (studentId: string, courseId: string) => void;
   addLesson: (input: Omit<Lesson, "id">, sections?: Omit<LessonSection, "id" | "lessonId">[]) => string;
   updateLesson: (id: string, patch: Partial<Lesson>) => void;
@@ -98,6 +167,7 @@ type Store = {
   addAssignmentQuestion: (assignmentId: string, questionId: string, points?: number) => void;
   updateAssignmentQuestion: (assignmentId: string, questionId: string, patch: { points?: number }) => void;
   addUnit: (courseId: string, title: string) => string;
+  deleteUnit: (id: string) => void;
   gradeAssignment: (id: string, score: number, totalPoints?: number) => void;
   recordResult: (input: {
     studentId: string;
@@ -144,6 +214,9 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
       patch((current) => ({ ...current, students: [...current.students, { ...input, id, createdAt: new Date().toISOString() }] }));
       return id;
     },
+    deleteStudent: (id) => {
+      patch((current) => removeStudentFromState(current, id));
+    },
     addCourse: (input, studentId) => {
       const id = uid("crs");
       patch((current) => ({
@@ -152,6 +225,9 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
         enrollments: studentId ? [...current.enrollments, { studentId, courseId: id }] : current.enrollments,
       }));
       return id;
+    },
+    deleteCourse: (id) => {
+      patch((current) => removeCourseFromState(current, id));
     },
     enroll: (studentId, courseId) => {
       patch((current) => {
@@ -256,6 +332,9 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
         return { ...current, units: [...current.units, { id, courseId, title, order }] };
       });
       return id;
+    },
+    deleteUnit: (id) => {
+      patch((current) => removeUnitFromState(current, id));
     },
     gradeAssignment: (id, score, totalPoints) => {
       patch((current) => ({

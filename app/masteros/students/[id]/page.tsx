@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { masteryLabel, masteryTone } from "@/lib/masteros/mastery";
 import { ASSIGNMENT_LABEL, formatDate, percent } from "@/lib/masteros/helpers";
@@ -11,7 +11,8 @@ const TABS = ["Overview", "Courses", "Assignments", "Assessments", "Skills", "No
 
 export default function StudentProfilePage() {
   const { id } = useParams<{ id: string }>();
-  const { state, addNote } = useMasterOS();
+  const router = useRouter();
+  const { state, addNote, deleteStudent } = useMasterOS();
   const student = state.students.find((item) => item.id === id);
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
   const [note, setNote] = useState("");
@@ -38,6 +39,20 @@ export default function StudentProfilePage() {
           <p className="eyebrow">Student</p>
           <h1>{student.name}</h1>
           <p>{student.gradeLevel ? `Grade ${student.gradeLevel}` : "No grade label"} · {courses.map((item) => item.name).join(", ") || "No courses yet"}</p>
+        </div>
+        <div className="mos-actions">
+          <Link className="primary" href={`/masteros/students/${student.id}/report`}>Report card</Link>
+          <button
+            className="mos-ghost"
+            type="button"
+            onClick={() => {
+              if (!window.confirm(`Delete “${student.name}” and all their lessons, assignments, and progress?`)) return;
+              deleteStudent(student.id);
+              router.push("/masteros/students");
+            }}
+          >
+            Delete student
+          </button>
         </div>
       </div>
       <div className="mos-tabs">

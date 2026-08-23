@@ -7,7 +7,7 @@ import { initials } from "@/lib/masteros/helpers";
 import { attentionSkills, courseProgress, coursesForStudent, useMasterOS } from "@/lib/masteros/store";
 
 function StudentsInner() {
-  const { state, addStudent } = useMasterOS();
+  const { state, addStudent, deleteStudent } = useMasterOS();
   const params = useSearchParams();
   const [open, setOpen] = useState(params.get("new") === "1");
   const [name, setName] = useState("");
@@ -33,16 +33,28 @@ function StudentsInner() {
           const weak = attentionSkills(state, student.id)[0];
           const skill = weak ? state.skills.find((item) => item.id === weak.skillId) : null;
           return (
-            <Link key={student.id} href={`/masteros/students/${student.id}`} className="mos-entity">
-              <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                <span className="mos-avatar">{initials(student.name)}</span>
-                <div style={{ flex: 1 }}>
-                  <strong>{student.name}</strong>
-                  <p className="mos-muted" style={{ margin: "4px 0 0" }}>{student.gradeLevel ? `Grade ${student.gradeLevel}` : "No grade"} · {course?.name ?? "No course"} · {progress}% mastery</p>
+            <article key={student.id} className="mos-entity" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <Link href={`/masteros/students/${student.id}`} style={{ flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}>
+                <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                  <span className="mos-avatar">{initials(student.name)}</span>
+                  <div style={{ flex: 1 }}>
+                    <strong>{student.name}</strong>
+                    <p className="mos-muted" style={{ margin: "4px 0 0" }}>{student.gradeLevel ? `Grade ${student.gradeLevel}` : "No grade"} · {course?.name ?? "No course"} · {progress}% mastery</p>
+                  </div>
+                  {skill ? <span className="mos-chip" style={{ background: "#cf625a18", color: "#cf625a" }}>{skill.name}</span> : null}
                 </div>
-                {skill ? <span className="mos-chip" style={{ background: "#cf625a18", color: "#cf625a" }}>{skill.name}</span> : null}
-              </div>
-            </Link>
+              </Link>
+              <button
+                className="mos-ghost"
+                type="button"
+                onClick={() => {
+                  if (!window.confirm(`Delete “${student.name}” and all their lessons, assignments, and progress?`)) return;
+                  deleteStudent(student.id);
+                }}
+              >
+                Delete
+              </button>
+            </article>
           );
         })}
       </div>
