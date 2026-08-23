@@ -2,7 +2,7 @@ import { applyQuestionResult, computeMasteryState, recommendNextSkill } from "@/
 import { createSeedState, DEMO_COURSE_ID, DEMO_STUDENT_ID } from "@/lib/masteros/seed";
 import { attentionSkills, courseProgress } from "@/lib/masteros/selectors";
 import { removeClassFromState, removeCourseFromState, removeQuestionFromState, removeStudentFromState, removeUnitFromState } from "@/lib/masteros/store";
-import { classesForStudent, groupLessonsBySubject, lessonSubject, studentsForClass } from "@/lib/masteros/selectors";
+import { classesForStudent, compareLessonsByCurriculum, groupLessonsBySubject, lessonSubject, studentsForClass } from "@/lib/masteros/selectors";
 import { buildStudentReportCard } from "@/lib/masteros/reportCard";
 import { groupQuestionsForBank, prepareQuestionForBank, resolveQuestionCategory } from "@/lib/masteros/questionBank";
 import { assignmentStatusLabel, assignmentTypeLabel, percent, tallyAssignmentMarks } from "@/lib/masteros/helpers";
@@ -137,6 +137,39 @@ describe("MasterOS lesson subjects", () => {
     const groups = groupLessonsBySubject(state);
     expect(groups.map((group) => group.label)).toEqual(expect.arrayContaining(["Math", "Reading/Writing"]));
     expect(groups.find((group) => group.label === "Math")?.lessons.some((item) => item.id === "les-percent")).toBe(true);
+  });
+
+  it("sorts lessons by unit order, not lexicographic title", () => {
+    const state = createSeedState();
+    const unit1 = state.units.find((item) => item.order === 1)!;
+    const unit10 = state.units.find((item) => item.order === 10)!;
+    const lessons: typeof state.lessons = [
+      {
+        id: "les-u10",
+        unitId: unit10.id,
+        studentId: DEMO_STUDENT_ID,
+        title: "Unit 10: Geometry",
+        objective: "",
+        date: "2026-08-23",
+        duration: 60,
+        status: "planned",
+        skillIds: [],
+      },
+      {
+        id: "les-u1",
+        unitId: unit1.id,
+        studentId: DEMO_STUDENT_ID,
+        title: "Unit 1: Linear Equations",
+        objective: "",
+        date: "2026-08-23",
+        duration: 60,
+        status: "planned",
+        skillIds: [],
+      },
+    ];
+    expect(compareLessonsByCurriculum({ ...state, lessons }, lessons[0], lessons[1])).toBeGreaterThan(0);
+    const mathGroup = groupLessonsBySubject({ ...state, lessons }).find((group) => group.label === "SAT Prep");
+    expect(mathGroup?.lessons.map((item) => item.id)).toEqual(["les-u1", "les-u10"]);
   });
 });
 

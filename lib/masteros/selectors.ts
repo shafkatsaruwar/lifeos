@@ -1,4 +1,4 @@
-import type { MasterOSState } from "./types";
+import type { Lesson, MasterOSState } from "./types";
 
 export function selectStudent(state: MasterOSState, id: string) {
   return state.students.find((item) => item.id === id);
@@ -51,6 +51,17 @@ export function lessonSubject(state: MasterOSState, lessonId: string): string {
   return courseName;
 }
 
+/** Curriculum order: unit sequence, then date, then natural title sort. */
+export function compareLessonsByCurriculum(state: MasterOSState, a: Lesson, b: Lesson): number {
+  const unitA = state.units.find((item) => item.id === a.unitId);
+  const unitB = state.units.find((item) => item.id === b.unitId);
+  const orderDiff = (unitA?.order ?? Number.MAX_SAFE_INTEGER) - (unitB?.order ?? Number.MAX_SAFE_INTEGER);
+  if (orderDiff !== 0) return orderDiff;
+  const dateDiff = a.date.localeCompare(b.date);
+  if (dateDiff !== 0) return dateDiff;
+  return a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: "base" });
+}
+
 export function groupLessonsBySubject(state: MasterOSState) {
   const groups = new Map<string, typeof state.lessons>();
   for (const lesson of state.lessons) {
@@ -62,7 +73,7 @@ export function groupLessonsBySubject(state: MasterOSState) {
   return [...groups.entries()]
     .map(([label, lessons]) => ({
       label,
-      lessons: [...lessons].sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title)),
+      lessons: [...lessons].sort((a, b) => compareLessonsByCurriculum(state, a, b)),
     }))
     .sort((a, b) => {
       if (a.label === "Uncategorized") return 1;
