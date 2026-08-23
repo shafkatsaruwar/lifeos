@@ -5,8 +5,9 @@ const { getDefaultConfig } = require("expo/metro-config");
 const config = getDefaultConfig(__dirname);
 
 // Keep Metro rooted on lifeos-mobile so the parent Next.js tree is not watched.
+// Also watch shared Focus Enforcer pure modules under ../lib/focusEnforcer.
 config.projectRoot = __dirname;
-config.watchFolders = [__dirname];
+config.watchFolders = [__dirname, path.resolve(__dirname, "../lib/focusEnforcer")];
 
 // Firebase Auth's React Native entry (getReactNativePersistence) only resolves
 // correctly when Metro does not prefer package.json "exports" browser builds.

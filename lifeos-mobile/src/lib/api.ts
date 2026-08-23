@@ -118,3 +118,68 @@ export function mergeCalendarEvents(existing: CalendarEvent[], incoming: Calenda
   for (const event of incoming) byId.set(event.id, event);
   return Array.from(byId.values());
 }
+
+export type FocusEnforcerVerifyRequest = {
+  taskTitle: string;
+  phase: "start" | "check" | "complete";
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  imageBase64: string;
+};
+
+export type FocusEnforcerVerifyResponse = {
+  match: boolean;
+  confidence: number;
+  reason: string;
+};
+
+/**
+ * Focus Enforcer live-photo verify. Soft-fails; never logs imageBase64.
+ */
+export async function verifyFocusEnforcerProof(
+  input: FocusEnforcerVerifyRequest,
+): Promise<FocusEnforcerVerifyResponse> {
+  const softFail = (reason: string): FocusEnforcerVerifyResponse => ({
+    match: false,
+    confidence: 0,
+    reason,
+  });
+
+  try {
+    const response = await fetch(`${API_BASE}/api/ai`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "focus-enforcer-verify",
+        taskTitle: input.taskTitle,
+        phase: input.phase,
+        mimeType: input.mimeType,
+        imageBase64: input.imageBase64,
+      }),
+    });
+
+    const data = (await response.json().catch(() => null)) as
+      | (FocusEnforcerVerifyResponse & { error?: string })
+      | null;
+
+    if (!response.ok || !data) {
+      return softFail(
+        (data && typeof data.error === "string" && data.error) ||
+          "Could not verify the photo. Try again or use manual override.",
+      );
+    }
+
+    return {
+      match: Boolean(data.match),
+      confidence:
+        typeof data.confidence === "number" ? Math.max(0, Math.min(1, data.confidence)) : 0,
+      reason:
+        typeof data.reason === "string" && data.reason.trim()
+          ? data.reason.trim().slice(0, 280)
+          : data.match
+            ? "Looks like you're on task."
+            : "Could not confirm you're on the task.",
+    };
+  } catch {
+    return softFail("Could not verify the photo. Try again or use manual override.");
+  }
+}

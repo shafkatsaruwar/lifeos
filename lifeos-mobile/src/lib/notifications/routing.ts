@@ -16,6 +16,14 @@ export function navigateFromNotification(payload: Partial<NotifPayload> | null |
     return;
   }
 
+  if (category === "focusEnforcer" && id) {
+    navigationRef.navigate("NowTab" as never, {
+      screen: "FocusEnforcerSession",
+      params: { sessionId: id },
+    } as never);
+    return;
+  }
+
   if ((category === "task" || category === "deadline" || category === "important") && id) {
     const taskId = Number(id);
     if (!Number.isNaN(taskId)) {
@@ -108,6 +116,9 @@ export const linking = {
           Focus: "focus",
           Settings: "settings",
           TaskDetail: "now/task/:taskId",
+          FocusEnforcerSession: "focus-enforcer/:sessionId",
+          FocusEnforcerSetup: "focus-enforcer/setup",
+          FocusEnforcerHistory: "focus-enforcer/history",
         },
       },
       TasksTab: {
