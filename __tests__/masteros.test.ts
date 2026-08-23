@@ -172,7 +172,7 @@ describe("MasterOS lesson subjects", () => {
     expect(mathGroup?.lessons.map((item) => item.id)).toEqual(["les-u1", "les-u10"]);
   });
 
-  it("groups lessons by course when multiple courses appear on the list", () => {
+  it("groups SAT PREP - MATH / ENGLISH lessons under subject headings", () => {
     const state = createSeedState();
     const mathCourse = {
       id: "crs-sat-math",
@@ -220,9 +220,8 @@ describe("MasterOS lesson subjects", () => {
       ],
     };
     const groups = groupLessonsForList(next);
-    expect(groups).toHaveLength(2);
-    expect(groups[0]).toMatchObject({ label: "SAT PREP - MATH", kind: "course" });
-    expect(groups[1]).toMatchObject({ label: "SAT PREP - ENGLISH", kind: "course" });
+    expect(groups.map((group) => group.label)).toEqual(["ENGLISH", "MATH"]);
+    expect(groups.every((group) => group.kind === "subject")).toBe(true);
   });
 });
 

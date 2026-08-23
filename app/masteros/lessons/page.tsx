@@ -37,7 +37,6 @@ function LessonsInner() {
   };
 
   const groups = useMemo(() => groupLessonsForList(state), [state]);
-  const showGroupHeadings = groups.length > 1;
 
   return (
     <div className="mos-page">
@@ -48,15 +47,13 @@ function LessonsInner() {
       {!groups.length ? <p className="mos-empty">No lessons yet. Create one to start Teaching Mode.</p> : null}
       {groups.map((group) => (
         <section key={group.key} className="mos-lesson-group">
-          {showGroupHeadings ? (
-            <header className="mos-group-heading">
-              <div>
-                <p className="eyebrow">{group.kind === "course" ? "Course" : "Subject"}</p>
-                <h2>{group.label}</h2>
-              </div>
-              <p className="mos-muted">{group.subtitle}</p>
-            </header>
-          ) : null}
+          <header className="mos-group-heading">
+            <div>
+              <p className="eyebrow">{group.kind === "course" ? "Course" : "Subject"}</p>
+              <h2>{group.label}</h2>
+            </div>
+            <p className="mos-muted">{group.subtitle}</p>
+          </header>
           <div className="mos-list-page">
             {group.lessons.map((lesson) => {
               const student = state.students.find((item) => item.id === lesson.studentId);

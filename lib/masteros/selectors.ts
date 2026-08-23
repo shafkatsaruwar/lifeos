@@ -90,18 +90,33 @@ export type LessonListGroup = {
   lessons: Lesson[];
 };
 
-/** Group lessons for the list page: by course when multiple courses appear, otherwise by subject. */
+/**
+ * Group lessons for the list page.
+ * Prefer subject (Math / English from skills or "Course - Subject" names).
+ * Fall back to course when subjects would collapse everything into one bucket
+ * but multiple courses are present.
+ */
 export function groupLessonsForList(state: MasterOSState): LessonListGroup[] {
   if (!state.lessons.length) return [];
 
   const courseIdForLesson = (lesson: Lesson) =>
     state.units.find((item) => item.id === lesson.unitId)?.courseId;
 
-  const courseIds = new Set(
-    state.lessons.map(courseIdForLesson).filter((id): id is string => Boolean(id)),
-  );
-  const groupByCourse = courseIds.size > 1;
+  const courseIds = [
+    ...new Set(state.lessons.map(courseIdForLesson).filter((id): id is string => Boolean(id))),
+  ];
   const courseOrder = new Map(state.courses.map((item, index) => [item.id, index]));
+
+  const bySubject = new Map<string, Lesson[]>();
+  for (const lesson of state.lessons) {
+    const subject = lessonSubject(state, lesson.id);
+    const list = bySubject.get(subject) ?? [];
+    list.push(lesson);
+    bySubject.set(subject, list);
+  }
+
+  const useCourse =
+    bySubject.size <= 1 && courseIds.length > 1;
 
   const buckets = new Map<string, { key: string; label: string; lessons: Lesson[] }>();
 
@@ -112,7 +127,7 @@ export function groupLessonsForList(state: MasterOSState): LessonListGroup[] {
     let key: string;
     let label: string;
 
-    if (groupByCourse && course) {
+    if (useCourse && course) {
       key = course.id;
       label = course.name;
     } else {
@@ -131,13 +146,13 @@ export function groupLessonsForList(state: MasterOSState): LessonListGroup[] {
       const unitIds = new Set(bucket.lessons.map((item) => item.unitId));
       return {
         ...bucket,
-        kind: groupByCourse ? "course" as const : "subject" as const,
+        kind: useCourse ? "course" as const : "subject" as const,
         subtitle: `${bucket.lessons.length} lesson${bucket.lessons.length === 1 ? "" : "s"} · ${unitIds.size} unit${unitIds.size === 1 ? "" : "s"}`,
         lessons: [...bucket.lessons].sort((a, b) => compareLessonsByCurriculum(state, a, b)),
       };
     })
     .sort((a, b) => {
-      if (groupByCourse) {
+      if (useCourse) {
         const orderA = courseOrder.get(a.key) ?? Number.MAX_SAFE_INTEGER;
         const orderB = courseOrder.get(b.key) ?? Number.MAX_SAFE_INTEGER;
         if (orderA !== orderB) return orderA - orderB;
