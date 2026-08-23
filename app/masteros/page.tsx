@@ -36,11 +36,35 @@ export default function MasterOSHome() {
 
       <div className="mos-quick">
         <Link href="/masteros/lessons?new=1"><Plus size={16} /> New Lesson</Link>
+        <Link href="/masteros/classes?new=1"><Plus size={16} /> Add Class</Link>
         <Link href="/masteros/assignments?new=1"><Plus size={16} /> New Assignment</Link>
         <Link href="/masteros/students?new=1"><Plus size={16} /> Add Student</Link>
         <Link href="/masteros/courses?new=1"><Plus size={16} /> Add Course</Link>
         <Link href="/masteros/questions?new=1"><Plus size={16} /> Add Question</Link>
       </div>
+
+      {state.classes.length ? (
+        <section className="mos-card" style={{ marginBottom: 16 }}>
+          <header><h2>Classes</h2><Link href="/masteros/classes">All <ChevronRight size={14} /></Link></header>
+          {state.classes.map((teachingClass) => {
+            const course = state.courses.find((item) => item.id === teachingClass.courseId);
+            const roster = state.students.filter((item) => teachingClass.studentIds.includes(item.id));
+            return (
+              <div key={teachingClass.id} className="mos-row">
+                <div style={{ flex: 1 }}>
+                  <strong>{teachingClass.name}</strong>
+                  <p className="mos-muted" style={{ margin: "3px 0 0" }}>
+                    {roster.length} student{roster.length === 1 ? "" : "s"}
+                    {course ? ` · ${course.name}` : ""}
+                    {teachingClass.schedule ? ` · ${teachingClass.schedule}` : ""}
+                  </p>
+                </div>
+                <small className="mos-muted">{roster.map((item) => item.name).join(", ")}</small>
+              </div>
+            );
+          })}
+        </section>
+      ) : null}
 
       <div className="mos-grid mos-2">
         <section className="mos-card">

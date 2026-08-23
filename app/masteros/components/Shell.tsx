@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BookOpen, ClipboardList, GraduationCap, Home, Layers, Library, Settings, Sparkles, Users,
+  BookOpen, ClipboardList, GraduationCap, Home, Layers, Library, Settings, Sparkles, Users, UsersRound,
 } from "lucide-react";
 import { MasterOSProvider } from "@/lib/masteros/store";
 
 const NAV = [
   { href: "/masteros", label: "Home", icon: Home },
+  { href: "/masteros/classes", label: "Classes", icon: UsersRound },
   { href: "/masteros/students", label: "Students", icon: Users },
   { href: "/masteros/courses", label: "Courses", icon: GraduationCap },
   { href: "/masteros/lessons", label: "Lessons", icon: BookOpen },

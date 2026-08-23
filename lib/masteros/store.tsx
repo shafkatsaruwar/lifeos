@@ -16,6 +16,7 @@ import type {
   Student,
   StudentSkill,
   TeacherNote,
+  TeachingClass,
 } from "./types";
 
 const STORAGE_KEY = "masteros.v1";
@@ -24,6 +25,7 @@ function emptyState(): MasterOSState {
   return {
     students: [],
     courses: [],
+    classes: [],
     enrollments: [],
     units: [],
     lessons: [],
@@ -96,6 +98,17 @@ export function removeStudentFromState(current: MasterOSState, studentId: string
     questionResults: current.questionResults.filter((item) => item.studentId !== studentId),
     assessments: current.assessments.filter((item) => item.studentId !== studentId),
     teacherNotes: current.teacherNotes.filter((item) => item.studentId !== studentId),
+    classes: current.classes.map((item) => ({
+      ...item,
+      studentIds: item.studentIds.filter((id) => id !== studentId),
+    })),
+  };
+}
+
+export function removeClassFromState(current: MasterOSState, classId: string): MasterOSState {
+  return {
+    ...current,
+    classes: current.classes.filter((item) => item.id !== classId),
   };
 }
 
@@ -144,6 +157,9 @@ export function removeCourseFromState(current: MasterOSState, courseId: string):
       .filter((item) => item.courseId !== courseId)
       .map((item) => (item.lessonId && lessonIds.has(item.lessonId) ? { ...item, lessonId: undefined } : item))
       .map((item) => (item.skillId && skillIds.has(item.skillId) ? { ...item, skillId: undefined } : item)),
+    classes: current.classes.map((item) =>
+      item.courseId === courseId ? { ...item, courseId: undefined } : item,
+    ),
   };
 }
 
@@ -171,6 +187,9 @@ type Store = {
   resetDemo: () => void;
   addStudent: (input: Pick<Student, "name" | "gradeLevel" | "notes">) => string;
   deleteStudent: (id: string) => void;
+  addClass: (input: Pick<TeachingClass, "name" | "courseId" | "schedule" | "notes" | "studentIds">) => string;
+  updateClass: (id: string, patch: Partial<TeachingClass>) => void;
+  deleteClass: (id: string) => void;
   addCourse: (input: Pick<Course, "name" | "description" | "status" | "startDate" | "targetDate">, studentId?: string) => string;
   deleteCourse: (id: string) => void;
   enroll: (studentId: string, courseId: string) => void;
@@ -236,6 +255,23 @@ export function MasterOSProvider({ children }: { children: React.ReactNode }) {
     },
     deleteStudent: (id) => {
       patch((current) => removeStudentFromState(current, id));
+    },
+    addClass: (input) => {
+      const id = uid("cls");
+      patch((current) => ({
+        ...current,
+        classes: [...current.classes, { ...input, id, studentIds: input.studentIds ?? [], createdAt: new Date().toISOString() }],
+      }));
+      return id;
+    },
+    updateClass: (id, next) => {
+      patch((current) => ({
+        ...current,
+        classes: current.classes.map((item) => (item.id === id ? { ...item, ...next } : item)),
+      }));
+    },
+    deleteClass: (id) => {
+      patch((current) => removeClassFromState(current, id));
     },
     addCourse: (input, studentId) => {
       const id = uid("crs");
@@ -480,9 +516,13 @@ export function useMasterOS() {
 
 export {
   attentionSkills,
+  classesForStudent,
   courseProgress,
   coursesForStudent,
+  groupLessonsBySubject,
+  lessonSubject,
   selectStudent,
+  studentsForClass,
   studentsForCourse,
   unitsForCourse,
 } from "./selectors";

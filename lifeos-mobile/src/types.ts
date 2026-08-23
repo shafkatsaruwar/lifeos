@@ -298,6 +298,8 @@ export type SettingsState = {
   enableLifeOS?: boolean;
   enableSchoolOS?: boolean;
   enableWorkOS?: boolean;
+  /** MasterOS teaching workspace — web + iPad; not shown on iPhone. */
+  enableMasterOS?: boolean;
   /** Local notification preferences (mobile). */
   notifications?: NotificationPrefs;
   /** ISO timestamp when first-run onboarding finished (or was skipped / migrated). */

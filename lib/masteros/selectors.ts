@@ -14,6 +14,63 @@ export function studentsForCourse(state: MasterOSState, courseId: string) {
   return state.students.filter((item) => ids.has(item.id));
 }
 
+export function studentsForClass(state: MasterOSState, classId: string) {
+  const teachingClass = state.classes.find((item) => item.id === classId);
+  if (!teachingClass) return [];
+  const ids = new Set(teachingClass.studentIds);
+  return state.students.filter((item) => ids.has(item.id));
+}
+
+export function classesForStudent(state: MasterOSState, studentId: string) {
+  return state.classes.filter((item) => item.studentIds.includes(studentId));
+}
+
+/** Subject label for a lesson: skill domain when known, otherwise course name. */
+export function lessonSubject(state: MasterOSState, lessonId: string): string {
+  const lesson = state.lessons.find((item) => item.id === lessonId);
+  if (!lesson) return "Uncategorized";
+  const domainCounts = new Map<string, number>();
+  for (const skillId of lesson.skillIds) {
+    const domain = state.skills.find((item) => item.id === skillId)?.domain?.trim();
+    if (!domain) continue;
+    domainCounts.set(domain, (domainCounts.get(domain) ?? 0) + 1);
+  }
+  if (domainCounts.size) {
+    return [...domainCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
+  }
+  const unit = state.units.find((item) => item.id === lesson.unitId);
+  const course = state.courses.find((item) => item.id === unit?.courseId);
+  const courseName = course?.name?.trim();
+  if (!courseName) return "Uncategorized";
+  // "SAT PREP - MATH" → group under Math; keep full name when no subject suffix.
+  const dash = courseName.lastIndexOf(" - ");
+  if (dash > 0) {
+    const suffix = courseName.slice(dash + 3).trim();
+    if (suffix) return suffix;
+  }
+  return courseName;
+}
+
+export function groupLessonsBySubject(state: MasterOSState) {
+  const groups = new Map<string, typeof state.lessons>();
+  for (const lesson of state.lessons) {
+    const subject = lessonSubject(state, lesson.id);
+    const list = groups.get(subject) ?? [];
+    list.push(lesson);
+    groups.set(subject, list);
+  }
+  return [...groups.entries()]
+    .map(([label, lessons]) => ({
+      label,
+      lessons: [...lessons].sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title)),
+    }))
+    .sort((a, b) => {
+      if (a.label === "Uncategorized") return 1;
+      if (b.label === "Uncategorized") return -1;
+      return a.label.localeCompare(b.label);
+    });
+}
+
 export function unitsForCourse(state: MasterOSState, courseId: string) {
   return state.units.filter((item) => item.courseId === courseId).sort((a, b) => a.order - b.order);
 }

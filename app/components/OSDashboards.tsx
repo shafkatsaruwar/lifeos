@@ -113,11 +113,12 @@ function periodProgress(now = new Date()) {
   return { Day: day, Week: week, Month: month, Year: (now.getTime() - start.getTime()) / (end.getTime() - start.getTime()) };
 }
 
-export function LifeDashboard({ tasks, projects, notes, events, workspaceName, onComplete, onOpenTask, onOpenProject, onOpenNote, onOpenTasks, onOpenProjects, onOpenNotes, onNewTask, onNewProject, onNewNote, onOpenCalendar, onOpenNow }: {
+export function LifeDashboard({ tasks, projects, notes, events, workspaceName, onComplete, onOpenTask, onOpenProject, onOpenNote, onOpenTasks, onOpenProjects, onOpenNotes, onNewTask, onNewProject, onNewNote, onOpenCalendar, onOpenNow, enableMasterOS = true }: {
   tasks: DashboardTask[]; projects: DashboardProject[]; notes: DashboardNote[]; events: DashboardEvent[]; workspaceName: string;
   onComplete: (id: number) => void; onOpenTask: (id: number) => void; onOpenProject: (name: string) => void; onOpenNote: (id: string) => void;
   onOpenTasks: () => void; onOpenProjects: () => void; onOpenNotes: () => void;
   onNewTask: () => void; onNewProject: () => void; onNewNote: () => void; onOpenCalendar: () => void; onOpenNow: () => void;
+  enableMasterOS?: boolean;
 }) {
   const now = new Date(), { today, end } = weekWindow();
   const weekTasks = tasks.filter(task => !task.classId && openTask(task) && (!task.due || (task.due >= today && task.due <= end))).sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
@@ -127,7 +128,7 @@ export function LifeDashboard({ tasks, projects, notes, events, workspaceName, o
   const progress = periodProgress(now);
   return <div className="os-dashboard life-dashboard">
     <div className="os-hero"><div><p className="eyebrow">{now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p><h1>LifeOS</h1><p>Hey {workspaceName.split(" ")[0]}. Keep life moving without turning it into admin.</p></div><button className="os-now-button" onClick={onOpenNow}><Target size={18} /> Open Now</button></div>
-    <div className="os-quick-row"><QuickAction icon={NotebookPen} label="New note" onClick={onNewNote} /><QuickAction icon={ListTodo} label="New task" onClick={onNewTask} /><QuickAction icon={FolderKanban} label="New project" onClick={onNewProject} /></div>
+    <div className="os-quick-row"><QuickAction icon={NotebookPen} label="New note" onClick={onNewNote} /><QuickAction icon={ListTodo} label="New task" onClick={onNewTask} /><QuickAction icon={FolderKanban} label="New project" onClick={onNewProject} />{enableMasterOS && <a className="os-quick-action" href="/masteros"><GraduationCap size={16} /> MasterOS</a>}</div>
     <div className="os-dashboard-grid life-dashboard-grid">
       <div className="os-two-up life-dashboard-priority">
         <Section icon={CheckCircle2} title="Tasks this week" action="All tasks" onAction={onOpenTasks}>{weekTasks.length ? weekTasks.slice(0, 6).map(task => <Row key={task.id} icon={ListTodo} color={task.color} title={task.title} meta={`${task.project || "Inbox"} · ${friendlyDate(task.due)} · ${task.priority}`} onClick={() => onOpenTask(task.id)} onComplete={() => onComplete(task.id)} />) : <Empty>No personal tasks are due in the next seven days.</Empty>}</Section>

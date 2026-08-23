@@ -1,7 +1,8 @@
 import { applyQuestionResult, computeMasteryState, recommendNextSkill } from "@/lib/masteros/mastery";
 import { createSeedState, DEMO_COURSE_ID, DEMO_STUDENT_ID } from "@/lib/masteros/seed";
 import { attentionSkills, courseProgress } from "@/lib/masteros/selectors";
-import { removeCourseFromState, removeQuestionFromState, removeStudentFromState, removeUnitFromState } from "@/lib/masteros/store";
+import { removeClassFromState, removeCourseFromState, removeQuestionFromState, removeStudentFromState, removeUnitFromState } from "@/lib/masteros/store";
+import { classesForStudent, groupLessonsBySubject, lessonSubject, studentsForClass } from "@/lib/masteros/selectors";
 import { buildStudentReportCard } from "@/lib/masteros/reportCard";
 import { groupQuestionsForBank, prepareQuestionForBank, resolveQuestionCategory } from "@/lib/masteros/questionBank";
 import { assignmentStatusLabel, assignmentTypeLabel, percent, tallyAssignmentMarks } from "@/lib/masteros/helpers";
@@ -34,6 +35,13 @@ describe("MasterOS mastery rules", () => {
 
 describe("MasterOS demo seed", () => {
   const state = createSeedState();
+
+  it("seeds a multi-student SAT Saturday class", () => {
+    const group = state.classes.find((item) => item.id === "cls-sat-saturday");
+    expect(group?.name).toBe("SAT Saturday Group");
+    expect(studentsForClass(state, "cls-sat-saturday").map((item) => item.name)).toEqual(["Wafia", "Omar", "Layla"]);
+    expect(classesForStudent(state, DEMO_STUDENT_ID)).toHaveLength(1);
+  });
 
   it("seeds Wafia and a generic SAT Prep course configuration", () => {
     const student = state.students.find((item) => item.id === DEMO_STUDENT_ID);
@@ -108,6 +116,27 @@ describe("MasterOS course and unit deletion", () => {
     expect(next.students.some((item) => item.id === DEMO_STUDENT_ID)).toBe(false);
     expect(next.assignments.some((item) => item.studentId === DEMO_STUDENT_ID)).toBe(false);
     expect(next.courses.some((item) => item.id === DEMO_COURSE_ID)).toBe(true);
+    expect(next.classes[0]?.studentIds.includes(DEMO_STUDENT_ID)).toBe(false);
+  });
+});
+
+describe("MasterOS classes", () => {
+  it("removes a class without deleting students or courses", () => {
+    const state = createSeedState();
+    const next = removeClassFromState(state, "cls-sat-saturday");
+    expect(next.classes).toHaveLength(0);
+    expect(next.students).toHaveLength(3);
+    expect(next.courses.some((item) => item.id === DEMO_COURSE_ID)).toBe(true);
+  });
+});
+
+describe("MasterOS lesson subjects", () => {
+  it("groups seeded lessons under Math and Reading/Writing domains", () => {
+    const state = createSeedState();
+    expect(lessonSubject(state, "les-percent")).toBe("Math");
+    const groups = groupLessonsBySubject(state);
+    expect(groups.map((group) => group.label)).toEqual(expect.arrayContaining(["Math", "Reading/Writing"]));
+    expect(groups.find((group) => group.label === "Math")?.lessons.some((item) => item.id === "les-percent")).toBe(true);
   });
 });
 
