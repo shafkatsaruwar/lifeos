@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "name": "dev-login-create-task",
+  "projectId": "lifeos-db1727b2",
+  "createdAt": 1787610717901,
+  "steps": [
+    {
+      "tool": "reticle_act",
+      "anchor": {
+        "kind": "role",
+        "role": "button",
+        "name": "Dev: Test Login"
+      },
+      "args": {},
+      "action": "click"
+    },
+    {
+      "tool": "reticle_act",
+      "anchor": {
+        "kind": "role",
+        "role": "button",
+        "name": "Continue"
+      },
+      "args": {},
+      "action": "click"
+    },
+    {
+      "tool": "reticle_act_sequence",
+      "anchor": {
+        "kind": "role",
+        "role": "textbox",
+        "name": "Click for commands, or type /"
+      },
+      "steps": [
+        {
+          "tool": "reticle_act",
+          "anchor": {
+            "kind": "role",
+            "role": "textbox",
+            "name": "Click for commands, or type /"
+          },
+          "args": {},
+          "action": "click"
+        },
+        {
+          "tool": "reticle_act",
+          "anchor": {
+            "kind": "role",
+            "role": "textbox",
+            "name": "Click for commands, or type /"
+          },
+          "args": {
+            "value": "/t Reticle smoke task"
+          },
+          "action": "fill"
+        }
+      ]
+    },
+    {
+      "tool": "reticle_act",
+      "anchor": {
+        "kind": "role",
+        "role": "textbox",
+        "name": "Click for commands, or type /"
+      },
+      "args": {
+        "key": "Enter"
+      },
+      "action": "press"
+    }
+  ]
+}

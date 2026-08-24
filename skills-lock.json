@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "install-and-verify": {
+      "source": "reticlehq/reticle",
+      "sourceType": "github",
+      "skillPath": "skills/install-and-verify/SKILL.md",
+      "computedHash": "7b39f1627f0f01e3b85ccd434afc43d930cbd9726c3ed02a3adc77b62f3ed832"
+    }
+  }
+}
