@@ -164,14 +164,7 @@ final class ShareViewController: UIViewController {
 
   private func openHost() {
     guard let url = URL(string: "lifeos://share") else { return }
-    var responder: UIResponder? = self
-    while let current = responder {
-      if let application = current as? UIApplication {
-        application.open(url, options: [:], completionHandler: nil)
-        return
-      }
-      responder = current.next
-    }
+    // Share extensions cannot walk to UIApplication; open the host app directly.
     extensionContext?.open(url, completionHandler: nil)
   }
 }

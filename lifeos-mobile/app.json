@@ -135,6 +135,15 @@
                       "group.com.shafkatsaruwar.lifeos"
                     ]
                   }
+                },
+                {
+                  "targetName": "Share",
+                  "bundleIdentifier": "com.shafkatsaruwar.lifeos.Share",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.shafkatsaruwar.lifeos"
+                    ]
+                  }
                 }
               ]
             }
