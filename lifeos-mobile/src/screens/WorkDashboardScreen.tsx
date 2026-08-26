@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { ActionButton, Card, Empty, Eyebrow, Page, SegmentedControl, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { SwipeDeleteRow } from "../components/SwipeDeleteRow";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatDueDate, toDateKey } from "../lib/helpers";
@@ -69,6 +70,7 @@ function priorityColor(priority: string) {
 export function WorkDashboardScreen() {
   const { theme, workspace, updateWork, updateTasks, updateProjects } = useLifeOS();
   const navigation = useNavigation<any>();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const work = workspace.work;
   const today = toDateKey(new Date());
   const colorScheme = useColorScheme();
@@ -656,7 +658,7 @@ export function WorkDashboardScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <View style={styles.header}>
           <View style={styles.grow}>
             <Eyebrow>WORK OS</Eyebrow>

@@ -3,6 +3,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Card, Page, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import {
   computeFocusEnforcerMetrics,
@@ -13,6 +14,7 @@ import {
 
 export function FocusEnforcerHistoryScreen() {
   const { user, theme } = useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const [sessions, setSessions] = useState<FocusEnforcerSession[]>([]);
 
@@ -33,7 +35,7 @@ export function FocusEnforcerHistoryScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.back}>
           <Feather name="chevron-left" size={22} color={theme.accent} />
           <Text style={{ color: theme.accent, fontWeight: "700" }}>Settings</Text>

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Empty, Page } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { PaperThumb } from "../components/PaperBackground";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { useLayout } from "../lib/layout";
@@ -27,6 +28,7 @@ import {
 import type { NotebookContextLink } from "../types";
 
 export function NotebookDetailScreen() {
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const { theme, workspace, updateNotebookHub, upsertNotebookPage, deleteNotebookPage } = useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -183,7 +185,7 @@ export function NotebookDetailScreen() {
         numColumns={columns}
         key={`page-cols-${columns}`}
         columnWrapperStyle={columns > 1 ? styles.gridRow : undefined}
-        contentContainerStyle={[styles.list, isWide && styles.listWide]}
+        contentContainerStyle={[styles.list, isWide && styles.listWide, { paddingBottom: tabBarPad }]}
         renderItem={({ item }) => (
           <Pressable
             onPress={() => navigation.navigate("PageCanvas", { notebookId, pageId: item.id })}

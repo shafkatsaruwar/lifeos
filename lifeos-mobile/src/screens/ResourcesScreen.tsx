@@ -4,6 +4,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { Empty, Eyebrow, Page, Subtitle, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { LibrarySubNav } from "../components/LibrarySubNav";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatResourceSize, uid } from "../lib/helpers";
@@ -20,6 +21,7 @@ import type { Resource } from "../types";
 // URI so a future pass can wire the actual upload.
 export function ResourcesScreen() {
   const { theme, workspace, updateResources } = useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const [uploading, setUploading] = useState(false);
 
   const grouped = groupByClassOrProject(workspace.resources, workspace);
@@ -80,7 +82,7 @@ export function ResourcesScreen() {
       <FlatList
         data={grouped}
         keyExtractor={(g) => g.label}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}
         renderItem={({ item: group }) => (
           <View style={styles.groupBlock}>
             <Text style={[styles.groupLabel, { color: theme.muted }]}>{group.label}</Text>

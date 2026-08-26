@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Empty, Eyebrow, Page, Subtitle, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { LibrarySubNav } from "../components/LibrarySubNav";
 import { QuickCaptureModal } from "../components/QuickCaptureModal";
 import { SwipeDeleteRow } from "../components/SwipeDeleteRow";
@@ -11,6 +12,7 @@ import { createNotebookFromText } from "../lib/notebooks";
 
 export function BrainScreen() {
   const { theme, workspace, updateBrain, updateTasks, updateNotebookHub, upsertNotebookPage } = useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const [captureOpen, setCaptureOpen] = useState(false);
 
@@ -76,7 +78,7 @@ export function BrainScreen() {
       <FlatList
         data={workspace.brain}
         keyExtractor={(_, i) => String(i)}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}
         renderItem={({ item, index }) => (
           <SwipeDeleteRow
             label={item}

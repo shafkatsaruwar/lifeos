@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { ActionButton, Card, Empty, Eyebrow, IconButton, Page, SegmentedControl, Subtitle, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import {
   CAL_PERSONAL_ID,
@@ -88,6 +89,7 @@ function formatTimeLabel(time: string) {
 }
 
 export function CalendarScreen() {
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const { theme, workspace, updateCalendar, updateCalendars, updateTasks } = useLifeOS();
   const navigation = useNavigation<any>();
   const colorScheme = useColorScheme();
@@ -471,7 +473,7 @@ export function CalendarScreen() {
         <FlatList
           data={upcomingItems}
           keyExtractor={(item) => `${item.kind}-${item.id}`}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}
           renderItem={({ item }) => {
             const date = new Date(`${item.date.slice(0, 10)}T12:00`);
             return (
@@ -498,7 +500,7 @@ export function CalendarScreen() {
           ListEmptyComponent={<Empty title="Nothing upcoming yet." body="Tap + to schedule an event." />}
         />
       ) : mode === "month" ? (
-        <ScrollView contentContainerStyle={styles.list}>
+        <ScrollView contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}>
           <View style={styles.monthToolbar}>
             <Pressable onPress={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}><Feather name="chevron-left" size={20} color={theme.text} /></Pressable>
             <Text style={[styles.monthLabel, { color: theme.text }]}>{cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</Text>
@@ -536,7 +538,7 @@ export function CalendarScreen() {
           </View>
         </ScrollView>
       ) : (
-        <ScrollView contentContainerStyle={styles.list}>
+        <ScrollView contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}>
           <View style={styles.dayToolbar}>
             <Pressable onPress={() => { const d = new Date(`${selected}T12:00`); d.setDate(d.getDate() - 1); setSelected(toDateKey(d)); }}>
               <Feather name="chevron-left" size={20} color={theme.text} />
