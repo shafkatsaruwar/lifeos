@@ -42,6 +42,13 @@ export function migrateLegacyNotesToNotebooks(
 
   for (const note of notes) {
     if (!note?.id || already.has(note.id)) continue;
+    // Text-only notes stay in Library → Text. Only ink-bearing notes become handwritten notebooks.
+    const hasInk =
+      Boolean(note.ink?.format === "pencilkit" && note.ink.data) ||
+      Boolean(note.ink?.pencilKitData) ||
+      Boolean(note.ink?.data && !note.ink.strokes?.length) ||
+      (note.ink?.strokes?.length ?? 0) > 0;
+    if (!hasInk) continue;
     const paper = TEMPLATE_TO_PAPER[note.template || "blank"] || "ruled";
     const context: NotebookContextLink = {
       type: note.classId ? "class" : note.projectName ? "project" : "personal",

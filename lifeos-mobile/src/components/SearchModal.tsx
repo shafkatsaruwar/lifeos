@@ -8,7 +8,7 @@ import { pageSearchBlob, pagesForNotebook, primaryPageForNotebook } from "../lib
 
 type Result = {
   key: string;
-  kind: "Task" | "Project" | "Class" | "Note" | "Page";
+  kind: "Task" | "Project" | "Class" | "Text note" | "Handwritten" | "Page";
   title: string;
   subtitle: string;
   onSelect: () => void;
@@ -72,19 +72,11 @@ export function SearchModal({ visible, onClose }: { visible: boolean; onClose: (
       if (`${note.title} ${note.body}`.toLowerCase().includes(q)) {
         out.push({
           key: `note-${note.id}`,
-          kind: "Note",
+          kind: "Text note",
           title: note.title || "Untitled note",
           subtitle: note.body.replace(/<[^>]+>/g, " ").slice(0, 60) || "Empty note",
           onSelect: () => {
-            const nb = workspace.notebookHub.notebooks.find((n) => n.context?.legacyNoteId === note.id);
-            if (nb) {
-              const page = Object.values(workspace.notebookPages).find((p) => p.notebookId === nb.id);
-              if (page) {
-                go("LibraryTab", { screen: "PageCanvas", params: { notebookId: nb.id, pageId: page.id } });
-                return;
-              }
-            }
-            go("LibraryTab", { screen: "NotebooksList" });
+            go("LibraryTab", { screen: "NoteEditor", params: { noteId: note.id } });
           },
         });
       }
@@ -92,12 +84,13 @@ export function SearchModal({ visible, onClose }: { visible: boolean; onClose: (
 
     const hub = workspace.notebookHub;
     hub.notebooks.forEach((nb) => {
+      if (nb.context?.legacyNoteId) return;
       const folder = hub.folders.find((f) => f.id === nb.folderId);
       const hay = `${nb.name} ${nb.context?.label ?? ""} ${folder?.name ?? ""}`.toLowerCase();
       if (hay.includes(q)) {
         out.push({
           key: `notebook-${nb.id}`,
-          kind: "Note",
+          kind: "Handwritten",
           title: nb.name,
           subtitle: [folder?.name, nb.context?.label, "Pages"].filter(Boolean).join(" · "),
           onSelect: () => {
@@ -135,6 +128,7 @@ export function SearchModal({ visible, onClose }: { visible: boolean; onClose: (
     if (kind === "Project") return "folder";
     if (kind === "Class") return "book-open";
     if (kind === "Page") return "file";
+    if (kind === "Text note") return "type";
     return "edit-3";
   };
 

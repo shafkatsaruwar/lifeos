@@ -87,6 +87,8 @@ export function NotebooksScreen() {
   const noteRows = useMemo(() => {
     const q = query.trim().toLowerCase();
     let pagesNotes = hub.notebooks.filter((n) => {
+      // Legacy auto-copies of typed web notes belong in Library → Text, not here.
+      if (n.context?.legacyNoteId) return false;
       if (filter === "trash") return Boolean(n.trashedAt);
       if (n.trashedAt) return false;
       if (filter === "starred") return Boolean(n.starred);
@@ -110,8 +112,6 @@ export function NotebooksScreen() {
       notebook,
     }));
 
-    // Legacy typed notes are migrated into notebooks on load — library is one model.
-
     rows.sort((a, b) => {
       if (a.kind === "new" || b.kind === "new") return 0;
       return (b.updatedAt || "").localeCompare(a.updatedAt || "");
@@ -122,14 +122,14 @@ export function NotebooksScreen() {
       return [{ kind: "new" as const, id: "new" as const }, ...rows];
     }
     return rows;
-  }, [hub.notebooks, filter, workspace.notes, activeFolder, query]);
+  }, [hub.notebooks, filter, activeFolder, query]);
 
   const headerTitle = useMemo(() => {
     if (activeFolder) return activeFolder.name;
     if (filter === "starred") return "Starred";
     if (filter === "unfiled") return "Unfiled";
     if (filter === "trash") return "Trash";
-    return "All Notes";
+    return "Handwritten";
   }, [activeFolder, filter]);
 
   const openCreateNotebook = (inFolderId?: string) => {
@@ -423,7 +423,7 @@ export function NotebooksScreen() {
       showsVerticalScrollIndicator={false}
     >
       <Text style={[styles.brand, { color: theme.text }]}>Library</Text>
-      <LibrarySubNav active="notes" compact />
+      <LibrarySubNav active="handwritten" compact />
       {browseChrome}
     </ScrollView>
   );
@@ -563,7 +563,10 @@ export function NotebooksScreen() {
         body="Create a note here, or long-press a note and move it into this folder."
       />
     ) : (
-      <Empty title="No notes yet." body="Tap New to start a handwritten or text note." />
+      <Empty
+        title="No handwritten notes yet."
+        body="Tap New for PencilKit pages. Typed notes from the web live under Library → Text."
+      />
     )
   );
 
@@ -599,7 +602,7 @@ export function NotebooksScreen() {
               ListHeaderComponent={
                 <View style={styles.phoneHeader}>
                   <Text style={[styles.brand, { color: theme.text }]}>Library</Text>
-                  <LibrarySubNav active="notes" compact />
+                  <LibrarySubNav active="handwritten" compact />
                   {browseChrome}
                   {sectionHeader}
                   {searchField}

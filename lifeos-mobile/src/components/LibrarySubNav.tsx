@@ -1,19 +1,36 @@
 import Feather from "@expo/vector-icons/Feather";
+import { StackActions, useNavigation } from "@react-navigation/native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useNavigation } from "@react-navigation/native";
 import { useLifeOS } from "../lib/LifeOSContext";
 
-type Tab = "notes" | "brain" | "resources";
+export type LibraryTab = "handwritten" | "text" | "brain" | "resources";
 
-const TABS: { key: Tab; label: string; icon: keyof typeof Feather.glyphMap; route: string }[] = [
-  { key: "notes", label: "Notes", icon: "edit-3", route: "NotebooksList" },
+const TABS: {
+  key: LibraryTab;
+  label: string;
+  icon: keyof typeof Feather.glyphMap;
+  route: string;
+}[] = [
+  { key: "handwritten", label: "Handwritten", icon: "edit-3", route: "NotebooksList" },
+  { key: "text", label: "Text", icon: "type", route: "NotesList" },
   { key: "brain", label: "MindDump", icon: "mic", route: "Brain" },
   { key: "resources", label: "Files", icon: "paperclip", route: "Resources" },
 ];
 
-export function LibrarySubNav({ active, compact = false }: { active: Tab; compact?: boolean }) {
-  const { theme } = useLifeOS();
+/** Peer Library sections — swap with fade instead of stacking push slides. */
+export function useLibrarySectionNavigate() {
   const navigation = useNavigation<any>();
+  return (route: string) => {
+    const state = navigation.getState?.();
+    const current = state?.routes?.[state.index ?? 0]?.name;
+    if (current === route) return;
+    navigation.dispatch(StackActions.replace(route));
+  };
+}
+
+export function LibrarySubNav({ active, compact = false }: { active: LibraryTab; compact?: boolean }) {
+  const { theme } = useLifeOS();
+  const go = useLibrarySectionNavigate();
 
   return (
     <View style={[styles.subNav, compact ? styles.subNavCompact : styles.subNavPage]}>
@@ -23,7 +40,7 @@ export function LibrarySubNav({ active, compact = false }: { active: Tab; compac
           <Pressable
             key={tab.key}
             onPress={() => {
-              if (!on) navigation.navigate(tab.route);
+              if (!on) go(tab.route);
             }}
             style={[
               styles.pill,
@@ -47,7 +64,17 @@ const styles = StyleSheet.create({
   subNav: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   subNavPage: { paddingHorizontal: 20, marginTop: 14 },
   subNavCompact: { paddingHorizontal: 6, marginTop: 2 },
-  pill: { flexDirection: "row", alignItems: "center", flexShrink: 0, gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, minHeight: 36 },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 0,
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 36,
+  },
   pillActive: { borderWidth: 1.5 },
   text: { fontSize: 12, fontWeight: "800" },
 });
