@@ -659,7 +659,7 @@ export function WorkDashboardScreen() {
   return (
     <Page>
       <ScrollView
-        contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad, flexGrow: 1 }]}
+        contentContainerStyle={[styles.screen, styles.screenGrow]}
         scrollIndicatorInsets={{ bottom: tabBarPad }}
         keyboardShouldPersistTaps="handled"
       >
@@ -705,8 +705,7 @@ export function WorkDashboardScreen() {
         </ScrollView>
 
         {view === "dashboard" ? dashboard : subview}
-        {/* Explicit spacer — contentContainerStyle padding alone can still leave the last card under the pill. */}
-        <View style={{ height: Math.max(tabBarPad - 36, 72) }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
+        <View style={{ height: tabBarPad }} />
       </ScrollView>
 
       <Modal visible={Boolean(composer)} animationType="slide" presentationStyle="pageSheet" onRequestClose={resetComposer}>
@@ -965,7 +964,8 @@ export function WorkDashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { padding: 20, paddingBottom: 36, gap: 12 },
+  screen: { padding: 20, paddingBottom: 20, gap: 12 },
+  screenGrow: { flexGrow: 1 },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   grow: { flex: 1, minWidth: 0 },
   iconBtn: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
