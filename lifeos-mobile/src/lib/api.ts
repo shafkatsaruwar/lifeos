@@ -59,6 +59,25 @@ export async function askCopilot(question: string, context: unknown): Promise<{ 
   return postJson("/api/ai", { action: "copilot", question, context });
 }
 
+// Focus Flow: goal → structured plan. Mirrors action: "parse-goal".
+export async function parseGoalPlan(input: string, spaces: string[]) {
+  const data = await postJson<{ plan: import("./focusFlow/shared").ParsedGoalPlan }>("/api/ai", {
+    action: "parse-goal",
+    input,
+    spaces,
+  });
+  return data.plan;
+}
+
+// Focus Flow: daily coach. Mirrors action: "coach-day".
+export async function coachDay(body: { today: string; context: unknown }) {
+  const data = await postJson<{ coach: import("./focusFlow/shared").CoachDayPlan }>("/api/ai", {
+    action: "coach-day",
+    ...body,
+  });
+  return data.coach;
+}
+
 // Generic iCal URL import — fetch + parse a public calendar subscription link.
 // Mirrors POST /api/ical { url } -> { ics }. The ICS text parsing itself is
 // done client-side (parseIcsEvents below), matching web's app/page.tsx logic.
