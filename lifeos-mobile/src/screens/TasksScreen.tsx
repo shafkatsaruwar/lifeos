@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Empty, Eyebrow, Page, SegmentedControl, Subtitle, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { TaskRow } from "../components/TaskRow";
 import { TaskCaptureModal } from "../components/TaskCaptureModal";
 import { useLifeOS } from "../lib/LifeOSContext";
@@ -21,6 +22,7 @@ const SORT_OPTIONS: { key: Sort; label: string; icon: keyof typeof Feather.glyph
 export function TasksScreen() {
   const { workspace, theme, updateTasks } = useLifeOS();
   const navigation = useNavigation<any>();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const [filter, setFilter] = useState<Filter>("Open");
   const [sort, setSort] = useState<Sort>("Due");
   const [captureOpen, setCaptureOpen] = useState(false);
