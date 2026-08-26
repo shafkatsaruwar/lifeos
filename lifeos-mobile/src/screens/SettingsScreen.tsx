@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { signOut } from "firebase/auth";
 import { ActionButton, Card, Eyebrow, Page, SegmentedControl, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { API_BASE } from "../lib/api";
 import { useLayout } from "../lib/layout";
@@ -24,6 +25,7 @@ export function SettingsScreen() {
   const navigation = useNavigation<any>();
   const { user, workspace, theme, dark, updateSettings, updateCalendar, sync, startOnboardingReplay } = useLifeOS();
   const { isTablet } = useLayout();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const notifPrefs = resolveNotificationPrefs(workspace.settings);
   const [name, setName] = useState(workspace.settings.preferredName ?? "");
   const [synapsePaste, setSynapsePaste] = useState("");
@@ -77,8 +79,13 @@ export function SettingsScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={[styles.screen, workspace.settings.compactMode && styles.screenCompact]}>
-        <Eyebrow>YOUR LIFEOS</Eyebrow>
+      <ScrollView
+        contentContainerStyle={[
+          styles.screen,
+          { paddingBottom: tabBarPad },
+          workspace.settings.compactMode && styles.screenCompact,
+        ]}
+      >        <Eyebrow>YOUR LIFEOS</Eyebrow>
         <Title>Settings</Title>
 
         <Card>

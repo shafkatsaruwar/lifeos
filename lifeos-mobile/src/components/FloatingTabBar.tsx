@@ -202,6 +202,12 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
 
 export const FLOATING_TAB_BAR_HEIGHT = PILL_H + 22;
 
+/** Extra scroll padding so the last controls clear the floating tab pill + home indicator. */
+export function useFloatingTabBarContentPadding(extra = 24) {
+  const insets = useSafeAreaInsets();
+  return FLOATING_TAB_BAR_HEIGHT + insets.bottom + extra;
+}
+
 const styles = StyleSheet.create({
   wrap: {
     position: "absolute",
