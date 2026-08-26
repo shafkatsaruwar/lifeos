@@ -70,7 +70,7 @@ function priorityColor(priority: string) {
 export function WorkDashboardScreen() {
   const { theme, workspace, updateWork, updateTasks, updateProjects } = useLifeOS();
   const navigation = useNavigation<any>();
-  const tabBarPad = useFloatingTabBarContentPadding(28);
+  const tabBarPad = useFloatingTabBarContentPadding(40);
   const work = workspace.work;
   const today = toDateKey(new Date());
   const colorScheme = useColorScheme();
@@ -658,7 +658,11 @@ export function WorkDashboardScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
+      <ScrollView
+        contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad, flexGrow: 1 }]}
+        scrollIndicatorInsets={{ bottom: tabBarPad }}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.header}>
           <View style={styles.grow}>
             <Eyebrow>WORK OS</Eyebrow>
@@ -701,6 +705,8 @@ export function WorkDashboardScreen() {
         </ScrollView>
 
         {view === "dashboard" ? dashboard : subview}
+        {/* Explicit spacer — contentContainerStyle padding alone can still leave the last card under the pill. */}
+        <View style={{ height: Math.max(tabBarPad - 36, 72) }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
       </ScrollView>
 
       <Modal visible={Boolean(composer)} animationType="slide" presentationStyle="pageSheet" onRequestClose={resetComposer}>
