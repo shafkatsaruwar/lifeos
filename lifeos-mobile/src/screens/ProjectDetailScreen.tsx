@@ -18,10 +18,11 @@ import { useLifeOS } from "../lib/LifeOSContext";
 import { dueRank, taskIsOpen } from "../lib/helpers";
 import { primaryPageForNotebook } from "../lib/notebooks";
 import { SPACE_COLORS } from "../lib/theme";
+import { removeWorkProject } from "../lib/workos";
 import type { Project, ProjectKind } from "../types";
 
 export function ProjectDetailScreen() {
-  const { theme, workspace, updateTasks, updateProjects, updateNotes, updateResources, updateNotebookHub } =
+  const { theme, workspace, updateTasks, updateProjects, updateNotes, updateResources, updateNotebookHub, updateWork } =
     useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -101,6 +102,10 @@ export function ProjectDetailScreen() {
           await updateNotes(
             workspace.notes.map((n) => (n.projectName === projectName ? { ...n, projectName: undefined } : n)),
           );
+          const workProject = workspace.work.projects.find((p) => p.name === projectName);
+          if (workProject) {
+            await updateWork(removeWorkProject(workspace.work, workProject.id));
+          }
           navigation.goBack();
         },
       },

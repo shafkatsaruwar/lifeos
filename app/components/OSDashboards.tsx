@@ -550,6 +550,20 @@ export type WorkMeeting = {
 };
 export type WorkHubState = { projects: WorkProject[]; deliverables: WorkDeliverable[]; tasks: WorkTask[]; meetings: WorkMeeting[] };
 
+/** Remove a Work OS project and cascade its deliverables, tasks, and meetings. */
+export function removeWorkProject(hub: WorkHubState, projectId: string): WorkHubState {
+  const deliverableIds = new Set(
+    hub.deliverables.filter(item => item.projectId === projectId).map(item => item.id),
+  );
+  return {
+    ...hub,
+    projects: hub.projects.filter(item => item.id !== projectId),
+    deliverables: hub.deliverables.filter(item => item.projectId !== projectId),
+    tasks: hub.tasks.filter(item => !deliverableIds.has(item.deliverableId)),
+    meetings: hub.meetings.filter(item => item.projectId !== projectId),
+  };
+}
+
 export const WORK_MEETING_ALERT_OPTIONS: { value: WorkMeetingAlertMinutes | "none"; label: string }[] = [
   { value: "none", label: "None" },
   { value: 0, label: "At time of event" },
@@ -885,7 +899,7 @@ function WorkTaskRow({ task, hub, today, onComplete, onOpen }: { task: WorkTask;
   );
 }
 
-export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, onChangeView, onChange, onFocusWork, onOpenWorkTask, onOpenCalendar, onOpenProject, onBrowseProjects }: {
+export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, onChangeView, onChange, onFocusWork, onOpenWorkTask, onOpenCalendar, onOpenProject, onBrowseProjects, onProjectDeleted }: {
   workHub: WorkHubState;
   focusTaskId?: string | null;
   workView?: WorkView;
@@ -896,6 +910,8 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
   onOpenCalendar?: () => void;
   onOpenProject?: (projectId: string) => void;
   onBrowseProjects?: () => void;
+  /** Called after a Work OS project is deleted (so Life Spaces can drop the mirror). */
+  onProjectDeleted?: (projectName: string) => void;
 }) {
   const [internalView, setInternalView] = useState<WorkView>("dashboard");
   const [taskFilter, setTaskFilter] = useState<WorkTask["priority"] | "completed" | "blocked" | "all">("all");
@@ -910,6 +926,13 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
   const openProject = (projectId: string) => {
     if (onOpenProject) onOpenProject(projectId);
     else setWorkView("projects");
+  };
+  const deleteProject = (projectId: string) => {
+    const project = workHub.projects.find(item => item.id === projectId);
+    if (!project) return;
+    if (!window.confirm(`Delete “${project.name}”? Its deliverables, tasks, and meetings will be removed from Work OS.`)) return;
+    onChange(removeWorkProject(workHub, projectId));
+    onProjectDeleted?.(project.name);
   };
   const { today, end } = weekWindow();
   const activeProjects = workHub.projects.filter(item => item.status === "active");
@@ -987,16 +1010,27 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
               const done = projectTasks.filter(task => task.status === "done").length;
               const total = projectTasks.length;
               return (
-                <button key={project.id} type="button" className="work-project-card" onClick={() => openProject(project.id)}>
-                  <div className="work-project-head">
-                    <span className="work-project-icon" style={{ color: project.color, background: `${project.color}18` }}><Database size={14} /></span>
-                    <div><strong>{project.name}</strong><p>{project.description || "Active project"}</p></div>
-                  </div>
-                  {total > 0 && <>
-                    <div className="work-project-progress"><i style={{ width: `${(done / total) * 100}%`, background: project.color }} /></div>
-                    <small>{done}/{total} tasks</small>
-                  </>}
-                </button>
+                <article key={project.id} className="work-project-card">
+                  <button type="button" className="work-project-card-main" onClick={() => openProject(project.id)}>
+                    <div className="work-project-head">
+                      <span className="work-project-icon" style={{ color: project.color, background: `${project.color}18` }}><Database size={14} /></span>
+                      <div><strong>{project.name}</strong><p>{project.description || "Active project"}</p></div>
+                    </div>
+                    {total > 0 && <>
+                      <div className="work-project-progress"><i style={{ width: `${(done / total) * 100}%`, background: project.color }} /></div>
+                      <small>{done}/{total} tasks</small>
+                    </>}
+                  </button>
+                  <button
+                    type="button"
+                    className="work-project-delete"
+                    aria-label={`Delete ${project.name}`}
+                    title="Delete project"
+                    onClick={() => deleteProject(project.id)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </article>
               );
             }) : <Empty>Create your first project to organize deliverables and tasks.</Empty>}
           </Section>
@@ -1101,17 +1135,28 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
             const total = projectTasks.length;
             const projectDeliverables = workHub.deliverables.filter(item => item.projectId === project.id);
             return (
-              <button key={project.id} type="button" className="work-project-detail-card" onClick={() => openProject(project.id)}>
-                <div className="work-project-head">
-                  <span className="work-project-icon" style={{ color: project.color, background: `${project.color}18` }}><Database size={16} /></span>
-                  <div><strong>{project.name}</strong><p>{project.description || "Active project"}</p></div>
-                </div>
-                {total > 0 && <>
-                  <div className="work-project-progress"><i style={{ width: `${(done / total) * 100}%`, background: project.color }} /></div>
-                  <small>{done}/{total} tasks complete</small>
-                </>}
-                <div className="work-project-meta"><span>{projectDeliverables.length} deliverable{projectDeliverables.length === 1 ? "" : "s"}</span><span>{projectTasks.filter(task => task.status !== "done").length} active tasks</span></div>
-              </button>
+              <article key={project.id} className="work-project-detail-card">
+                <button type="button" className="work-project-card-main" onClick={() => openProject(project.id)}>
+                  <div className="work-project-head">
+                    <span className="work-project-icon" style={{ color: project.color, background: `${project.color}18` }}><Database size={16} /></span>
+                    <div><strong>{project.name}</strong><p>{project.description || "Active project"}</p></div>
+                  </div>
+                  {total > 0 && <>
+                    <div className="work-project-progress"><i style={{ width: `${(done / total) * 100}%`, background: project.color }} /></div>
+                    <small>{done}/{total} tasks complete</small>
+                  </>}
+                  <div className="work-project-meta"><span>{projectDeliverables.length} deliverable{projectDeliverables.length === 1 ? "" : "s"}</span><span>{projectTasks.filter(task => task.status !== "done").length} active tasks</span></div>
+                </button>
+                <button
+                  type="button"
+                  className="work-project-delete"
+                  aria-label={`Delete ${project.name}`}
+                  title="Delete project"
+                  onClick={() => deleteProject(project.id)}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </article>
             );
           }) : <Empty>Create your first project to organize deliverables and tasks.</Empty>}
         </div>

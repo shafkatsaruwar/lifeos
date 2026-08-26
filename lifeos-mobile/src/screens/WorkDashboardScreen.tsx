@@ -24,6 +24,7 @@ import {
   formatWorkMeetingWhere,
   projectForDeliverable,
   projectForTask,
+  removeWorkProject,
   uidWork,
   WORK_COLORS,
   type WorkDeliverable,
@@ -199,6 +200,26 @@ export function WorkDashboardScreen() {
 
   const deleteTask = (id: string) =>
     void updateWork({ ...work, tasks: work.tasks.filter((t) => t.id !== id) });
+
+  const deleteProject = (project: WorkProject) => {
+    Alert.alert(
+      `Delete “${project.name}”?`,
+      "Its deliverables, tasks, and meetings will be removed from Work OS.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void updateWork(removeWorkProject(work, project.id));
+            if (workspace.projects.some((entry) => entry.name === project.name)) {
+              void updateProjects(workspace.projects.filter((entry) => entry.name !== project.name));
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const openWorkProject = async (workProject: WorkProject) => {
     const nextProjects = ensureLifeProjectForWork(workspace.projects, workProject);
@@ -384,21 +405,22 @@ export function WorkDashboardScreen() {
         activeProjects.map((p) => {
           const count = work.tasks.filter((t) => projectForTask(work, t)?.id === p.id && t.status !== "done").length;
           return (
-            <Pressable
-              key={p.id}
-              onPress={() => void openWorkProject(p)}
-              style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.border }]}
-            >
-              <View style={[styles.dot, { backgroundColor: p.color || theme.accent }]} />
-              <View style={styles.grow}>
-                <Text style={{ color: theme.text, fontWeight: "800" }}>{p.name}</Text>
-                <Text style={{ color: theme.muted, fontSize: 12 }}>
-                  {count} open task{count === 1 ? "" : "s"}
-                  {p.description ? ` · ${p.description}` : ""}
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.muted} />
-            </Pressable>
+            <SwipeDeleteRow key={p.id} label={p.name} onDelete={() => deleteProject(p)}>
+              <Pressable
+                onPress={() => void openWorkProject(p)}
+                style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              >
+                <View style={[styles.dot, { backgroundColor: p.color || theme.accent }]} />
+                <View style={styles.grow}>
+                  <Text style={{ color: theme.text, fontWeight: "800" }}>{p.name}</Text>
+                  <Text style={{ color: theme.muted, fontSize: 12 }}>
+                    {count} open task{count === 1 ? "" : "s"}
+                    {p.description ? ` · ${p.description}` : ""}
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={theme.muted} />
+              </Pressable>
+            </SwipeDeleteRow>
           );
         })
       ) : (
@@ -516,18 +538,19 @@ export function WorkDashboardScreen() {
     if (view === "projects") {
       return activeProjects.length ? (
         activeProjects.map((p) => (
-          <Pressable
-            key={p.id}
-            onPress={() => void openWorkProject(p)}
-            style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.border }]}
-          >
-            <View style={[styles.dot, { backgroundColor: p.color || theme.accent }]} />
-            <View style={styles.grow}>
-              <Text style={{ color: theme.text, fontWeight: "800" }}>{p.name}</Text>
-              {p.description ? <Text style={{ color: theme.muted, fontSize: 12 }}>{p.description}</Text> : null}
-            </View>
-            <Feather name="chevron-right" size={18} color={theme.muted} />
-          </Pressable>
+          <SwipeDeleteRow key={p.id} label={p.name} onDelete={() => deleteProject(p)}>
+            <Pressable
+              onPress={() => void openWorkProject(p)}
+              style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.border }]}
+            >
+              <View style={[styles.dot, { backgroundColor: p.color || theme.accent }]} />
+              <View style={styles.grow}>
+                <Text style={{ color: theme.text, fontWeight: "800" }}>{p.name}</Text>
+                {p.description ? <Text style={{ color: theme.muted, fontSize: 12 }}>{p.description}</Text> : null}
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.muted} />
+            </Pressable>
+          </SwipeDeleteRow>
         ))
       ) : (
         <Card><Empty title="No projects" body="Create a work project to get started." /></Card>
