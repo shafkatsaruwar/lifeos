@@ -79,7 +79,7 @@ describe('Data Validation', () => {
       expect(result.success).toBe(false);
     });
 
-    it('rejects array with invalid task', () => {
+    it('keeps valid tasks when one sibling is invalid', () => {
       const tasks = [
         {
           id: 1,
@@ -93,12 +93,37 @@ describe('Data Validation', () => {
         },
         {
           id: 2,
-          // Missing required fields
+          // Missing required fields — soft-repaired or dropped, must not wipe the list
           title: 'Invalid Task',
         },
       ];
       const result = validateTasks(tasks);
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.length).toBeGreaterThanOrEqual(1);
+        expect(result.data[0].title).toBe('Valid Task');
+      }
+    });
+
+    it('accepts Firebase object-map shaped task lists', () => {
+      const asMap = {
+        0: {
+          id: 1,
+          title: 'Mapped Task',
+          project: 'Project',
+          color: '#625af6',
+          due: '2026-07-10',
+          priority: 'High',
+          focusMinutes: 45,
+          energy: 'High',
+        },
+      };
+      const result = validateTasks(asMap);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toHaveLength(1);
+        expect(result.data[0].title).toBe('Mapped Task');
+      }
     });
   });
 
