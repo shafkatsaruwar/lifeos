@@ -3,7 +3,8 @@ import { getClientDatabase } from './firebase';
 import { logger } from './logger';
 import { withErrorHandling, retryOperation } from './firebaseErrors';
 import { FIREBASE_PATHS } from './constants';
-import { validateTasks, validateProjects, validateCalendarEvents, validateSettings } from './validation';
+import { parseTasksFromCloud, validateProjects, validateCalendarEvents, validateSettings } from './validation';
+import { writeTaskBackup } from './taskBackup';
 
 const listeners: Map<string, Unsubscribe> = new Map();
 
@@ -63,6 +64,11 @@ export async function syncDataToFirebase(key: string, data: any) {
       1000
     );
 
+    // Mirror tasks locally so a future bad cloud read can be recovered.
+    if (key === 'tasks' && Array.isArray(cleanedData)) {
+      writeTaskBackup(userId, cleanedData);
+    }
+
     logger.info(`Synced ${key} to Firebase`);
   }, `syncDataToFirebase[${key}]`);
 }
@@ -93,32 +99,94 @@ export async function loadDataFromFirebase(key: string) {
     const data = snapshot.val();
 
     // Validate data based on key
-    let validation;
     switch (key) {
-      case 'tasks':
-        validation = validateTasks(data);
-        break;
-      case 'projects':
-        validation = validateProjects(data);
-        break;
-      case 'calendar':
-        validation = validateCalendarEvents(data);
-        break;
-      case 'settings':
-        validation = validateSettings(data);
-        break;
+      case 'tasks': {
+        // Soft-parse + coerce object maps. Never all-or-nothing reject — that
+        // used to return null, which the UI treated as "empty" and then wrote
+        // [] back to Firebase, wiping the user's list.
+        const parsed = parseTasksFromCloud(data);
+        if (parsed.invalidShape) {
+          logger.warn('Invalid tasks shape from Firebase', { type: typeof data });
+          throw new Error('Invalid tasks payload shape');
+        }
+        if (parsed.dropped > 0) {
+          logger.warn(`Dropped ${parsed.dropped} unreadable task(s) from Firebase`);
+        }
+        logger.info(`Loaded tasks from Firebase (${parsed.data.length})`);
+        return parsed.data;
+      }
+      case 'projects': {
+        const validation = validateProjects(data);
+        if (!validation.success) {
+          logger.warn('Invalid projects data from Firebase', { errors: validation.error.errors });
+          return null;
+        }
+        logger.info('Loaded projects from Firebase');
+        return validation.data;
+      }
+      case 'calendar': {
+        const validation = validateCalendarEvents(data);
+        if (!validation.success) {
+          logger.warn('Invalid calendar data from Firebase', { errors: validation.error.errors });
+          return null;
+        }
+        logger.info('Loaded calendar from Firebase');
+        return validation.data;
+      }
+      case 'settings': {
+        const validation = validateSettings(data);
+        if (!validation.success) {
+          logger.warn('Invalid settings data from Firebase', { errors: validation.error.errors });
+          return null;
+        }
+        logger.info('Loaded settings from Firebase');
+        return validation.data;
+      }
       default:
+        logger.info(`Loaded ${key} from Firebase`);
         return data;
     }
+  }, `loadDataFromFirebase[${key}]`);
+}
 
-    if (validation && !validation.success) {
-      logger.warn(`Invalid ${key} data from Firebase`, { errors: validation.error.errors });
-      return null;
+/** Discriminated task load so the UI never confuses "error" with "empty workspace". */
+export type TaskCloudLoad =
+  | { status: 'ok'; tasks: unknown[] }
+  | { status: 'missing' }
+  | { status: 'error'; message: string };
+
+export async function loadTasksFromFirebase(): Promise<TaskCloudLoad> {
+  if (!process.env.NEXT_PUBLIC_FIREBASE_DB_URL) return { status: 'missing' };
+  if (typeof window === 'undefined') return { status: 'missing' };
+
+  try {
+    const database = getClientDatabase();
+    if (!database) return { status: 'error', message: 'Database not initialized' };
+
+    const userId = getUserId();
+    if (!userId) return { status: 'error', message: 'No user ID available' };
+
+    const path = FIREBASE_PATHS.tasks(userId);
+    const snapshot = await retryOperation(() => get(ref(database, path)), 3, 1000);
+
+    if (!snapshot.exists()) {
+      logger.info('No data found for tasks');
+      return { status: 'missing' };
     }
 
-    logger.info(`Loaded ${key} from Firebase`);
-    return data;
-  }, `loadDataFromFirebase[${key}]`);
+    const parsed = parseTasksFromCloud(snapshot.val());
+    if (parsed.invalidShape) {
+      return { status: 'error', message: 'Invalid tasks payload shape' };
+    }
+    if (parsed.dropped > 0) {
+      logger.warn(`Dropped ${parsed.dropped} unreadable task(s) from Firebase`);
+    }
+    return { status: 'ok', tasks: parsed.data };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('loadTasksFromFirebase failed', error instanceof Error ? error : new Error(message));
+    return { status: 'error', message };
+  }
 }
 
 export function listenToFirebaseChanges(key: string, callback: (data: any) => void) {

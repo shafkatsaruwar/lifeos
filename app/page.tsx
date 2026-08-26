@@ -31,7 +31,8 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { syncDataToFirebase, loadDataFromFirebase, listenToFirebaseChanges, stopListeningToFirebaseChanges, pullAllDataFromFirebase, setUserId, clearUserId, getUserId } from "@/lib/dataSync";
+import { syncDataToFirebase, loadDataFromFirebase, loadTasksFromFirebase, listenToFirebaseChanges, stopListeningToFirebaseChanges, pullAllDataFromFirebase, setUserId, clearUserId, getUserId } from "@/lib/dataSync";
+import { readTaskBackup, writeTaskBackup } from "@/lib/taskBackup";
 import { signInWithGoogle, signOut, onAuthStateChanged, getClientAuth } from "@/lib/firebase";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
@@ -493,6 +494,8 @@ export default function LifeOS() {
   const [flowScreen, setFlowScreen] = useState<FlowScreen>("talk");
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [tasksHydrated, setTasksHydrated] = useState(false);
+  /** False after a cloud read error so we never sync [] over a still-valid remote list. */
+  const [tasksSyncEnabled, setTasksSyncEnabled] = useState(false);
   const [palette, setPalette] = useState(false);
   const [capture, setCapture] = useState(false);
   const [focus, setFocus] = useState(false);
@@ -1113,34 +1116,59 @@ export default function LifeOS() {
   useEffect(() => {
     if (!cloudUserId) return;
     setTasksHydrated(false);
+    setTasksSyncEnabled(false);
     (async () => {
-      try {
-        const firebaseTasks = await loadDataFromFirebase('tasks');
-        if (Array.isArray(firebaseTasks)) {
-          const normalized = firebaseTasks.map(task => normalizeTask(task));
-          // Drop the old demo starter set if it was ever synced — those items
-          // pointed at fake spaces (Synapse, Photography, …) and flooded notifications.
-          setTasks(isStarterTaskSet(normalized) ? [] : normalized);
-        } else {
-          // New cloud workspaces start blank instead of seeding overdue demo tasks.
-          setTasks([]);
+      const applyList = (raw: unknown[], source: "cloud" | "backup") => {
+        const normalized = raw.map(task => normalizeTask(task as Partial<Task>));
+        const next = isStarterTaskSet(normalized) ? [] : normalized;
+        setTasks(next);
+        if (next.length) writeTaskBackup(cloudUserId, next);
+        if (source === "backup") {
+          setNotice(`Restored ${next.length} task${next.length === 1 ? "" : "s"} from a local backup`);
         }
-      } catch (error) {
-        console.error('Failed to load tasks from Firebase:', error);
-        setTasks([]);
-      } finally {
-        setTasksHydrated(true);
+      };
+
+      const result = await loadTasksFromFirebase();
+      if (result.status === "ok") {
+        if (result.tasks.length) {
+          applyList(result.tasks, "cloud");
+        } else {
+          // Cloud is explicitly empty — try a local remnant before accepting blank.
+          const backup = readTaskBackup(cloudUserId);
+          if (backup?.length) applyList(backup, "backup");
+          else setTasks([]);
+        }
+        setTasksSyncEnabled(true);
+      } else if (result.status === "missing") {
+        const backup = readTaskBackup(cloudUserId);
+        if (backup?.length) applyList(backup, "backup");
+        else setTasks([]);
+        setTasksSyncEnabled(true);
+      } else {
+        console.error("Failed to load tasks from Firebase:", result.message);
+        const backup = readTaskBackup(cloudUserId);
+        if (backup?.length) {
+          applyList(backup, "backup");
+          // Allow sync so the recovered backup can heal the cloud copy.
+          setTasksSyncEnabled(true);
+        } else {
+          setNotice("Couldn't load your tasks from the cloud. Nothing was overwritten.");
+          // Keep sync OFF — do not write [] over remote data we failed to read.
+          setTasksSyncEnabled(false);
+        }
       }
+      setTasksHydrated(true);
     })();
   }, [cloudUserId]);
   useEffect(() => {
-    if (!cloudUserId || !tasksHydrated) return;
+    if (!cloudUserId || !tasksHydrated || !tasksSyncEnabled) return;
     const snapshot = tasks;
     const timer = window.setTimeout(() => {
+      writeTaskBackup(cloudUserId, snapshot);
       syncDataToFirebase('tasks', snapshot);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [cloudUserId, tasks, tasksHydrated]);
+  }, [cloudUserId, tasks, tasksHydrated, tasksSyncEnabled]);
   useEffect(() => {
     const activeTasks = tasks.filter(task => !task.done && !task.canceled);
     if (!activeTasks.length) {
