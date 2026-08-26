@@ -280,6 +280,8 @@ export type NotificationPrefs = {
   permissionAskedAt?: string;
 };
 
+export type CalendarDefaultView = "upcoming" | "month" | "day";
+
 export type SettingsState = {
   accent?: string;
   preferredName?: string;
@@ -287,6 +289,8 @@ export type SettingsState = {
   defaultFocusMinutes?: number;
   defaultEnergy?: EnergyLevel;
   weekStartsMonday?: boolean;
+  /** Initial Calendar tab when opening the Calendar screen. */
+  defaultCalendarView?: CalendarDefaultView;
   compactMode?: boolean;
   reduceMotion?: boolean;
   themeMode?: ThemeMode;
