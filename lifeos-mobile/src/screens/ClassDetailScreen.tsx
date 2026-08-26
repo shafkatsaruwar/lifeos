@@ -2,6 +2,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Card, Empty, Page } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { PRIORITY_COLOR } from "../lib/theme";
 import { dueRank, formatDueDate, formatResourceSize } from "../lib/helpers";
@@ -9,6 +10,7 @@ import { primaryPageForNotebook } from "../lib/notebooks";
 
 export function ClassDetailScreen() {
   const { theme, workspace } = useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const classId = route.params?.classId as string;
@@ -35,7 +37,7 @@ export function ClassDetailScreen() {
         <Text style={{ color: theme.text, fontWeight: "700" }}>Courses</Text>
       </Pressable>
 
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <View style={[styles.hero, { backgroundColor: `${color}18`, borderColor: color }]}>
           <View style={[styles.heroIcon, { backgroundColor: color }]}>
             <Feather name="book-open" size={20} color="#FFF" />

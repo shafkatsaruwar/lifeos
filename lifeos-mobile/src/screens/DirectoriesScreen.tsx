@@ -2,6 +2,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { Empty, Page } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { taskIsOpen } from "../lib/helpers";
 
@@ -26,6 +27,7 @@ function DirectoryHeader({ eyebrow, title, onBack, onAdd }: { eyebrow: string; t
 export function ProjectsDirectoryScreen() {
   const { theme, workspace, updateProjects } = useLifeOS();
   const navigation = useNavigation<any>();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
 
   const add = () => {
     Alert.prompt(
@@ -56,7 +58,7 @@ export function ProjectsDirectoryScreen() {
       <FlatList
         data={workspace.projects}
         keyExtractor={(item) => item.name}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}
         renderItem={({ item }) => {
           const open = workspace.tasks.filter((task) => task.project === item.name && taskIsOpen(task)).length;
           return (
@@ -84,6 +86,7 @@ export function ProjectsDirectoryScreen() {
 export function CoursesDirectoryScreen() {
   const { theme, workspace } = useLifeOS();
   const navigation = useNavigation<any>();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const courses = workspace.classes.filter((course) => !course.archived);
 
   return (
@@ -92,7 +95,7 @@ export function CoursesDirectoryScreen() {
       <FlatList
         data={courses}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}
         renderItem={({ item }) => {
           const open = workspace.tasks.filter((task) => task.classId === item.id && taskIsOpen(task)).length;
           const notes = workspace.notes.filter((note) => note.classId === item.id).length;

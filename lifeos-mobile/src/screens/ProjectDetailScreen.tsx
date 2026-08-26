@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Card, Empty, Page, ActionButton } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { TaskRow } from "../components/TaskRow";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { dueRank, taskIsOpen } from "../lib/helpers";
@@ -23,6 +24,7 @@ import type { Project, ProjectKind } from "../types";
 export function ProjectDetailScreen() {
   const { theme, workspace, updateTasks, updateProjects, updateNotes, updateResources, updateNotebookHub } =
     useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const projectName = route.params?.projectName as string;
@@ -123,7 +125,7 @@ export function ProjectDetailScreen() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <View
           style={[
             styles.hero,

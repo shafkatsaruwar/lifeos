@@ -3,9 +3,11 @@ import { useNavigation } from "@react-navigation/native";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Page } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 
 export function SchoolProfileScreen() {
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const { theme, workspace, updateSchool } = useLifeOS();
   const navigation = useNavigation<any>();
   const [major, setMajor] = useState(workspace.school.profile.major ?? "");
@@ -35,7 +37,7 @@ export function SchoolProfileScreen() {
           <Text style={[styles.title, { color: theme.text }]}>Academic profile</Text>
         </View>
       </View>
-      <View style={styles.form}>
+      <View style={[styles.form, { paddingBottom: tabBarPad }]}>
         <Field label="Major" value={major} onChangeText={setMajor} theme={theme} placeholder="e.g. Computer Science" />
         <Field label="Minor" value={minor} onChangeText={setMinor} theme={theme} placeholder="Optional" />
         <Field label="Class of" value={classOf} onChangeText={setClassOf} theme={theme} placeholder="e.g. 2028" />

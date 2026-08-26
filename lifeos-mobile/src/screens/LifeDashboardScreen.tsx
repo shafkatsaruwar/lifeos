@@ -6,6 +6,7 @@ import { PlanTomorrowModal } from "../components/PlanTomorrowModal";
 import { useState } from "react";
 import { DashboardModule, DashboardRow, ModuleEmpty, ProgressBar, QuickAction } from "../components/HubDashboard";
 import { Eyebrow, Page } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatDueDate, getGreeting, taskIsOpen, toDateKey } from "../lib/helpers";
 import {
@@ -45,6 +46,7 @@ export function LifeDashboardScreen() {
     useLifeOS();
   const navigation = useNavigation<any>();
   const { isTablet } = useLayout();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const [planTomorrowOpen, setPlanTomorrowOpen] = useState(false);
   const now = new Date();
   const today = toDateKey(now);
@@ -238,7 +240,7 @@ export function LifeDashboardScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <View style={styles.header}>
           <View style={styles.grow}>
             <Eyebrow>

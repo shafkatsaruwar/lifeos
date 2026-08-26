@@ -2,11 +2,13 @@ import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Card, Empty, Eyebrow, Page, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { buildInbox, navigateFromNotification, resolveNotificationPrefs } from "../lib/notifications";
 
 export function NotificationCenterScreen() {
   const { theme, workspace } = useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const prefs = resolveNotificationPrefs(workspace.settings);
   const items = buildInbox(workspace);
@@ -15,7 +17,7 @@ export function NotificationCenterScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.back}>
             <Feather name="chevron-left" size={22} color={theme.accent} />

@@ -5,12 +5,14 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { DashboardModule, DashboardRow, ModuleEmpty, QuickAction } from "../components/HubDashboard";
 import { FocusModal } from "../components/FocusModal";
 import { Eyebrow, Page } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatDueDate, taskIsOpen, toDateKey } from "../lib/helpers";
 import { primaryPageForNotebook } from "../lib/notebooks";
 
 export function SchoolDashboardScreen() {
   const { theme, workspace, updateTasks } = useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const [focusTaskId, setFocusTaskId] = useState<number | null>(null);
   const now = new Date();
@@ -56,7 +58,7 @@ export function SchoolDashboardScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <View style={styles.header}>
           <View style={styles.grow}>
             <Eyebrow>CURRENT TERM</Eyebrow>

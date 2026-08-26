@@ -131,7 +131,7 @@ export function TasksScreen() {
       <FlatList
         data={tasks}
         keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}
         renderItem={({ item }) => (
           <TaskRow
             task={item}

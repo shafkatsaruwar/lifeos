@@ -3,6 +3,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { ActionButton, Card, Page, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { FocusProofModal } from "../components/FocusProofModal";
 import { useLifeOS } from "../lib/LifeOSContext";
 import {
@@ -27,6 +28,7 @@ type ProofIntent =
 
 export function FocusEnforcerSessionScreen() {
   const { user, workspace, theme } = useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const sessionId = String(route.params?.sessionId || "");
@@ -188,7 +190,7 @@ export function FocusEnforcerSessionScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.back}>
           <Feather name="chevron-left" size={22} color={theme.accent} />
           <Text style={{ color: theme.accent, fontWeight: "700" }}>Back</Text>
