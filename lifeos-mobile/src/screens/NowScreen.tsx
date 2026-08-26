@@ -96,6 +96,17 @@ export function NowScreen() {
           </Pressable>
         ) : null}
 
+        <Pressable
+          onPress={() => navigation.navigate("FocusFlow")}
+          style={[styles.flowCard, { backgroundColor: theme.soft, borderColor: theme.border }]}
+        >
+          <View style={styles.grow}>
+            <Text style={[styles.kicker, { color: theme.muted }]}>FOCUS FLOW</Text>
+            <Text style={[styles.weekLine, { color: theme.text }]}>Talk · Focus · Coach · Strength</Text>
+          </View>
+          <Feather name="arrow-right" size={18} color={theme.accent} />
+        </Pressable>
+
         <View style={[styles.block, shell]}>
           <View style={[styles.weekHead, { borderBottomColor: theme.border }]}>
             <View style={styles.grow}>
@@ -313,6 +324,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 16,
     padding: 14,
+  },
+  flowCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   ambientTitle: { fontSize: 15, fontWeight: "800" },
   ambientMeta: { fontSize: 12, marginTop: 2 },
