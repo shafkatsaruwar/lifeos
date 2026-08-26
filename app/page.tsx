@@ -2299,6 +2299,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   const [suggestedCommandIndex, setSuggestedCommandIndex] = useState(-1);
   const [queueOpen, setQueueOpen] = useState(false);
   const [dragQueueId, setDragQueueId] = useState<number | null>(null);
+  const captureInputRef = useRef<HTMLInputElement | null>(null);
   const captureBlurTimer = useRef<number | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -2415,6 +2416,14 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   const handleCaptureBlur = () => {
     captureBlurTimer.current = window.setTimeout(() => setCaptureFocused(false), 160);
   };
+  /** After a command runs, clear + unfocus so the help list does not pop back open. */
+  const finishCaptureCommand = () => {
+    if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current);
+    setCaptureInput("");
+    setSuggestedCommandIndex(-1);
+    setCaptureFocused(false);
+    captureInputRef.current?.blur();
+  };
   const handleCaptureKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -2431,14 +2440,14 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
         const cmd = filtered[suggestedCommandIndex];
         if (['/w', '/break', '/a', '/focus', '/flow', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
           runInstantCommand(cmd.shortcut);
-          setCaptureInput('');
+          finishCaptureCommand();
         } else {
           setCaptureInput(cmd.shortcut + ' ');
+          setSuggestedCommandIndex(-1);
         }
-        setSuggestedCommandIndex(-1);
       } else if (val) {
         if (runInstantCommand(val)) {
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/t ')) {
           const taskTitle = val.slice(3).trim();
           if (taskTitle) {
@@ -2448,7 +2457,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               else onChoose(id);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/tm ')) {
           const taskTitle = val.slice(4).trim();
           if (taskTitle) {
@@ -2463,24 +2472,24 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               else onChoose(id);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/proj ')) {
           const projectName = val.slice(6).trim();
           if (projectName) onAddProject(projectName);
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/asg ')) {
           const assignmentTitle = val.slice(5).trim();
           if (assignmentTitle) onAddAssignment(assignmentTitle);
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/note ')) {
           const noteTitle = val.slice(6).trim();
           if (noteTitle) onAddNote(noteTitle);
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableWorkOS && val.startsWith('/w proj ')) {
           const projName = val.slice(8).trim() || 'New Project';
           const newProj: WorkProject = { id: `proj-${Date.now()}`, name: projName, color: '#625af6', status: 'active', createdAt: new Date().toISOString() };
           onSetWorkHub((current: WorkHubState) => ({ ...current, projects: [...current.projects, newProj] }));
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableWorkOS && val.startsWith('/w deliver ')) {
           const title = val.slice(11).trim() || 'New deliverable';
           onSetWorkHub((current: WorkHubState) => {
@@ -2489,7 +2498,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             const deliverable: WorkDeliverable = { id: `del-${Date.now()}`, projectId: project.id, title, type: 'document', status: 'planned', priority: 'medium', dueDate: toDateKey(new Date()), createdAt: new Date().toISOString() };
             return { ...current, deliverables: [...current.deliverables, deliverable] };
           });
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableWorkOS && val.startsWith('/w task ')) {
           const title = val.slice(8).trim() || 'New task';
           onSetWorkHub((current: WorkHubState) => {
@@ -2498,12 +2507,12 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             const task: WorkTask = { id: `task-${Date.now()}`, deliverableId: deliverable.id, title, status: 'open', priority: 'medium', dueDate: toDateKey(new Date()), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
             return { ...current, tasks: [...current.tasks, task] };
           });
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableWorkOS && val.startsWith('/w meet ')) {
           const meetTitle = val.slice(8).trim() || 'New Meeting';
           const newMeet: WorkMeeting = { id: `meet-${Date.now()}`, title: meetTitle, start: new Date().toISOString(), type: 'other', createdAt: new Date().toISOString() };
           onSetWorkHub((current: WorkHubState) => ({ ...current, meetings: [...current.meetings, newMeet] }));
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa country ')) {
           const name = val.slice(12).trim();
           if (name) {
@@ -2514,7 +2523,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             }, 'Added country', name, 'country'));
             flash(`Country added: ${name}`);
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa uni ')) {
           const name = val.slice(8).trim();
           if (name) {
@@ -2529,7 +2538,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               flash(`University added: ${name}`);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa prog ')) {
           const name = val.slice(9).trim();
           if (name) {
@@ -2544,7 +2553,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               flash(`Program added: ${name}`);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa app ')) {
           const name = val.slice(8).trim();
           const program = name
@@ -2560,7 +2569,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             }, 'Started application', program.name, 'application'));
             flash(`Application started: ${program.name}`);
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && (val.startsWith('/sa fund ') || val.startsWith('/sa scholarship '))) {
           const name = val.startsWith('/sa scholarship ') ? val.slice(16).trim() : val.slice(9).trim();
           if (name) {
@@ -2571,7 +2580,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             }, 'Added funding', name, 'funding'));
             flash(`Scholarship added: ${name}`);
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa task ')) {
           const title = val.slice(9).trim();
           if (title) {
@@ -2589,7 +2598,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               flash(`Study Abroad task: ${title}`);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa note ')) {
           const title = val.slice(9).trim();
           if (title) {
@@ -2601,10 +2610,10 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             }, 'Added knowledge note', title, 'general'));
             flash(`Study Abroad note: ${title}`);
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (!val.startsWith('/')) {
           onStartAmbient();
-          setCaptureInput('');
+          finishCaptureCommand();
         }
       }
     }
@@ -2654,6 +2663,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
         <section className="capture-bar-section" title="Capture commands: /t, /break, /focus, and more">
           <span className="section-icon blue"><Command size={16} /></span>
           <input
+            ref={captureInputRef}
             type="text"
             placeholder="Click for commands, or type /"
             value={captureInput}
@@ -2677,12 +2687,12 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
                   onClick={() => {
                     if (['/w', '/break', '/a', '/focus', '/flow', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
                       runInstantCommand(cmd.shortcut);
-                      setCaptureInput('');
-                      setCaptureFocused(false);
+                      finishCaptureCommand();
                     } else {
                       setCaptureInput(cmd.shortcut + " ");
+                      setSuggestedCommandIndex(-1);
+                      captureInputRef.current?.focus();
                     }
-                    setSuggestedCommandIndex(-1);
                   }}
                 >
                   <strong>{cmd.shortcut}</strong>
