@@ -3457,6 +3457,9 @@ function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming
   const [cursor, setCursor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => toDateKey(new Date()));
   const [mode, setMode] = useState<CalendarDefaultView>(() => normalizeCalendarDefaultView(defaultView));
+  useEffect(() => {
+    setMode(normalizeCalendarDefaultView(defaultView));
+  }, [defaultView]);
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const gridStart = new Date(monthStart);
   const firstDayOffset = weekStartsMonday ? (monthStart.getDay() + 6) % 7 : monthStart.getDay();
