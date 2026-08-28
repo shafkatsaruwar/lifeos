@@ -121,6 +121,27 @@ export function formatResourceSize(bytes: number) {
   return `${Math.round((bytes / Math.pow(1024, unit)) * 10) / 10} ${units[unit]}`;
 }
 
+/** Strip web rich-text HTML so mobile TextInputs can show the same note body. */
+export function htmlToPlainText(value: string): string {
+  if (!value) return "";
+  if (!/<\/?[a-z][\s\S]*>/i.test(value)) return value;
+  return value
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/h[1-6]>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
