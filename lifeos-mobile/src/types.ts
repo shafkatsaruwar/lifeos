@@ -480,6 +480,8 @@ export type NotebookPage = {
     pageIndex: number;
     pageCount?: number;
     fileName?: string;
+    /** Rasterized PNG for reliable per-page display (PDFKit on iOS). */
+    previewImagePath?: string;
   };
   /** Handwriting recognition index — empty until a real engine is wired */
   recognition?: PageRecognitionIndex;

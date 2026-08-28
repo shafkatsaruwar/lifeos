@@ -8,7 +8,7 @@ import * as Sharing from "expo-sharing";
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
 import { Platform } from "react-native";
 import type { NotebookPage, PaperColor, PaperStyle } from "../types";
-import { createPage, pagesForNotebook, paperColorHex } from "./notebooks";
+import { createPage, pagesForNotebook, paperColorHex, reindexPages } from "./notebooks";
 
 async function renderDrawingPng(
   base64String: string,
@@ -83,26 +83,218 @@ export async function planPdfImport(_fileUri?: string): Promise<PdfImportPlan | 
   return { fileName, localUri: storagePath, storagePath, pageCount };
 }
 
-/** Create one NotebookPage per PDF page (capped for safety). */
-export function pagesFromPdfImport(
+/** One extracted PDF page — always a single-page file for reliable WKWebView display. */
+export type PdfPageSlice = {
+  storagePath: string;
+  /** Original page index inside the imported source PDF (0-based). */
+  sourcePageIndex: number;
+};
+
+async function renderPdfPagePngNative(
+  filePath: string,
+  pageIndex: number,
+  scale = 2,
+): Promise<string> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require("expo-pencilkit-ui") as {
+      renderPdfPagePng?: (path: string, pageIndex: number, scale?: number) => Promise<string>;
+    };
+    if (!mod.renderPdfPagePng || Platform.OS !== "ios") return "";
+    return (await mod.renderPdfPagePng(filePath, pageIndex, scale)) || "";
+  } catch {
+    return "";
+  }
+}
+
+function pdfPreviewCachePath(sourcePath: string, pageIndex: number) {
+  const dir = `${FileSystem.documentDirectory}notebookPdfs/previews/`;
+  return `${dir}${pdfSliceCacheKey(sourcePath, pageIndex)}-v2.png`;
+}
+
+/**
+ * Rasterize one PDF page to a cached PNG via native PDFKit.
+ * Works for multi-page source files — each pageIndex renders the matching PDF page.
+ */
+export async function rasterizePdfPageImage(
+  storagePath: string,
+  pageIndex: number,
+  scale = 2,
+): Promise<string | null> {
+  const previewDir = `${FileSystem.documentDirectory}notebookPdfs/previews/`;
+  await FileSystem.makeDirectoryAsync(previewDir, { intermediates: true }).catch(() => undefined);
+  const outPath = pdfPreviewCachePath(storagePath, pageIndex);
+  const cached = await FileSystem.getInfoAsync(outPath);
+  if (cached.exists) return outPath;
+
+  const pngB64 = await renderPdfPagePngNative(storagePath, pageIndex, scale);
+  if (!pngB64) return null;
+
+  await FileSystem.writeAsStringAsync(outPath, pngB64, { encoding: BASE64 });
+  return outPath;
+}
+
+/** Local file URI for the rasterized PDF page image backing a notebook page. */
+export async function resolvePdfPageImageUri(
+  ref: NonNullable<NotebookPage["pdfRef"]>,
+): Promise<string | null> {
+  if (ref.previewImagePath) {
+    const info = await FileSystem.getInfoAsync(ref.previewImagePath);
+    if (info.exists) return ref.previewImagePath;
+  }
+  return await rasterizePdfPageImage(ref.storagePath, ref.pageIndex);
+}
+
+function pdfSliceCacheKey(sourcePath: string, pageIndex: number) {
+  const base = sourcePath.split("/").pop() || "pdf";
+  return `${base.replace(/[^\w.\-]+/g, "_")}-p${pageIndex + 1}`;
+}
+
+/**
+ * WKWebView ignores `#page=` on local PDFs — extract one page into its own file.
+ * Cached under notebookPdfs/split/ so legacy imports self-heal on first view.
+ */
+export async function extractSinglePagePdf(
+  sourcePath: string,
+  pageIndex: number,
+): Promise<string> {
+  const dir = `${FileSystem.documentDirectory}notebookPdfs/split/`;
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(() => undefined);
+  const cachePath = `${dir}${pdfSliceCacheKey(sourcePath, pageIndex)}.pdf`;
+  const cached = await FileSystem.getInfoAsync(cachePath);
+  if (cached.exists) return cachePath;
+
+  const bytes = await FileSystem.readAsStringAsync(sourcePath, { encoding: BASE64 });
+  const source = await PDFDocument.load(bytes, { ignoreEncryption: true });
+  const idx = Math.min(Math.max(0, pageIndex), source.getPageCount() - 1);
+  const doc = await PDFDocument.create();
+  const [copied] = await doc.copyPages(source, [idx]);
+  doc.addPage(copied);
+  const outB64 = await doc.saveAsBase64({ dataUri: false });
+  await FileSystem.writeAsStringAsync(cachePath, outB64, { encoding: BASE64 });
+  return cachePath;
+}
+
+/** Split an imported PDF into single-page files (capped for safety). */
+export async function splitPdfToSinglePageFiles(
+  plan: PdfImportPlan,
+  maxPages = 100,
+): Promise<PdfPageSlice[]> {
+  const count = Math.min(plan.pageCount, maxPages);
+  const dir = `${FileSystem.documentDirectory}notebookPdfs/split/`;
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(() => undefined);
+  const stamp = Date.now();
+  const baseName = plan.fileName.replace(/\.pdf$/i, "").replace(/[^\w.\-]+/g, "_");
+
+  const bytes = await FileSystem.readAsStringAsync(plan.storagePath, { encoding: BASE64 });
+  const source = await PDFDocument.load(bytes, { ignoreEncryption: true });
+
+  const slices: PdfPageSlice[] = [];
+  for (let i = 0; i < count; i++) {
+    const cachePath = `${dir}${stamp}-${baseName}-p${i + 1}.pdf`;
+    const doc = await PDFDocument.create();
+    const [copied] = await doc.copyPages(source, [i]);
+    doc.addPage(copied);
+    const outB64 = await doc.saveAsBase64({ dataUri: false });
+    await FileSystem.writeAsStringAsync(cachePath, outB64, { encoding: BASE64 });
+    slices.push({ storagePath: cachePath, sourcePageIndex: i });
+  }
+  return slices;
+}
+
+/**
+ * Resolve a display URI for WKWebView. iOS cannot jump to arbitrary PDF pages via URL fragments,
+ * so each notebook page must point at a single-page PDF file.
+ */
+export async function resolvePdfDisplayUri(
+  ref: NonNullable<NotebookPage["pdfRef"]>,
+): Promise<string | null> {
+  if (!ref.storagePath) return null;
+  try {
+    const info = await FileSystem.getInfoAsync(ref.storagePath);
+    if (!info.exists) return null;
+
+    const bytes = await FileSystem.readAsStringAsync(ref.storagePath, { encoding: BASE64 });
+    const probe = await PDFDocument.load(bytes, { ignoreEncryption: true });
+    if (probe.getPageCount() <= 1) return ref.storagePath;
+
+    return await extractSinglePagePdf(ref.storagePath, ref.pageIndex);
+  } catch {
+    return null;
+  }
+}
+
+/** Base64 PDF bytes + 1-based page number for PDF.js rendering in WebView. */
+export async function resolvePdfDisplayPayload(
+  ref: NonNullable<NotebookPage["pdfRef"]>,
+): Promise<{ base64: string; pageNumber: number } | null> {
+  const path = await resolvePdfDisplayUri(ref);
+  if (!path) return null;
+  try {
+    const base64 = await FileSystem.readAsStringAsync(path, { encoding: BASE64 });
+    return { base64, pageNumber: 1 };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fill notebook pages starting at `startAtIndex` with consecutive PDF pages.
+ * Example: import on notebook page 3 with a 10-page PDF → page 3 = PDF p.1, page 4 = PDF p.2, …
+ */
+export async function applyPdfImportToNotebook(
+  notebookId: string,
+  plan: PdfImportPlan,
+  existingPages: NotebookPage[],
+  startAtIndex: number,
+  maxPages = 100,
+): Promise<{ pages: NotebookPage[] }> {
+  const slices = await splitPdfToSinglePageFiles(plan, maxPages);
+  const sorted = [...existingPages].sort((a, b) => a.index - b.index);
+  const merged = new Map(sorted.map((p) => [p.id, { ...p }]));
+  const baseTitle = plan.fileName.replace(/\.pdf$/i, "");
+
+  for (let i = 0; i < slices.length; i++) {
+    const slice = slices[i];
+    const targetIndex = startAtIndex + i;
+    const previewImagePath = await rasterizePdfPageImage(plan.storagePath, slice.sourcePageIndex);
+    const pdfRef = {
+      storagePath: plan.storagePath,
+      pageIndex: slice.sourcePageIndex,
+      pageCount: plan.pageCount,
+      fileName: plan.fileName,
+      previewImagePath: previewImagePath || undefined,
+    };
+    const title = `${baseTitle} · p.${slice.sourcePageIndex + 1}`;
+    const existing = sorted.find((p) => p.index === targetIndex);
+
+    if (existing) {
+      merged.set(existing.id, {
+        ...existing,
+        pdfRef,
+        title: existing.title || title,
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      const page = createPage(notebookId, targetIndex, "blank");
+      page.pdfRef = pdfRef;
+      page.title = title;
+      merged.set(page.id, page);
+    }
+  }
+
+  const pages = reindexPages(Array.from(merged.values()).sort((a, b) => a.index - b.index));
+  return { pages };
+}
+
+/** @deprecated Use applyPdfImportToNotebook — fills from a start index instead of always appending. */
+export async function pagesFromPdfImport(
   notebookId: string,
   plan: PdfImportPlan,
   startIndex = 0,
   maxPages = 40,
-): NotebookPage[] {
-  const count = Math.min(plan.pageCount, maxPages);
-  const pages: NotebookPage[] = [];
-  for (let i = 0; i < count; i++) {
-    const page = createPage(notebookId, startIndex + i, "blank");
-    page.title = `${plan.fileName.replace(/\.pdf$/i, "")} · p.${i + 1}`;
-    page.pdfRef = {
-      storagePath: plan.storagePath,
-      pageIndex: i,
-      pageCount: plan.pageCount,
-      fileName: plan.fileName,
-    };
-    pages.push(page);
-  }
+): Promise<NotebookPage[]> {
+  const { pages } = await applyPdfImportToNotebook(notebookId, plan, [], startIndex, maxPages);
   return pages;
 }
 
