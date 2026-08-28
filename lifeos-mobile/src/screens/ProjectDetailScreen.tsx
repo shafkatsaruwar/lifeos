@@ -13,18 +13,21 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Card, Empty, Page, ActionButton } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { TaskRow } from "../components/TaskRow";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { dueRank, taskIsOpen } from "../lib/helpers";
 import { primaryPageForNotebook } from "../lib/notebooks";
 import { SPACE_COLORS } from "../lib/theme";
+import { removeWorkProject } from "../lib/workos";
 import type { Project, ProjectKind } from "../types";
 
 export function ProjectDetailScreen() {
-  const { theme, workspace, updateTasks, updateProjects, updateNotes, updateResources, updateNotebookHub } =
+  const { theme, workspace, updateTasks, updateProjects, updateNotes, updateResources, updateNotebookHub, updateWork } =
     useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const projectName = route.params?.projectName as string;
   const project = workspace.projects.find((p) => p.name === projectName);
   const [editOpen, setEditOpen] = useState(false);
@@ -101,6 +104,10 @@ export function ProjectDetailScreen() {
           await updateNotes(
             workspace.notes.map((n) => (n.projectName === projectName ? { ...n, projectName: undefined } : n)),
           );
+          const workProject = workspace.work.projects.find((p) => p.name === projectName);
+          if (workProject) {
+            await updateWork(removeWorkProject(workspace.work, workProject.id));
+          }
           navigation.goBack();
         },
       },
@@ -123,7 +130,7 @@ export function ProjectDetailScreen() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <View
           style={[
             styles.hero,

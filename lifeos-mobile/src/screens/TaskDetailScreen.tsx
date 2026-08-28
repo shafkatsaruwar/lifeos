@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { ActionButton, Card, Page, SegmentedControl } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { FocusModal } from "../components/FocusModal";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { PRIORITY_COLOR } from "../lib/theme";
@@ -72,6 +73,7 @@ export function TaskDetailScreen() {
   const { workspace, theme, updateTasks, updateSettings } = useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const taskId = route.params?.taskId as number;
   const task = workspace.tasks.find((t) => t.id === taskId);
   const [focusOpen, setFocusOpen] = useState(false);
@@ -184,7 +186,7 @@ export function TaskDetailScreen() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <TextInput
           value={task.title}
           onChangeText={(v) => persist({ title: v })}

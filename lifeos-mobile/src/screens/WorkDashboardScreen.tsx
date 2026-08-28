@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { ActionButton, Card, Empty, Eyebrow, Page, SegmentedControl, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { SwipeDeleteRow } from "../components/SwipeDeleteRow";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatDueDate, toDateKey } from "../lib/helpers";
@@ -24,6 +25,7 @@ import {
   formatWorkMeetingWhere,
   projectForDeliverable,
   projectForTask,
+  removeWorkProject,
   uidWork,
   WORK_COLORS,
   type WorkDeliverable,
@@ -68,6 +70,7 @@ function priorityColor(priority: string) {
 export function WorkDashboardScreen() {
   const { theme, workspace, updateWork, updateTasks, updateProjects } = useLifeOS();
   const navigation = useNavigation<any>();
+  const tabBarPad = useFloatingTabBarContentPadding(40);
   const work = workspace.work;
   const today = toDateKey(new Date());
   const colorScheme = useColorScheme();
@@ -199,6 +202,26 @@ export function WorkDashboardScreen() {
 
   const deleteTask = (id: string) =>
     void updateWork({ ...work, tasks: work.tasks.filter((t) => t.id !== id) });
+
+  const deleteProject = (project: WorkProject) => {
+    Alert.alert(
+      `Delete “${project.name}”?`,
+      "Its deliverables, tasks, and meetings will be removed from Work OS.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void updateWork(removeWorkProject(work, project.id));
+            if (workspace.projects.some((entry) => entry.name === project.name)) {
+              void updateProjects(workspace.projects.filter((entry) => entry.name !== project.name));
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const openWorkProject = async (workProject: WorkProject) => {
     const nextProjects = ensureLifeProjectForWork(workspace.projects, workProject);
@@ -384,21 +407,22 @@ export function WorkDashboardScreen() {
         activeProjects.map((p) => {
           const count = work.tasks.filter((t) => projectForTask(work, t)?.id === p.id && t.status !== "done").length;
           return (
-            <Pressable
-              key={p.id}
-              onPress={() => void openWorkProject(p)}
-              style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.border }]}
-            >
-              <View style={[styles.dot, { backgroundColor: p.color || theme.accent }]} />
-              <View style={styles.grow}>
-                <Text style={{ color: theme.text, fontWeight: "800" }}>{p.name}</Text>
-                <Text style={{ color: theme.muted, fontSize: 12 }}>
-                  {count} open task{count === 1 ? "" : "s"}
-                  {p.description ? ` · ${p.description}` : ""}
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.muted} />
-            </Pressable>
+            <SwipeDeleteRow key={p.id} label={p.name} onDelete={() => deleteProject(p)}>
+              <Pressable
+                onPress={() => void openWorkProject(p)}
+                style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              >
+                <View style={[styles.dot, { backgroundColor: p.color || theme.accent }]} />
+                <View style={styles.grow}>
+                  <Text style={{ color: theme.text, fontWeight: "800" }}>{p.name}</Text>
+                  <Text style={{ color: theme.muted, fontSize: 12 }}>
+                    {count} open task{count === 1 ? "" : "s"}
+                    {p.description ? ` · ${p.description}` : ""}
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={theme.muted} />
+              </Pressable>
+            </SwipeDeleteRow>
           );
         })
       ) : (
@@ -516,18 +540,19 @@ export function WorkDashboardScreen() {
     if (view === "projects") {
       return activeProjects.length ? (
         activeProjects.map((p) => (
-          <Pressable
-            key={p.id}
-            onPress={() => void openWorkProject(p)}
-            style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.border }]}
-          >
-            <View style={[styles.dot, { backgroundColor: p.color || theme.accent }]} />
-            <View style={styles.grow}>
-              <Text style={{ color: theme.text, fontWeight: "800" }}>{p.name}</Text>
-              {p.description ? <Text style={{ color: theme.muted, fontSize: 12 }}>{p.description}</Text> : null}
-            </View>
-            <Feather name="chevron-right" size={18} color={theme.muted} />
-          </Pressable>
+          <SwipeDeleteRow key={p.id} label={p.name} onDelete={() => deleteProject(p)}>
+            <Pressable
+              onPress={() => void openWorkProject(p)}
+              style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.border }]}
+            >
+              <View style={[styles.dot, { backgroundColor: p.color || theme.accent }]} />
+              <View style={styles.grow}>
+                <Text style={{ color: theme.text, fontWeight: "800" }}>{p.name}</Text>
+                {p.description ? <Text style={{ color: theme.muted, fontSize: 12 }}>{p.description}</Text> : null}
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.muted} />
+            </Pressable>
+          </SwipeDeleteRow>
         ))
       ) : (
         <Card><Empty title="No projects" body="Create a work project to get started." /></Card>
@@ -633,7 +658,11 @@ export function WorkDashboardScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView
+        contentContainerStyle={[styles.screen, styles.screenGrow]}
+        scrollIndicatorInsets={{ bottom: tabBarPad }}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.header}>
           <View style={styles.grow}>
             <Eyebrow>WORK OS</Eyebrow>
@@ -676,6 +705,7 @@ export function WorkDashboardScreen() {
         </ScrollView>
 
         {view === "dashboard" ? dashboard : subview}
+        <View style={{ height: tabBarPad }} />
       </ScrollView>
 
       <Modal visible={Boolean(composer)} animationType="slide" presentationStyle="pageSheet" onRequestClose={resetComposer}>
@@ -934,7 +964,8 @@ export function WorkDashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { padding: 20, paddingBottom: 36, gap: 12 },
+  screen: { padding: 20, paddingBottom: 20, gap: 12 },
+  screenGrow: { flexGrow: 1 },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   grow: { flex: 1, minWidth: 0 },
   iconBtn: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },

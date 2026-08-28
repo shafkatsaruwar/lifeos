@@ -8,6 +8,7 @@ import {
   type PencilKitViewRef,
 } from "../components/HandwritingCanvas";
 import { Page, SegmentedControl } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { htmlToPlainText } from "../lib/helpers";
 import type { NoteInk, NoteTemplate } from "../types";
@@ -40,6 +41,7 @@ function noteHasInk(ink: NoteInk | undefined) {
 }
 
 export function NoteEditorScreen() {
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const { theme, workspace, updateNotes } = useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -166,7 +168,7 @@ export function NoteEditorScreen() {
       ) : null}
 
       {mode === "type" ? (
-        <ScrollView contentContainerStyle={styles.body} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" style={styles.grow}>
+        <ScrollView contentContainerStyle={[styles.body, { paddingBottom: tabBarPad }]} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" style={styles.grow}>
           <View style={[styles.paper, paperStyle]}>
             <TextInput
               value={plainBody}

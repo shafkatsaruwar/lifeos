@@ -1,4 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
+import Constants from "expo-constants";
+import { initialWindowMetrics } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -17,6 +19,7 @@ import {
   View,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AnchoredPopover } from "../components/AnchoredPopover";
 import { DocumentZoom } from "../components/DocumentZoom";
 import {
@@ -36,7 +39,7 @@ import { buildPageAiContext, isNotebookAiAvailable, runNotebookAi } from "../lib
 import {
   isPdfPipelineAvailable,
   notebookPagesForExport,
-  pagesFromPdfImport,
+  applyPdfImportToNotebook,
   planPdfExport,
   planPdfImport,
   sharePdf,
@@ -64,6 +67,7 @@ import type {
   PageCanvasMode,
   PageImageElement,
   PageTextElement,
+  PaperOrientation,
 } from "../types";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -72,6 +76,34 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 
 function animatePageChange() {
   LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+}
+
+function pageScrollMetrics(
+  pages: NotebookPage[],
+  stageWidth: number,
+  fallbackWidth: number,
+) {
+  const widths = pages.map((p) =>
+    pageSizeForWidth(stageWidth > 0 ? stageWidth : fallbackWidth, p.paperOrientation, p.paperSize).height +
+    PAGE_GAP,
+  );
+  return widths;
+}
+
+function pageIndexAtScrollOffset(offsetY: number, strides: number[]) {
+  if (!strides.length) return 0;
+  let y = 0;
+  for (let i = 0; i < strides.length; i++) {
+    if (offsetY < y + strides[i] * 0.55) return i;
+    y += strides[i];
+  }
+  return strides.length - 1;
+}
+
+function scrollOffsetForPageIndex(strides: number[], index: number) {
+  let offset = 0;
+  for (let i = 0; i < index; i++) offset += strides[i] ?? 0;
+  return offset;
 }
 
 /**
@@ -85,6 +117,14 @@ export function PageCanvasScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { isTablet, isWide } = useLayout();
+  const insets = useSafeAreaInsets();
+  const windowTop = initialWindowMetrics?.insets.top ?? 0;
+  const statusBarHeight = Constants.statusBarHeight ?? 0;
+  const iosMinTop = isTablet ? 32 : 47;
+  const resolvedTop = Math.max(insets.top, windowTop, statusBarHeight);
+  /** fullScreenModal on iPad often reports 0 — use a real status-bar height. */
+  const chromePadTop = Math.max(insets.top, windowTop, statusBarHeight, resolvedTop < 20 ? iosMinTop : 0);
+  const chromePadRight = Math.max(insets.right, 8);
   const notebookId = route.params?.notebookId as string;
   const pageId = route.params?.pageId as string;
   const hub = workspace.notebookHub;
@@ -128,10 +168,17 @@ export function PageCanvasScreen() {
   const [zoomScale, setZoomScale] = useState(1);
   const pencilReady = isPencilKitAvailable();
 
+  const pageOrientation: PaperOrientation = page?.paperOrientation ?? "portrait";
+
   const sheetSize = useMemo(() => {
     const width = stageWidth > 0 ? stageWidth : isWide ? 640 : 360;
-    return pageSizeForWidth(width, page?.paperOrientation, page?.paperSize);
-  }, [stageWidth, isWide, page?.paperOrientation, page?.paperSize]);
+    return pageSizeForWidth(width, pageOrientation, page?.paperSize);
+  }, [stageWidth, isWide, pageOrientation, page?.paperSize]);
+
+  const pageStrides = useMemo(
+    () => pageScrollMetrics(pages, stageWidth, sheetSize.width),
+    [pages, stageWidth, sheetSize.width],
+  );
 
   useEffect(() => {
     setViewMode(workspace.settings.notebookPageView ?? "seamless");
@@ -229,8 +276,12 @@ export function PageCanvasScreen() {
       if (viewMode === "seamless") {
         const index = pages.findIndex((p) => p.id === nextPageId);
         if (index >= 0) {
+          const strides = pageScrollMetrics(pages, stageWidthRef.current, sheetSize.width);
           requestAnimationFrame(() => {
-            listRef.current?.scrollToIndex({ index, animated: opts?.animated ?? true, viewPosition: 0 });
+            listRef.current?.scrollToOffset({
+              offset: scrollOffsetForPageIndex(strides, index),
+              animated: opts?.animated ?? true,
+            });
           });
         }
       }
@@ -251,13 +302,16 @@ export function PageCanvasScreen() {
     if (scrollingRef.current) return;
     const timer = setTimeout(() => {
       try {
-        listRef.current?.scrollToIndex({ index: pageIndex, animated: false, viewPosition: 0 });
+        listRef.current?.scrollToOffset({
+          offset: scrollOffsetForPageIndex(pageStrides, pageIndex),
+          animated: false,
+        });
       } catch {
         /* layout may not be ready */
       }
     }, 16);
     return () => clearTimeout(timer);
-  }, [pageIndex, viewMode, stageWidth]);
+  }, [pageIndex, viewMode, stageWidth, pageStrides]);
 
   const touchPageCount = useCallback(
     async (count: number) => {
@@ -640,6 +694,16 @@ export function PageCanvasScreen() {
     requestAnimationFrame(action);
   };
 
+  const setPageOrientation = useCallback(
+    async (next: PaperOrientation) => {
+      const latest = pagesByIdRef.current[pageIdRef.current];
+      if (!latest || (latest.paperOrientation ?? "portrait") === next) return;
+      animatePageChange();
+      await flushInk();
+      await persistPageById(pageIdRef.current, { paperOrientation: next });
+    },
+    [flushInk, persistPageById],
+  );
   const inkInteractive = mode === "ink";
   const overlayInteractive = mode !== "ink";
   /** Finger can scroll pages while inking when Pencil owns drawing. */
@@ -650,9 +714,10 @@ export function PageCanvasScreen() {
   const onScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const offsetY = contentOffset.y;
-    const stride = sheetSize.height + PAGE_GAP;
-    const index = Math.max(0, Math.min(pages.length - 1, Math.round(offsetY / stride)));
+    const index = pageIndexAtScrollOffset(offsetY, pageStrides);
     const next = pages[index];
+    const currentHeight =
+      pageStrides[index] ? pageStrides[index] - PAGE_GAP : sheetSize.height;
     if (next && next.id !== pageIdRef.current) {
       ignoreScrollSyncRef.current = true;
       void flushInk().then(() => {
@@ -660,14 +725,11 @@ export function PageCanvasScreen() {
         navigation.setParams({ pageId: next.id });
       });
     }
-    // Near the document end → append the next page so scroll never dead-ends.
-    // Do this only on user scroll — never mid-stroke (appending reflows the list).
     const nearEnd =
-      offsetY + layoutMeasurement.height >= contentSize.height - Math.max(120, sheetSize.height * 0.35);
+      offsetY + layoutMeasurement.height >= contentSize.height - Math.max(120, currentHeight * 0.35);
     if (nearEnd && index >= pages.length - 1) {
       void ensureTrailingPage();
     }
-    // Clear after sync so late layout passes don't treat this as an active drag.
     scrollingRef.current = false;
   };
 
@@ -751,64 +813,78 @@ export function PageCanvasScreen() {
   }
 
   return (
-    <Page edges={["top", "bottom"]} fullBleed>
-      <View style={styles.chrome}>
-        <Pressable
-          accessibilityLabel="Back to pages"
-          onPress={() => navigation.goBack()}
-          style={({ pressed }) => [styles.chromeBtn, pressed && { opacity: 0.55 }]}
-        >
-          <Feather name="chevron-left" size={22} color={theme.text} />
-        </Pressable>
-        <View style={styles.chromeMid}>
-          <Text style={[styles.notebookName, { color: theme.text }]} numberOfLines={1}>
-            {notebook.name}
-          </Text>
-          <Text style={[styles.pageName, { color: theme.muted }]} numberOfLines={1}>
-            {page.title?.trim() || `Page ${page.index + 1}`}
-            {pageIndicator ? ` · ${pageIndicator}` : ""}
-          </Text>
-        </View>
-        <Pressable
-          accessibilityLabel={viewMode === "seamless" ? "Seamless view" : "Single page view"}
-          onPress={() => setPageView(viewMode === "seamless" ? "single" : "seamless")}
-          style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
-        >
-          <Feather name={viewMode === "seamless" ? "menu" : "square"} size={13} color={theme.muted} />
-          <Text style={[styles.viewChipText, { color: theme.muted }]}>
-            {viewMode === "seamless" ? "Seamless" : "Single"}
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityLabel={zoomScale > 1.01 ? "Reset zoom to 100%" : "Zoom to 160%"}
-          onPress={() => setZoomScale((z) => (z > 1.05 ? 1 : 1.6))}
-          style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
-        >
-          <Text style={[styles.viewChipText, { color: theme.muted }]}>
-            {`${Math.round(zoomScale * 100)}%`}
-          </Text>
-        </Pressable>
-        <Pressable accessibilityLabel="Previous page" disabled={pageIndex <= 0} onPress={() => goPage(-1)} style={[styles.chromeBtn, pageIndex <= 0 && { opacity: 0.3 }]}>
-          <Feather name="chevron-up" size={18} color={theme.text} />
-        </Pressable>
-        <Pressable
-          accessibilityLabel={pageIndex >= pages.length - 1 ? "Add page" : "Next page"}
-          onPress={() => {
-            if (pageIndex >= pages.length - 1) void addPage();
-            else goPage(1);
-          }}
-          style={styles.chromeBtn}
-        >
-          <Feather
-            name={pageIndex >= pages.length - 1 ? "plus" : "chevron-down"}
-            size={18}
-            color={theme.text}
-          />
-        </Pressable>
-        <View ref={moreBtnRef} collapsable={false}>
-          <Pressable accessibilityLabel="More" onPress={openMore} style={styles.chromeBtn}>
-            <Feather name="more-horizontal" size={18} color={theme.text} />
+    <Page edges={["bottom"]} fullBleed>
+      <View style={{ paddingTop: chromePadTop, paddingRight: chromePadRight, backgroundColor: theme.bg }}>
+        <View style={styles.chrome}>
+          <Pressable
+            accessibilityLabel="Back to pages"
+            onPress={() => navigation.goBack()}
+            style={({ pressed }) => [styles.chromeBtn, pressed && { opacity: 0.55 }]}
+          >
+            <Feather name="chevron-left" size={22} color={theme.text} />
           </Pressable>
+          <View style={styles.chromeMid}>
+            <Text style={[styles.notebookName, { color: theme.text }]} numberOfLines={1}>
+              {notebook.name || "Note"}
+            </Text>
+            <Text style={[styles.pageName, { color: theme.muted }]} numberOfLines={1}>
+              {page.title?.trim() || `Page ${page.index + 1}`}
+              {pageIndicator ? ` · ${pageIndicator}` : ""}
+            </Text>
+          </View>
+          <View ref={moreBtnRef} collapsable={false} style={styles.chromeBtnWrap}>
+            <Pressable accessibilityLabel="More" onPress={openMore} style={styles.chromeBtn}>
+              <Feather name="more-horizontal" size={20} color={theme.text} />
+            </Pressable>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chromeTrailingScroll}
+            contentContainerStyle={styles.chromeTrailing}
+          >
+            <Pressable
+              accessibilityLabel={viewMode === "seamless" ? "Seamless view" : "Single page view"}
+              onPress={() => setPageView(viewMode === "seamless" ? "single" : "seamless")}
+              style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
+            >
+              <Feather name={viewMode === "seamless" ? "menu" : "square"} size={13} color={theme.muted} />
+              <Text style={[styles.viewChipText, { color: theme.muted }]}>
+                {viewMode === "seamless" ? "Seamless" : "Single"}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel={zoomScale > 1.01 ? "Reset zoom to 100%" : "Zoom to 160%"}
+              onPress={() => setZoomScale((z) => (z > 1.05 ? 1 : 1.6))}
+              style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
+            >
+              <Text style={[styles.viewChipText, { color: theme.muted }]}>
+                {`${Math.round(zoomScale * 100)}%`}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Previous page"
+              disabled={pageIndex <= 0}
+              onPress={() => goPage(-1)}
+              style={[styles.chromeBtn, pageIndex <= 0 && { opacity: 0.3 }]}
+            >
+              <Feather name="chevron-up" size={18} color={theme.text} />
+            </Pressable>
+            <Pressable
+              accessibilityLabel={pageIndex >= pages.length - 1 ? "Add page" : "Next page"}
+              onPress={() => {
+                if (pageIndex >= pages.length - 1) void addPage();
+                else goPage(1);
+              }}
+              style={styles.chromeBtn}
+            >
+              <Feather
+                name={pageIndex >= pages.length - 1 ? "plus" : "chevron-down"}
+                size={18}
+                color={theme.text}
+              />
+            </Pressable>
+          </ScrollView>
         </View>
       </View>
 
@@ -868,6 +944,24 @@ export function PageCanvasScreen() {
           onPress={() => {
             setToolPanel("none");
             setTemplatePickerOpen(true);
+          }}
+        />
+        <ToolBtn
+          icon="smartphone"
+          label="Portrait page"
+          active={pageOrientation === "portrait"}
+          onPress={() => {
+            setToolPanel("none");
+            void setPageOrientation("portrait");
+          }}
+        />
+        <ToolBtn
+          icon="tablet"
+          label="Landscape page"
+          active={pageOrientation === "landscape"}
+          onPress={() => {
+            setToolPanel("none");
+            void setPageOrientation("landscape");
           }}
         />
         <ToolBtn
@@ -1002,6 +1096,7 @@ export function PageCanvasScreen() {
           <ScrollView style={styles.pageStrip} contentContainerStyle={styles.pageStripInner}>
             {pages.map((p) => {
               const active = p.id === pageId;
+              const landscape = (p.paperOrientation ?? "portrait") === "landscape";
               return (
                 <Pressable
                   key={p.id}
@@ -1014,6 +1109,7 @@ export function PageCanvasScreen() {
                   delayLongPress={350}
                   style={[
                     styles.stripItem,
+                    landscape ? styles.stripItemLandscape : styles.stripItemPortrait,
                     {
                       borderColor: active ? theme.accent : theme.border,
                       backgroundColor: theme.surface,
@@ -1083,8 +1179,12 @@ export function PageCanvasScreen() {
                   onScrollEnd(event);
                 }}
                 getItemLayout={(_, index) => {
-                  const stride = sheetSize.height + PAGE_GAP;
-                  return { length: stride, offset: stride * index, index };
+                  const stride = pageStrides[index] ?? sheetSize.height + PAGE_GAP;
+                  return {
+                    length: stride,
+                    offset: scrollOffsetForPageIndex(pageStrides, index),
+                    index,
+                  };
                 }}
                 initialScrollIndex={pageIndex >= 0 ? pageIndex : 0}
                 // Virtualization: placeholders beyond ±2 keep 100-page notes light.
@@ -1094,9 +1194,8 @@ export function PageCanvasScreen() {
                 initialNumToRender={Math.min(pages.length, 3)}
                 removeClippedSubviews={Platform.OS === "android"}
                 onScrollToIndexFailed={(info) => {
-                  const stride = sheetSize.height + PAGE_GAP;
                   listRef.current?.scrollToOffset({
-                    offset: stride * info.index,
+                    offset: scrollOffsetForPageIndex(pageStrides, info.index),
                     animated: false,
                   });
                 }}
@@ -1186,6 +1285,16 @@ export function PageCanvasScreen() {
               runMoreAction(() => setPageView(viewMode === "seamless" ? "single" : "seamless"))
             }
           />
+          <MenuRow
+            label="Portrait page"
+            detail={pageOrientation === "portrait" ? "Current" : undefined}
+            onPress={() => runMoreAction(() => void setPageOrientation("portrait"))}
+          />
+          <MenuRow
+            label="Landscape page"
+            detail={pageOrientation === "landscape" ? "Current" : undefined}
+            onPress={() => runMoreAction(() => void setPageOrientation("landscape"))}
+          />
         </MenuSection>
         <MenuSection label="Other">
           <MenuRow
@@ -1207,12 +1316,18 @@ export function PageCanvasScreen() {
             onPress={() =>
               runMoreAction(async () => {
                 if (!isPdfPipelineAvailable()) return;
+                await flushInk();
                 const plan = await planPdfImport();
                 if (!plan) return;
-                const created = pagesFromPdfImport(notebookId, plan, pages.length);
-                await Promise.all(created.map((p) => upsertNotebookPage(p)));
-                await touchPageCount(pages.length + created.length);
-                if (created[0]) await openCreatedPage(created[0].id);
+                const startAt = pageIndex >= 0 ? pageIndex : 0;
+                const { pages: nextPages } = await applyPdfImportToNotebook(
+                  notebookId,
+                  plan,
+                  pages,
+                  startAt,
+                );
+                await Promise.all(nextPages.map((p) => upsertNotebookPage(p)));
+                await touchPageCount(nextPages.length);
               })
             }
           />
@@ -1334,9 +1449,12 @@ function ToolBtn({
 
 const styles = StyleSheet.create({
   missing: { flex: 1, alignItems: "center", justifyContent: "center" },
-  chrome: { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingBottom: 4, gap: 2 },
-  chromeBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  chromeMid: { flex: 1, minWidth: 0, paddingHorizontal: 4 },
+  chrome: { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingBottom: 6, gap: 2, minHeight: 44 },
+  chromeBtnWrap: { flexShrink: 0 },
+  chromeBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  chromeMid: { flex: 1, minWidth: 0, paddingHorizontal: 4, flexShrink: 1 },
+  chromeTrailingScroll: { flexGrow: 0, flexShrink: 0, maxWidth: 220 },
+  chromeTrailing: { flexDirection: "row", alignItems: "center", gap: 2, paddingRight: 4 },
   notebookName: { fontSize: 15, fontWeight: "800" },
   pageName: { fontSize: 11, fontWeight: "700", marginTop: 1 },
   viewChip: {
@@ -1348,6 +1466,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     minHeight: 30,
     marginRight: 2,
+    flexShrink: 0,
   },
   viewChipText: { fontSize: 10, fontWeight: "800" },
   toolRail: {
@@ -1379,8 +1498,6 @@ const styles = StyleSheet.create({
   pageStripInner: { gap: 8, paddingBottom: 24, paddingTop: 2 },
   stripAdd: { borderStyle: "dashed", alignItems: "center", justifyContent: "center" },
   stripItem: {
-    width: 48,
-    height: 64,
     borderRadius: 10,
     borderWidth: 1.5,
     overflow: "hidden",
@@ -1388,6 +1505,8 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
+  stripItemPortrait: { width: 48, height: 64 },
+  stripItemLandscape: { width: 52, height: 38 },
   stripPaper: { ...StyleSheet.absoluteFillObject, opacity: 0.95 },
   stripBadge: {
     position: "absolute",

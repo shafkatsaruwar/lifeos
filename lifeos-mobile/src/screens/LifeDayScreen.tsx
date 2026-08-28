@@ -5,6 +5,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { DashboardRow, ModuleEmpty } from "../components/HubDashboard";
 import { RecordMemoryModal } from "../components/RecordMemoryModal";
 import { Eyebrow, IconButton, Page } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { deleteMemoryAudio, getExpoAv, removeDayMemory } from "../lib/dayMemories";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { toDateKey } from "../lib/helpers";
@@ -65,6 +66,7 @@ function signalIcon(kind: LifeSignalKind): keyof typeof Feather.glyphMap {
 
 export function LifeDayScreen() {
   const { theme, workspace, updateLife, updateSettings } = useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const todayKey = toDateKey(new Date());
   const [cursor, setCursor] = useState(() => new Date());
@@ -196,7 +198,7 @@ export function LifeDayScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <View style={styles.header}>
           <IconButton icon="chevron-left" label="Back" onPress={() => navigation.goBack()} />
           <View style={styles.grow}>

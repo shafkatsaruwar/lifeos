@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { Empty, Page, SegmentedControl } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { toDateKey, uid } from "../lib/helpers";
 import {
@@ -51,6 +52,7 @@ const CONFIG: Record<string, { title: string; subtitle: string; icon: keyof type
 
 export function HubCollectionScreen() {
   const { theme, workspace, updateLife, updateSchool } = useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const scope = (route.params?.scope ?? "life") as "life" | "school";
@@ -162,7 +164,7 @@ export function HubCollectionScreen() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.screen} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]} keyboardShouldPersistTaps="handled">
         {adding ? (
           <View style={[styles.composer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Text style={[styles.composerTitle, { color: theme.text }]}>New {config.title.toLowerCase().replace(/s$/, "")}</Text>

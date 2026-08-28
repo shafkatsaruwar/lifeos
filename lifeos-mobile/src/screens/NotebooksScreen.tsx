@@ -17,6 +17,7 @@ import { useNavigation } from "@react-navigation/native";
 import { CreateNoteModal } from "../components/CreateNoteModal";
 import { NotebookCoverFace } from "../components/NotebookCoverFace";
 import { Empty, Page } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { LibrarySubNav } from "../components/LibrarySubNav";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { uid } from "../lib/helpers";
@@ -52,6 +53,7 @@ const QUICK_BG = {
 } as const;
 
 export function NotebooksScreen() {
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const { theme, dark, workspace, updateNotebookHub, upsertNotebookPage, deleteNotebookPage } =
     useLifeOS();
   const navigation = useNavigation<any>();
@@ -419,7 +421,7 @@ export function NotebooksScreen() {
   const sidebar = (
     <ScrollView
       style={[styles.sidebar, { width: SIDEBAR_W, borderRightColor: theme.border }]}
-      contentContainerStyle={styles.sidebarInner}
+      contentContainerStyle={[styles.sidebarInner, { paddingBottom: tabBarPad }]}
       showsVerticalScrollIndicator={false}
     >
       <Text style={[styles.brand, { color: theme.text }]}>Library</Text>
@@ -586,7 +588,7 @@ export function NotebooksScreen() {
                 keyExtractor={(item) => `${item.kind}-${item.id}`}
                 numColumns={columns}
                 columnWrapperStyle={columns > 1 ? { gap: gutter } : undefined}
-                contentContainerStyle={[styles.grid, { paddingHorizontal: mainPad, gap: gutter }]}
+                contentContainerStyle={[styles.grid, { paddingHorizontal: mainPad, gap: gutter, paddingBottom: tabBarPad }]}
                 renderItem={renderItem}
                 ListEmptyComponent={empty}
               />
@@ -608,7 +610,7 @@ export function NotebooksScreen() {
                   {searchField}
                 </View>
               }
-              contentContainerStyle={[styles.grid, { paddingHorizontal: mainPad, gap: gutter }]}
+              contentContainerStyle={[styles.grid, { paddingHorizontal: mainPad, gap: gutter, paddingBottom: tabBarPad }]}
               renderItem={renderItem}
               ListEmptyComponent={empty}
             />

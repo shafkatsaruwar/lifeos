@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { ActionButton, Eyebrow, IconButton, Page, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { SearchModal } from "../components/SearchModal";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatAmbientDuration, getGreeting, taskIsOpen } from "../lib/helpers";
@@ -16,6 +17,7 @@ export function NowScreen() {
   const { workspace, theme, updateSettings, updateTasks } = useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const [focusOpen, setFocusOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
@@ -67,7 +69,7 @@ export function NowScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <View style={styles.headerRow}>
           <View style={styles.grow}>
             <Eyebrow>ONE THING, ON PURPOSE</Eyebrow>

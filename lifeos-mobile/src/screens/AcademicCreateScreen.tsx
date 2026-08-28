@@ -3,6 +3,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Page, SegmentedControl } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { toDateKey, uid } from "../lib/helpers";
 import type { AcademicItemType, Priority } from "../types";
@@ -20,6 +21,7 @@ const LABELS: Record<CreateKind, { title: string; prompt: string }> = {
 export function AcademicCreateScreen() {
   const { theme, workspace, updateClasses, updateTasks, updateSchool, updateNotebookHub, upsertNotebookPage } =
     useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const kind = (route.params?.kind ?? "assignment") as CreateKind;
@@ -131,7 +133,7 @@ export function AcademicCreateScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.form, { paddingBottom: tabBarPad }]} keyboardShouldPersistTaps="handled">
         {needsClass ? (
           <View style={styles.field}>
             <Text style={[styles.label, { color: theme.text }]}>Course</Text>

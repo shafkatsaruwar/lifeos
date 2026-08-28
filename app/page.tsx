@@ -52,7 +52,7 @@ import { NLTaskCreationModal } from "@/app/components/NLTaskCreationModal";
 import { FocusFlowView, type FlowScreen } from "@/app/components/FocusFlow/FocusFlowView";
 import {
   HubCollectionModal, LifeDashboard, SchoolClassPickerModal, SchoolDashboard, SchoolProfileModal, WorkDashboard,
-  emptyLifeHub, emptySchoolHub, emptyWorkHub, isSampleWorkHub, formatWorkMeetingWhere,
+  emptyLifeHub, emptySchoolHub, emptyWorkHub, isSampleWorkHub, formatWorkMeetingWhere, removeWorkProject,
   type HubCollectionTarget, type LifeHubKey, type LifeHubState, type SchoolHubKey, type SchoolHubState,
   type WorkHubState, type WorkProject, type WorkDeliverable, type WorkTask, type WorkMeeting, type WorkView, type SchoolView,
 } from "@/app/components/OSDashboards";
@@ -117,6 +117,11 @@ const viewFromLocation = (): View => {
   if (typeof window === "undefined") return "Now";
   return routedViews[new URLSearchParams(window.location.search).get("view")?.toLowerCase() ?? ""] ?? "Now";
 };
+type CalendarDefaultView = "upcoming" | "month" | "day";
+
+const normalizeCalendarDefaultView = (value: unknown): CalendarDefaultView =>
+  value === "month" || value === "day" || value === "upcoming" ? value : "upcoming";
+
 type SettingsState = {
   accent: string;
   dailyDigest: boolean;
@@ -126,6 +131,8 @@ type SettingsState = {
   defaultFocusMinutes: number;
   defaultEnergy: EnergyLevel;
   weekStartsMonday: boolean;
+  /** Initial Calendar tab when opening Today / Calendar. */
+  defaultCalendarView: CalendarDefaultView;
   compactMode: boolean;
   reduceMotion: boolean;
   nowTaskId?: number | null;
@@ -208,6 +215,7 @@ const initialSettings: SettingsState = {
   defaultFocusMinutes: 45,
   defaultEnergy: "Medium",
   weekStartsMonday: false,
+  defaultCalendarView: "upcoming",
   compactMode: false,
   reduceMotion: false,
   nowTaskId: null,
@@ -1734,6 +1742,11 @@ export default function LifeOS() {
     setProjectItems(items => items.filter(project => project.name !== name));
     setTasks(items => items.map(task => task.project === name ? { ...task, project: "Inbox", color: "#625af6" } : task));
     setNotes(items => items.map(note => note.projectName === name ? { ...note, projectName: undefined } : note));
+    // Work OS keeps its own project list — drop any Work project with the same name too.
+    setWorkHub(hub => {
+      const workProject = hub.projects.find(project => project.name === name);
+      return workProject ? removeWorkProject(hub, workProject.id) : hub;
+    });
     setActionProjectName(null);
     setSelectedProjectName(null);
     flash("Project deleted");
@@ -2193,13 +2206,19 @@ export default function LifeOS() {
           <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Work" || view === "Study Abroad" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
             {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarFeed} workspaceName={workspaceName} onComplete={complete} onOpenTask={openTaskPage} onOpenProject={openProjectSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => openSpacesList("Projects")} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} enableMasterOS={settingsState.enableMasterOS !== false} />}
             {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} schoolView={schoolView} onChangeView={setSchoolView} schoolFocusTaskId={schoolFocusTaskId} onSelectFocusTask={setSchoolFocusTaskId} onComplete={complete} onOpenTask={openTaskPage} onOpenClass={openClassSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={(id) => { setSchoolFocusTaskId(id); openFocus(id); }} onOpenCalendar={() => go("Calendar")} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} enableMasterOS={settingsState.enableMasterOS !== false} />}
-            {view === "Work" && <WorkDashboard workHub={workHub} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => openSpacesList("Projects")} />}
+            {view === "Work" && <WorkDashboard workHub={workHub} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => setWorkView("projects")} onProjectDeleted={(name) => {
+              setProjectItems(items => items.filter(project => project.name !== name));
+              setTasks(items => items.map(task => task.project === name ? { ...task, project: "Inbox", color: "#625af6" } : task));
+              setNotes(items => items.map(note => note.projectName === name ? { ...note, projectName: undefined } : note));
+              setSelectedProjectName(current => current === name ? null : current);
+              flash(`Deleted ${name}`);
+            }} />}
             {view === "Study Abroad" && <StudyAbroadDashboard hub={studyAbroadHub} studyView={studyAbroadView} onChangeView={setStudyAbroadView} onChange={setStudyAbroadHub} workspaceName={workspaceName} onOpenCalendar={() => go("Calendar")} onFocusStudyTask={focusStudyAbroadTask} focusEntity={studyAbroadFocusEntity} onFocusEntityConsumed={() => setStudyAbroadFocusEntity(null)} />}
             {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableMasterOS={settingsState.enableMasterOS !== false} flash={flash} />}
             {view === "Flow" && <FocusFlowView screen={flowScreen} onScreenChange={setFlowScreen} tasks={tasks} projects={[...projectItems.map(project => project.name), ...classes.map(item => item.code)]} events={calendarFeed} weeklyPlan={weeklyPlan} momentumLog={settingsState.momentumLog ?? []} nowTaskId={settingsState.nowTaskId ?? null} today={toDateKey(new Date())} onFocus={openFocus} onChoose={chooseNowTask} onComplete={complete} onAddTask={(title, options, projectName) => addTask(title, undefined, projectName && projectName !== "Inbox" ? projectName : "", options)} onAddProject={(name) => addProject(name)} onUpdateTask={updateTaskDetails} onAddCalendarEvent={addCalendarEvent} onSetWeeklyPlan={setWeeklyPlan} onOpenCalendar={() => go("Calendar")} flash={flash} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
             {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} />}
-            {(view === "Today" || view === "Calendar") && <CalendarView events={calendarFeed} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => { if (id.startsWith("task-")) openTaskPage(Number(id.slice(5))); else if (id.startsWith("work-meet-")) { setWorkView("calendar"); go("Work"); } else setEditingCalendarEventId(id); }} onPlanTask={setEditingTaskId} />}
+            {(view === "Today" || view === "Calendar") && <CalendarView events={calendarFeed} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} defaultView={normalizeCalendarDefaultView(settingsState.defaultCalendarView)} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => { if (id.startsWith("task-")) openTaskPage(Number(id.slice(5))); else if (id.startsWith("work-meet-")) { setWorkView("calendar"); go("Work"); } else setEditingCalendarEventId(id); }} onPlanTask={setEditingTaskId} />}
             {view === "Notes" && <NotesView notes={notes} classes={classes} projects={projectItems} selectedNoteId={selectedNoteId} onSelect={setSelectedNoteId} onCreate={() => createNote()} onUpdate={updateNote} onDelete={deleteNote} onImport={importNotes} />}
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
@@ -2299,6 +2318,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   const [suggestedCommandIndex, setSuggestedCommandIndex] = useState(-1);
   const [queueOpen, setQueueOpen] = useState(false);
   const [dragQueueId, setDragQueueId] = useState<number | null>(null);
+  const captureInputRef = useRef<HTMLInputElement | null>(null);
   const captureBlurTimer = useRef<number | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -2415,6 +2435,14 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   const handleCaptureBlur = () => {
     captureBlurTimer.current = window.setTimeout(() => setCaptureFocused(false), 160);
   };
+  /** After a command runs, clear + unfocus so the help list does not pop back open. */
+  const finishCaptureCommand = () => {
+    if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current);
+    setCaptureInput("");
+    setSuggestedCommandIndex(-1);
+    setCaptureFocused(false);
+    captureInputRef.current?.blur();
+  };
   const handleCaptureKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -2431,14 +2459,14 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
         const cmd = filtered[suggestedCommandIndex];
         if (['/w', '/break', '/a', '/focus', '/flow', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
           runInstantCommand(cmd.shortcut);
-          setCaptureInput('');
+          finishCaptureCommand();
         } else {
           setCaptureInput(cmd.shortcut + ' ');
+          setSuggestedCommandIndex(-1);
         }
-        setSuggestedCommandIndex(-1);
       } else if (val) {
         if (runInstantCommand(val)) {
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/t ')) {
           const taskTitle = val.slice(3).trim();
           if (taskTitle) {
@@ -2448,7 +2476,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               else onChoose(id);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/tm ')) {
           const taskTitle = val.slice(4).trim();
           if (taskTitle) {
@@ -2463,24 +2491,24 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               else onChoose(id);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/proj ')) {
           const projectName = val.slice(6).trim();
           if (projectName) onAddProject(projectName);
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/asg ')) {
           const assignmentTitle = val.slice(5).trim();
           if (assignmentTitle) onAddAssignment(assignmentTitle);
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/note ')) {
           const noteTitle = val.slice(6).trim();
           if (noteTitle) onAddNote(noteTitle);
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableWorkOS && val.startsWith('/w proj ')) {
           const projName = val.slice(8).trim() || 'New Project';
           const newProj: WorkProject = { id: `proj-${Date.now()}`, name: projName, color: '#625af6', status: 'active', createdAt: new Date().toISOString() };
           onSetWorkHub((current: WorkHubState) => ({ ...current, projects: [...current.projects, newProj] }));
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableWorkOS && val.startsWith('/w deliver ')) {
           const title = val.slice(11).trim() || 'New deliverable';
           onSetWorkHub((current: WorkHubState) => {
@@ -2489,7 +2517,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             const deliverable: WorkDeliverable = { id: `del-${Date.now()}`, projectId: project.id, title, type: 'document', status: 'planned', priority: 'medium', dueDate: toDateKey(new Date()), createdAt: new Date().toISOString() };
             return { ...current, deliverables: [...current.deliverables, deliverable] };
           });
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableWorkOS && val.startsWith('/w task ')) {
           const title = val.slice(8).trim() || 'New task';
           onSetWorkHub((current: WorkHubState) => {
@@ -2498,12 +2526,12 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             const task: WorkTask = { id: `task-${Date.now()}`, deliverableId: deliverable.id, title, status: 'open', priority: 'medium', dueDate: toDateKey(new Date()), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
             return { ...current, tasks: [...current.tasks, task] };
           });
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableWorkOS && val.startsWith('/w meet ')) {
           const meetTitle = val.slice(8).trim() || 'New Meeting';
           const newMeet: WorkMeeting = { id: `meet-${Date.now()}`, title: meetTitle, start: new Date().toISOString(), type: 'other', createdAt: new Date().toISOString() };
           onSetWorkHub((current: WorkHubState) => ({ ...current, meetings: [...current.meetings, newMeet] }));
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa country ')) {
           const name = val.slice(12).trim();
           if (name) {
@@ -2514,7 +2542,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             }, 'Added country', name, 'country'));
             flash(`Country added: ${name}`);
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa uni ')) {
           const name = val.slice(8).trim();
           if (name) {
@@ -2529,7 +2557,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               flash(`University added: ${name}`);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa prog ')) {
           const name = val.slice(9).trim();
           if (name) {
@@ -2544,7 +2572,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               flash(`Program added: ${name}`);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa app ')) {
           const name = val.slice(8).trim();
           const program = name
@@ -2560,7 +2588,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             }, 'Started application', program.name, 'application'));
             flash(`Application started: ${program.name}`);
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && (val.startsWith('/sa fund ') || val.startsWith('/sa scholarship '))) {
           const name = val.startsWith('/sa scholarship ') ? val.slice(16).trim() : val.slice(9).trim();
           if (name) {
@@ -2571,7 +2599,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             }, 'Added funding', name, 'funding'));
             flash(`Scholarship added: ${name}`);
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa task ')) {
           const title = val.slice(9).trim();
           if (title) {
@@ -2589,7 +2617,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               flash(`Study Abroad task: ${title}`);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa note ')) {
           const title = val.slice(9).trim();
           if (title) {
@@ -2601,10 +2629,10 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             }, 'Added knowledge note', title, 'general'));
             flash(`Study Abroad note: ${title}`);
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (!val.startsWith('/')) {
           onStartAmbient();
-          setCaptureInput('');
+          finishCaptureCommand();
         }
       }
     }
@@ -2654,6 +2682,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
         <section className="capture-bar-section" title="Capture commands: /t, /break, /focus, and more">
           <span className="section-icon blue"><Command size={16} /></span>
           <input
+            ref={captureInputRef}
             type="text"
             placeholder="Click for commands, or type /"
             value={captureInput}
@@ -2677,12 +2706,12 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
                   onClick={() => {
                     if (['/w', '/break', '/a', '/focus', '/flow', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
                       runInstantCommand(cmd.shortcut);
-                      setCaptureInput('');
-                      setCaptureFocused(false);
+                      finishCaptureCommand();
                     } else {
                       setCaptureInput(cmd.shortcut + " ");
+                      setSuggestedCommandIndex(-1);
+                      captureInputRef.current?.focus();
                     }
-                    setSuggestedCommandIndex(-1);
                   }}
                 >
                   <strong>{cmd.shortcut}</strong>
@@ -3434,10 +3463,13 @@ function LegacyCalendarView({ events, weekStartsMonday, onNew, onImport, onEdit 
   return <><div className="page-title"><div><p className="eyebrow">Protect your time</p><h1>Calendar</h1><p>Manual planning plus iCal imports from Apple Calendar, school, work, or anything that exports `.ics`.</p></div><div className="calendar-actions"><div className="calendar-mode-tabs"><button className={mode === "month" ? "selected" : ""} onClick={() => setMode("month")}><CalendarDays size={14} /> Month</button><button className={mode === "day" ? "selected" : ""} onClick={() => setMode("day")}><Clock3 size={14} /> Day</button></div><button onClick={onImport}><Link2 size={16} /> Import iCal</button><button className="primary" onClick={() => onNew(selected)}><Plus size={16} /> Add event</button></div></div><div className="calendar-layout"><section className="card calendar-card">{mode === "month" ? <><div className="calendar-toolbar"><button onClick={() => changeMonth(-1)}>←</button><strong>{cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</strong><button onClick={() => changeMonth(1)}>→</button></div><div className="calendar-weekdays">{weekDays.map(day => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{days.map(day => { const key = toDateKey(day); const dayEvents = events.filter(event => event.start.slice(0, 10) === key); return <button key={key} className={`${day.getMonth() !== cursor.getMonth() ? "muted" : ""} ${key === selected ? "selected" : ""} ${key === toDateKey(new Date()) ? "today" : ""}`} onClick={() => selectDay(key)}><span>{day.getDate()}</span><div>{dayEvents.slice(0, 3).map(event => <i key={event.id} style={{ background: event.color }} title={event.title} />)}</div>{dayEvents.length > 3 && <small>+{dayEvents.length - 3}</small>}</button>; })}</div></> : <><div className="calendar-toolbar day-toolbar"><button onClick={() => changeDay(-1)}>←</button><div><strong>{selectedLabel}</strong><span>{selectedEvents.length ? `${selectedEvents.length} scheduled event${selectedEvents.length === 1 ? "" : "s"}` : "Open day"}</span></div><button onClick={() => changeDay(1)}>→</button></div><div className="day-jump-row"><button onClick={() => changeDay(-1)}>Yesterday</button><button onClick={() => { const today = new Date(); setSelected(toDateKey(today)); setCursor(new Date(today.getFullYear(), today.getMonth(), 1)); }}>Today</button><button onClick={() => changeDay(1)}>Tomorrow</button></div><div className="day-timeline"><div className="day-hours">{hours.map(hour => <div key={hour} className="day-hour"><span>{new Date(`${selected}T${String(hour).padStart(2, "0")}:00`).toLocaleTimeString("en-US", { hour: "numeric" })}</span></div>)}</div><div className="day-events-layer">{selectedIsToday && <div className="now-line" style={{ top: `${nowTop}%` }}><span>Now</span></div>}{selectedEvents.map(event => <button key={event.id} className="day-event-block" style={eventBlockStyle(event)} onClick={() => onEdit(event.id)}><strong>{event.title}</strong><span>{formatEventTime(event.start)}{event.end ? ` – ${formatEventTime(event.end)}` : ""}</span>{event.notes && <small>{event.notes}</small>}</button>)}</div></div></>}</section><aside className="calendar-side"><section className="card agenda-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>{selectedLabel}</h2></div><span className="count">{selectedEvents.length} events</span></div><div className="agenda-list">{selectedEvents.length ? selectedEvents.map(event => <button className="agenda-item editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventTime(event.start)}{event.end ? ` – ${formatEventTime(event.end)}` : ""} · {event.source}</p>{event.notes && <small>{event.notes}</small>}</div><Pencil size={14} /></button>) : <div className="priority-empty"><strong>Nothing scheduled.</strong><p>That white space is not a bug. Protect it.</p></div>}</div></section><section className="card agenda-card"><div className="card-head"><div><span className="section-icon violet"><Clock3 size={14} /></span><h2>Today</h2></div><span className="count">{todayEvents.length}</span></div><div className="agenda-list">{todayEvents.slice(0, 4).map(event => <button className="agenda-item compact editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventTime(event.start)}</p></div><Pencil size={14} /></button>)}</div></section></aside></div></>;
 }
 
-function CalendarView({ events, tasks, weekStartsMonday, onNew, onImport, onEdit, onPlanTask }: { events: CalendarEvent[]; tasks: Task[]; weekStartsMonday: boolean; onNew: (date: string) => void; onImport: () => void; onEdit: (id: string) => void; onPlanTask: (id: number) => void }) {
+function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming", onNew, onImport, onEdit, onPlanTask }: { events: CalendarEvent[]; tasks: Task[]; weekStartsMonday: boolean; defaultView?: CalendarDefaultView; onNew: (date: string) => void; onImport: () => void; onEdit: (id: string) => void; onPlanTask: (id: number) => void }) {
   const [cursor, setCursor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => toDateKey(new Date()));
-  const [mode, setMode] = useState<"month" | "day" | "upcoming">("upcoming");
+  const [mode, setMode] = useState<CalendarDefaultView>(() => normalizeCalendarDefaultView(defaultView));
+  useEffect(() => {
+    setMode(normalizeCalendarDefaultView(defaultView));
+  }, [defaultView]);
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const gridStart = new Date(monthStart);
   const firstDayOffset = weekStartsMonday ? (monthStart.getDay() + 6) % 7 : monthStart.getDay();
@@ -3891,7 +3923,7 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
     const permission = await Notification.requestPermission();
     flash(permission === "granted" ? "Browser notifications enabled" : "Notifications not enabled");
   };
-  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Appearance</h2></div></div><div className="settings-body"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{SPACE_COLORS.map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><ToggleRow title="Compact mode" desc="Tighten spacing when you want more on screen." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions for lower sensory load." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Settings size={14} /></span><h2>Environments</h2></div></div><div className="settings-body"><ToggleRow title="LifeOS" desc="Personal task management and life organization." checked={settings.enableLifeOS !== false} onChange={(enableLifeOS) => update({ enableLifeOS })} /><ToggleRow title="SchoolOS" desc="Academic coursework, assignments, and learning." checked={settings.enableSchoolOS !== false} onChange={(enableSchoolOS) => update({ enableSchoolOS })} /><ToggleRow title="WorkOS" desc="Professional projects, tasks, and deliverables." checked={settings.enableWorkOS !== false} onChange={(enableWorkOS) => update({ enableWorkOS })} /><ToggleRow title="Study Abroad" desc="Multi-country research and applications for studying abroad." checked={settings.enableStudyAbroad !== false} onChange={(enableStudyAbroad) => update({ enableStudyAbroad })} /><ToggleRow title="MasterOS" desc="Teaching app — classes, lessons, whiteboard, gradebook. Web + iPad only; not on iPhone." checked={settings.enableMasterOS !== false} onChange={(enableMasterOS) => update({ enableMasterOS })} />{settings.enableMasterOS !== false && <p className="settings-note"><a href="/masteros">Open MasterOS</a> · type <code>/mos</code> on Now · sidebar under Environments.</p>}</div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><Archive size={14} /></span><h2>Archives</h2></div><span className="count">{archivedTasks.length}</span></div><div className="settings-body"><p className="settings-note">Done and canceled tasks live here so your active lists stay clear. Restore any of them to put it back on your active list.</p><div className="agenda-list">{archivedTasks.length ? archivedTasks.slice(0, 40).map((task) => <div key={task.id} className="agenda-item compact archived-task-row"><i style={{ background: task.color || "var(--accent)" }} /><button type="button" className="archived-task-open" onClick={() => onOpenTask?.(task.id)}><strong>{task.title}</strong><p>{task.canceled || task.status === "Canceled" ? "Canceled" : "Done"}{task.project ? ` · ${task.project}` : ""}{task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</p></button><button type="button" className="archived-task-restore" onClick={() => onRestoreTask?.(task.id)}>Restore</button></div>) : <div className="priority-empty"><strong>No archived tasks yet.</strong><p>When you mark something done or canceled, it shows up here.</p></div>}</div></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body"><ToggleRow title="Show capture commands" desc="When you click the Now capture bar, show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} /><div className="shortcut-list" style={{ marginTop: 12 }}><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>/t</kbd><span>Add task (Now capture bar)</span></div><div><kbd>/break</kbd><span>Take a break</span></div><div><kbd>/focus</kbd><span>Start focus</span></div><div><kbd>/w</kbd><span>Start ambient activity</span></div><div><kbd>/a</kbd><span>AI task</span></div><div><kbd>/spaces</kbd><span>Open Spaces</span></div><div><kbd>/mos</kbd><span>Open MasterOS (web / iPad)</span></div></div><p className="settings-note">Capture commands live in the Now capture bar. Type / to filter after you hide the cheatsheet.</p></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
+  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Appearance</h2></div></div><div className="settings-body"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{SPACE_COLORS.map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><ToggleRow title="Compact mode" desc="Tighten spacing when you want more on screen." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions for lower sensory load." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><div className="settings-calendar-default"><span className="settings-field-label">Default view</span><p className="settings-note" style={{ margin: "4px 0 10px" }}>Opens Calendar on this tab first.</p><div className="calendar-mode-tabs" role="group" aria-label="Default calendar view">{(["upcoming", "month", "day"] as CalendarDefaultView[]).map(option => <button key={option} type="button" className={normalizeCalendarDefaultView(settings.defaultCalendarView) === option ? "selected" : ""} onClick={() => update({ defaultCalendarView: option })}>{option === "upcoming" ? "Upcoming" : option === "month" ? "Month" : "Day"}</button>)}</div></div><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Settings size={14} /></span><h2>Environments</h2></div></div><div className="settings-body"><ToggleRow title="LifeOS" desc="Personal task management and life organization." checked={settings.enableLifeOS !== false} onChange={(enableLifeOS) => update({ enableLifeOS })} /><ToggleRow title="SchoolOS" desc="Academic coursework, assignments, and learning." checked={settings.enableSchoolOS !== false} onChange={(enableSchoolOS) => update({ enableSchoolOS })} /><ToggleRow title="WorkOS" desc="Professional projects, tasks, and deliverables." checked={settings.enableWorkOS !== false} onChange={(enableWorkOS) => update({ enableWorkOS })} /><ToggleRow title="Study Abroad" desc="Multi-country research and applications for studying abroad." checked={settings.enableStudyAbroad !== false} onChange={(enableStudyAbroad) => update({ enableStudyAbroad })} /><ToggleRow title="MasterOS" desc="Teaching app — classes, lessons, whiteboard, gradebook. Web + iPad only; not on iPhone." checked={settings.enableMasterOS !== false} onChange={(enableMasterOS) => update({ enableMasterOS })} />{settings.enableMasterOS !== false && <p className="settings-note"><a href="/masteros">Open MasterOS</a> · type <code>/mos</code> on Now · sidebar under Environments.</p>}</div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><Archive size={14} /></span><h2>Archives</h2></div><span className="count">{archivedTasks.length}</span></div><div className="settings-body"><p className="settings-note">Done and canceled tasks live here so your active lists stay clear. Restore any of them to put it back on your active list.</p><div className="agenda-list">{archivedTasks.length ? archivedTasks.slice(0, 40).map((task) => <div key={task.id} className="agenda-item compact archived-task-row"><i style={{ background: task.color || "var(--accent)" }} /><button type="button" className="archived-task-open" onClick={() => onOpenTask?.(task.id)}><strong>{task.title}</strong><p>{task.canceled || task.status === "Canceled" ? "Canceled" : "Done"}{task.project ? ` · ${task.project}` : ""}{task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</p></button><button type="button" className="archived-task-restore" onClick={() => onRestoreTask?.(task.id)}>Restore</button></div>) : <div className="priority-empty"><strong>No archived tasks yet.</strong><p>When you mark something done or canceled, it shows up here.</p></div>}</div></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body"><ToggleRow title="Show capture commands" desc="When you click the Now capture bar, show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} /><div className="shortcut-list" style={{ marginTop: 12 }}><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>/t</kbd><span>Add task (Now capture bar)</span></div><div><kbd>/break</kbd><span>Take a break</span></div><div><kbd>/focus</kbd><span>Start focus</span></div><div><kbd>/w</kbd><span>Start ambient activity</span></div><div><kbd>/a</kbd><span>AI task</span></div><div><kbd>/spaces</kbd><span>Open Spaces</span></div><div><kbd>/mos</kbd><span>Open MasterOS (web / iPad)</span></div></div><p className="settings-note">Capture commands live in the Now capture bar. Type / to filter after you hide the cheatsheet.</p></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
 }
 
 function BrainView({ items, onCapture, onArchive }: { items: string[]; onCapture: () => void; onArchive: (index: number) => void }) {

@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { ActionButton, Eyebrow, Page, Subtitle, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { taskIsOpen, toDateKey } from "../lib/helpers";
 import { parseGoalPlan, coachDay } from "../lib/api";
@@ -33,6 +34,7 @@ const SCREENS: { key: FlowScreen; label: string }[] = [
 
 export function FocusFlowScreen() {
   const { workspace, theme, updateTasks, updateSettings, updateCalendar, updateProjects } = useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const [screen, setScreen] = useState<FlowScreen>("talk");
   const [goalText, setGoalText] = useState("");
@@ -197,7 +199,7 @@ export function FocusFlowScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.back} hitSlop={12}>
           <Feather name="chevron-left" size={22} color={theme.text} />
         </Pressable>

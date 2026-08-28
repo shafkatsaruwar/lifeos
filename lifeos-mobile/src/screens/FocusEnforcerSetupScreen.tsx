@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { ActionButton, Card, Page, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import {
   createFocusEnforcerSession,
@@ -37,6 +38,7 @@ export function FocusEnforcerSetupScreen() {
   const taskId = Number(route.params?.taskId);
   const task = workspace.tasks.find((t) => t.id === taskId);
   const colorScheme = useColorScheme();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const pickerTheme = colorScheme === "dark" ? "dark" : "light";
 
   const defaultStart = useMemo(() => roundToNextFiveMinutes(new Date()), []);
@@ -98,7 +100,7 @@ export function FocusEnforcerSetupScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.back}>
           <Feather name="chevron-left" size={22} color={theme.accent} />
           <Text style={{ color: theme.accent, fontWeight: "700" }}>Back</Text>

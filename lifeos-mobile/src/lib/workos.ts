@@ -76,6 +76,20 @@ export type WorkHubState = {
   meetings: WorkMeeting[];
 };
 
+/** Remove a Work OS project and cascade its deliverables, tasks, and meetings. */
+export function removeWorkProject(hub: WorkHubState, projectId: string): WorkHubState {
+  const deliverableIds = new Set(
+    hub.deliverables.filter((item) => item.projectId === projectId).map((item) => item.id),
+  );
+  return {
+    ...hub,
+    projects: hub.projects.filter((item) => item.id !== projectId),
+    deliverables: hub.deliverables.filter((item) => item.projectId !== projectId),
+    tasks: hub.tasks.filter((item) => !deliverableIds.has(item.deliverableId)),
+    meetings: hub.meetings.filter((item) => item.projectId !== projectId),
+  };
+}
+
 export type WorkView =
   | "dashboard"
   | "tasks"

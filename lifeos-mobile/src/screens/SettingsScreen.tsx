@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { signOut } from "firebase/auth";
 import { ActionButton, Card, Eyebrow, Page, SegmentedControl, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { API_BASE } from "../lib/api";
 import { useLayout } from "../lib/layout";
@@ -18,12 +19,13 @@ import {
 import { resolveNotificationPrefs } from "../lib/notifications";
 import { mergeSynapseCalendarEvents, parseSynapseDayPlan } from "../lib/synapseImport";
 import { SPACE_COLORS } from "../lib/theme";
-import type { EnergyLevel, ThemeMode } from "../types";
+import type { CalendarDefaultView, EnergyLevel, ThemeMode } from "../types";
 
 export function SettingsScreen() {
   const navigation = useNavigation<any>();
   const { user, workspace, theme, dark, updateSettings, updateCalendar, sync, startOnboardingReplay } = useLifeOS();
   const { isTablet } = useLayout();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const notifPrefs = resolveNotificationPrefs(workspace.settings);
   const [name, setName] = useState(workspace.settings.preferredName ?? "");
   const [synapsePaste, setSynapsePaste] = useState("");
@@ -77,8 +79,13 @@ export function SettingsScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={[styles.screen, workspace.settings.compactMode && styles.screenCompact]}>
-        <Eyebrow>YOUR LIFEOS</Eyebrow>
+      <ScrollView
+        contentContainerStyle={[
+          styles.screen,
+          { paddingBottom: tabBarPad },
+          workspace.settings.compactMode && styles.screenCompact,
+        ]}
+      >        <Eyebrow>YOUR LIFEOS</Eyebrow>
         <Title>Settings</Title>
 
         <Card>
@@ -254,6 +261,27 @@ export function SettingsScreen() {
               trackColor={{ true: theme.accent }}
             />
           </View>
+          <Text style={{ color: theme.text, fontSize: 12, fontWeight: "700", marginTop: 14, marginBottom: 6 }}>
+            Default calendar view
+          </Text>
+          <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>
+            Opens Calendar on this tab first.
+          </Text>
+          <SegmentedControl
+            value={
+              (workspace.settings.defaultCalendarView === "month" ||
+              workspace.settings.defaultCalendarView === "day" ||
+              workspace.settings.defaultCalendarView === "upcoming"
+                ? workspace.settings.defaultCalendarView
+                : "upcoming") as CalendarDefaultView
+            }
+            onChange={(v) => patchSettings({ defaultCalendarView: v })}
+            options={[
+              { key: "upcoming" as const, label: "Upcoming" },
+              { key: "month" as const, label: "Month" },
+              { key: "day" as const, label: "Day" },
+            ]}
+          />
         </Card>
 
         <Card>

@@ -3,6 +3,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { Card, Eyebrow, Page, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import {
   LEAD_LABELS,
@@ -21,6 +22,7 @@ const LEAD_OPTIONS: NotificationLead[] = ["exact", "5m", "15m", "30m", "1h", "1d
 
 export function NotificationSettingsScreen() {
   const { theme, workspace, updateSettings } = useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const prefs = resolveNotificationPrefs(workspace.settings);
   const [permission, setPermission] = useState<"undetermined" | "granted" | "denied">("undetermined");
@@ -71,7 +73,7 @@ export function NotificationSettingsScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.back}>
           <Feather name="chevron-left" size={22} color={theme.accent} />
           <Text style={{ color: theme.accent, fontWeight: "700" }}>Settings</Text>
