@@ -36,7 +36,7 @@ import { buildPageAiContext, isNotebookAiAvailable, runNotebookAi } from "../lib
 import {
   isPdfPipelineAvailable,
   notebookPagesForExport,
-  pagesFromPdfImport,
+  applyPdfImportToNotebook,
   planPdfExport,
   planPdfImport,
   sharePdf,
@@ -1207,12 +1207,18 @@ export function PageCanvasScreen() {
             onPress={() =>
               runMoreAction(async () => {
                 if (!isPdfPipelineAvailable()) return;
+                await flushInk();
                 const plan = await planPdfImport();
                 if (!plan) return;
-                const created = await pagesFromPdfImport(notebookId, plan, pages.length);
-                await Promise.all(created.map((p) => upsertNotebookPage(p)));
-                await touchPageCount(pages.length + created.length);
-                if (created[0]) await openCreatedPage(created[0].id);
+                const startAt = pageIndex >= 0 ? pageIndex : 0;
+                const { pages: nextPages } = await applyPdfImportToNotebook(
+                  notebookId,
+                  plan,
+                  pages,
+                  startAt,
+                );
+                await Promise.all(nextPages.map((p) => upsertNotebookPage(p)));
+                await touchPageCount(nextPages.length);
               })
             }
           />

@@ -8,7 +8,7 @@ import * as Sharing from "expo-sharing";
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
 import { Platform } from "react-native";
 import type { NotebookPage, PaperColor, PaperStyle } from "../types";
-import { createPage, pagesForNotebook, paperColorHex } from "./notebooks";
+import { createPage, pagesForNotebook, paperColorHex, reindexPages } from "./notebooks";
 
 async function renderDrawingPng(
   base64String: string,
@@ -159,11 +159,9 @@ export async function resolvePdfDisplayUri(
     const info = await FileSystem.getInfoAsync(ref.storagePath);
     if (!info.exists) return null;
 
-    if (ref.pageIndex <= 0) {
-      const bytes = await FileSystem.readAsStringAsync(ref.storagePath, { encoding: BASE64 });
-      const probe = await PDFDocument.load(bytes, { ignoreEncryption: true });
-      if (probe.getPageCount() <= 1) return ref.storagePath;
-    }
+    const bytes = await FileSystem.readAsStringAsync(ref.storagePath, { encoding: BASE64 });
+    const probe = await PDFDocument.load(bytes, { ignoreEncryption: true });
+    if (probe.getPageCount() <= 1) return ref.storagePath;
 
     return await extractSinglePagePdf(ref.storagePath, ref.pageIndex);
   } catch {
@@ -171,27 +169,75 @@ export async function resolvePdfDisplayUri(
   }
 }
 
-/** Create one NotebookPage per PDF page (capped for safety). */
+/** Base64 PDF bytes + 1-based page number for PDF.js rendering in WebView. */
+export async function resolvePdfDisplayPayload(
+  ref: NonNullable<NotebookPage["pdfRef"]>,
+): Promise<{ base64: string; pageNumber: number } | null> {
+  const path = await resolvePdfDisplayUri(ref);
+  if (!path) return null;
+  try {
+    const base64 = await FileSystem.readAsStringAsync(path, { encoding: BASE64 });
+    return { base64, pageNumber: 1 };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fill notebook pages starting at `startAtIndex` with consecutive PDF pages.
+ * Example: import on notebook page 3 with a 10-page PDF → page 3 = PDF p.1, page 4 = PDF p.2, …
+ */
+export async function applyPdfImportToNotebook(
+  notebookId: string,
+  plan: PdfImportPlan,
+  existingPages: NotebookPage[],
+  startAtIndex: number,
+  maxPages = 40,
+): Promise<{ pages: NotebookPage[] }> {
+  const slices = await splitPdfToSinglePageFiles(plan, maxPages);
+  const sorted = [...existingPages].sort((a, b) => a.index - b.index);
+  const merged = new Map(sorted.map((p) => [p.id, { ...p }]));
+  const baseTitle = plan.fileName.replace(/\.pdf$/i, "");
+
+  for (let i = 0; i < slices.length; i++) {
+    const slice = slices[i];
+    const targetIndex = startAtIndex + i;
+    const pdfRef = {
+      storagePath: slice.storagePath,
+      pageIndex: slice.sourcePageIndex,
+      pageCount: plan.pageCount,
+      fileName: plan.fileName,
+    };
+    const title = `${baseTitle} · p.${slice.sourcePageIndex + 1}`;
+    const existing = sorted.find((p) => p.index === targetIndex);
+
+    if (existing) {
+      merged.set(existing.id, {
+        ...existing,
+        pdfRef,
+        title: existing.title || title,
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      const page = createPage(notebookId, targetIndex, "blank");
+      page.pdfRef = pdfRef;
+      page.title = title;
+      merged.set(page.id, page);
+    }
+  }
+
+  const pages = reindexPages(Array.from(merged.values()).sort((a, b) => a.index - b.index));
+  return { pages };
+}
+
+/** @deprecated Use applyPdfImportToNotebook — fills from a start index instead of always appending. */
 export async function pagesFromPdfImport(
   notebookId: string,
   plan: PdfImportPlan,
   startIndex = 0,
   maxPages = 40,
 ): Promise<NotebookPage[]> {
-  const slices = await splitPdfToSinglePageFiles(plan, maxPages);
-  const pages: NotebookPage[] = [];
-  for (let i = 0; i < slices.length; i++) {
-    const slice = slices[i];
-    const page = createPage(notebookId, startIndex + i, "blank");
-    page.title = `${plan.fileName.replace(/\.pdf$/i, "")} · p.${slice.sourcePageIndex + 1}`;
-    page.pdfRef = {
-      storagePath: slice.storagePath,
-      pageIndex: slice.sourcePageIndex,
-      pageCount: plan.pageCount,
-      fileName: plan.fileName,
-    };
-    pages.push(page);
-  }
+  const { pages } = await applyPdfImportToNotebook(notebookId, plan, [], startIndex, maxPages);
   return pages;
 }
 
