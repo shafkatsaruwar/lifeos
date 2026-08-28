@@ -8,7 +8,9 @@ import {
   type PencilKitViewRef,
 } from "../components/HandwritingCanvas";
 import { Page, SegmentedControl } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { htmlToPlainText } from "../lib/helpers";
 import type { NoteInk, NoteTemplate } from "../types";
 
 // Web renders templates as contentEditable HTML transforms (ruled/dotted
@@ -39,6 +41,7 @@ function noteHasInk(ink: NoteInk | undefined) {
 }
 
 export function NoteEditorScreen() {
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const { theme, workspace, updateNotes } = useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -79,6 +82,7 @@ export function NoteEditorScreen() {
   const onInkChange = (ink: NoteInk) => persist({ ink });
   const paperStyle = paperStyleFor(note.template ?? "blank", theme);
   const pencilReady = isPencilKitAvailable();
+  const plainBody = htmlToPlainText(note.body || "");
 
   return (
     <Page edges={["top", "bottom"]}>
@@ -95,7 +99,7 @@ export function NoteEditorScreen() {
             placeholderTextColor={theme.muted}
             style={[styles.titleInput, { color: theme.text }]}
           />
-          <Text style={[styles.spaceLabel, { color: theme.muted }]} numberOfLines={1}>{note.projectName || "Unfiled"}</Text>
+          <Text style={[styles.spaceLabel, { color: theme.muted }]} numberOfLines={1}>{note.projectName || "Personal"}</Text>
         </View>
         <Pressable accessibilityLabel="Delete note" accessibilityRole="button" onPress={deleteNote} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
           <Feather name="trash-2" size={18} color={theme.danger} />
@@ -164,10 +168,10 @@ export function NoteEditorScreen() {
       ) : null}
 
       {mode === "type" ? (
-        <ScrollView contentContainerStyle={styles.body} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" style={styles.grow}>
+        <ScrollView contentContainerStyle={[styles.body, { paddingBottom: tabBarPad }]} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" style={styles.grow}>
           <View style={[styles.paper, paperStyle]}>
             <TextInput
-              value={note.body}
+              value={plainBody}
               onChangeText={(v) => persist({ body: v })}
               accessibilityLabel="Note body"
               multiline

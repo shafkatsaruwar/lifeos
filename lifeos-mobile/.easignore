@@ -1,0 +1,11 @@
+# Keep EAS uploads small — local native build artifacts must never upload.
+ios/build/
+ios/Pods/
+**/DerivedData/
+**/*.xcuser
+**/node_modules/.cache/
+
+# Finder / iCloud duplicate trash
+ios/**/* [0-9]*
+ios/**/* [0-9].*
+ios/LifeOS */*

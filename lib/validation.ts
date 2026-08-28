@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_FOCUS_MINUTES, MIN_FOCUS_MINUTES } from './constants';
 
 // Zod schemas for runtime validation of Firebase data
 export const TaskSchema = z.object({
@@ -44,7 +45,7 @@ export const CalendarEventSchema = z.object({
   title: z.string(),
   start: z.string(), // ISO datetime
   end: z.string().optional(),
-  source: z.enum(['LifeOS', 'iCal', 'Google', 'Outlook', 'Work']),
+  source: z.enum(['LifeOS', 'iCal', 'Google', 'Outlook', 'Work', 'Synapse']),
   color: z.string(),
   notes: z.string().optional(),
   location: z.string().optional(),
@@ -89,6 +90,7 @@ export const SettingsSchema = z.object({
   enableSchoolOS: z.boolean().optional(),
   enableWorkOS: z.boolean().optional(),
   enableStudyAbroad: z.boolean().optional(),
+  enableMasterOS: z.boolean().optional(),
   preferredName: z.string().optional(),
 });
 
@@ -105,17 +107,113 @@ export const ResourceSchema = z.object({
   storage: z.enum(['cloud', 'local']).optional(),
 });
 
+/**
+ * Firebase RTDB stores dense 0..n arrays as arrays, but any hole (or some
+ * client writes) turns the path into an object map `{ "0": ..., "2": ... }`.
+ * Treating that as "no data" is how a full task list can disappear on load.
+ */
+export function coerceFirebaseList(data: unknown): unknown[] | null {
+  if (data == null) return null;
+  if (Array.isArray(data)) return data;
+  if (typeof data === 'object') return Object.values(data as Record<string, unknown>);
+  return null;
+}
+
+function softRepairTask(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const task = { ...(raw as Record<string, unknown>) };
+
+  if (typeof task.focusMinutes === 'number' && Number.isFinite(task.focusMinutes)) {
+    task.focusMinutes = Math.min(
+      MAX_FOCUS_MINUTES,
+      Math.max(MIN_FOCUS_MINUTES, Math.round(task.focusMinutes)),
+    );
+  } else if (task.focusMinutes != null) {
+    const parsed = Number(task.focusMinutes);
+    task.focusMinutes = Number.isFinite(parsed)
+      ? Math.min(MAX_FOCUS_MINUTES, Math.max(MIN_FOCUS_MINUTES, Math.round(parsed)))
+      : 45;
+  }
+
+  if (task.priority !== 'High' && task.priority !== 'Medium' && task.priority !== 'Low') {
+    task.priority = 'Medium';
+  }
+  if (task.energy !== 'Low' && task.energy !== 'Medium' && task.energy !== 'High') {
+    task.energy = 'Medium';
+  }
+  if (typeof task.title !== 'string' || !task.title.trim()) {
+    task.title = typeof task.title === 'string' && task.title.length ? task.title : 'Untitled task';
+  }
+  if (typeof task.project !== 'string') task.project = 'Inbox';
+  if (typeof task.color !== 'string' || !task.color) task.color = '#625af6';
+  if (typeof task.due !== 'string') task.due = '';
+  if (typeof task.id !== 'number' || !Number.isFinite(task.id)) {
+    const asNum = Number(task.id);
+    task.id = Number.isFinite(asNum) ? asNum : Date.now();
+  }
+
+  return task;
+}
+
+export type ParsedCloudTasks = {
+  success: boolean;
+  /** Valid (or soft-repaired) tasks. Empty when the cloud value was empty. */
+  data: z.infer<typeof TaskSchema>[];
+  dropped: number;
+  /** True when the payload was not array-shaped and not an object map. */
+  invalidShape: boolean;
+};
+
+/** Parse tasks from Firebase without all-or-nothing rejection. */
+export function parseTasksFromCloud(data: unknown): ParsedCloudTasks {
+  const list = coerceFirebaseList(data);
+  if (list === null) {
+    return { success: false, data: [], dropped: 0, invalidShape: data != null };
+  }
+
+  const parsed: z.infer<typeof TaskSchema>[] = [];
+  let dropped = 0;
+
+  for (const item of list) {
+    const direct = TaskSchema.safeParse(item);
+    if (direct.success) {
+      parsed.push(direct.data);
+      continue;
+    }
+    const repaired = TaskSchema.safeParse(softRepairTask(item));
+    if (repaired.success) {
+      parsed.push(repaired.data);
+      continue;
+    }
+    dropped += 1;
+  }
+
+  return { success: true, data: parsed, dropped, invalidShape: false };
+}
+
 // Parse and validate data from Firebase
 export const validateTasks = (data: unknown) => {
-  return z.array(TaskSchema).safeParse(data);
+  const parsed = parseTasksFromCloud(data);
+  if (parsed.invalidShape) {
+    return {
+      success: false as const,
+      error: { errors: [{ message: 'Tasks payload must be an array or object map' }] },
+    };
+  }
+  // Soft-parse: keep valid/repaired items so one bad record cannot wipe the list.
+  return { success: true as const, data: parsed.data };
 };
 
 export const validateProjects = (data: unknown) => {
-  return z.array(ProjectSchema).safeParse(data);
+  const list = coerceFirebaseList(data);
+  if (list === null) return z.array(ProjectSchema).safeParse(data);
+  return z.array(ProjectSchema).safeParse(list);
 };
 
 export const validateCalendarEvents = (data: unknown) => {
-  return z.array(CalendarEventSchema).safeParse(data);
+  const list = coerceFirebaseList(data);
+  if (list === null) return z.array(CalendarEventSchema).safeParse(data);
+  return z.array(CalendarEventSchema).safeParse(list);
 };
 
 export const validateSettings = (data: unknown) => {

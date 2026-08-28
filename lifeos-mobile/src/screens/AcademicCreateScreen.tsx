@@ -3,6 +3,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Page, SegmentedControl } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { toDateKey, uid } from "../lib/helpers";
 import type { AcademicItemType, Priority } from "../types";
@@ -18,7 +19,9 @@ const LABELS: Record<CreateKind, { title: string; prompt: string }> = {
 };
 
 export function AcademicCreateScreen() {
-  const { theme, workspace, updateClasses, updateTasks, updateNotes, updateSchool } = useLifeOS();
+  const { theme, workspace, updateClasses, updateTasks, updateSchool, updateNotebookHub, upsertNotebookPage } =
+    useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const kind = (route.params?.kind ?? "assignment") as CreateKind;
@@ -58,19 +61,20 @@ export function AcademicCreateScreen() {
     }
 
     if (kind === "lecture") {
-      const id = uid();
-      await updateNotes([
-        {
-          id,
-          title: title.trim(),
-          body: detail.trim(),
-          classId,
-          template: "cornell",
-          updatedAt: new Date().toISOString(),
-        },
-        ...workspace.notes,
-      ]);
-      navigation.navigate("LibraryTab", { screen: "NoteEditor", params: { noteId: id } });
+      const { createNotebookFromText } = await import("../lib/notebooks");
+      const { notebook, page } = createNotebookFromText(title.trim(), detail.trim(), {
+        classId,
+        paper: "cornell",
+      });
+      await updateNotebookHub({
+        ...workspace.notebookHub,
+        notebooks: [notebook, ...workspace.notebookHub.notebooks],
+      });
+      await upsertNotebookPage(page);
+      navigation.navigate("LibraryTab", {
+        screen: "PageCanvas",
+        params: { notebookId: notebook.id, pageId: page.id },
+      });
       return;
     }
 
@@ -129,7 +133,7 @@ export function AcademicCreateScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.form, { paddingBottom: tabBarPad }]} keyboardShouldPersistTaps="handled">
         {needsClass ? (
           <View style={styles.field}>
             <Text style={[styles.label, { color: theme.text }]}>Course</Text>

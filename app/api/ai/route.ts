@@ -103,10 +103,119 @@ async function askClaude(system: string, prompt: string) {
   return readJson(text);
 }
 
+const FOCUS_PROOF_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_FOCUS_PROOF_BASE64 = 1_500_000;
+
+type FocusVerifySoft = { match: boolean; confidence: number; reason: string };
+
+function softFocusFail(reason: string): FocusVerifySoft {
+  return { match: false, confidence: 0, reason };
+}
+
+/** Vision verify for Focus Enforcer. Never logs or echoes imageBase64. Does not store images. */
+async function verifyFocusEnforcerProof(body: {
+  taskTitle?: unknown;
+  phase?: unknown;
+  mimeType?: unknown;
+  imageBase64?: unknown;
+}): Promise<FocusVerifySoft> {
+  try {
+    const taskTitle =
+      typeof body.taskTitle === "string" && body.taskTitle.trim()
+        ? body.taskTitle.trim().slice(0, 180)
+        : "";
+    const phase =
+      body.phase === "start" || body.phase === "check" || body.phase === "complete"
+        ? body.phase
+        : "check";
+    const mimeType = typeof body.mimeType === "string" ? body.mimeType : "";
+    const imageBase64 = typeof body.imageBase64 === "string" ? body.imageBase64 : "";
+
+    if (!taskTitle) return softFocusFail("Missing task title.");
+    if (!FOCUS_PROOF_MIME.has(mimeType)) {
+      return softFocusFail("Unsupported image type. Use JPEG, PNG, or WebP.");
+    }
+    if (!imageBase64 || imageBase64.length > MAX_FOCUS_PROOF_BASE64) {
+      return softFocusFail("Photo is too large or empty. Try again or use manual override.");
+    }
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return softFocusFail("AI is not configured yet. Try again later or use manual override.");
+    }
+
+    const promptText = `You verify a LIVE camera photo for Focus Enforcer (phase: ${phase}). Task: "${taskTitle}". Decide if the photo shows plausible evidence the person is working on that task (desk/laptop/materials/context). Reply with ONLY valid JSON: {"match":boolean,"confidence":number,"reason":"short string"}. confidence is 0 to 1. Be skeptical of blank walls, ceilings, unrelated scenes, or selfies with no work evidence.`;
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
+        max_tokens: 200,
+        temperature: 0,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: mimeType,
+                  data: imageBase64,
+                },
+              },
+              { type: "text", text: promptText },
+            ],
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(25_000),
+    });
+
+    if (!response.ok) {
+      return softFocusFail("Could not verify the photo. Try again or use manual override.");
+    }
+
+    const message = await response.json();
+    const text = message.content?.find((part: { type?: string }) => part.type === "text")?.text;
+    if (!text || typeof text !== "string") {
+      return softFocusFail("Could not verify the photo. Try again or use manual override.");
+    }
+
+    const parsed = readJson(text) as { match?: unknown; confidence?: unknown; reason?: unknown };
+    return {
+      match: Boolean(parsed.match),
+      confidence:
+        typeof parsed.confidence === "number"
+          ? Math.max(0, Math.min(1, parsed.confidence))
+          : 0,
+      reason:
+        typeof parsed.reason === "string" && parsed.reason.trim()
+          ? parsed.reason.trim().slice(0, 280)
+          : parsed.match
+            ? "Looks like you're on task."
+            : "Could not confirm you're on the task.",
+    };
+  } catch {
+    return softFocusFail("Could not verify the photo. Try again or use manual override.");
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const action = body?.action;
+
+    if (action === "focus-enforcer-verify") {
+      // Soft-fail path — never throw with image data in the message.
+      const result = await verifyFocusEnforcerProof(body);
+      return NextResponse.json(result);
+    }
 
     if (action === "parse-task") {
       const input = typeof body.input === "string" ? body.input.trim().slice(0, MAX_INPUT_LENGTH) : "";
@@ -165,6 +274,79 @@ export async function POST(request: NextRequest) {
         answer: typeof response.answer === "string" ? response.answer.trim().slice(0, 600) : "I’m not sure yet—pick one small task and I’ll help you start.",
         suggestedTaskId: Number.isFinite(taskId) && taskIds.includes(taskId) ? taskId : null,
         suggestedAction,
+      });
+    }
+
+    if (action === "parse-goal") {
+      const input = typeof body.input === "string" ? body.input.trim().slice(0, MAX_INPUT_LENGTH) : "";
+      const spaces = Array.isArray(body.spaces) ? body.spaces.filter((item: unknown) => typeof item === "string").slice(0, 50) : [];
+      if (!input) return NextResponse.json({ error: "Describe the goal first." }, { status: 400 });
+      const parsed = await askClaude(
+        `Turn a spoken or written goal into a structured LifeOS plan. Reply with ONLY valid JSON: {"goal":"string","summary":"string","projectName":"string","tasks":[{"title":"string","badge":"First milestone|Next task|This week|For later","focusMinutes":number,"priority":"High|Medium|Low","energy":"Low|Medium|High"}]}. Produce 3 to 6 tasks in execution order. First task badge should be "First milestone" or "Next task". Use a listed space when obvious; otherwise "Inbox". focusMinutes 15-90.`,
+        input,
+      );
+      const badges = new Set(["First milestone", "Next task", "This week", "For later"]);
+      const tasks = Array.isArray(parsed.tasks)
+        ? parsed.tasks
+          .filter((task: { title?: unknown }) => typeof task?.title === "string" && task.title.trim())
+          .slice(0, 6)
+          .map((task: { title: string; badge?: string; focusMinutes?: number; priority?: string; energy?: string }) => ({
+            title: task.title.trim().slice(0, 180),
+            badge: badges.has(task.badge ?? "") ? task.badge : "This week",
+            focusMinutes: Math.max(15, Math.min(90, Number(task.focusMinutes) || 30)),
+            priority: asPriority(task.priority),
+            energy: asEnergy(task.energy),
+          }))
+        : [];
+      if (!tasks.length) throw new Error("AI did not return usable tasks. Please try again.");
+      const requestedProject = typeof parsed.projectName === "string" ? parsed.projectName.trim().slice(0, 100) : "Inbox";
+      return NextResponse.json({
+        plan: {
+          goal: typeof parsed.goal === "string" && parsed.goal.trim() ? parsed.goal.trim().slice(0, 180) : input.slice(0, 180),
+          summary: typeof parsed.summary === "string" ? parsed.summary.trim().slice(0, 400) : "",
+          projectName: spaces.includes(requestedProject) ? requestedProject : requestedProject || "Inbox",
+          tasks,
+        },
+      });
+    }
+
+    if (action === "coach-day") {
+      const today = asDate(body.today) || new Date().toISOString().slice(0, 10);
+      const context = body.context && typeof body.context === "object" ? body.context : {};
+      const taskIds = Array.isArray(context.tasks) ? context.tasks.map((task: { id?: unknown }) => Number(task?.id)) : [];
+      const parsed = await askClaude(
+        'You are LifeOS daily coach. Use only supplied context. Reply with ONLY valid JSON: {"headline":"string","summary":"string","recommendations":[{"id":"string","text":"string","action":"rename_task|add_event|weekly_plan|choose_task|focus_task","taskId":number|null,"newTitle":"string|null","eventTitle":"string|null","eventStart":"YYYY-MM-DDTHH:MM|null","eventEnd":"YYYY-MM-DDTHH:MM|null","weeklyDay":number|null,"weeklyText":"string|null"}],"looksGood":["string"],"needsWork":["string"]}. Give 2-4 specific recommendations with Apply buttons. Only use taskId values from context.tasks.',
+        JSON.stringify({ today, context }),
+      );
+      const validActions = new Set(["rename_task", "add_event", "weekly_plan", "choose_task", "focus_task"]);
+      const recommendations = Array.isArray(parsed.recommendations)
+        ? parsed.recommendations
+          .filter((item: { text?: unknown; action?: unknown }) => typeof item?.text === "string" && typeof item?.action === "string" && validActions.has(item.action))
+          .slice(0, 4)
+          .map((item: Record<string, unknown>, index: number) => {
+            const taskId = Number(item.taskId);
+            return {
+              id: typeof item.id === "string" ? item.id : `rec-${index}`,
+              text: String(item.text).slice(0, 220),
+              action: item.action,
+              taskId: Number.isFinite(taskId) && taskIds.includes(taskId) ? taskId : undefined,
+              newTitle: typeof item.newTitle === "string" ? item.newTitle.slice(0, 180) : undefined,
+              eventTitle: typeof item.eventTitle === "string" ? item.eventTitle.slice(0, 120) : undefined,
+              eventStart: typeof item.eventStart === "string" ? item.eventStart : undefined,
+              eventEnd: typeof item.eventEnd === "string" ? item.eventEnd : undefined,
+              weeklyDay: Number.isFinite(Number(item.weeklyDay)) ? Number(item.weeklyDay) : undefined,
+              weeklyText: typeof item.weeklyText === "string" ? item.weeklyText.slice(0, 120) : undefined,
+            };
+          })
+        : [];
+      return NextResponse.json({
+        coach: {
+          headline: typeof parsed.headline === "string" ? parsed.headline.slice(0, 120) : "Tune your afternoon",
+          summary: typeof parsed.summary === "string" ? parsed.summary.slice(0, 400) : "",
+          recommendations,
+          looksGood: Array.isArray(parsed.looksGood) ? parsed.looksGood.filter((item: unknown) => typeof item === "string").slice(0, 4) : [],
+          needsWork: Array.isArray(parsed.needsWork) ? parsed.needsWork.filter((item: unknown) => typeof item === "string").slice(0, 4) : [],
+        },
       });
     }
 

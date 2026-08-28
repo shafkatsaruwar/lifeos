@@ -1,18 +1,72 @@
 import Feather from "@expo/vector-icons/Feather";
-import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import * as WebBrowser from "expo-web-browser";
+import { useEffect, useMemo, useState } from "react";
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { signOut } from "firebase/auth";
 import { ActionButton, Card, Eyebrow, Page, SegmentedControl, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { API_BASE } from "../lib/api";
+import { useLayout } from "../lib/layout";
 import { auth } from "../lib/firebase";
+import {
+  DEFAULT_FOCUS_ENFORCER_PREFS,
+  loadFocusEnforcerPrefs,
+  saveFocusEnforcerPrefs,
+  type FocusEnforcerPrefs,
+} from "../lib/focusEnforcer";
+import { resolveNotificationPrefs } from "../lib/notifications";
+import { mergeSynapseCalendarEvents, parseSynapseDayPlan } from "../lib/synapseImport";
 import { SPACE_COLORS } from "../lib/theme";
-import type { EnergyLevel, ThemeMode } from "../types";
+import type { CalendarDefaultView, EnergyLevel, ThemeMode } from "../types";
 
 export function SettingsScreen() {
-  const { user, workspace, theme, dark, updateSettings, sync } = useLifeOS();
+  const navigation = useNavigation<any>();
+  const { user, workspace, theme, dark, updateSettings, updateCalendar, sync, startOnboardingReplay } = useLifeOS();
+  const { isTablet } = useLayout();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
+  const notifPrefs = resolveNotificationPrefs(workspace.settings);
   const [name, setName] = useState(workspace.settings.preferredName ?? "");
+  const [synapsePaste, setSynapsePaste] = useState("");
+  const [synapseBusy, setSynapseBusy] = useState(false);
+  const [fePrefs, setFePrefs] = useState<FocusEnforcerPrefs>(DEFAULT_FOCUS_ENFORCER_PREFS);
   const themeMode = workspace.settings.themeMode ?? "system";
   const accent = workspace.settings.accent?.trim() || theme.accent;
+  const synapseEventCount = workspace.calendar.filter((event) => event.id.startsWith("synapse-")).length;
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    void loadFocusEnforcerPrefs(user.uid).then(setFePrefs);
+  }, [user?.uid]);
+
+  const patchFePrefs = (next: FocusEnforcerPrefs) => {
+    setFePrefs(next);
+    if (!user?.uid) return;
+    void saveFocusEnforcerPrefs(user.uid, next);
+  };
+
+  const importSynapsePlan = () => {
+    setSynapseBusy(true);
+    try {
+      const events = parseSynapseDayPlan(synapsePaste);
+      if (!events.length) {
+        Alert.alert("Synapse", "No Synapse events found in that paste.");
+        return;
+      }
+      const merged = mergeSynapseCalendarEvents(workspace.calendar, events);
+      void updateCalendar(merged as typeof workspace.calendar);
+      setSynapsePaste("");
+      Alert.alert(
+        "Imported",
+        `${events.length} Synapse event${events.length === 1 ? "" : "s"} added. Previous Synapse events were replaced.`,
+      );
+    } catch (error) {
+      Alert.alert("Synapse import", error instanceof Error ? error.message : "Could not import day plan.");
+    } finally {
+      setSynapseBusy(false);
+    }
+  };
   const accentOptions = useMemo(() => {
     const normalized = accent.toLowerCase();
     if (SPACE_COLORS.some((color) => color.toLowerCase() === normalized)) return [...SPACE_COLORS];
@@ -25,8 +79,13 @@ export function SettingsScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={[styles.screen, workspace.settings.compactMode && styles.screenCompact]}>
-        <Eyebrow>YOUR LIFEOS</Eyebrow>
+      <ScrollView
+        contentContainerStyle={[
+          styles.screen,
+          { paddingBottom: tabBarPad },
+          workspace.settings.compactMode && styles.screenCompact,
+        ]}
+      >        <Eyebrow>YOUR LIFEOS</Eyebrow>
         <Title>Settings</Title>
 
         <Card>
@@ -155,6 +214,42 @@ export function SettingsScreen() {
         </Card>
 
         <Card>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
+              <Feather name="zap" size={14} color={theme.accent} />
+            </View>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Focus Enforcer</Text>
+          </View>
+          <View style={styles.settingRow}>
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>Enabled</Text>
+              <Text style={{ color: theme.muted, fontSize: 12 }}>
+                Schedule starts, escalate delays, and optional live-photo checks.
+              </Text>
+            </View>
+            <Switch
+              value={fePrefs.enabled}
+              onValueChange={(enabled) => patchFePrefs({ ...fePrefs, enabled })}
+              trackColor={{ true: theme.accent }}
+            />
+          </View>
+          <Text style={{ color: theme.muted, fontSize: 12, marginTop: 8 }}>
+            Escalations at +{fePrefs.escalateOffsetsMin[0]} / +{fePrefs.escalateOffsetsMin[1]} / +
+            {fePrefs.escalateOffsetsMin[2]} min (absolute from start)
+          </Text>
+          <Pressable
+            onPress={() => navigation.navigate("FocusEnforcerHistory")}
+            style={[styles.notifRow, { borderColor: theme.border, backgroundColor: theme.bg }]}
+          >
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>History</Text>
+              <Text style={{ color: theme.muted, fontSize: 12 }}>On-time rate and past sessions</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={theme.muted} />
+          </Pressable>
+        </Card>
+
+        <Card>
           <View style={styles.settingRow}>
             <View style={styles.grow}>
               <Text style={{ color: theme.text, fontWeight: "800" }}>Week starts Monday</Text>
@@ -164,6 +259,206 @@ export function SettingsScreen() {
               value={Boolean(workspace.settings.weekStartsMonday)}
               onValueChange={(v) => patchSettings({ weekStartsMonday: v })}
               trackColor={{ true: theme.accent }}
+            />
+          </View>
+          <Text style={{ color: theme.text, fontSize: 12, fontWeight: "700", marginTop: 14, marginBottom: 6 }}>
+            Default calendar view
+          </Text>
+          <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>
+            Opens Calendar on this tab first.
+          </Text>
+          <SegmentedControl
+            value={
+              (workspace.settings.defaultCalendarView === "month" ||
+              workspace.settings.defaultCalendarView === "day" ||
+              workspace.settings.defaultCalendarView === "upcoming"
+                ? workspace.settings.defaultCalendarView
+                : "upcoming") as CalendarDefaultView
+            }
+            onChange={(v) => patchSettings({ defaultCalendarView: v })}
+            options={[
+              { key: "upcoming" as const, label: "Upcoming" },
+              { key: "month" as const, label: "Month" },
+              { key: "day" as const, label: "Day" },
+            ]}
+          />
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
+              <Feather name="bell" size={14} color={theme.accent} />
+            </View>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Notifications</Text>
+          </View>
+          <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 18 }}>
+            Due dates, deadlines, calendar, and focus — without spam.
+          </Text>
+          <Pressable
+            onPress={() => navigation.navigate("NotificationSettings")}
+            style={[styles.notifRow, { borderColor: theme.border, backgroundColor: theme.bg }]}
+          >
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>
+                {notifPrefs.enabled ? "Alerts on" : "Alerts off"}
+              </Text>
+              <Text style={{ color: theme.muted, fontSize: 12 }}>Categories, timing, and system permission</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={theme.muted} />
+          </Pressable>
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
+              <Feather name="heart" size={14} color={theme.accent} />
+            </View>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Synapse</Text>
+          </View>
+          <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 18 }}>
+            Import upcoming medications and appointments from Synapse so they show on Today&apos;s schedule. Re-import replaces earlier Synapse events.
+          </Text>
+          <Text style={{ color: theme.muted, fontSize: 12, marginTop: 8 }}>
+            {synapseEventCount
+              ? `${synapseEventCount} Synapse event${synapseEventCount === 1 ? "" : "s"} on your calendar`
+              : "No Synapse events yet"}
+          </Text>
+          <TextInput
+            value={synapsePaste}
+            onChangeText={setSynapsePaste}
+            placeholder='Paste Synapse day-plan JSON {"v":1,"events":[...]}'
+            placeholderTextColor={theme.muted}
+            multiline
+            style={[
+              styles.input,
+              {
+                color: theme.text,
+                borderColor: theme.border,
+                marginTop: 12,
+                minHeight: 96,
+                paddingTop: 10,
+                textAlignVertical: "top",
+              },
+            ]}
+          />
+          <View style={[styles.row, { marginTop: 12 }]}>
+            <ActionButton
+              label={synapseBusy ? "Importing…" : "Import Synapse plan"}
+              icon="download"
+              quiet
+              onPress={importSynapsePlan}
+            />
+          </View>
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
+              <Feather name="layers" size={14} color={theme.accent} />
+            </View>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Environments</Text>
+          </View>
+          <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>
+            Show or hide HomeOS, School, and Work tabs. MasterOS opens in-app on iPad (native teaching UI).
+          </Text>
+          <View style={styles.settingRow}>
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>HomeOS</Text>
+            </View>
+            <Switch
+              value={workspace.settings.enableLifeOS !== false}
+              onValueChange={(value) => patchSettings({ enableLifeOS: value })}
+              trackColor={{ true: theme.accent }}
+            />
+          </View>
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <View style={styles.settingRow}>
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>School</Text>
+            </View>
+            <Switch
+              value={workspace.settings.enableSchoolOS !== false}
+              onValueChange={(value) => patchSettings({ enableSchoolOS: value })}
+              trackColor={{ true: theme.accent }}
+            />
+          </View>
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <View style={styles.settingRow}>
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>Work</Text>
+              <Text style={{ color: theme.muted, fontSize: 12 }}>Show the Work tab and hub</Text>
+            </View>
+            <Switch
+              value={workspace.settings.enableWorkOS !== false}
+              onValueChange={(value) => patchSettings({ enableWorkOS: value })}
+              trackColor={{ true: theme.accent }}
+            />
+          </View>
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <View style={styles.settingRow}>
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>MasterOS</Text>
+              <Text style={{ color: theme.muted, fontSize: 12 }}>
+                {isTablet ? "Teaching on iPad — native Hub, Teach, Whiteboard, Grade" : "iPad only · use web at /masteros on desktop"}
+              </Text>
+            </View>
+            <Switch
+              value={workspace.settings.enableMasterOS !== false}
+              onValueChange={(value) => patchSettings({ enableMasterOS: value })}
+              trackColor={{ true: theme.accent }}
+            />
+          </View>
+          {workspace.settings.enableMasterOS !== false && isTablet ? (
+            <View style={{ marginTop: 12 }}>
+              <ActionButton
+                label="Open MasterOS"
+                icon="book-open"
+                onPress={() => navigation.navigate("MasterOS")}
+              />
+            </View>
+          ) : null}
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
+              <Feather name="map" size={14} color={theme.accent} />
+            </View>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Intro</Text>
+          </View>
+          <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 18 }}>
+            Replay the short first-run walkthrough — name, spaces, and a first move.
+          </Text>
+          <View style={{ marginTop: 14 }}>
+            <ActionButton
+              label="Show intro again"
+              icon="play"
+              quiet
+              onPress={() => {
+                // Local replay flag — do not rely on clearing Firebase settings
+                // (silent sync was restoring onboardingCompletedAt and killing the flow).
+                startOnboardingReplay();
+              }}
+            />
+          </View>
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
+              <Feather name="archive" size={14} color={theme.accent} />
+            </View>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Archives</Text>
+          </View>
+          <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 18 }}>
+            Done and canceled tasks are kept in Settings → Archives on the web. Go to the web to see archived tasks.
+          </Text>
+          <View style={{ marginTop: 14 }}>
+            <ActionButton
+              label="Open archives on web"
+              icon="external-link"
+              quiet
+              onPress={() => WebBrowser.openBrowserAsync(`${API_BASE}/?view=Settings`)}
             />
           </View>
         </Card>
@@ -224,6 +519,16 @@ const styles = StyleSheet.create({
   cardLabel: { fontSize: 16, fontWeight: "800" },
   sectionHead: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4 },
   sectionIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  notifRow: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   themeRow: { flexDirection: "row", gap: 10, marginTop: 8 },
   themeChoice: {
     flex: 1,

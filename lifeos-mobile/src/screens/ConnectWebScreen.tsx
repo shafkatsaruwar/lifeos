@@ -3,6 +3,7 @@ import * as WebBrowser from "expo-web-browser";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Card, Page, Subtitle, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { API_BASE } from "../lib/api";
 
@@ -20,6 +21,7 @@ import { API_BASE } from "../lib/api";
 // the connection.
 export function ConnectWebScreen() {
   const { theme } = useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
 
   const openSettings = () => WebBrowser.openBrowserAsync(`${API_BASE}/?view=Settings`);
@@ -32,7 +34,7 @@ export function ConnectWebScreen() {
 
   return (
     <Page>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingBottom: tabBarPad }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
           <Feather name="chevron-left" size={22} color={theme.text} />
         </Pressable>

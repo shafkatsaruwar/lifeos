@@ -3,8 +3,9 @@ import * as DocumentPicker from "expo-document-picker";
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
-import { Empty, Eyebrow, Page, Subtitle, Title } from "../components/UI";
-import { LibrarySubNav } from "../components/LibrarySubNav";
+import { Empty, Page } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
+import { LibraryChrome } from "../components/LibraryChrome";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatResourceSize, uid } from "../lib/helpers";
 import type { Resource } from "../types";
@@ -20,6 +21,7 @@ import type { Resource } from "../types";
 // URI so a future pass can wire the actual upload.
 export function ResourcesScreen() {
   const { theme, workspace, updateResources } = useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const [uploading, setUploading] = useState(false);
 
   const grouped = groupByClassOrProject(workspace.resources, workspace);
@@ -64,23 +66,31 @@ export function ResourcesScreen() {
 
   return (
     <Page>
-      <View style={styles.header}>
-        <View style={styles.grow}>
-          <Eyebrow>EVERYTHING YOU NEED</Eyebrow>
-          <Title>Resources</Title>
-          <Subtitle>Syllabi, slides, readings, and reference files.</Subtitle>
-        </View>
-        <Pressable onPress={pickAndAdd} disabled={uploading} style={[styles.addButton, { backgroundColor: theme.text, opacity: uploading ? 0.6 : 1 }]}>
-          <Feather name="upload" size={17} color={theme.surface} />
-        </Pressable>
-      </View>
-
-      <LibrarySubNav active="resources" />
-
       <FlatList
         data={grouped}
         keyExtractor={(g) => g.label}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}
+        ListHeaderComponent={
+          <View style={styles.headerBlock}>
+            <LibraryChrome active="resources" />
+            <View style={styles.sectionRow}>
+              <View style={styles.grow}>
+                <Text style={[styles.sectionEyebrow, { color: theme.muted }]}>EVERYTHING YOU NEED</Text>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>Files</Text>
+                <Text style={[styles.sectionBody, { color: theme.muted }]}>
+                  Syllabi, slides, readings, and reference files.
+                </Text>
+              </View>
+              <Pressable
+                onPress={pickAndAdd}
+                disabled={uploading}
+                style={[styles.addButton, { backgroundColor: theme.text, opacity: uploading ? 0.6 : 1 }]}
+              >
+                <Feather name="upload" size={17} color={theme.surface} />
+              </Pressable>
+            </View>
+          </View>
+        }
         renderItem={({ item: group }) => (
           <View style={styles.groupBlock}>
             <Text style={[styles.groupLabel, { color: theme.muted }]}>{group.label}</Text>
@@ -90,9 +100,12 @@ export function ResourcesScreen() {
                   <Feather name="file-text" size={16} color={theme.accent} />
                 </View>
                 <Pressable style={styles.grow} onPress={() => openResource(resource)}>
-                  <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{resource.name}</Text>
+                  <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>
+                    {resource.name}
+                  </Text>
                   <Text style={[styles.meta, { color: theme.muted }]}>
-                    {formatResourceSize(resource.size)} · {new Date(resource.uploadedAt).toLocaleDateString()} · {resource.storage === "local" ? "This device" : "Cloud"}
+                    {formatResourceSize(resource.size)} · {new Date(resource.uploadedAt).toLocaleDateString()} ·{" "}
+                    {resource.storage === "local" ? "This device" : "Cloud"}
                   </Text>
                 </Pressable>
                 <Pressable onPress={() => deleteResource(resource)} style={styles.iconButtonSmall}>
@@ -119,11 +132,15 @@ function groupByClassOrProject(resources: Resource[], workspace: { classes: { id
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, gap: 12 },
-  grow: { flex: 1 },
+  list: { paddingBottom: 120, gap: 18 },
+  headerBlock: { gap: 14, paddingBottom: 8 },
+  sectionRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingHorizontal: 20 },
+  grow: { flex: 1, minWidth: 0 },
+  sectionEyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 0.6 },
+  sectionTitle: { fontSize: 22, fontWeight: "800", marginTop: 2 },
+  sectionBody: { fontSize: 13, lineHeight: 18, marginTop: 4 },
   addButton: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  list: { padding: 20, paddingBottom: 28, gap: 18 },
-  groupBlock: { gap: 8 },
+  groupBlock: { gap: 8, paddingHorizontal: 20 },
   groupLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase" },
   row: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 12 },
   iconWrap: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },

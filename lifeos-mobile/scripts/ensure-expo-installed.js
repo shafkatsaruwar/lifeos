@@ -1,32 +1,53 @@
 /**
- * EAS Build hook helper.
+ * Ensure local `expo` (SDK 54) is resolvable before `npx expo prebuild`.
  *
- * In this repo the Next.js app lives at the git root and Expo lives in
- * lifeos-mobile/. Some EAS installs leave lifeos-mobile without node_modules/expo,
- * then `npx expo prebuild --no-install` fetches the latest Expo (57+) and fails.
+ * Important timing:
+ * - Use npm `postinstall` (runs during `npm install`, before prebuild).
+ * - Do NOT rely on `eas-build-post-install` for this — on iOS that hook runs
+ *   AFTER prebuild / pod install, which is too late.
  *
- * Run after EAS dependency install; if expo is missing, install locally.
+ * If `expo` is missing, `npx expo prebuild --no-install` fetches latest Expo
+ * (57+) and fails with ConfigError.
  */
 const { execSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 
-function hasExpo() {
-  try {
-    require.resolve("expo/package.json", { paths: [process.cwd()] });
-    return true;
-  } catch {
-    return false;
-  }
+const cwd = process.cwd();
+const expoPkgPath = path.join(cwd, "node_modules", "expo", "package.json");
+const expoBinPath = path.join(cwd, "node_modules", ".bin", "expo");
+
+function hasLocalExpo() {
+  return fs.existsSync(expoPkgPath) && fs.existsSync(expoBinPath);
 }
 
-if (!hasExpo()) {
-  console.log(`[eas] expo missing in ${process.cwd()} — running npm install`);
-  execSync("npm install --legacy-peer-deps", { stdio: "inherit", cwd: process.cwd() });
+function readExpoVersion() {
+  return JSON.parse(fs.readFileSync(expoPkgPath, "utf8")).version;
 }
 
-if (!hasExpo()) {
-  console.error("[eas] expo is still not installed after npm install");
+if (process.env.LIFEOS_ENSURING_EXPO === "1") {
+  process.exit(0);
+}
+
+if (!hasLocalExpo()) {
+  console.log(`[eas] local expo missing in ${cwd} — installing dependencies`);
+  process.env.LIFEOS_ENSURING_EXPO = "1";
+  execSync("npm install --legacy-peer-deps", { stdio: "inherit", cwd, env: process.env });
+}
+
+if (!hasLocalExpo()) {
+  console.log("[eas] expo still missing — installing expo@~54.0.35 explicitly");
+  process.env.LIFEOS_ENSURING_EXPO = "1";
+  execSync("npm install expo@~54.0.35 --legacy-peer-deps", {
+    stdio: "inherit",
+    cwd,
+    env: process.env,
+  });
+}
+
+if (!hasLocalExpo()) {
+  console.error("[eas] expo is still not installed; prebuild would fetch Expo 57+ via npx");
   process.exit(1);
 }
 
-const expoPkg = require(require.resolve("expo/package.json", { paths: [process.cwd()] }));
-console.log(`[eas] expo@${expoPkg.version} ready for prebuild`);
+console.log(`[eas] expo@${readExpoVersion()} ready for prebuild`);

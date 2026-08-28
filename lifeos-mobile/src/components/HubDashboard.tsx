@@ -18,7 +18,7 @@ export function DashboardModule({
   const { theme } = useLifeOS();
   return (
     <View style={styles.module}>
-      <View style={[styles.band, { backgroundColor: theme.highlight }]}>
+      <View style={styles.band}>
         <Feather name={icon} size={16} color={theme.text} />
         <Text style={[styles.bandTitle, { color: theme.text }]}>{title}</Text>
         {action && onAction ? (
@@ -51,20 +51,12 @@ export function QuickAction({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.quickAction,
-        { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.65 : 1 },
-      ]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [styles.quickAction, { opacity: pressed ? 0.55 : 1 }]}
+      hitSlop={6}
     >
-      <Feather name={icon} size={20} color={tint} />
-      <Text
-        style={[styles.quickLabel, { color: theme.text }]}
-        numberOfLines={2}
-        adjustsFontSizeToFit
-        minimumFontScale={0.76}
-      >
-        {label}
-      </Text>
+      <Feather name={icon} size={22} color={tint} />
     </Pressable>
   );
 }
@@ -132,22 +124,17 @@ export function ModuleEmpty({ text }: { text: string }) {
 
 const styles = StyleSheet.create({
   module: { gap: 8 },
-  band: { minHeight: 50, borderRadius: 8, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 9 },
+  band: { minHeight: 44, paddingHorizontal: 2, flexDirection: "row", alignItems: "center", gap: 9 },
   bandTitle: { fontSize: 16, fontWeight: "800", flex: 1 },
   bandAction: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 2, marginRight: -6, paddingHorizontal: 6 },
   bandActionText: { fontSize: 12, fontWeight: "800" },
   moduleBody: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   quickAction: {
-    width: 72,
-    minHeight: 64,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    justifyContent: "flex-start",
-    gap: 6,
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  quickLabel: { fontSize: 11, lineHeight: 14, fontWeight: "800" },
   dataRow: { minHeight: 50, flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 5 },
   dataIcon: { width: 22, alignItems: "center", justifyContent: "center" },
   grow: { flex: 1, minWidth: 0 },

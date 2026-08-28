@@ -31,7 +31,8 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { syncDataToFirebase, loadDataFromFirebase, listenToFirebaseChanges, stopListeningToFirebaseChanges, pullAllDataFromFirebase, setUserId, clearUserId, getUserId } from "@/lib/dataSync";
+import { syncDataToFirebase, loadDataFromFirebase, loadTasksFromFirebase, listenToFirebaseChanges, stopListeningToFirebaseChanges, pullAllDataFromFirebase, setUserId, clearUserId, getUserId } from "@/lib/dataSync";
+import { readTaskBackup, writeTaskBackup } from "@/lib/taskBackup";
 import { signInWithGoogle, signOut, onAuthStateChanged, getClientAuth } from "@/lib/firebase";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
@@ -48,9 +49,10 @@ import {
   type NotificationAction,
 } from "@/lib/notifications";
 import { NLTaskCreationModal } from "@/app/components/NLTaskCreationModal";
+import { FocusFlowView, type FlowScreen } from "@/app/components/FocusFlow/FocusFlowView";
 import {
   HubCollectionModal, LifeDashboard, SchoolClassPickerModal, SchoolDashboard, SchoolProfileModal, WorkDashboard,
-  emptyLifeHub, emptySchoolHub, emptyWorkHub, isSampleWorkHub, formatWorkMeetingWhere,
+  emptyLifeHub, emptySchoolHub, emptyWorkHub, isSampleWorkHub, formatWorkMeetingWhere, removeWorkProject,
   type HubCollectionTarget, type LifeHubKey, type LifeHubState, type SchoolHubKey, type SchoolHubState,
   type WorkHubState, type WorkProject, type WorkDeliverable, type WorkTask, type WorkMeeting, type WorkView, type SchoolView,
 } from "@/app/components/OSDashboards";
@@ -70,6 +72,7 @@ import {
   nowIso,
   studyAbroadToCalendarEvents,
 } from "@/lib/studyAbroadHelpers";
+import { mergeSynapseCalendarEvents, parseSynapseDayPlan, type SynapseCalendarEvent } from "@/lib/synapseImport";
 import type { ParsedTask } from "@/lib/useNLTaskCreation";
 import { useTaskBreakdown } from "@/lib/useTaskBreakdown";
 import {
@@ -82,19 +85,19 @@ import {
   BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils,
 } from "lucide-react";
 
-type View = "Life" | "School" | "Work" | "Study Abroad" | "Now" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
+type View = "Life" | "School" | "Work" | "Study Abroad" | "Now" | "Flow" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
 type EnergyLevel = "Low" | "Medium" | "High";
 type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
 type AcademicItemType = "Assignment" | "Project" | "Exam" | "Quiz" | "Lab" | "Reading" | "Discussion";
 type TaskProperty = { id: string; name: string; value: string };
-type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; status?: TaskStatus; notes?: string; handoffNote?: string; nextAction?: string; followUpDate?: string; recurringDays?: number; completedAt?: string; customProperties?: TaskProperty[]; checklist?: string[]; checklistProgress?: boolean[]; focusRemainingSeconds?: number; focusSessionStarted?: boolean; focusSessionRunning?: boolean; focusHalfwayPrompted?: boolean; classId?: string; academicType?: AcademicItemType; gradeWeight?: number; pointsEarned?: number; pointsPossible?: number; submission?: string; calendarEventId?: string; done?: boolean; canceled?: boolean };
-type FocusSessionUpdate = { remainingSeconds: number; hasStarted: boolean; isRunning: boolean; halfwayPrompted: boolean; focusMinutes?: number };
+type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; status?: TaskStatus; notes?: string; handoffNote?: string; nextAction?: string; followUpDate?: string; recurringDays?: number; completedAt?: string; customProperties?: TaskProperty[]; checklist?: string[]; checklistProgress?: boolean[]; focusRemainingSeconds?: number; focusSessionStarted?: boolean; focusSessionRunning?: boolean; focusHalfwayPrompted?: boolean; focusUpdatedAt?: string; classId?: string; academicType?: AcademicItemType; gradeWeight?: number; pointsEarned?: number; pointsPossible?: number; submission?: string; calendarEventId?: string; done?: boolean; canceled?: boolean };
+type FocusSessionUpdate = { remainingSeconds: number; hasStarted: boolean; isRunning: boolean; halfwayPrompted: boolean; focusMinutes?: number; checkpoint?: boolean };
 type ProjectKind = "maintenance" | "finishable";
 type SpaceKind = "class" | "project" | "maintenance";
 type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban" | "BriefcaseBusiness" | "Camera" | "Code2" | "HeartPulse" | "Utensils" | "BookOpen";
 type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string; classId?: string; projectName?: string; storagePath?: string; storage?: "cloud" | "local" };
 type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind };
-type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work"; color: string; notes?: string; location?: string };
+type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work" | "Synapse"; color: string; notes?: string; location?: string };
 type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterStart?: string; semesterEnd?: string; archived?: boolean };
 type Note = { id: string; title: string; body: string; classId?: string; projectName?: string; template?: "blank" | "lined" | "dotted" | "cornell" | "meeting"; /** Handwriting from mobile (Apple PencilKit PKDrawing base64, or legacy strokes); preserved on web updates */ ink?: { version?: 1 | 2; format?: "pencilkit"; data?: string; pencilKitData?: string; strokes?: Array<{ id: string; color: string; width: number; tool: "pen" | "highlighter" | "eraser"; points: Array<{ x: number; y: number; t?: number }> }>; height?: number; updatedAt?: number }; updatedAt: string };
 type AmbientActivity = { title: string; startedAt: string; note?: string; spaceName?: string; spaceColor?: string };
@@ -106,7 +109,7 @@ type WeeklyPlan = { [dayOfWeek: number]: WeeklyPlanItem[] }; // 0=Sunday through
 
 const routedViews: Record<string, View> = {
   life: "Life", school: "School", work: "Work", "study-abroad": "Study Abroad", studyabroad: "Study Abroad",
-  now: "Now", dashboard: "Life", today: "Calendar", calendar: "Calendar", spaces: "Spaces",
+  now: "Now", flow: "Flow", dashboard: "Life", today: "Calendar", calendar: "Calendar", spaces: "Spaces",
   library: "Library", notes: "Library", resources: "Library", brain: "Library", knowledge: "Library",
   settings: "Settings", tasks: "Tasks",
 };
@@ -114,6 +117,11 @@ const viewFromLocation = (): View => {
   if (typeof window === "undefined") return "Now";
   return routedViews[new URLSearchParams(window.location.search).get("view")?.toLowerCase() ?? ""] ?? "Now";
 };
+type CalendarDefaultView = "upcoming" | "month" | "day";
+
+const normalizeCalendarDefaultView = (value: unknown): CalendarDefaultView =>
+  value === "month" || value === "day" || value === "upcoming" ? value : "upcoming";
+
 type SettingsState = {
   accent: string;
   dailyDigest: boolean;
@@ -123,6 +131,8 @@ type SettingsState = {
   defaultFocusMinutes: number;
   defaultEnergy: EnergyLevel;
   weekStartsMonday: boolean;
+  /** Initial Calendar tab when opening Today / Calendar. */
+  defaultCalendarView: CalendarDefaultView;
   compactMode: boolean;
   reduceMotion: boolean;
   nowTaskId?: number | null;
@@ -137,6 +147,7 @@ type SettingsState = {
   enableSchoolOS?: boolean;
   enableWorkOS?: boolean;
   enableStudyAbroad?: boolean;
+  enableMasterOS?: boolean;
   /** When true (default), focusing the Now capture bar shows the /command cheatsheet. */
   showCaptureCommands?: boolean;
   /** Ordered upcoming task ids for the Now queue (excludes the current nowTaskId). */
@@ -171,12 +182,17 @@ function ColorSwatches({ value, onChange, label = "Color" }: { value: string; on
   </>;
 }
 
-const nav: { category?: string; name: View; icon: typeof Home }[] = [
+type NavName = View | "MasterOS";
+type NavItem = { category?: string; name: NavName; icon: typeof Home; href?: string };
+
+const nav: NavItem[] = [
   { name: "Now", icon: TimerReset },
+  { name: "Flow", icon: Focus },
   { category: "ENVIRONMENTS", name: "Life", icon: Home },
   { category: "ENVIRONMENTS", name: "Work", icon: BriefcaseBusiness },
   { category: "ENVIRONMENTS", name: "School", icon: GraduationCap },
   { category: "ENVIRONMENTS", name: "Study Abroad", icon: Globe2 },
+  { category: "ENVIRONMENTS", name: "MasterOS", icon: NotebookPen, href: "/masteros" },
   { category: "NAVIGATION", name: "Tasks", icon: CheckCircle2 },
   { category: "NAVIGATION", name: "Calendar", icon: CalendarDays },
   { category: "NAVIGATION", name: "Library", icon: Library },
@@ -199,6 +215,7 @@ const initialSettings: SettingsState = {
   defaultFocusMinutes: 45,
   defaultEnergy: "Medium",
   weekStartsMonday: false,
+  defaultCalendarView: "upcoming",
   compactMode: false,
   reduceMotion: false,
   nowTaskId: null,
@@ -210,6 +227,7 @@ const initialSettings: SettingsState = {
   enableSchoolOS: true,
   enableWorkOS: true,
   enableStudyAbroad: true,
+  enableMasterOS: true,
   showCaptureCommands: true,
   nowQueueIds: [],
 };
@@ -256,10 +274,38 @@ const focusChecklistTemplates = [
 ];
 
 const formatEventTime = (value: string) => new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+const asTaskList = (data: unknown): unknown[] | null => {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") return Object.values(data as Record<string, unknown>);
+  return null;
+};
 const getTaskFocusSeconds = (task: Task) => {
   const totalSeconds = Math.max(1, task.focusMinutes) * 60;
-  if (typeof task.focusRemainingSeconds !== "number" || !Number.isFinite(task.focusRemainingSeconds)) return totalSeconds;
-  return Math.max(0, Math.min(totalSeconds, Math.round(task.focusRemainingSeconds)));
+  const stored = typeof task.focusRemainingSeconds === "number" && Number.isFinite(task.focusRemainingSeconds)
+    ? Math.max(0, Math.min(totalSeconds, Math.round(task.focusRemainingSeconds)))
+    : totalSeconds;
+  if (!task.focusSessionRunning || !task.focusUpdatedAt) return stored;
+  const elapsed = Math.floor((Date.now() - Date.parse(task.focusUpdatedAt)) / 1000);
+  if (!Number.isFinite(elapsed) || elapsed <= 0) return stored;
+  return Math.max(0, stored - elapsed);
+};
+const mergeTasksFocus = (local: Task[], remote: Task[]) => {
+  const localById = new Map(local.map(task => [task.id, task]));
+  return remote.map(task => {
+    const prev = localById.get(task.id);
+    if (!prev) return task;
+    const localTs = Date.parse(prev.focusUpdatedAt ?? "") || 0;
+    const remoteTs = Date.parse(task.focusUpdatedAt ?? "") || 0;
+    if (remoteTs >= localTs) return task;
+    return {
+      ...task,
+      focusRemainingSeconds: prev.focusRemainingSeconds,
+      focusSessionStarted: prev.focusSessionStarted,
+      focusSessionRunning: prev.focusSessionRunning,
+      focusHalfwayPrompted: prev.focusHalfwayPrompted,
+      focusUpdatedAt: prev.focusUpdatedAt,
+    };
+  });
 };
 const formatFocusTime = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 const getEventDateRange = (event: CalendarEvent) => {
@@ -339,6 +385,14 @@ const normalizeTask = (task: Partial<Task>): Task => ({
   project: task.project ?? "Inbox",
   color: task.color ?? "#625af6",
   due: typeof task.due === "string" ? task.due : "",
+  startTime: typeof task.startTime === "string" && /^\d{1,2}:\d{2}/.test(task.startTime)
+    ? (() => {
+        const [hours, minutes] = task.startTime.split(":").map(Number);
+        if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return undefined;
+        if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return undefined;
+        return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+      })()
+    : undefined,
   priority: task.priority ?? "Medium",
   focusMinutes: task.focusMinutes ?? 45,
   energy: task.energy ?? "Medium",
@@ -371,6 +425,7 @@ const normalizeTask = (task: Partial<Task>): Task => ({
   focusSessionStarted: Boolean(task.focusSessionStarted),
   focusSessionRunning: Boolean(task.focusSessionRunning),
   focusHalfwayPrompted: Boolean(task.focusHalfwayPrompted),
+  focusUpdatedAt: typeof task.focusUpdatedAt === "string" ? task.focusUpdatedAt : undefined,
   done: task.done,
   canceled: task.canceled,
 });
@@ -444,8 +499,11 @@ export default function LifeOS() {
   const [authLoading, setAuthLoading] = useState(true);
   const [cloudUserId, setCloudUserId] = useState<string | null>(null);
   const [view, setView] = useState<View>(() => viewFromLocation());
+  const [flowScreen, setFlowScreen] = useState<FlowScreen>("talk");
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [tasksHydrated, setTasksHydrated] = useState(false);
+  /** False after a cloud read error so we never sync [] over a still-valid remote list. */
+  const [tasksSyncEnabled, setTasksSyncEnabled] = useState(false);
   const [palette, setPalette] = useState(false);
   const [capture, setCapture] = useState(false);
   const [focus, setFocus] = useState(false);
@@ -919,6 +977,15 @@ export default function LifeOS() {
     return () => window.removeEventListener("lifeos:google-calendar-events", importGoogleEvents);
   }, []);
   useEffect(() => {
+    const importSynapseEvents = (event: Event) => {
+      const incoming = (event as CustomEvent<SynapseCalendarEvent[]>).detail;
+      if (!Array.isArray(incoming)) return;
+      setCalendarEvents((current) => mergeSynapseCalendarEvents(current, incoming) as CalendarEvent[]);
+    };
+    window.addEventListener("lifeos:synapse-calendar-events", importSynapseEvents);
+    return () => window.removeEventListener("lifeos:synapse-calendar-events", importSynapseEvents);
+  }, []);
+  useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette(true); }
       if (e.key === "Escape") {
@@ -1057,30 +1124,59 @@ export default function LifeOS() {
   useEffect(() => {
     if (!cloudUserId) return;
     setTasksHydrated(false);
+    setTasksSyncEnabled(false);
     (async () => {
-      try {
-        const firebaseTasks = await loadDataFromFirebase('tasks');
-        if (Array.isArray(firebaseTasks)) {
-          const normalized = firebaseTasks.map(task => normalizeTask(task));
-          // Drop the old demo starter set if it was ever synced — those items
-          // pointed at fake spaces (Synapse, Photography, …) and flooded notifications.
-          setTasks(isStarterTaskSet(normalized) ? [] : normalized);
-        } else {
-          // New cloud workspaces start blank instead of seeding overdue demo tasks.
-          setTasks([]);
+      const applyList = (raw: unknown[], source: "cloud" | "backup") => {
+        const normalized = raw.map(task => normalizeTask(task as Partial<Task>));
+        const next = isStarterTaskSet(normalized) ? [] : normalized;
+        setTasks(next);
+        if (next.length) writeTaskBackup(cloudUserId, next);
+        if (source === "backup") {
+          setNotice(`Restored ${next.length} task${next.length === 1 ? "" : "s"} from a local backup`);
         }
-      } catch (error) {
-        console.error('Failed to load tasks from Firebase:', error);
-        setTasks([]);
-      } finally {
-        setTasksHydrated(true);
+      };
+
+      const result = await loadTasksFromFirebase();
+      if (result.status === "ok") {
+        if (result.tasks.length) {
+          applyList(result.tasks, "cloud");
+        } else {
+          // Cloud is explicitly empty — try a local remnant before accepting blank.
+          const backup = readTaskBackup(cloudUserId);
+          if (backup?.length) applyList(backup, "backup");
+          else setTasks([]);
+        }
+        setTasksSyncEnabled(true);
+      } else if (result.status === "missing") {
+        const backup = readTaskBackup(cloudUserId);
+        if (backup?.length) applyList(backup, "backup");
+        else setTasks([]);
+        setTasksSyncEnabled(true);
+      } else {
+        console.error("Failed to load tasks from Firebase:", result.message);
+        const backup = readTaskBackup(cloudUserId);
+        if (backup?.length) {
+          applyList(backup, "backup");
+          // Allow sync so the recovered backup can heal the cloud copy.
+          setTasksSyncEnabled(true);
+        } else {
+          setNotice("Couldn't load your tasks from the cloud. Nothing was overwritten.");
+          // Keep sync OFF — do not write [] over remote data we failed to read.
+          setTasksSyncEnabled(false);
+        }
       }
+      setTasksHydrated(true);
     })();
   }, [cloudUserId]);
   useEffect(() => {
-    if (!cloudUserId || !tasksHydrated) return;
-    syncDataToFirebase('tasks', tasks);
-  }, [cloudUserId, tasks, tasksHydrated]);
+    if (!cloudUserId || !tasksHydrated || !tasksSyncEnabled) return;
+    const snapshot = tasks;
+    const timer = window.setTimeout(() => {
+      writeTaskBackup(cloudUserId, snapshot);
+      syncDataToFirebase('tasks', snapshot);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [cloudUserId, tasks, tasksHydrated, tasksSyncEnabled]);
   useEffect(() => {
     const activeTasks = tasks.filter(task => !task.done && !task.canceled);
     if (!activeTasks.length) {
@@ -1345,7 +1441,8 @@ export default function LifeOS() {
   useEffect(() => {
     if (!cloudUserId || !tasksHydrated) return;
     listenToFirebaseChanges('tasks', (data) => {
-      if (Array.isArray(data)) setTasks(data.map(task => normalizeTask(task)));
+      const list = asTaskList(data);
+      if (list) setTasks(prev => mergeTasksFocus(prev, list.map(task => normalizeTask(task as Task))));
     });
     return () => stopListeningToFirebaseChanges('tasks');
   }, [cloudUserId, tasksHydrated]);
@@ -1645,6 +1742,11 @@ export default function LifeOS() {
     setProjectItems(items => items.filter(project => project.name !== name));
     setTasks(items => items.map(task => task.project === name ? { ...task, project: "Inbox", color: "#625af6" } : task));
     setNotes(items => items.map(note => note.projectName === name ? { ...note, projectName: undefined } : note));
+    // Work OS keeps its own project list — drop any Work project with the same name too.
+    setWorkHub(hub => {
+      const workProject = hub.projects.find(project => project.name === name);
+      return workProject ? removeWorkProject(hub, workProject.id) : hub;
+    });
     setActionProjectName(null);
     setSelectedProjectName(null);
     flash("Project deleted");
@@ -1742,10 +1844,17 @@ export default function LifeOS() {
     setTasks(items => items.map(task => task.id === id ? { ...task, checklistProgress: progress } : task));
   }, []);
   const updateFocusSession = useCallback((id: number, session: FocusSessionUpdate) => {
+    const stamped = new Date().toISOString();
     setTasks(items => items.map(task => {
       if (task.id !== id) return task;
+      // Heartbeats must never un-pause a session the phone just saved.
+      if (session.checkpoint && !task.focusSessionRunning) return task;
       const nextFocusMinutes = Math.max(5, Math.min(240, session.focusMinutes ?? task.focusMinutes));
       const remainingSeconds = Math.max(0, Math.min(nextFocusMinutes * 60, Math.round(session.remainingSeconds)));
+      if (session.checkpoint) {
+        if (task.focusRemainingSeconds === remainingSeconds) return task;
+        return { ...task, focusRemainingSeconds: remainingSeconds, focusUpdatedAt: stamped };
+      }
       if (
         task.focusRemainingSeconds === remainingSeconds
         && task.focusMinutes === nextFocusMinutes
@@ -1760,6 +1869,7 @@ export default function LifeOS() {
         focusSessionStarted: session.hasStarted,
         focusSessionRunning: session.isRunning,
         focusHalfwayPrompted: session.halfwayPrompted,
+        focusUpdatedAt: stamped,
       };
     }));
   }, []);
@@ -1954,8 +2064,11 @@ export default function LifeOS() {
   const activeTasks = useMemo(() => tasks.filter(task => !task.done && !task.canceled), [tasks]);
   const floatingFocusTask = useMemo(() => activeTasks.find(task => Boolean(task.focusSessionStarted) && getTaskFocusSeconds(task) > 0), [activeTasks]);
   const visibleNav = useMemo(
-    () => nav.filter(item => isEnvironmentEnabled(item.name)),
-    [isEnvironmentEnabled],
+    () => nav.filter(item => {
+      if (item.name === "MasterOS") return settingsState.enableMasterOS !== false;
+      return isEnvironmentEnabled(item.name as View);
+    }),
+    [isEnvironmentEnabled, settingsState.enableMasterOS],
   );
   useEffect(() => {
     if (!isEnvironmentEnabled(view)) go("Now");
@@ -2064,7 +2177,11 @@ export default function LifeOS() {
             return (
               <div key={item.name}>
                 {showCategory && <p className="nav-label">{item.category}</p>}
-                <button className={`nav-item ${view === item.name ? "active" : ""}`} onClick={() => go(item.name)}><Icon size={17} strokeWidth={1.8} /><span>{item.name}</span>{item.name === "Brain" && <em>{brainItems.length}</em>}{item.name === "Spaces" && projectItems.length + classes.length > 0 && <em>{projectItems.length + classes.length}</em>}</button>
+                {item.href ? (
+                  <a className="nav-item" href={item.href} onClick={() => setSidebar(false)}><Icon size={17} strokeWidth={1.8} /><span>{item.name}</span><ExternalLink size={13} className="nav-external-icon" /></a>
+                ) : (
+                  <button className={`nav-item ${view === item.name ? "active" : ""}`} onClick={() => go(item.name as View)}><Icon size={17} strokeWidth={1.8} /><span>{item.name}</span>{item.name === "Brain" && <em>{brainItems.length}</em>}{item.name === "Spaces" && projectItems.length + classes.length > 0 && <em>{projectItems.length + classes.length}</em>}</button>
+                )}
               </div>
             );
           })}
@@ -2087,21 +2204,29 @@ export default function LifeOS() {
         </header>
         <AnimatePresence mode="wait">
           <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Work" || view === "Study Abroad" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
-            {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarFeed} workspaceName={workspaceName} onComplete={complete} onOpenTask={openTaskPage} onOpenProject={openProjectSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => openSpacesList("Projects")} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} />}
-            {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} schoolView={schoolView} onChangeView={setSchoolView} schoolFocusTaskId={schoolFocusTaskId} onSelectFocusTask={setSchoolFocusTaskId} onComplete={complete} onOpenTask={openTaskPage} onOpenClass={openClassSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={(id) => { setSchoolFocusTaskId(id); openFocus(id); }} onOpenCalendar={() => go("Calendar")} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} />}
-            {view === "Work" && <WorkDashboard workHub={workHub} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => openSpacesList("Projects")} />}
+            {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarFeed} workspaceName={workspaceName} onComplete={complete} onOpenTask={openTaskPage} onOpenProject={openProjectSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => openSpacesList("Projects")} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} enableMasterOS={settingsState.enableMasterOS !== false} />}
+            {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} schoolView={schoolView} onChangeView={setSchoolView} schoolFocusTaskId={schoolFocusTaskId} onSelectFocusTask={setSchoolFocusTaskId} onComplete={complete} onOpenTask={openTaskPage} onOpenClass={openClassSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={(id) => { setSchoolFocusTaskId(id); openFocus(id); }} onOpenCalendar={() => go("Calendar")} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} enableMasterOS={settingsState.enableMasterOS !== false} />}
+            {view === "Work" && <WorkDashboard workHub={workHub} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => setWorkView("projects")} onProjectDeleted={(name) => {
+              setProjectItems(items => items.filter(project => project.name !== name));
+              setTasks(items => items.map(task => task.project === name ? { ...task, project: "Inbox", color: "#625af6" } : task));
+              setNotes(items => items.map(note => note.projectName === name ? { ...note, projectName: undefined } : note));
+              setSelectedProjectName(current => current === name ? null : current);
+              flash(`Deleted ${name}`);
+            }} />}
             {view === "Study Abroad" && <StudyAbroadDashboard hub={studyAbroadHub} studyView={studyAbroadView} onChangeView={setStudyAbroadView} onChange={setStudyAbroadHub} workspaceName={workspaceName} onOpenCalendar={() => go("Calendar")} onFocusStudyTask={focusStudyAbroadTask} focusEntity={studyAbroadFocusEntity} onFocusEntityConsumed={() => setStudyAbroadFocusEntity(null)} />}
-            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} flash={flash} />}
+            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableMasterOS={settingsState.enableMasterOS !== false} flash={flash} />}
+            {view === "Flow" && <FocusFlowView screen={flowScreen} onScreenChange={setFlowScreen} tasks={tasks} projects={[...projectItems.map(project => project.name), ...classes.map(item => item.code)]} events={calendarFeed} weeklyPlan={weeklyPlan} momentumLog={settingsState.momentumLog ?? []} nowTaskId={settingsState.nowTaskId ?? null} today={toDateKey(new Date())} onFocus={openFocus} onChoose={chooseNowTask} onComplete={complete} onAddTask={(title, options, projectName) => addTask(title, undefined, projectName && projectName !== "Inbox" ? projectName : "", options)} onAddProject={(name) => addProject(name)} onUpdateTask={updateTaskDetails} onAddCalendarEvent={addCalendarEvent} onSetWeeklyPlan={setWeeklyPlan} onOpenCalendar={() => go("Calendar")} flash={flash} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
             {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} />}
-            {(view === "Today" || view === "Calendar") && <CalendarView events={calendarFeed} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => { if (id.startsWith("task-")) openTaskPage(Number(id.slice(5))); else if (id.startsWith("work-meet-")) { setWorkView("calendar"); go("Work"); } else setEditingCalendarEventId(id); }} onPlanTask={setEditingTaskId} />}
+            {(view === "Today" || view === "Calendar") && <CalendarView events={calendarFeed} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} defaultView={normalizeCalendarDefaultView(settingsState.defaultCalendarView)} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => { if (id.startsWith("task-")) openTaskPage(Number(id.slice(5))); else if (id.startsWith("work-meet-")) { setWorkView("calendar"); go("Work"); } else setEditingCalendarEventId(id); }} onPlanTask={setEditingTaskId} />}
             {view === "Notes" && <NotesView notes={notes} classes={classes} projects={projectItems} selectedNoteId={selectedNoteId} onSelect={setSelectedNoteId} onCreate={() => createNote()} onUpdate={updateNote} onDelete={deleteNote} onImport={importNotes} />}
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} />}
-            {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} onLogout={handleLogout} />}
+            {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} />}
             {view === "Settings" && <CalendarConnections user={user} flash={flash} />}
-            {!["Life", "School", "Work", "Study Abroad", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
+            {view === "Settings" && <SynapseDayPlanImport flash={flash} />}
+            {!["Life", "School", "Work", "Study Abroad", "Now", "Flow", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
         </AnimatePresence>
         </>}
@@ -2152,7 +2277,11 @@ export default function LifeOS() {
           else if (project) openProjectSpace(project.name);
           else if (classRecord) openClassSpace(classRecord.id);
           else if (note) { setSelectedNoteId(note.id); setView("Notes"); }
-          else if (visibleNav.some(item => item.name === result)) go(result as View);
+          else if (visibleNav.some(item => item.name === result)) {
+            const navHit = visibleNav.find(item => item.name === result);
+            if (navHit?.href) window.location.href = navHit.href;
+            else go(result as View);
+          }
         }} />}
         {capture && <CaptureModal key="capture-modal" close={() => setCapture(false)} add={(text) => { setBrainItems(x => [text, ...x]); setCapture(false); flash("Thought captured"); }} />}
         {ambientStartOpen && <AmbientStartModal key="ambient-start-modal" close={() => { setAmbientStartOpen(false); setAmbientDraft(null); }} start={beginAmbientActivity} draft={ambientDraft} spaces={[...projectItems.map(item => ({ name: item.name, color: item.color })), ...classes.filter(item => !item.archived).map(item => ({ name: item.code, color: item.color }))]} />}
@@ -2182,13 +2311,14 @@ export default function LifeOS() {
   );
 }
 
-function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableWorkOS, enableStudyAbroad, flash }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableWorkOS: boolean; enableStudyAbroad: boolean; flash: (message: string) => void }) {
+function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableWorkOS, enableStudyAbroad, enableMasterOS, flash }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableWorkOS: boolean; enableStudyAbroad: boolean; enableMasterOS: boolean; flash: (message: string) => void }) {
   const [handoff, setHandoff] = useState("");
   const [captureInput, setCaptureInput] = useState("");
   const [captureFocused, setCaptureFocused] = useState(false);
   const [suggestedCommandIndex, setSuggestedCommandIndex] = useState(-1);
   const [queueOpen, setQueueOpen] = useState(false);
   const [dragQueueId, setDragQueueId] = useState<number | null>(null);
+  const captureInputRef = useRef<HTMLInputElement | null>(null);
   const captureBlurTimer = useRef<number | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -2251,6 +2381,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     { shortcut: '/asg', label: 'Add assignment', desc: 'School mode only' },
     { shortcut: '/note', label: 'Add note', desc: 'Capture a quick note' },
     { shortcut: '/focus', label: 'Start focus', desc: 'Enter a focus session' },
+    { shortcut: '/flow', label: 'Focus flow', desc: 'Talk → plan, coach, strength' },
     { shortcut: '/break', label: 'Break', desc: 'I need a break' },
     { shortcut: '/spaces', label: 'Spaces', desc: 'Open your spaces' },
     { shortcut: '/w', label: 'I\'m doing something', desc: 'Start ambient activity' },
@@ -2271,6 +2402,9 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       { shortcut: '/sa note', label: 'Note', desc: 'Add study-abroad knowledge' },
       { shortcut: '/sa task', label: 'SA task', desc: 'Add a study-abroad task' },
     ] : []),
+    ...(enableMasterOS ? [
+      { shortcut: '/mos', label: 'MasterOS', desc: 'Open teaching workspace (web / iPad)' },
+    ] : []),
   ];
   const captureQuery = captureInput.startsWith('/') ? captureInput.trim().toLowerCase() : '';
   const showCommandHelp = showCaptureCommands && captureFocused && (!captureInput || captureInput.startsWith('/'));
@@ -2288,8 +2422,10 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       if (target) onFocus(target.id);
       return true;
     }
+    if (val === '/flow') { onGo('Flow'); return true; }
     if (val === '/spaces') { onGo('Spaces'); return true; }
     if (enableStudyAbroad && (val === '/sa' || val === '/study abroad')) { onGo('Study Abroad'); return true; }
+    if (enableMasterOS && (val === '/mos' || val === '/masteros')) { window.location.href = '/masteros'; return true; }
     return false;
   };
   const handleCaptureFocus = () => {
@@ -2298,6 +2434,14 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   };
   const handleCaptureBlur = () => {
     captureBlurTimer.current = window.setTimeout(() => setCaptureFocused(false), 160);
+  };
+  /** After a command runs, clear + unfocus so the help list does not pop back open. */
+  const finishCaptureCommand = () => {
+    if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current);
+    setCaptureInput("");
+    setSuggestedCommandIndex(-1);
+    setCaptureFocused(false);
+    captureInputRef.current?.blur();
   };
   const handleCaptureKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowDown') {
@@ -2313,16 +2457,16 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       const val = e.currentTarget.value.trim();
       if (suggestedCommandIndex >= 0) {
         const cmd = filtered[suggestedCommandIndex];
-        if (['/w', '/break', '/a', '/focus', '/spaces', '/sa'].includes(cmd.shortcut)) {
+        if (['/w', '/break', '/a', '/focus', '/flow', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
           runInstantCommand(cmd.shortcut);
-          setCaptureInput('');
+          finishCaptureCommand();
         } else {
           setCaptureInput(cmd.shortcut + ' ');
+          setSuggestedCommandIndex(-1);
         }
-        setSuggestedCommandIndex(-1);
       } else if (val) {
         if (runInstantCommand(val)) {
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/t ')) {
           const taskTitle = val.slice(3).trim();
           if (taskTitle) {
@@ -2332,7 +2476,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               else onChoose(id);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/tm ')) {
           const taskTitle = val.slice(4).trim();
           if (taskTitle) {
@@ -2347,24 +2491,24 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               else onChoose(id);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/proj ')) {
           const projectName = val.slice(6).trim();
           if (projectName) onAddProject(projectName);
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/asg ')) {
           const assignmentTitle = val.slice(5).trim();
           if (assignmentTitle) onAddAssignment(assignmentTitle);
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (val.startsWith('/note ')) {
           const noteTitle = val.slice(6).trim();
           if (noteTitle) onAddNote(noteTitle);
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableWorkOS && val.startsWith('/w proj ')) {
           const projName = val.slice(8).trim() || 'New Project';
           const newProj: WorkProject = { id: `proj-${Date.now()}`, name: projName, color: '#625af6', status: 'active', createdAt: new Date().toISOString() };
           onSetWorkHub((current: WorkHubState) => ({ ...current, projects: [...current.projects, newProj] }));
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableWorkOS && val.startsWith('/w deliver ')) {
           const title = val.slice(11).trim() || 'New deliverable';
           onSetWorkHub((current: WorkHubState) => {
@@ -2373,7 +2517,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             const deliverable: WorkDeliverable = { id: `del-${Date.now()}`, projectId: project.id, title, type: 'document', status: 'planned', priority: 'medium', dueDate: toDateKey(new Date()), createdAt: new Date().toISOString() };
             return { ...current, deliverables: [...current.deliverables, deliverable] };
           });
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableWorkOS && val.startsWith('/w task ')) {
           const title = val.slice(8).trim() || 'New task';
           onSetWorkHub((current: WorkHubState) => {
@@ -2382,12 +2526,12 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             const task: WorkTask = { id: `task-${Date.now()}`, deliverableId: deliverable.id, title, status: 'open', priority: 'medium', dueDate: toDateKey(new Date()), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
             return { ...current, tasks: [...current.tasks, task] };
           });
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableWorkOS && val.startsWith('/w meet ')) {
           const meetTitle = val.slice(8).trim() || 'New Meeting';
           const newMeet: WorkMeeting = { id: `meet-${Date.now()}`, title: meetTitle, start: new Date().toISOString(), type: 'other', createdAt: new Date().toISOString() };
           onSetWorkHub((current: WorkHubState) => ({ ...current, meetings: [...current.meetings, newMeet] }));
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa country ')) {
           const name = val.slice(12).trim();
           if (name) {
@@ -2398,7 +2542,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             }, 'Added country', name, 'country'));
             flash(`Country added: ${name}`);
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa uni ')) {
           const name = val.slice(8).trim();
           if (name) {
@@ -2413,7 +2557,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               flash(`University added: ${name}`);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa prog ')) {
           const name = val.slice(9).trim();
           if (name) {
@@ -2428,7 +2572,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               flash(`Program added: ${name}`);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa app ')) {
           const name = val.slice(8).trim();
           const program = name
@@ -2444,7 +2588,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             }, 'Started application', program.name, 'application'));
             flash(`Application started: ${program.name}`);
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && (val.startsWith('/sa fund ') || val.startsWith('/sa scholarship '))) {
           const name = val.startsWith('/sa scholarship ') ? val.slice(16).trim() : val.slice(9).trim();
           if (name) {
@@ -2455,7 +2599,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             }, 'Added funding', name, 'funding'));
             flash(`Scholarship added: ${name}`);
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa task ')) {
           const title = val.slice(9).trim();
           if (title) {
@@ -2473,7 +2617,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               flash(`Study Abroad task: ${title}`);
             }
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (enableStudyAbroad && val.startsWith('/sa note ')) {
           const title = val.slice(9).trim();
           if (title) {
@@ -2485,10 +2629,10 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             }, 'Added knowledge note', title, 'general'));
             flash(`Study Abroad note: ${title}`);
           }
-          setCaptureInput('');
+          finishCaptureCommand();
         } else if (!val.startsWith('/')) {
           onStartAmbient();
-          setCaptureInput('');
+          finishCaptureCommand();
         }
       }
     }
@@ -2538,6 +2682,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
         <section className="capture-bar-section" title="Capture commands: /t, /break, /focus, and more">
           <span className="section-icon blue"><Command size={16} /></span>
           <input
+            ref={captureInputRef}
             type="text"
             placeholder="Click for commands, or type /"
             value={captureInput}
@@ -2548,7 +2693,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             onKeyDown={handleCaptureKeyDown}
             title="Click to see capture commands"
           />
-          <span className="capture-hint">/t · /tm · /break · /focus</span>
+          <span className="capture-hint">/t · /tm · /break · /focus{enableMasterOS ? " · /mos" : ""}</span>
         </section>
         {showSuggestions ? (
           <div className="capture-suggestions" onMouseDown={(e) => e.preventDefault()}>
@@ -2559,14 +2704,14 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
                   type="button"
                   className={idx === suggestedCommandIndex ? "suggested" : ""}
                   onClick={() => {
-                    if (['/w', '/break', '/a', '/focus', '/spaces'].includes(cmd.shortcut)) {
+                    if (['/w', '/break', '/a', '/focus', '/flow', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
                       runInstantCommand(cmd.shortcut);
-                      setCaptureInput('');
-                      setCaptureFocused(false);
+                      finishCaptureCommand();
                     } else {
                       setCaptureInput(cmd.shortcut + " ");
+                      setSuggestedCommandIndex(-1);
+                      captureInputRef.current?.focus();
                     }
-                    setSuggestedCommandIndex(-1);
                   }}
                 >
                   <strong>{cmd.shortcut}</strong>
@@ -2585,6 +2730,17 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
         ) : null}
       </div>
     )}
+    {enableMasterOS ? (
+      <section className="card" style={{ marginBottom: 16 }}>
+        <div className="card-head">
+          <div><span className="section-icon blue"><GraduationCap size={14} /></span><h2>MasterOS</h2></div>
+          <a className="text-button" href="/masteros">Open <ArrowRight size={14} /></a>
+        </div>
+        <p className="mos-muted" style={{ padding: "0 18px 16px", margin: 0, color: "var(--muted)", fontSize: 13, lineHeight: 1.5 }}>
+          Your teaching app — classes, lessons, whiteboard, gradebook. Web and iPad; type <code>/mos</code> anytime. Not on iPhone.
+        </p>
+      </section>
+    ) : null}
     <div className="now-layout">
       <section className="card now-current-card" title="Your focused task. Click any task to focus on it here.">
         <div className="card-head"><div><span className="section-icon violet"><Focus size={14} /></span><h2>Current task</h2></div><div className="now-current-head-actions"><button type="button" className="text-button" onClick={() => setQueueOpen(value => !value)}>{queueOpen ? "Hide queue" : "Open Queue"}</button>{current && <button className="text-button" onClick={() => onChoose(null)}>Clear</button>}</div></div>
@@ -2820,7 +2976,7 @@ function Dashboard({ tasks, projects, classes, brainCount, user, onComplete, onF
           const startTime = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
           const endTime = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
           return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong><span>{event.notes || (event.source === "LifeOS" ? "Focus block" : event.source)}</span></div></div>;
-        }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p></div>}
+        }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p><p style={{ marginTop: 6 }}>Share a day plan from Synapse → Settings → LifeOS to see meds and appointments here.</p></div>}
       </section>
       <DashboardGmailCard user={user} onSettings={() => onGo("Settings")} />
       <section className="card projects-card">
@@ -3307,10 +3463,13 @@ function LegacyCalendarView({ events, weekStartsMonday, onNew, onImport, onEdit 
   return <><div className="page-title"><div><p className="eyebrow">Protect your time</p><h1>Calendar</h1><p>Manual planning plus iCal imports from Apple Calendar, school, work, or anything that exports `.ics`.</p></div><div className="calendar-actions"><div className="calendar-mode-tabs"><button className={mode === "month" ? "selected" : ""} onClick={() => setMode("month")}><CalendarDays size={14} /> Month</button><button className={mode === "day" ? "selected" : ""} onClick={() => setMode("day")}><Clock3 size={14} /> Day</button></div><button onClick={onImport}><Link2 size={16} /> Import iCal</button><button className="primary" onClick={() => onNew(selected)}><Plus size={16} /> Add event</button></div></div><div className="calendar-layout"><section className="card calendar-card">{mode === "month" ? <><div className="calendar-toolbar"><button onClick={() => changeMonth(-1)}>←</button><strong>{cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</strong><button onClick={() => changeMonth(1)}>→</button></div><div className="calendar-weekdays">{weekDays.map(day => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{days.map(day => { const key = toDateKey(day); const dayEvents = events.filter(event => event.start.slice(0, 10) === key); return <button key={key} className={`${day.getMonth() !== cursor.getMonth() ? "muted" : ""} ${key === selected ? "selected" : ""} ${key === toDateKey(new Date()) ? "today" : ""}`} onClick={() => selectDay(key)}><span>{day.getDate()}</span><div>{dayEvents.slice(0, 3).map(event => <i key={event.id} style={{ background: event.color }} title={event.title} />)}</div>{dayEvents.length > 3 && <small>+{dayEvents.length - 3}</small>}</button>; })}</div></> : <><div className="calendar-toolbar day-toolbar"><button onClick={() => changeDay(-1)}>←</button><div><strong>{selectedLabel}</strong><span>{selectedEvents.length ? `${selectedEvents.length} scheduled event${selectedEvents.length === 1 ? "" : "s"}` : "Open day"}</span></div><button onClick={() => changeDay(1)}>→</button></div><div className="day-jump-row"><button onClick={() => changeDay(-1)}>Yesterday</button><button onClick={() => { const today = new Date(); setSelected(toDateKey(today)); setCursor(new Date(today.getFullYear(), today.getMonth(), 1)); }}>Today</button><button onClick={() => changeDay(1)}>Tomorrow</button></div><div className="day-timeline"><div className="day-hours">{hours.map(hour => <div key={hour} className="day-hour"><span>{new Date(`${selected}T${String(hour).padStart(2, "0")}:00`).toLocaleTimeString("en-US", { hour: "numeric" })}</span></div>)}</div><div className="day-events-layer">{selectedIsToday && <div className="now-line" style={{ top: `${nowTop}%` }}><span>Now</span></div>}{selectedEvents.map(event => <button key={event.id} className="day-event-block" style={eventBlockStyle(event)} onClick={() => onEdit(event.id)}><strong>{event.title}</strong><span>{formatEventTime(event.start)}{event.end ? ` – ${formatEventTime(event.end)}` : ""}</span>{event.notes && <small>{event.notes}</small>}</button>)}</div></div></>}</section><aside className="calendar-side"><section className="card agenda-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>{selectedLabel}</h2></div><span className="count">{selectedEvents.length} events</span></div><div className="agenda-list">{selectedEvents.length ? selectedEvents.map(event => <button className="agenda-item editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventTime(event.start)}{event.end ? ` – ${formatEventTime(event.end)}` : ""} · {event.source}</p>{event.notes && <small>{event.notes}</small>}</div><Pencil size={14} /></button>) : <div className="priority-empty"><strong>Nothing scheduled.</strong><p>That white space is not a bug. Protect it.</p></div>}</div></section><section className="card agenda-card"><div className="card-head"><div><span className="section-icon violet"><Clock3 size={14} /></span><h2>Today</h2></div><span className="count">{todayEvents.length}</span></div><div className="agenda-list">{todayEvents.slice(0, 4).map(event => <button className="agenda-item compact editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventTime(event.start)}</p></div><Pencil size={14} /></button>)}</div></section></aside></div></>;
 }
 
-function CalendarView({ events, tasks, weekStartsMonday, onNew, onImport, onEdit, onPlanTask }: { events: CalendarEvent[]; tasks: Task[]; weekStartsMonday: boolean; onNew: (date: string) => void; onImport: () => void; onEdit: (id: string) => void; onPlanTask: (id: number) => void }) {
+function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming", onNew, onImport, onEdit, onPlanTask }: { events: CalendarEvent[]; tasks: Task[]; weekStartsMonday: boolean; defaultView?: CalendarDefaultView; onNew: (date: string) => void; onImport: () => void; onEdit: (id: string) => void; onPlanTask: (id: number) => void }) {
   const [cursor, setCursor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => toDateKey(new Date()));
-  const [mode, setMode] = useState<"month" | "day" | "upcoming">("upcoming");
+  const [mode, setMode] = useState<CalendarDefaultView>(() => normalizeCalendarDefaultView(defaultView));
+  useEffect(() => {
+    setMode(normalizeCalendarDefaultView(defaultView));
+  }, [defaultView]);
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const gridStart = new Date(monthStart);
   const firstDayOffset = weekStartsMonday ? (monthStart.getDay() + 6) % 7 : monthStart.getDay();
@@ -3536,6 +3695,58 @@ function CalendarConnections({ user, flash }: { user?: any; flash: (message: str
   return <section className="card settings-card calendar-hub"><div className="card-head"><div><span className="section-icon violet"><CalendarDays size={14} /></span><h2>Calendar connections</h2></div><span className="calendar-hub-note">Read-only imports</span></div><div className="calendar-auto-refresh"><span><CheckCircle2 size={14} /> Automatic refresh is on</span><small>Connected calendars update every 5 minutes while LifeOS is open.</small></div><div className="calendar-provider-tabs" role="tablist" aria-label="Calendar providers">{choices.map(choice => <button key={choice.id} role="tab" aria-selected={provider === choice.id} className={provider === choice.id ? "selected" : ""} onClick={() => setProvider(choice.id)}><b>{choice.number}</b><span>{choice.name}<small>{choice.detail}</small></span></button>)}</div><div className="calendar-provider-content">{provider === "apple" && <ICloudCalendarIntegration user={user} flash={flash} />}{provider === "google" && <GoogleCalendarIntegration user={user} flash={flash} />}</div></section>;
 }
 
+function SynapseDayPlanImport({ flash }: { flash: (message: string) => void }) {
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const importPlan = () => {
+    try {
+      setBusy(true);
+      setError("");
+      const events = parseSynapseDayPlan(text);
+      if (!events.length) throw new Error("No Synapse events found in that paste.");
+      window.dispatchEvent(new CustomEvent("lifeos:synapse-calendar-events", { detail: events }));
+      setText("");
+      flash(`${events.length} Synapse event${events.length === 1 ? "" : "s"} imported into your calendar`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not import Synapse day plan.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="card settings-card">
+      <div className="card-head">
+        <div>
+          <span className="section-icon blue"><HeartPulse size={14} /></span>
+          <h2>Synapse health day plan</h2>
+        </div>
+      </div>
+      <div className="settings-body">
+        <div className="integration-empty">
+          <strong>See upcoming meds and appointments beside your LifeOS day.</strong>
+          <p>In Synapse → Settings → LifeOS, tap Share day plan. Then paste the JSON here. Each import replaces earlier Synapse events so the plan stays current.</p>
+        </div>
+        <label htmlFor="synapse-day-plan">Synapse day-plan JSON</label>
+        <textarea
+          id="synapse-day-plan"
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          placeholder='{"v":1,"events":[...]}'
+          rows={5}
+        />
+        <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+          <button className="primary" type="button" disabled={busy || !text.trim()} onClick={importPlan}>
+            {busy ? "Importing…" : "Import Synapse plan"}
+          </button>
+        </div>
+        {error ? <p className="gmail-error" role="alert">{error}</p> : null}
+        <p className="settings-note">Read-only planning view. Log doses and change appointments in Synapse.</p>
+      </div>
+    </section>
+  );
+}
+
 function GoogleCalendarIntegration({ user, flash }: { user?: any; flash: (message: string) => void }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -3702,7 +3913,8 @@ function ICloudCalendarIntegration({ user, flash }: { user?: any; flash: (messag
   return <section className="card settings-card icloud-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>iCloud Calendar</h2></div>{connected && <button onClick={() => void sync()} disabled={busy}><RefreshCw size={14} /> {busy ? "Syncing…" : "Sync now"}</button>}</div><div className="settings-body">{loading ? <p className="settings-note">Checking iCloud Calendar…</p> : !configured ? <div className="integration-empty"><strong>One setup step left.</strong><p>Add <code>ICLOUD_CONNECTION_SECRET</code> in Vercel to turn on encrypted iCloud Calendar connections.</p></div> : !connected ? <form className="icloud-connect-form" onSubmit={connect}><p className="settings-note">Use an Apple app-specific password — never your normal Apple Account password. LifeOS encrypts it server-side.</p><label>Apple ID<input type="email" required autoComplete="username" value={appleId} onChange={event => setAppleId(event.target.value)} placeholder="you@icloud.com" /></label><label>App-specific password<input type="password" required autoComplete="new-password" value={appPassword} onChange={event => setAppPassword(event.target.value)} placeholder="xxxx-xxxx-xxxx-xxxx" /></label><button className="primary" disabled={busy}>{busy ? "Connecting…" : "Connect iCloud Calendar"}</button></form> : <><div className="icloud-status"><span><CheckCircle2 size={15} /> Connected securely</span><button onClick={() => void disconnect()} disabled={busy}>Disconnect</button></div><p className="settings-note">Choose the calendars LifeOS should import. Sync is read-only for now, so it won’t alter Apple Calendar.</p>{calendars.length ? <div className="icloud-calendar-list">{calendars.map(calendar => <label key={calendar.url}><input type="checkbox" checked={selected.includes(calendar.url)} onChange={event => void saveSelection(event.target.checked ? [...selected, calendar.url] : selected.filter(url => url !== calendar.url))} /><i style={{ background: calendar.color || "#8b7cff" }} /><span>{calendar.name}</span></label>)}</div> : <div className="integration-empty"><strong>Calendars need a refresh.</strong><p>Your connection is safe. Refreshing re-reads the available iCloud calendars.</p><button onClick={() => void refreshCalendars()} disabled={busy}>Refresh calendars</button></div>}</>}{error && <p className="gmail-error" role="alert">{error}</p>}</div></section>;
 }
 
-function SettingsView({ dark, setDark, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport, user, onLogout }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; onLogout?: () => void }) {
+function SettingsView({ dark, setDark, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport, user, onLogout, onOpenTask, onRestoreTask }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; onLogout?: () => void; onOpenTask?: (id: number) => void; onRestoreTask?: (id: number) => void }) {
+  const archivedTasks = tasks.filter((task) => task.done || task.canceled || task.status === "Done" || task.status === "Canceled");
   const requestNotifications = async () => {
     if (!("Notification" in window)) {
       flash("Notifications are not supported here");
@@ -3711,7 +3923,7 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
     const permission = await Notification.requestPermission();
     flash(permission === "granted" ? "Browser notifications enabled" : "Notifications not enabled");
   };
-  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Appearance</h2></div></div><div className="settings-body"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{SPACE_COLORS.map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><ToggleRow title="Compact mode" desc="Tighten spacing when you want more on screen." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions for lower sensory load." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Settings size={14} /></span><h2>Environments</h2></div></div><div className="settings-body"><ToggleRow title="LifeOS" desc="Personal task management and life organization." checked={settings.enableLifeOS !== false} onChange={(enableLifeOS) => update({ enableLifeOS })} /><ToggleRow title="SchoolOS" desc="Academic coursework, assignments, and learning." checked={settings.enableSchoolOS !== false} onChange={(enableSchoolOS) => update({ enableSchoolOS })} /><ToggleRow title="WorkOS" desc="Professional projects, tasks, and deliverables." checked={settings.enableWorkOS !== false} onChange={(enableWorkOS) => update({ enableWorkOS })} /><ToggleRow title="Study Abroad" desc="Multi-country research and applications for studying abroad." checked={settings.enableStudyAbroad !== false} onChange={(enableStudyAbroad) => update({ enableStudyAbroad })} /></div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body"><ToggleRow title="Show capture commands" desc="When you click the Now capture bar, show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} /><div className="shortcut-list" style={{ marginTop: 12 }}><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>/t</kbd><span>Add task (Now capture bar)</span></div><div><kbd>/break</kbd><span>Take a break</span></div><div><kbd>/focus</kbd><span>Start focus</span></div><div><kbd>/w</kbd><span>Start ambient activity</span></div><div><kbd>/a</kbd><span>AI task</span></div><div><kbd>/spaces</kbd><span>Open Spaces</span></div></div><p className="settings-note">Capture commands live in the Now capture bar. Type / to filter after you hide the cheatsheet.</p></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
+  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Appearance</h2></div></div><div className="settings-body"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{SPACE_COLORS.map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><ToggleRow title="Compact mode" desc="Tighten spacing when you want more on screen." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions for lower sensory load." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><div className="settings-calendar-default"><span className="settings-field-label">Default view</span><p className="settings-note" style={{ margin: "4px 0 10px" }}>Opens Calendar on this tab first.</p><div className="calendar-mode-tabs" role="group" aria-label="Default calendar view">{(["upcoming", "month", "day"] as CalendarDefaultView[]).map(option => <button key={option} type="button" className={normalizeCalendarDefaultView(settings.defaultCalendarView) === option ? "selected" : ""} onClick={() => update({ defaultCalendarView: option })}>{option === "upcoming" ? "Upcoming" : option === "month" ? "Month" : "Day"}</button>)}</div></div><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Settings size={14} /></span><h2>Environments</h2></div></div><div className="settings-body"><ToggleRow title="LifeOS" desc="Personal task management and life organization." checked={settings.enableLifeOS !== false} onChange={(enableLifeOS) => update({ enableLifeOS })} /><ToggleRow title="SchoolOS" desc="Academic coursework, assignments, and learning." checked={settings.enableSchoolOS !== false} onChange={(enableSchoolOS) => update({ enableSchoolOS })} /><ToggleRow title="WorkOS" desc="Professional projects, tasks, and deliverables." checked={settings.enableWorkOS !== false} onChange={(enableWorkOS) => update({ enableWorkOS })} /><ToggleRow title="Study Abroad" desc="Multi-country research and applications for studying abroad." checked={settings.enableStudyAbroad !== false} onChange={(enableStudyAbroad) => update({ enableStudyAbroad })} /><ToggleRow title="MasterOS" desc="Teaching app — classes, lessons, whiteboard, gradebook. Web + iPad only; not on iPhone." checked={settings.enableMasterOS !== false} onChange={(enableMasterOS) => update({ enableMasterOS })} />{settings.enableMasterOS !== false && <p className="settings-note"><a href="/masteros">Open MasterOS</a> · type <code>/mos</code> on Now · sidebar under Environments.</p>}</div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><Archive size={14} /></span><h2>Archives</h2></div><span className="count">{archivedTasks.length}</span></div><div className="settings-body"><p className="settings-note">Done and canceled tasks live here so your active lists stay clear. Restore any of them to put it back on your active list.</p><div className="agenda-list">{archivedTasks.length ? archivedTasks.slice(0, 40).map((task) => <div key={task.id} className="agenda-item compact archived-task-row"><i style={{ background: task.color || "var(--accent)" }} /><button type="button" className="archived-task-open" onClick={() => onOpenTask?.(task.id)}><strong>{task.title}</strong><p>{task.canceled || task.status === "Canceled" ? "Canceled" : "Done"}{task.project ? ` · ${task.project}` : ""}{task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</p></button><button type="button" className="archived-task-restore" onClick={() => onRestoreTask?.(task.id)}>Restore</button></div>) : <div className="priority-empty"><strong>No archived tasks yet.</strong><p>When you mark something done or canceled, it shows up here.</p></div>}</div></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body"><ToggleRow title="Show capture commands" desc="When you click the Now capture bar, show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} /><div className="shortcut-list" style={{ marginTop: 12 }}><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>/t</kbd><span>Add task (Now capture bar)</span></div><div><kbd>/break</kbd><span>Take a break</span></div><div><kbd>/focus</kbd><span>Start focus</span></div><div><kbd>/w</kbd><span>Start ambient activity</span></div><div><kbd>/a</kbd><span>AI task</span></div><div><kbd>/spaces</kbd><span>Open Spaces</span></div><div><kbd>/mos</kbd><span>Open MasterOS (web / iPad)</span></div></div><p className="settings-note">Capture commands live in the Now capture bar. Type / to filter after you hide the cheatsheet.</p></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
 }
 
 function BrainView({ items, onCapture, onArchive }: { items: string[]; onCapture: () => void; onArchive: (index: number) => void }) {
@@ -4043,7 +4255,8 @@ function TaskWorkspace({ task, tasks, projects, classes, onExit, onSwitch, onUpd
     <header className="task-page-topbar">
       <button className="task-page-back" onClick={onExit}><ArrowRight size={15} /> Back to LifeOS</button>
       <div className="task-page-save"><i /> Autosave on</div>
-      {status !== "Done" && <button className="task-page-done" onClick={onMarkDone}><CheckCircle2 size={15} /> Mark as done</button>}
+      {status !== "Done" && status !== "Canceled" && <button className="task-page-done" onClick={onMarkDone}><CheckCircle2 size={15} /> Mark as done</button>}
+      {(status === "Done" || status === "Canceled") && <button className="task-page-done" onClick={() => onUpdate({ status: "Not started", done: false, canceled: false, completedAt: undefined })}><RefreshCw size={15} /> Restore to active</button>}
       <button className="task-page-focus" onClick={onFocus} disabled={status === "Canceled" || status === "Done"}><Focus size={15} /> Start focus</button>
       <button className="task-page-close" onClick={onExit} aria-label="Close task page"><X size={18} /></button>
     </header>
@@ -4059,7 +4272,7 @@ function TaskWorkspace({ task, tasks, projects, classes, onExit, onSwitch, onUpd
             <label><span><Circle size={14} /> Status</span><select value={status} onChange={event => onUpdate({ status: event.target.value as TaskStatus })}>{(["Not started", "In progress", "Waiting", "Blocked", "Done", "Canceled"] as TaskStatus[]).map(value => <option key={value}>{value}</option>)}</select></label>
             <label><span><LayoutGrid size={14} /> Space</span><select value={spaceValue} onChange={event => updateSpace(event.target.value)}><option value="">Inbox / no space</option>{classes.length > 0 && <optgroup label="Classes">{classes.map(item => <option key={item.id} value={`class:${item.id}`}>{item.code} — {item.name}</option>)}</optgroup>}{projects.length > 0 && <optgroup label="Projects & maintenance">{projects.map(project => <option key={project.name} value={`project:${project.name}`}>{project.name}</option>)}</optgroup>}</select></label>
             <label><span><CalendarDays size={14} /> Due date</span><input type="date" value={dateValue} onChange={event => onUpdate({ due: event.target.value })} /></label>
-            <label><span><Clock3 size={14} /> Start time</span><input type="time" value={task.startTime ?? ""} onChange={event => onUpdate({ startTime: event.target.value })} /></label>
+            <label><span><Clock3 size={14} /> Start time</span><input type="time" value={task.startTime ?? ""} onChange={event => onUpdate({ startTime: event.target.value || undefined })} /></label>
             <label><span><Flame size={14} /> Priority</span><select value={task.priority} onChange={event => onUpdate({ priority: event.target.value as Task["priority"] })}><option>High</option><option>Medium</option><option>Low</option></select></label>
             <label><span><TimerReset size={14} /> Focus estimate</span><div className="task-number-field"><input type="number" min={5} max={240} step={5} value={task.focusMinutes} onChange={event => onUpdate({ focusMinutes: Math.max(5, Math.min(240, Number(event.target.value) || 5)) })} /><em>minutes</em></div></label>
             <label><span><Zap size={14} /> Energy</span><select value={task.energy} onChange={event => onUpdate({ energy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label>
@@ -4192,8 +4405,8 @@ function FloatingFocusDock({ task, onResume, onUpdateSession, onEnd }: { task: T
       onUpdateSession({ remainingSeconds: 0, hasStarted: true, isRunning: false, halfwayPrompted: Boolean(task.focusHalfwayPrompted) });
       return;
     }
-    if (running && seconds > 0 && seconds % 15 === 0) onUpdateSession({ remainingSeconds: seconds, hasStarted: true, isRunning: true, halfwayPrompted: Boolean(task.focusHalfwayPrompted) });
-  }, [onUpdateSession, running, seconds, task.focusHalfwayPrompted]);
+    if (running && task.focusSessionRunning && seconds > 0 && seconds % 15 === 0) onUpdateSession({ remainingSeconds: seconds, hasStarted: true, isRunning: true, halfwayPrompted: Boolean(task.focusHalfwayPrompted), checkpoint: true });
+  }, [onUpdateSession, running, seconds, task.focusHalfwayPrompted, task.focusSessionRunning]);
   const toggleRunning = () => {
     const next = !running;
     setRunning(next);
@@ -4240,10 +4453,25 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
   const hasStartedRef = useRef(hasStarted);
   const runningRef = useRef(running);
   const halfwayPromptedRef = useRef(halfwayPrompted);
+  const remoteRunningRef = useRef(Boolean(task.focusSessionRunning));
+  remoteRunningRef.current = Boolean(task.focusSessionRunning);
   useEffect(() => { secondsRef.current = seconds; }, [seconds]);
   useEffect(() => { hasStartedRef.current = hasStarted; }, [hasStarted]);
   useEffect(() => { runningRef.current = running; }, [running]);
   useEffect(() => { halfwayPromptedRef.current = halfwayPrompted; }, [halfwayPrompted]);
+  useEffect(() => {
+    const nextRunning = Boolean(task.focusSessionRunning);
+    const nextSeconds = getTaskFocusSeconds(task);
+    const nextStarted = Boolean(task.focusSessionStarted) || nextSeconds < totalSeconds;
+    setRunning(nextRunning);
+    runningRef.current = nextRunning;
+    setSeconds(nextSeconds);
+    secondsRef.current = nextSeconds;
+    setHasStarted(nextStarted);
+    hasStartedRef.current = nextStarted;
+    setHalfwayPrompted(Boolean(task.focusHalfwayPrompted));
+    if (nextRunning) setBreakStage("hidden");
+  }, [task.focusHalfwayPrompted, task.focusRemainingSeconds, task.focusSessionRunning, task.focusSessionStarted, task.focusUpdatedAt, task.id, totalSeconds]);
   const saveFocusSession = useCallback((remainingSeconds = seconds, started = hasStarted, prompted = halfwayPrompted, isRunning = running) => {
     onUpdateFocusSession(task.id, { remainingSeconds, hasStarted: started, isRunning, halfwayPrompted: prompted });
   }, [hasStarted, halfwayPrompted, onUpdateFocusSession, running, seconds, task.id]);
@@ -4251,7 +4479,7 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
     onUpdateFocusSession(task.id, {
       remainingSeconds: secondsRef.current,
       hasStarted: hasStartedRef.current,
-      isRunning: runningRef.current,
+      isRunning: runningRef.current && remoteRunningRef.current,
       halfwayPrompted: halfwayPromptedRef.current,
     });
   }, [onUpdateFocusSession, task.id]);
@@ -4261,9 +4489,9 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
     return () => window.clearInterval(id);
   }, [running]);
   useEffect(() => {
-    if (!running || seconds <= 0 || seconds % 15 !== 0) return;
-    saveFocusSession(seconds, true, halfwayPrompted, true);
-  }, [halfwayPrompted, running, saveFocusSession, seconds]);
+    if (!running || !task.focusSessionRunning || seconds <= 0 || seconds % 15 !== 0) return;
+    onUpdateFocusSession(task.id, { remainingSeconds: seconds, hasStarted: true, isRunning: true, halfwayPrompted, checkpoint: true });
+  }, [halfwayPrompted, onUpdateFocusSession, running, seconds, task.focusSessionRunning, task.id]);
   useEffect(() => {
     if (seconds !== 0 || !hasStarted) return;
     setRunning(false);
@@ -4367,7 +4595,11 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
   }, [hasStarted, task.title, time]);
   const completedSteps = checks.filter(Boolean).length;
   const totalSteps = Math.max(1, checklist.length);
-  const resumeFocus = () => { setBreakStage("hidden"); setRunning(true); };
+  const resumeFocus = () => {
+    setBreakStage("hidden");
+    setRunning(true);
+    saveFocusSession(secondsRef.current, true, halfwayPromptedRef.current, true);
+  };
   const toggleTimer = () => {
     if (running) {
       setRunning(false);
@@ -4432,7 +4664,7 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
 }
 
 function CommandPalette({ query, setQuery, results, close, go, onFocus, onCapture, onNewTask, onResult }: { query: string; setQuery: (s: string) => void; results: string[]; close: () => void; go: (v: View) => void; onFocus: () => void; onCapture: () => void; onNewTask: () => void; onResult: (result: string) => void }) {
-  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="command-modal" onMouseDown={e => e.stopPropagation()} initial={{ scale: .98, y: -10 }} animate={{ scale: 1, y: 0 }}><div className="command-input"><Search size={20} /><input autoFocus placeholder="Find anything in LifeOS…" value={query} onChange={e => setQuery(e.target.value)} /><kbd>ESC</kbd></div><div className="command-results">{!query && <><p>QUICK ACTIONS</p><button onClick={onFocus}><span className="command-icon"><Focus size={16} /></span><span>Start focus session</span></button><button onClick={onCapture}><span className="command-icon"><Brain size={16} /></span><span>Capture a thought</span></button><button onClick={onNewTask}><span className="command-icon"><Plus size={16} /></span><span>Create new task</span></button></>}{query && <p>RESULTS</p>}{results.slice(0, 7).map(result => <button key={result} onClick={() => { if (nav.some(n => n.name === result)) { go(result as View); close(); } else onResult(result); }}><span className="command-icon">{nav.some(n => n.name === result) ? <Command size={16} /> : <Search size={16} />}</span><span>{result}</span><ArrowRight size={14} /></button>)}</div><footer><span><kbd>⌘ K</kbd> Find</span><span><kbd>↵</kbd> Open</span><span>LifeOS Search</span></footer></motion.div></motion.div>;
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="command-modal" onMouseDown={e => e.stopPropagation()} initial={{ scale: .98, y: -10 }} animate={{ scale: 1, y: 0 }}><div className="command-input"><Search size={20} /><input autoFocus placeholder="Find anything in LifeOS…" value={query} onChange={e => setQuery(e.target.value)} /><kbd>ESC</kbd></div><div className="command-results">{!query && <><p>QUICK ACTIONS</p><button onClick={onFocus}><span className="command-icon"><Focus size={16} /></span><span>Start focus session</span></button><button onClick={onCapture}><span className="command-icon"><Brain size={16} /></span><span>Capture a thought</span></button><button onClick={onNewTask}><span className="command-icon"><Plus size={16} /></span><span>Create new task</span></button></>}{query && <p>RESULTS</p>}{results.slice(0, 7).map(result => <button key={result} onClick={() => { onResult(result); close(); }}><span className="command-icon">{nav.some(n => n.name === result) ? <Command size={16} /> : <Search size={16} />}</span><span>{result}</span><ArrowRight size={14} /></button>)}</div><footer><span><kbd>⌘ K</kbd> Find</span><span><kbd>↵</kbd> Open</span><span>LifeOS Search</span></footer></motion.div></motion.div>;
 }
 
 function AmbientStartModal({ close, start, spaces, draft }: { close: () => void; start: (title: string, space?: { name: string; color: string }) => void; spaces: { name: string; color: string }[]; draft: AmbientDraft }) {

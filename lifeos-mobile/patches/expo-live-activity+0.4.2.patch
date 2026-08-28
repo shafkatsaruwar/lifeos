@@ -1,0 +1,38 @@
+diff --git a/node_modules/expo-live-activity/ios-files/LiveActivityWidgetBundle.swift b/node_modules/expo-live-activity/ios-files/LiveActivityWidgetBundle.swift
+--- a/node_modules/expo-live-activity/ios-files/LiveActivityWidgetBundle.swift
++++ b/node_modules/expo-live-activity/ios-files/LiveActivityWidgetBundle.swift
+@@ -4,6 +4,13 @@
+ @main
+ struct LiveActivityWidgetBundle: WidgetBundle {
+   var body: some Widget {
+     LiveActivityWidget()
++    // LifeOS home-screen widgets (Attention-first family)
++    LifeOSAttentionWidget()
++    LifeOSNowFocusWidget()
++    LifeOSTasksWidget()
++    LifeOSDeadlineWidget()
++    LifeOSCalendarWidget()
++    LifeOSTodayWidget()
+   }
+ }
+diff --git a/node_modules/expo-live-activity/plugin/build/withConfig.js b/node_modules/expo-live-activity/plugin/build/withConfig.js
+--- a/node_modules/expo-live-activity/plugin/build/withConfig.js
++++ b/node_modules/expo-live-activity/plugin/build/withConfig.js
+@@ -9,7 +9,7 @@ const withConfig = (config, { bundleIdentifier, targetName, groupIdentifier }) => {
+             configIndex = index;
+         }
+     });
+-    if (!configIndex) {
++    if (configIndex == null) {
+         config.extra = {
+             ...config.extra,
+             eas: {
+@@ -32,7 +32,7 @@ const withConfig = (config, { bundleIdentifier, targetName, groupIdentifier }) => {
+                 },
+             },
+         };
+-        configIndex = 0;
++        configIndex = config.extra.eas.build.experimental.ios.appExtensions.length - 1;
+     }
+     if (configIndex != null && config.extra) {
+         const widgetsExtensionConfig = config.extra.eas.build.experimental.ios.appExtensions[configIndex];

@@ -32,6 +32,15 @@ export function taskIsOpen(task: Task) {
   return !task.done && !task.canceled && task.status !== "Done" && task.status !== "Canceled";
 }
 
+export function taskIsRecentlyDone(task: Task, days = 10) {
+  if (taskIsOpen(task) || task.canceled || task.status === "Canceled") return false;
+  if (!task.done && task.status !== "Done") return false;
+  if (!task.completedAt) return false;
+  const stamp = Date.parse(task.completedAt);
+  if (Number.isNaN(stamp)) return false;
+  return stamp >= Date.now() - days * 24 * 60 * 60 * 1000;
+}
+
 export function getTaskStatus(task: Task) {
   return task.status ?? (task.canceled ? "Canceled" : task.done ? "Done" : "Not started");
 }
@@ -110,6 +119,27 @@ export function formatResourceSize(bytes: number) {
   const units = ["B", "KB", "MB", "GB"];
   const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${Math.round((bytes / Math.pow(1024, unit)) * 10) / 10} ${units[unit]}`;
+}
+
+/** Strip web rich-text HTML so mobile TextInputs can show the same note body. */
+export function htmlToPlainText(value: string): string {
+  if (!value) return "";
+  if (!/<\/?[a-z][\s\S]*>/i.test(value)) return value;
+  return value
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/h[1-6]>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export function uid() {

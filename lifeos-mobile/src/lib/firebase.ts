@@ -5,8 +5,9 @@ import {
   initializeAuth,
   type Auth,
 } from "firebase/auth";
-import { get, getDatabase, ref, remove, set } from "firebase/database";
+import { get, getDatabase, onValue, ref, remove, set, type Unsubscribe } from "firebase/database";
 import type { NotebookHub, NotebookPage, Workspace } from "../types";
+import { normalizeCalendars } from "./calendars";
 import { emptyNotebookHub } from "./notebooks";
 
 /**
@@ -83,6 +84,7 @@ export const emptyWorkspace: Workspace = {
   tasks: [],
   projects: [],
   calendar: [],
+  calendars: [],
   classes: [],
   notes: [],
   settings: {},
@@ -110,6 +112,7 @@ export const emptyWorkspace: Workspace = {
     professors: [],
     goals: [],
   },
+  work: { projects: [], deliverables: [], tasks: [], meetings: [] },
   notebookHub: emptyNotebookHub(),
   notebookPages: {},
 };
@@ -159,6 +162,14 @@ export async function loadWorkspace(userId: string): Promise<Workspace> {
       ...loaded.school,
       profile: { ...emptyWorkspace.school.profile, ...loaded.school?.profile },
     },
+    work: {
+      projects: Array.isArray(loaded.work?.projects) ? loaded.work.projects : [],
+      deliverables: Array.isArray(loaded.work?.deliverables) ? loaded.work.deliverables : [],
+      tasks: Array.isArray(loaded.work?.tasks) ? loaded.work.tasks : [],
+      meetings: Array.isArray(loaded.work?.meetings) ? loaded.work.meetings : [],
+    },
+    calendars: normalizeCalendars(loaded.calendars),
+    calendar: Array.isArray(loaded.calendar) ? loaded.calendar : [],
     notebookHub: normalizeNotebookHub(loaded.notebookHub),
     notebookPages: normalizeNotebookPages(loaded.notebookPages),
   };
@@ -171,6 +182,17 @@ export async function saveWorkspacePart<K extends keyof Workspace>(
 ) {
   const serializable = JSON.parse(JSON.stringify(value)) as Workspace[K];
   await set(ref(database, `users/${userId}/${key}`), serializable);
+}
+
+export function subscribeWorkspacePart<K extends keyof Workspace>(
+  userId: string,
+  key: K,
+  onData: (value: Workspace[K]) => void,
+): Unsubscribe {
+  return onValue(ref(database, `users/${userId}/${key}`), (snapshot) => {
+    if (!snapshot.exists()) return;
+    onData(snapshot.val() as Workspace[K]);
+  });
 }
 
 /** Per-page write so stroke autosave does not rewrite the whole library. */

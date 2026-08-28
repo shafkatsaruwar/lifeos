@@ -26,9 +26,10 @@ npx expo start -c
 
 1. Use **Expo Go compatible with SDK 54** (same major as this project)
 2. Force-quit Expo Go, then scan QR (or press `i` for Simulator)
-3. Sign in with Google
-4. Land on **Now** — Tasks, Calendar, Life, School, Library in the tab bar
+3. Sign in with Google or **Sign in with Apple** (iOS — enable the Apple provider in Firebase Console + Apple Developer)
+4. Land on **Now** — Tasks, Calendar, Life, School, Work, Library in the tab bar
 5. Settings is the gear on Now
+6. Home-screen widgets: copy `native/LifeOSWidgets` into the iOS project after prebuild (see that folder’s README)
 
 ### If you see `PlatformConstants` / TurboModuleRegistry errors
 

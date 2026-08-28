@@ -1,7 +1,8 @@
 import Feather from "@expo/vector-icons/Feather";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Empty, Eyebrow, Page, Subtitle, Title } from "../components/UI";
+import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { taskIsOpen } from "../lib/helpers";
 
@@ -12,6 +13,7 @@ import { taskIsOpen } from "../lib/helpers";
 // t.classId === class.id for classes).
 export function SpacesScreen() {
   const { theme, workspace, updateProjects } = useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
 
   const items = [
@@ -25,7 +27,26 @@ export function SpacesScreen() {
       : workspace.tasks.filter((t) => t.classId === item.id && taskIsOpen(t)).length;
 
   const createProject = () => {
-    updateProjects([...workspace.projects, { name: `New space ${workspace.projects.length + 1}`, color: theme.accent, kind: "finishable" }]);
+    Alert.prompt(
+      "New project",
+      "Give this project a name",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Create",
+          onPress: (value?: string) => {
+            const name = (value || "").trim() || `New space ${workspace.projects.length + 1}`;
+            if (workspace.projects.some((p) => p.name === name)) {
+              Alert.alert("Name taken", "Another project already uses that name.");
+              return;
+            }
+            void updateProjects([...workspace.projects, { name, color: theme.accent, kind: "finishable" }]);
+            navigation.navigate("ProjectDetail", { projectName: name });
+          },
+        },
+      ],
+      "plain-text",
+    );
   };
 
   return (
@@ -45,7 +66,7 @@ export function SpacesScreen() {
         keyExtractor={(item) => item.key}
         numColumns={2}
         columnWrapperStyle={styles.columnWrap}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}
         renderItem={({ item }) => (
           <Pressable
             onPress={() => navigation.navigate(item.kind === "project" ? "ProjectDetail" : "ClassDetail", item.kind === "project" ? { projectName: item.id } : { classId: item.id })}

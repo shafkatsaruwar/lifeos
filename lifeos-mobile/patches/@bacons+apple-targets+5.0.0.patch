@@ -1,0 +1,133 @@
+diff --git a/node_modules/@bacons/apple-targets/ios/ExtensionStorage.podspec b/node_modules/@bacons/apple-targets/ios/ExtensionStorage.podspec
+index 1111111..2222222 100644
+--- a/node_modules/@bacons/apple-targets/ios/ExtensionStorage.podspec
++++ b/node_modules/@bacons/apple-targets/ios/ExtensionStorage.podspec
+@@ -5,7 +5,9 @@
+   s.description    = 'A sample project description'
+   s.author         = ''
+   s.homepage       = 'https://docs.expo.dev/modules/'
+-  s.platform       = :ios, '16.4'
++  # Match Expo default (15.1). 16.4 caused CocoaPods to skip this pod entirely
++  # ("doesn't support ios platform") when the app target is below 16.4.
++  s.platform       = :ios, '15.1'
+   s.source         = { git: '' }
+   s.static_framework = true
+ 
+diff --git a/node_modules/@bacons/apple-targets/ios/ExtensionStorageModule.swift b/node_modules/@bacons/apple-targets/ios/ExtensionStorageModule.swift
+index 1111111..2222222 100644
+--- a/node_modules/@bacons/apple-targets/ios/ExtensionStorageModule.swift
++++ b/node_modules/@bacons/apple-targets/ios/ExtensionStorageModule.swift
+@@ -1,5 +1,6 @@
+ import ExpoModulesCore
+ import WidgetKit
++import Foundation
+ 
+ public class ExtensionStorageModule: Module {
+     public func definition() -> ModuleDefinition {
+@@ -7,6 +8,7 @@
+         
+         Function("remove") { (forKey: String, suiteName: String?) in
+             UserDefaults(suiteName: suiteName)?.removeObject(forKey: forKey)
++            UserDefaults(suiteName: suiteName)?.synchronize()
+         }
+         
+         Function("reloadWidget") { (timeline: String?) in
+@@ -53,12 +55,23 @@
+         Function("setInt") { (key: String, value: Int, group: String?) in
+             let userDefaults = UserDefaults(suiteName: group)
+             userDefaults?.set(value, forKey: key)
++            userDefaults?.synchronize()
+         }
+         
+         Function("setString") { (key: String, value: String, group: String?) in
+             let userDefaults = UserDefaults(suiteName: group)
+             userDefaults?.set(value, forKey: key)
+-        }        
++            userDefaults?.synchronize()
++            // Mirror into App Group files so WidgetKit can read even if suite prefs lag.
++            if let group, let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) {
++                let fileURL = url.appendingPathComponent("\(key).json")
++                try? value.data(using: .utf8)?.write(to: fileURL, options: .atomic)
++                if key == "lifeosWidgetSnapshot" {
++                    let alias = url.appendingPathComponent("lifeos-widget-snapshot.json")
++                    try? value.data(using: .utf8)?.write(to: alias, options: .atomic)
++                }
++            }
++        }
+ 
+         Function("get") { (key: String, group: String?) -> String? in
+             let userDefaults = UserDefaults(suiteName: group)
+diff --git a/node_modules/@bacons/apple-targets/build/ExtensionStorage.js b/node_modules/@bacons/apple-targets/build/ExtensionStorage.js
+index 1111111..2222222 100644
+--- a/node_modules/@bacons/apple-targets/build/ExtensionStorage.js
++++ b/node_modules/@bacons/apple-targets/build/ExtensionStorage.js
+@@ -1,10 +1,8 @@
+ "use strict";
+-var _a;
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.ExtensionStorage = void 0;
+-// @ts-expect-error
+-const ExtensionStorageModule = (_a = expo === null || expo === void 0 ? void 0 : expo.modules) === null || _a === void 0 ? void 0 : _a.ExtensionStorage;
+-const nativeModule = ExtensionStorageModule !== null && ExtensionStorageModule !== void 0 ? ExtensionStorageModule : {
++
++const stubs = {
+     setInt() { },
+     setString() { },
+     reloadWidget() { },
+@@ -14,25 +12,25 @@
+     get() { },
+     remove() { },
+ };
+-const originalSetObject = nativeModule.setObject;
+-// Sweet API doesn't support doing this natively.
+-nativeModule.setObject = (key, value, suite) => {
+-    if (Array.isArray(value)) {
+-        return nativeModule.setArray(key, value, suite);
+-    }
+-    return originalSetObject(key, value, suite);
+-};
++
++/** Resolve at call-time — import-time `expo.modules` is often still undefined. */
++function getNative() {
++    // @ts-expect-error expo global
++    return (typeof expo !== "undefined" && expo?.modules?.ExtensionStorage) || stubs;
++}
++
+ class ExtensionStorage {
+     static reloadWidget(name) {
+-        nativeModule.reloadWidget(name);
++        getNative().reloadWidget(name);
+     }
+     static reloadControls(name) {
+-        nativeModule.reloadControls(name);
++        getNative().reloadControls(name);
+     }
+     constructor(appGroup) {
+         this.appGroup = appGroup;
+     }
+     set(key, value) {
++        const nativeModule = getNative();
+         if (typeof value === "number") {
+             nativeModule.setInt(key, value, this.appGroup);
+         }
+@@ -46,14 +44,17 @@
+             nativeModule.remove(key, this.appGroup);
+         }
+         else {
+-            nativeModule.setObject(key, value, this.appGroup);
++            if (Array.isArray(value)) {
++                return nativeModule.setArray(key, value, this.appGroup);
++            }
++            return nativeModule.setObject(key, value, this.appGroup);
+         }
+     }
+     get(key) {
+-        return nativeModule.get(key, this.appGroup);
++        return getNative().get(key, this.appGroup);
+     }
+     remove(key) {
+-        nativeModule.remove(key, this.appGroup);
++        getNative().remove(key, this.appGroup);
+     }
+ }
+ exports.ExtensionStorage = ExtensionStorage;
