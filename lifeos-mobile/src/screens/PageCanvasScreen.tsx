@@ -175,6 +175,11 @@ export function PageCanvasScreen() {
     return pageSizeForWidth(width, pageOrientation, page?.paperSize);
   }, [stageWidth, isWide, pageOrientation, page?.paperSize]);
 
+  const pageStrides = useMemo(
+    () => pageScrollMetrics(pages, stageWidth, sheetSize.width),
+    [pages, stageWidth, sheetSize.width],
+  );
+
   useEffect(() => {
     setViewMode(workspace.settings.notebookPageView ?? "seamless");
   }, [workspace.settings.notebookPageView]);
@@ -689,11 +694,6 @@ export function PageCanvasScreen() {
     requestAnimationFrame(action);
   };
 
-  const pageStrides = useMemo(
-    () => pageScrollMetrics(pages, stageWidth, sheetSize.width),
-    [pages, stageWidth, sheetSize.width],
-  );
-
   const setPageOrientation = useCallback(
     async (next: PaperOrientation) => {
       const latest = pagesByIdRef.current[pageIdRef.current];
@@ -704,6 +704,7 @@ export function PageCanvasScreen() {
     },
     [flushInk, persistPageById],
   );
+  const inkInteractive = mode === "ink";
   const overlayInteractive = mode !== "ink";
   /** Finger can scroll pages while inking when Pencil owns drawing. */
   const listScrollWhileInk = drawingPolicy === "pencilOnly";
