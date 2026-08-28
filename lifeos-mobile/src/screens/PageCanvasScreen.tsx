@@ -67,6 +67,7 @@ import type {
   PageCanvasMode,
   PageImageElement,
   PageTextElement,
+  PaperOrientation,
 } from "../types";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -75,6 +76,34 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 
 function animatePageChange() {
   LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+}
+
+function pageScrollMetrics(
+  pages: NotebookPage[],
+  stageWidth: number,
+  fallbackWidth: number,
+) {
+  const widths = pages.map((p) =>
+    pageSizeForWidth(stageWidth > 0 ? stageWidth : fallbackWidth, p.paperOrientation, p.paperSize).height +
+    PAGE_GAP,
+  );
+  return widths;
+}
+
+function pageIndexAtScrollOffset(offsetY: number, strides: number[]) {
+  if (!strides.length) return 0;
+  let y = 0;
+  for (let i = 0; i < strides.length; i++) {
+    if (offsetY < y + strides[i] * 0.55) return i;
+    y += strides[i];
+  }
+  return strides.length - 1;
+}
+
+function scrollOffsetForPageIndex(strides: number[], index: number) {
+  let offset = 0;
+  for (let i = 0; i < index; i++) offset += strides[i] ?? 0;
+  return offset;
 }
 
 /**
@@ -139,10 +168,12 @@ export function PageCanvasScreen() {
   const [zoomScale, setZoomScale] = useState(1);
   const pencilReady = isPencilKitAvailable();
 
+  const pageOrientation: PaperOrientation = page?.paperOrientation ?? "portrait";
+
   const sheetSize = useMemo(() => {
     const width = stageWidth > 0 ? stageWidth : isWide ? 640 : 360;
-    return pageSizeForWidth(width, page?.paperOrientation, page?.paperSize);
-  }, [stageWidth, isWide, page?.paperOrientation, page?.paperSize]);
+    return pageSizeForWidth(width, pageOrientation, page?.paperSize);
+  }, [stageWidth, isWide, pageOrientation, page?.paperSize]);
 
   useEffect(() => {
     setViewMode(workspace.settings.notebookPageView ?? "seamless");
@@ -240,8 +271,12 @@ export function PageCanvasScreen() {
       if (viewMode === "seamless") {
         const index = pages.findIndex((p) => p.id === nextPageId);
         if (index >= 0) {
+          const strides = pageScrollMetrics(pages, stageWidthRef.current, sheetSize.width);
           requestAnimationFrame(() => {
-            listRef.current?.scrollToIndex({ index, animated: opts?.animated ?? true, viewPosition: 0 });
+            listRef.current?.scrollToOffset({
+              offset: scrollOffsetForPageIndex(strides, index),
+              animated: opts?.animated ?? true,
+            });
           });
         }
       }
@@ -262,13 +297,16 @@ export function PageCanvasScreen() {
     if (scrollingRef.current) return;
     const timer = setTimeout(() => {
       try {
-        listRef.current?.scrollToIndex({ index: pageIndex, animated: false, viewPosition: 0 });
+        listRef.current?.scrollToOffset({
+          offset: scrollOffsetForPageIndex(pageStrides, pageIndex),
+          animated: false,
+        });
       } catch {
         /* layout may not be ready */
       }
     }, 16);
     return () => clearTimeout(timer);
-  }, [pageIndex, viewMode, stageWidth]);
+  }, [pageIndex, viewMode, stageWidth, pageStrides]);
 
   const touchPageCount = useCallback(
     async (count: number) => {
@@ -651,7 +689,21 @@ export function PageCanvasScreen() {
     requestAnimationFrame(action);
   };
 
-  const inkInteractive = mode === "ink";
+  const pageStrides = useMemo(
+    () => pageScrollMetrics(pages, stageWidth, sheetSize.width),
+    [pages, stageWidth, sheetSize.width],
+  );
+
+  const setPageOrientation = useCallback(
+    async (next: PaperOrientation) => {
+      const latest = pagesByIdRef.current[pageIdRef.current];
+      if (!latest || (latest.paperOrientation ?? "portrait") === next) return;
+      animatePageChange();
+      await flushInk();
+      await persistPageById(pageIdRef.current, { paperOrientation: next });
+    },
+    [flushInk, persistPageById],
+  );
   const overlayInteractive = mode !== "ink";
   /** Finger can scroll pages while inking when Pencil owns drawing. */
   const listScrollWhileInk = drawingPolicy === "pencilOnly";
@@ -661,9 +713,10 @@ export function PageCanvasScreen() {
   const onScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const offsetY = contentOffset.y;
-    const stride = sheetSize.height + PAGE_GAP;
-    const index = Math.max(0, Math.min(pages.length - 1, Math.round(offsetY / stride)));
+    const index = pageIndexAtScrollOffset(offsetY, pageStrides);
     const next = pages[index];
+    const currentHeight =
+      pageStrides[index] ? pageStrides[index] - PAGE_GAP : sheetSize.height;
     if (next && next.id !== pageIdRef.current) {
       ignoreScrollSyncRef.current = true;
       void flushInk().then(() => {
@@ -671,14 +724,11 @@ export function PageCanvasScreen() {
         navigation.setParams({ pageId: next.id });
       });
     }
-    // Near the document end → append the next page so scroll never dead-ends.
-    // Do this only on user scroll — never mid-stroke (appending reflows the list).
     const nearEnd =
-      offsetY + layoutMeasurement.height >= contentSize.height - Math.max(120, sheetSize.height * 0.35);
+      offsetY + layoutMeasurement.height >= contentSize.height - Math.max(120, currentHeight * 0.35);
     if (nearEnd && index >= pages.length - 1) {
       void ensureTrailingPage();
     }
-    // Clear after sync so late layout passes don't treat this as an active drag.
     scrollingRef.current = false;
   };
 
@@ -896,6 +946,24 @@ export function PageCanvasScreen() {
           }}
         />
         <ToolBtn
+          icon="smartphone"
+          label="Portrait page"
+          active={pageOrientation === "portrait"}
+          onPress={() => {
+            setToolPanel("none");
+            void setPageOrientation("portrait");
+          }}
+        />
+        <ToolBtn
+          icon="tablet"
+          label="Landscape page"
+          active={pageOrientation === "landscape"}
+          onPress={() => {
+            setToolPanel("none");
+            void setPageOrientation("landscape");
+          }}
+        />
+        <ToolBtn
           icon="crop"
           label="Lasso"
           active={mode === "ink" && inkTool === "lasso"}
@@ -1027,6 +1095,7 @@ export function PageCanvasScreen() {
           <ScrollView style={styles.pageStrip} contentContainerStyle={styles.pageStripInner}>
             {pages.map((p) => {
               const active = p.id === pageId;
+              const landscape = (p.paperOrientation ?? "portrait") === "landscape";
               return (
                 <Pressable
                   key={p.id}
@@ -1039,6 +1108,7 @@ export function PageCanvasScreen() {
                   delayLongPress={350}
                   style={[
                     styles.stripItem,
+                    landscape ? styles.stripItemLandscape : styles.stripItemPortrait,
                     {
                       borderColor: active ? theme.accent : theme.border,
                       backgroundColor: theme.surface,
@@ -1108,8 +1178,12 @@ export function PageCanvasScreen() {
                   onScrollEnd(event);
                 }}
                 getItemLayout={(_, index) => {
-                  const stride = sheetSize.height + PAGE_GAP;
-                  return { length: stride, offset: stride * index, index };
+                  const stride = pageStrides[index] ?? sheetSize.height + PAGE_GAP;
+                  return {
+                    length: stride,
+                    offset: scrollOffsetForPageIndex(pageStrides, index),
+                    index,
+                  };
                 }}
                 initialScrollIndex={pageIndex >= 0 ? pageIndex : 0}
                 // Virtualization: placeholders beyond ±2 keep 100-page notes light.
@@ -1119,9 +1193,8 @@ export function PageCanvasScreen() {
                 initialNumToRender={Math.min(pages.length, 3)}
                 removeClippedSubviews={Platform.OS === "android"}
                 onScrollToIndexFailed={(info) => {
-                  const stride = sheetSize.height + PAGE_GAP;
                   listRef.current?.scrollToOffset({
-                    offset: stride * info.index,
+                    offset: scrollOffsetForPageIndex(pageStrides, info.index),
                     animated: false,
                   });
                 }}
@@ -1210,6 +1283,16 @@ export function PageCanvasScreen() {
             onPress={() =>
               runMoreAction(() => setPageView(viewMode === "seamless" ? "single" : "seamless"))
             }
+          />
+          <MenuRow
+            label="Portrait page"
+            detail={pageOrientation === "portrait" ? "Current" : undefined}
+            onPress={() => runMoreAction(() => void setPageOrientation("portrait"))}
+          />
+          <MenuRow
+            label="Landscape page"
+            detail={pageOrientation === "landscape" ? "Current" : undefined}
+            onPress={() => runMoreAction(() => void setPageOrientation("landscape"))}
           />
         </MenuSection>
         <MenuSection label="Other">
@@ -1414,8 +1497,6 @@ const styles = StyleSheet.create({
   pageStripInner: { gap: 8, paddingBottom: 24, paddingTop: 2 },
   stripAdd: { borderStyle: "dashed", alignItems: "center", justifyContent: "center" },
   stripItem: {
-    width: 48,
-    height: 64,
     borderRadius: 10,
     borderWidth: 1.5,
     overflow: "hidden",
@@ -1423,6 +1504,8 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
+  stripItemPortrait: { width: 48, height: 64 },
+  stripItemLandscape: { width: 52, height: 38 },
   stripPaper: { ...StyleSheet.absoluteFillObject, opacity: 0.95 },
   stripBadge: {
     position: "absolute",
