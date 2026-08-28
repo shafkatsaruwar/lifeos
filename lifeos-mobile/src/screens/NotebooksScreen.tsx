@@ -43,7 +43,6 @@ type NoteRow =
   | { kind: "pages"; id: string; updatedAt: string; notebook: Notebook }
   | { kind: "new"; id: "new" };
 
-const SIDEBAR_W = 232;
 const QUICK_BG = {
   all: { light: "#E8E9ED", dark: "#2A2C31" },
   starred: { light: "#F5E7DF", dark: "#3A2E28" },
@@ -79,10 +78,7 @@ export function NotebooksScreen() {
   const columns = isWide ? 4 : isTablet ? 3 : 2;
   const mainPad = 20;
   const gutter = 14;
-  const mainWidth = Math.max(
-    280,
-    (isTablet ? windowW - SIDEBAR_W : windowW) - mainPad * 2,
-  );
+  const mainWidth = Math.max(280, windowW - mainPad * 2);
   const coverW = (mainWidth - gutter * (columns - 1)) / columns;
   const coverH = coverW * 1.28;
 
@@ -418,18 +414,6 @@ export function NotebooksScreen() {
     </>
   );
 
-  const sidebar = (
-    <ScrollView
-      style={[styles.sidebar, { width: SIDEBAR_W, borderRightColor: theme.border }]}
-      contentContainerStyle={[styles.sidebarInner, { paddingBottom: tabBarPad }]}
-      showsVerticalScrollIndicator={false}
-    >
-      <Text style={[styles.brand, { color: theme.text }]}>Library</Text>
-      <LibrarySubNav active="handwritten" compact />
-      {browseChrome}
-    </ScrollView>
-  );
-
   const renderCoverFace = (opts: {
     color: string;
     cover?: Notebook["cover"];
@@ -488,7 +472,6 @@ export function NotebooksScreen() {
         {renderCoverFace({
           color: notebook.color || theme.accent,
           cover: notebook.cover,
-          kind: "pages",
           starred: notebook.starred,
         })}
         <Text style={[styles.metaTitle, { color: theme.text }]} numberOfLines={1}>
@@ -503,14 +486,14 @@ export function NotebooksScreen() {
     <View
       style={[
         styles.mainHeader,
-        !isTablet && styles.mainHeaderPhone,
-        !isTablet && { borderTopColor: theme.border },
+        styles.mainHeaderPhone,
+        { borderTopColor: theme.border },
       ]}
     >
       <Text
         style={[
           styles.mainTitle,
-          !isTablet && styles.mainTitlePhone,
+          isTablet ? undefined : styles.mainTitlePhone,
           {
             color: theme.text,
             fontFamily: Platform.OS === "ios" ? "Georgia" : undefined,
@@ -548,7 +531,6 @@ export function NotebooksScreen() {
       autoFocus
       style={[
         styles.searchInput,
-        isTablet && { marginHorizontal: 20 },
         { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface },
       ]}
     />
@@ -572,49 +554,31 @@ export function NotebooksScreen() {
     )
   );
 
+  const listHeader = (
+    <View style={styles.phoneHeader}>
+      <Text style={[styles.brand, { color: theme.text }]}>Library</Text>
+      <LibrarySubNav active="handwritten" compact />
+      {browseChrome}
+      {sectionHeader}
+      {searchField}
+    </View>
+  );
+
   return (
     <Page fullBleed>
-      <View style={[styles.shell, !isTablet && styles.shellPhone]}>
-        {isTablet ? sidebar : null}
-
+      <View style={[styles.shell, styles.shellPhone]}>
         <View style={styles.main}>
-          {isTablet ? (
-            <>
-              {sectionHeader}
-              {searchField}
-              <FlatList
-                data={noteRows}
-                key={`grid-${columns}-${filter}`}
-                keyExtractor={(item) => `${item.kind}-${item.id}`}
-                numColumns={columns}
-                columnWrapperStyle={columns > 1 ? { gap: gutter } : undefined}
-                contentContainerStyle={[styles.grid, { paddingHorizontal: mainPad, gap: gutter, paddingBottom: tabBarPad }]}
-                renderItem={renderItem}
-                ListEmptyComponent={empty}
-              />
-            </>
-          ) : (
-            <FlatList
-              data={noteRows}
-              key={`phone-grid-${columns}-${filter}`}
-              keyExtractor={(item) => `${item.kind}-${item.id}`}
-              numColumns={columns}
-              columnWrapperStyle={columns > 1 ? { gap: gutter } : undefined}
-              stickyHeaderIndices={[]}
-              ListHeaderComponent={
-                <View style={styles.phoneHeader}>
-                  <Text style={[styles.brand, { color: theme.text }]}>Library</Text>
-                  <LibrarySubNav active="handwritten" compact />
-                  {browseChrome}
-                  {sectionHeader}
-                  {searchField}
-                </View>
-              }
-              contentContainerStyle={[styles.grid, { paddingHorizontal: mainPad, gap: gutter, paddingBottom: tabBarPad }]}
-              renderItem={renderItem}
-              ListEmptyComponent={empty}
-            />
-          )}
+          <FlatList
+            data={noteRows}
+            key={`grid-${columns}-${filter}`}
+            keyExtractor={(item) => `${item.kind}-${item.id}`}
+            numColumns={columns}
+            columnWrapperStyle={columns > 1 ? { gap: gutter } : undefined}
+            ListHeaderComponent={listHeader}
+            contentContainerStyle={[styles.grid, { paddingHorizontal: mainPad, gap: gutter, paddingBottom: tabBarPad }]}
+            renderItem={renderItem}
+            ListEmptyComponent={empty}
+          />
         </View>
       </View>
 
@@ -800,10 +764,8 @@ function Chip({
 }
 
 const styles = StyleSheet.create({
-  shell: { flex: 1, flexDirection: "row" },
+  shell: { flex: 1, flexDirection: "column" },
   shellPhone: { flexDirection: "column" },
-  sidebar: { borderRightWidth: StyleSheet.hairlineWidth },
-  sidebarInner: { paddingTop: 8, paddingBottom: 28, paddingHorizontal: 14, gap: 12 },
   brand: {
     fontSize: 26,
     fontWeight: "700",
