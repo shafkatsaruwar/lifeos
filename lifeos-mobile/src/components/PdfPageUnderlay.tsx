@@ -1,49 +1,41 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { WebView } from "react-native-webview";
+import { Image, StyleSheet, Text, View } from "react-native";
 import type { NotebookPage } from "../types";
-import { buildPdfJsViewerHtml } from "../lib/pdfViewerHtml";
-import { resolvePdfDisplayPayload } from "../lib/notebookPdf";
+import { resolvePdfPageImageUri } from "../lib/notebookPdf";
 import { useLifeOS } from "../lib/LifeOSContext";
+
+function toFileUri(path: string) {
+  return path.startsWith("file://") ? path : `file://${path}`;
+}
 
 /**
  * Renders an imported PDF page behind PencilKit when `page.pdfRef` is set.
- * Uses PDF.js inside WebView — iOS WKWebView ignores `#page=` on local PDF URIs.
+ * Uses native PDFKit → cached PNG so each notebook page shows the correct PDF page.
  */
 export function PdfPageUnderlay({ page }: { page: NotebookPage }) {
   const { theme } = useLifeOS();
   const ref = page.pdfRef;
-  const [viewerHtml, setViewerHtml] = useState<string | null>(null);
+  const [imageUri, setImageUri] = useState<string | null>(null);
 
   useEffect(() => {
     if (!ref?.storagePath) {
-      setViewerHtml(null);
+      setImageUri(null);
       return;
     }
     let cancelled = false;
-    resolvePdfDisplayPayload(ref).then((payload) => {
-      if (cancelled || !payload) return;
-      setViewerHtml(buildPdfJsViewerHtml(payload.base64, payload.pageNumber));
+    resolvePdfPageImageUri(ref).then((path) => {
+      if (!cancelled && path) setImageUri(toFileUri(path));
     });
     return () => {
       cancelled = true;
     };
-  }, [ref?.storagePath, ref?.pageIndex]);
+  }, [ref?.storagePath, ref?.pageIndex, ref?.previewImagePath]);
 
-  if (!ref?.storagePath || !viewerHtml) return null;
+  if (!ref?.storagePath || !imageUri) return null;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <WebView
-        source={{ html: viewerHtml }}
-        style={styles.web}
-        originWhitelist={["*"]}
-        scrollEnabled={false}
-        showsVerticalScrollIndicator={false}
-        showsHorizontalScrollIndicator={false}
-        javaScriptEnabled
-        domStorageEnabled
-      />
+      <Image source={{ uri: imageUri }} style={styles.image} resizeMode="contain" />
       <View style={[styles.badge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <Text style={{ color: theme.muted, fontSize: 10, fontWeight: "700" }}>
           PDF p.{ref.pageIndex + 1}
@@ -55,7 +47,7 @@ export function PdfPageUnderlay({ page }: { page: NotebookPage }) {
 }
 
 const styles = StyleSheet.create({
-  web: { flex: 1, backgroundColor: "#fff", opacity: 0.92 },
+  image: { flex: 1, width: "100%", height: "100%", backgroundColor: "#fff" },
   badge: {
     position: "absolute",
     top: 8,

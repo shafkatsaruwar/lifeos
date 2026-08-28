@@ -90,6 +90,61 @@ export type PdfPageSlice = {
   sourcePageIndex: number;
 };
 
+async function renderPdfPagePngNative(
+  filePath: string,
+  pageIndex: number,
+  scale = 2,
+): Promise<string> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require("expo-pencilkit-ui") as {
+      renderPdfPagePng?: (path: string, pageIndex: number, scale?: number) => Promise<string>;
+    };
+    if (!mod.renderPdfPagePng || Platform.OS !== "ios") return "";
+    return (await mod.renderPdfPagePng(filePath, pageIndex, scale)) || "";
+  } catch {
+    return "";
+  }
+}
+
+function pdfPreviewCachePath(sourcePath: string, pageIndex: number) {
+  const dir = `${FileSystem.documentDirectory}notebookPdfs/previews/`;
+  return `${dir}${pdfSliceCacheKey(sourcePath, pageIndex)}-v2.png`;
+}
+
+/**
+ * Rasterize one PDF page to a cached PNG via native PDFKit.
+ * Works for multi-page source files — each pageIndex renders the matching PDF page.
+ */
+export async function rasterizePdfPageImage(
+  storagePath: string,
+  pageIndex: number,
+  scale = 2,
+): Promise<string | null> {
+  const previewDir = `${FileSystem.documentDirectory}notebookPdfs/previews/`;
+  await FileSystem.makeDirectoryAsync(previewDir, { intermediates: true }).catch(() => undefined);
+  const outPath = pdfPreviewCachePath(storagePath, pageIndex);
+  const cached = await FileSystem.getInfoAsync(outPath);
+  if (cached.exists) return outPath;
+
+  const pngB64 = await renderPdfPagePngNative(storagePath, pageIndex, scale);
+  if (!pngB64) return null;
+
+  await FileSystem.writeAsStringAsync(outPath, pngB64, { encoding: BASE64 });
+  return outPath;
+}
+
+/** Local file URI for the rasterized PDF page image backing a notebook page. */
+export async function resolvePdfPageImageUri(
+  ref: NonNullable<NotebookPage["pdfRef"]>,
+): Promise<string | null> {
+  if (ref.previewImagePath) {
+    const info = await FileSystem.getInfoAsync(ref.previewImagePath);
+    if (info.exists) return ref.previewImagePath;
+  }
+  return await rasterizePdfPageImage(ref.storagePath, ref.pageIndex);
+}
+
 function pdfSliceCacheKey(sourcePath: string, pageIndex: number) {
   const base = sourcePath.split("/").pop() || "pdf";
   return `${base.replace(/[^\w.\-]+/g, "_")}-p${pageIndex + 1}`;
@@ -123,7 +178,7 @@ export async function extractSinglePagePdf(
 /** Split an imported PDF into single-page files (capped for safety). */
 export async function splitPdfToSinglePageFiles(
   plan: PdfImportPlan,
-  maxPages = 40,
+  maxPages = 100,
 ): Promise<PdfPageSlice[]> {
   const count = Math.min(plan.pageCount, maxPages);
   const dir = `${FileSystem.documentDirectory}notebookPdfs/split/`;
@@ -192,7 +247,7 @@ export async function applyPdfImportToNotebook(
   plan: PdfImportPlan,
   existingPages: NotebookPage[],
   startAtIndex: number,
-  maxPages = 40,
+  maxPages = 100,
 ): Promise<{ pages: NotebookPage[] }> {
   const slices = await splitPdfToSinglePageFiles(plan, maxPages);
   const sorted = [...existingPages].sort((a, b) => a.index - b.index);
@@ -202,11 +257,13 @@ export async function applyPdfImportToNotebook(
   for (let i = 0; i < slices.length; i++) {
     const slice = slices[i];
     const targetIndex = startAtIndex + i;
+    const previewImagePath = await rasterizePdfPageImage(plan.storagePath, slice.sourcePageIndex);
     const pdfRef = {
-      storagePath: slice.storagePath,
+      storagePath: plan.storagePath,
       pageIndex: slice.sourcePageIndex,
       pageCount: plan.pageCount,
       fileName: plan.fileName,
+      previewImagePath: previewImagePath || undefined,
     };
     const title = `${baseTitle} · p.${slice.sourcePageIndex + 1}`;
     const existing = sorted.find((p) => p.index === targetIndex);

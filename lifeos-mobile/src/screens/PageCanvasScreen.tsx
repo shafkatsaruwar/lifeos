@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AnchoredPopover } from "../components/AnchoredPopover";
 import { DocumentZoom } from "../components/DocumentZoom";
 import {
@@ -84,6 +85,9 @@ export function PageCanvasScreen() {
     useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const insets = useSafeAreaInsets();
+  const chromePadTop = Math.max(insets.top, Platform.OS === "ios" ? 8 : 0);
+  const chromePadRight = Math.max(insets.right, 4);
   const { isTablet, isWide } = useLayout();
   const notebookId = route.params?.notebookId as string;
   const pageId = route.params?.pageId as string;
@@ -751,8 +755,8 @@ export function PageCanvasScreen() {
   }
 
   return (
-    <Page edges={["top", "bottom"]} fullBleed>
-      <View style={styles.chrome}>
+    <Page edges={["bottom"]} fullBleed>
+      <View style={[styles.chrome, { paddingTop: chromePadTop, paddingRight: chromePadRight }]}>
         <Pressable
           accessibilityLabel="Back to pages"
           onPress={() => navigation.goBack()}

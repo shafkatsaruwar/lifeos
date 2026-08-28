@@ -1,5 +1,3 @@
-import { buildPdfJsViewerHtml } from "../lifeos-mobile/src/lib/pdfViewerHtml";
-
 /**
  * pdfSliceCacheKey mirrors notebookPdf.ts naming for split-page cache files.
  */
@@ -25,14 +23,6 @@ describe("single-page PDF export index clamp", () => {
     const storedSourceIndex = 5;
     const idx = Math.min(storedSourceIndex, pageCount - 1);
     expect(idx).toBe(0);
-  });
-});
-
-describe("buildPdfJsViewerHtml", () => {
-  it("embeds the requested 1-based page number", () => {
-    const html = buildPdfJsViewerHtml("YWJj", 4);
-    expect(html).toContain("Math.min(4, pdf.numPages)");
-    expect(html).toContain("disableWorker: true");
   });
 });
 
