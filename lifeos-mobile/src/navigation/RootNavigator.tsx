@@ -163,9 +163,11 @@ function LibraryStackNavigator() {
   const { workspace } = useLifeOS();
   const reduceMotion = Boolean(workspace.settings.reduceMotion);
   const screenOptions = useStackScreenOptions();
+  /** Peer Library sections crossfade so Handwritten ↔ Text ↔ MindDump ↔ Files don't slide/jump. */
+  const sectionOptions = { ...screenOptions, animation: "fade" as const, animationDuration: 180 };
   return (
     <LibraryStack.Navigator screenOptions={screenOptions}>
-      <LibraryStack.Screen name="NotebooksList" component={NotebooksScreen} />
+      <LibraryStack.Screen name="NotebooksList" component={NotebooksScreen} options={sectionOptions} />
       <LibraryStack.Screen name="NotebookDetail" component={NotebookDetailScreen} />
       <LibraryStack.Screen
         name="PageCanvas"
@@ -175,10 +177,10 @@ function LibraryStackNavigator() {
           animation: reduceMotion ? "fade" : "slide_from_bottom",
         }}
       />
-      <LibraryStack.Screen name="NotesList" component={NotesScreen} />
+      <LibraryStack.Screen name="NotesList" component={NotesScreen} options={sectionOptions} />
       <LibraryStack.Screen name="NoteEditor" component={NoteEditorScreen} />
-      <LibraryStack.Screen name="Brain" component={BrainScreen} />
-      <LibraryStack.Screen name="Resources" component={ResourcesScreen} />
+      <LibraryStack.Screen name="Brain" component={BrainScreen} options={sectionOptions} />
+      <LibraryStack.Screen name="Resources" component={ResourcesScreen} options={sectionOptions} />
     </LibraryStack.Navigator>
   );
 }
