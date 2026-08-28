@@ -29,7 +29,7 @@ import {
   type InkToolKind,
 } from "../components/HandwritingCanvas";
 import { InkToolTray, type DrawingTip } from "../components/InkToolTray";
-import { PaperBackground } from "../components/PaperBackground";
+import { PageBrowserPanel } from "../components/PageBrowserPanel";
 import { PageSheet } from "../components/PageSheet";
 import { TemplatePicker } from "../components/TemplatePicker";
 import { Page } from "../components/UI";
@@ -162,6 +162,7 @@ export function PageCanvasScreen() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [moreAnchor, setMoreAnchor] = useState<LayoutRectangle | null>(null);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [pageBrowserOpen, setPageBrowserOpen] = useState(false);
   const [stageWidth, setStageWidth] = useState(0);
   const [viewMode, setViewMode] = useState<NotebookPageView>(workspace.settings.notebookPageView ?? "seamless");
   /** Session-only document zoom; resets when leaving the note. */
@@ -1092,54 +1093,6 @@ export function PageCanvasScreen() {
       ) : null}
 
       <View style={[styles.stage, isWide && styles.stageWide]}>
-        {isWide ? (
-          <ScrollView style={styles.pageStrip} contentContainerStyle={styles.pageStripInner}>
-            {pages.map((p) => {
-              const active = p.id === pageId;
-              const landscape = (p.paperOrientation ?? "portrait") === "landscape";
-              return (
-                <Pressable
-                  key={p.id}
-                  onPress={() => void jumpToPage(p.id)}
-                  onLongPress={() => {
-                    void jumpToPage(p.id).then(() => {
-                      setTimeout(() => openMore(), 0);
-                    });
-                  }}
-                  delayLongPress={350}
-                  style={[
-                    styles.stripItem,
-                    landscape ? styles.stripItemLandscape : styles.stripItemPortrait,
-                    {
-                      borderColor: active ? theme.accent : theme.border,
-                      backgroundColor: theme.surface,
-                      shadowOpacity: active ? 0.12 : 0,
-                    },
-                  ]}
-                >
-                  <View style={styles.stripPaper}>
-                    <PaperBackground paper={p.paper ?? "ruled"} paperColor={p.paperColor} />
-                  </View>
-                  <View style={[styles.stripBadge, { backgroundColor: active ? theme.accent : "rgba(15,23,42,0.55)" }]}>
-                    <Text style={styles.stripBadgeText}>{p.index + 1}</Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-            <Pressable
-              accessibilityLabel="Add page"
-              onPress={() => void addPage()}
-              style={[
-                styles.stripItem,
-                styles.stripAdd,
-                { borderColor: theme.border, backgroundColor: theme.surface },
-              ]}
-            >
-              <Feather name="plus" size={14} color={theme.muted} />
-            </Pressable>
-          </ScrollView>
-        ) : null}
-
         <View
           style={styles.stageMain}
           onLayout={(event) => {
@@ -1246,6 +1199,24 @@ export function PageCanvasScreen() {
                   : "Native build required for PencilKit"}
             </Text>
           ) : null}
+
+          {!pageBrowserOpen ? (
+            <View style={styles.pageNavFloat} pointerEvents="box-none">
+              <Pressable
+                accessibilityLabel="Show pages"
+                onPress={() => setPageBrowserOpen(true)}
+                style={[
+                  styles.pageNavPill,
+                  {
+                    borderColor: "rgba(15,23,42,0.1)",
+                    backgroundColor: "rgba(245,248,250,0.96)",
+                  },
+                ]}
+              >
+                <Feather name="grid" size={17} color={theme.text} />
+              </Pressable>
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -1294,6 +1265,10 @@ export function PageCanvasScreen() {
             label="Landscape page"
             detail={pageOrientation === "landscape" ? "Current" : undefined}
             onPress={() => runMoreAction(() => void setPageOrientation("landscape"))}
+          />
+          <MenuRow
+            label="Pages at a glance"
+            onPress={() => runMoreAction(() => setPageBrowserOpen(true))}
           />
         </MenuSection>
         <MenuSection label="Other">
@@ -1364,6 +1339,16 @@ export function PageCanvasScreen() {
           <MenuRow label="Delete note" danger onPress={() => runMoreAction(deleteCurrentNotebook)} />
         </MenuSection>
       </AnchoredPopover>
+
+      <PageBrowserPanel
+        visible={pageBrowserOpen}
+        onClose={() => setPageBrowserOpen(false)}
+        notebookName={notebook.name || "Note"}
+        pages={pages}
+        currentPageId={pageId}
+        onSelectPage={(id) => void jumpToPage(id)}
+        onAddPage={() => void addPage()}
+      />
 
       <TemplatePicker
         visible={templatePickerOpen}
@@ -1494,32 +1479,24 @@ const styles = StyleSheet.create({
   templateHint: { fontSize: 11, fontWeight: "800", marginRight: 4, alignSelf: "center" },
   stage: { flex: 1, minHeight: 0, paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
   stageWide: { flexDirection: "row", paddingHorizontal: 8, paddingBottom: 0, gap: 0 },
-  pageStrip: { width: 56, marginRight: 8, flexGrow: 0, flexShrink: 0 },
-  pageStripInner: { gap: 8, paddingBottom: 24, paddingTop: 2 },
-  stripAdd: { borderStyle: "dashed", alignItems: "center", justifyContent: "center" },
-  stripItem: {
-    borderRadius: 10,
-    borderWidth: 1.5,
-    overflow: "hidden",
-    shadowColor: "#0F172A",
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  stripItemPortrait: { width: 48, height: 64 },
-  stripItemLandscape: { width: 52, height: 38 },
-  stripPaper: { ...StyleSheet.absoluteFillObject, opacity: 0.95 },
-  stripBadge: {
+  pageNavFloat: {
     position: "absolute",
     left: 4,
-    bottom: 4,
-    minWidth: 18,
-    height: 16,
-    borderRadius: 8,
+    top: 8,
+    zIndex: 4,
+  },
+  pageNavPill: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 4,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
-  stripBadgeText: { color: "#fff", fontSize: 9, fontWeight: "800" },
   menuSection: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "rgba(15,23,42,0.08)",
