@@ -1,4 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
+import Constants from "expo-constants";
+import { initialWindowMetrics } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -85,10 +87,15 @@ export function PageCanvasScreen() {
     useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const insets = useSafeAreaInsets();
-  const chromePadTop = Math.max(insets.top, Platform.OS === "ios" ? 8 : 0);
-  const chromePadRight = Math.max(insets.right, 4);
   const { isTablet, isWide } = useLayout();
+  const insets = useSafeAreaInsets();
+  const windowTop = initialWindowMetrics?.insets.top ?? 0;
+  const statusBarHeight = Constants.statusBarHeight ?? 0;
+  const iosMinTop = isTablet ? 32 : 47;
+  const resolvedTop = Math.max(insets.top, windowTop, statusBarHeight);
+  /** fullScreenModal on iPad often reports 0 — use a real status-bar height. */
+  const chromePadTop = Math.max(insets.top, windowTop, statusBarHeight, resolvedTop < 20 ? iosMinTop : 0);
+  const chromePadRight = Math.max(insets.right, 8);
   const notebookId = route.params?.notebookId as string;
   const pageId = route.params?.pageId as string;
   const hub = workspace.notebookHub;
@@ -756,63 +763,77 @@ export function PageCanvasScreen() {
 
   return (
     <Page edges={["bottom"]} fullBleed>
-      <View style={[styles.chrome, { paddingTop: chromePadTop, paddingRight: chromePadRight }]}>
-        <Pressable
-          accessibilityLabel="Back to pages"
-          onPress={() => navigation.goBack()}
-          style={({ pressed }) => [styles.chromeBtn, pressed && { opacity: 0.55 }]}
-        >
-          <Feather name="chevron-left" size={22} color={theme.text} />
-        </Pressable>
-        <View style={styles.chromeMid}>
-          <Text style={[styles.notebookName, { color: theme.text }]} numberOfLines={1}>
-            {notebook.name}
-          </Text>
-          <Text style={[styles.pageName, { color: theme.muted }]} numberOfLines={1}>
-            {page.title?.trim() || `Page ${page.index + 1}`}
-            {pageIndicator ? ` · ${pageIndicator}` : ""}
-          </Text>
-        </View>
-        <Pressable
-          accessibilityLabel={viewMode === "seamless" ? "Seamless view" : "Single page view"}
-          onPress={() => setPageView(viewMode === "seamless" ? "single" : "seamless")}
-          style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
-        >
-          <Feather name={viewMode === "seamless" ? "menu" : "square"} size={13} color={theme.muted} />
-          <Text style={[styles.viewChipText, { color: theme.muted }]}>
-            {viewMode === "seamless" ? "Seamless" : "Single"}
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityLabel={zoomScale > 1.01 ? "Reset zoom to 100%" : "Zoom to 160%"}
-          onPress={() => setZoomScale((z) => (z > 1.05 ? 1 : 1.6))}
-          style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
-        >
-          <Text style={[styles.viewChipText, { color: theme.muted }]}>
-            {`${Math.round(zoomScale * 100)}%`}
-          </Text>
-        </Pressable>
-        <Pressable accessibilityLabel="Previous page" disabled={pageIndex <= 0} onPress={() => goPage(-1)} style={[styles.chromeBtn, pageIndex <= 0 && { opacity: 0.3 }]}>
-          <Feather name="chevron-up" size={18} color={theme.text} />
-        </Pressable>
-        <Pressable
-          accessibilityLabel={pageIndex >= pages.length - 1 ? "Add page" : "Next page"}
-          onPress={() => {
-            if (pageIndex >= pages.length - 1) void addPage();
-            else goPage(1);
-          }}
-          style={styles.chromeBtn}
-        >
-          <Feather
-            name={pageIndex >= pages.length - 1 ? "plus" : "chevron-down"}
-            size={18}
-            color={theme.text}
-          />
-        </Pressable>
-        <View ref={moreBtnRef} collapsable={false}>
-          <Pressable accessibilityLabel="More" onPress={openMore} style={styles.chromeBtn}>
-            <Feather name="more-horizontal" size={18} color={theme.text} />
+      <View style={{ paddingTop: chromePadTop, paddingRight: chromePadRight, backgroundColor: theme.bg }}>
+        <View style={styles.chrome}>
+          <Pressable
+            accessibilityLabel="Back to pages"
+            onPress={() => navigation.goBack()}
+            style={({ pressed }) => [styles.chromeBtn, pressed && { opacity: 0.55 }]}
+          >
+            <Feather name="chevron-left" size={22} color={theme.text} />
           </Pressable>
+          <View style={styles.chromeMid}>
+            <Text style={[styles.notebookName, { color: theme.text }]} numberOfLines={1}>
+              {notebook.name || "Note"}
+            </Text>
+            <Text style={[styles.pageName, { color: theme.muted }]} numberOfLines={1}>
+              {page.title?.trim() || `Page ${page.index + 1}`}
+              {pageIndicator ? ` · ${pageIndicator}` : ""}
+            </Text>
+          </View>
+          <View ref={moreBtnRef} collapsable={false} style={styles.chromeBtnWrap}>
+            <Pressable accessibilityLabel="More" onPress={openMore} style={styles.chromeBtn}>
+              <Feather name="more-horizontal" size={20} color={theme.text} />
+            </Pressable>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chromeTrailingScroll}
+            contentContainerStyle={styles.chromeTrailing}
+          >
+            <Pressable
+              accessibilityLabel={viewMode === "seamless" ? "Seamless view" : "Single page view"}
+              onPress={() => setPageView(viewMode === "seamless" ? "single" : "seamless")}
+              style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
+            >
+              <Feather name={viewMode === "seamless" ? "menu" : "square"} size={13} color={theme.muted} />
+              <Text style={[styles.viewChipText, { color: theme.muted }]}>
+                {viewMode === "seamless" ? "Seamless" : "Single"}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel={zoomScale > 1.01 ? "Reset zoom to 100%" : "Zoom to 160%"}
+              onPress={() => setZoomScale((z) => (z > 1.05 ? 1 : 1.6))}
+              style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
+            >
+              <Text style={[styles.viewChipText, { color: theme.muted }]}>
+                {`${Math.round(zoomScale * 100)}%`}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Previous page"
+              disabled={pageIndex <= 0}
+              onPress={() => goPage(-1)}
+              style={[styles.chromeBtn, pageIndex <= 0 && { opacity: 0.3 }]}
+            >
+              <Feather name="chevron-up" size={18} color={theme.text} />
+            </Pressable>
+            <Pressable
+              accessibilityLabel={pageIndex >= pages.length - 1 ? "Add page" : "Next page"}
+              onPress={() => {
+                if (pageIndex >= pages.length - 1) void addPage();
+                else goPage(1);
+              }}
+              style={styles.chromeBtn}
+            >
+              <Feather
+                name={pageIndex >= pages.length - 1 ? "plus" : "chevron-down"}
+                size={18}
+                color={theme.text}
+              />
+            </Pressable>
+          </ScrollView>
         </View>
       </View>
 
@@ -1344,9 +1365,12 @@ function ToolBtn({
 
 const styles = StyleSheet.create({
   missing: { flex: 1, alignItems: "center", justifyContent: "center" },
-  chrome: { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingBottom: 4, gap: 2 },
-  chromeBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  chromeMid: { flex: 1, minWidth: 0, paddingHorizontal: 4 },
+  chrome: { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingBottom: 6, gap: 2, minHeight: 44 },
+  chromeBtnWrap: { flexShrink: 0 },
+  chromeBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  chromeMid: { flex: 1, minWidth: 0, paddingHorizontal: 4, flexShrink: 1 },
+  chromeTrailingScroll: { flexGrow: 0, flexShrink: 0, maxWidth: 220 },
+  chromeTrailing: { flexDirection: "row", alignItems: "center", gap: 2, paddingRight: 4 },
   notebookName: { fontSize: 15, fontWeight: "800" },
   pageName: { fontSize: 11, fontWeight: "700", marginTop: 1 },
   viewChip: {
@@ -1358,6 +1382,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     minHeight: 30,
     marginRight: 2,
+    flexShrink: 0,
   },
   viewChipText: { fontSize: 10, fontWeight: "800" },
   toolRail: {
