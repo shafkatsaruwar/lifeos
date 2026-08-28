@@ -68,7 +68,6 @@ function priorityColor(priority: string) {
 }
 
 export function WorkDashboardScreen() {
-  const tabBarPad = useFloatingTabBarContentPadding(28);
   const { theme, workspace, updateWork, updateTasks, updateProjects } = useLifeOS();
   const navigation = useNavigation<any>();
   const tabBarPad = useFloatingTabBarContentPadding(40);

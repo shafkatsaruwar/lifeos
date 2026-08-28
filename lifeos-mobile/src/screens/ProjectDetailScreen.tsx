@@ -28,7 +28,6 @@ export function ProjectDetailScreen() {
   const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const tabBarPad = useFloatingTabBarContentPadding(28);
   const projectName = route.params?.projectName as string;
   const project = workspace.projects.find((p) => p.name === projectName);
   const [editOpen, setEditOpen] = useState(false);
