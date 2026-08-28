@@ -102,8 +102,7 @@ export function TemplatePicker({
     onSelect({
       paper,
       paperColor,
-      // Lock layout when editing an existing page so ink/overlays stay put.
-      paperOrientation: preserveContent ? currentOrientation : orientation,
+      paperOrientation: orientation,
       paperSize: preserveContent ? currentSize : paperSize,
     });
     onClose();
@@ -182,29 +181,27 @@ export function TemplatePicker({
                 <View style={[styles.miniLine, { top: 18 }]} />
               </View>
             </Pressable>
-            {!preserveContent ? (
-              <View style={styles.orientGroup}>
-                <Pressable
-                  accessibilityLabel="Portrait"
-                  onPress={() => setOrientation("portrait")}
-                  style={[styles.orientBtn, orientation === "portrait" && styles.orientBtnOn]}
-                >
-                  <View style={styles.orientPort} />
-                </Pressable>
-                <Pressable
-                  accessibilityLabel="Landscape"
-                  onPress={() => setOrientation("landscape")}
-                  style={[styles.orientBtn, orientation === "landscape" && styles.orientBtnOn]}
-                >
-                  <View style={styles.orientLand} />
-                </Pressable>
-              </View>
-            ) : null}
+            <View style={styles.orientGroup}>
+              <Pressable
+                accessibilityLabel="Portrait"
+                onPress={() => setOrientation("portrait")}
+                style={[styles.orientBtn, orientation === "portrait" && styles.orientBtnOn]}
+              >
+                <View style={styles.orientPort} />
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Landscape"
+                onPress={() => setOrientation("landscape")}
+                style={[styles.orientBtn, orientation === "landscape" && styles.orientBtnOn]}
+              >
+                <View style={styles.orientLand} />
+              </Pressable>
+            </View>
           </View>
 
           {preserveContent ? (
             <Text style={styles.preserveHint}>
-              Changes the paper only — your handwriting and notes stay on the page.
+              Paper style updates on this page. Portrait / landscape rotates the sheet — handwriting may shift slightly.
             </Text>
           ) : null}
 

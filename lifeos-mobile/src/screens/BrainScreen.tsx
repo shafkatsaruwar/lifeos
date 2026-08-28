@@ -2,9 +2,9 @@ import Feather from "@expo/vector-icons/Feather";
 import { useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { Empty, Eyebrow, Page, Subtitle, Title } from "../components/UI";
+import { Empty, Page } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
-import { LibrarySubNav } from "../components/LibrarySubNav";
+import { LibraryChrome } from "../components/LibraryChrome";
 import { QuickCaptureModal } from "../components/QuickCaptureModal";
 import { SwipeDeleteRow } from "../components/SwipeDeleteRow";
 import { useLifeOS } from "../lib/LifeOSContext";
@@ -15,17 +15,6 @@ export function BrainScreen() {
   const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const [captureOpen, setCaptureOpen] = useState(false);
-
-  const deleteAt = (index: number) => {
-    Alert.alert("Delete this thought?", undefined, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => updateBrain(workspace.brain.filter((_, i) => i !== index)),
-      },
-    ]);
-  };
 
   const convertToTask = (index: number, text: string) => {
     updateTasks([
@@ -58,27 +47,29 @@ export function BrainScreen() {
 
   return (
     <Page>
-      <View style={styles.header}>
-        <View style={styles.grow}>
-          <Eyebrow>DUMP IT. SORT LATER.</Eyebrow>
-          <Title>MindDump</Title>
-          <Subtitle>
-            {workspace.brain.length
-              ? `${workspace.brain.length} dumped thought${workspace.brain.length === 1 ? "" : "s"}`
-              : "Blab it, type it, get it out of your head."}
-          </Subtitle>
-        </View>
-        <Pressable onPress={() => setCaptureOpen(true)} style={[styles.addButton, { backgroundColor: theme.text }]}>
-          <Feather name="plus" size={18} color={theme.surface} />
-        </Pressable>
-      </View>
-
-      <LibrarySubNav active="brain" />
-
       <FlatList
         data={workspace.brain}
         keyExtractor={(_, i) => String(i)}
         contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}
+        ListHeaderComponent={
+          <View style={styles.headerBlock}>
+            <LibraryChrome active="brain" />
+            <View style={styles.sectionRow}>
+              <View style={styles.grow}>
+                <Text style={[styles.sectionEyebrow, { color: theme.muted }]}>DUMP IT. SORT LATER.</Text>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>MindDump</Text>
+                <Text style={[styles.sectionBody, { color: theme.muted }]}>
+                  {workspace.brain.length
+                    ? `${workspace.brain.length} dumped thought${workspace.brain.length === 1 ? "" : "s"}`
+                    : "Blab it, type it, get it out of your head."}
+                </Text>
+              </View>
+              <Pressable onPress={() => setCaptureOpen(true)} style={[styles.addButton, { backgroundColor: theme.text }]}>
+                <Feather name="plus" size={18} color={theme.surface} />
+              </Pressable>
+            </View>
+          </View>
+        }
         renderItem={({ item, index }) => (
           <SwipeDeleteRow
             label={item}
@@ -99,16 +90,26 @@ export function BrainScreen() {
                 >
                   <Feather name="file-text" size={14} color={theme.accent} />
                 </Pressable>
-                <Pressable onPress={() => deleteAt(index)} style={[styles.iconButton, { backgroundColor: theme.soft }]}>
+                <Pressable
+                  onPress={() =>
+                    Alert.alert("Delete this thought?", undefined, [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Delete",
+                        style: "destructive",
+                        onPress: () => updateBrain(workspace.brain.filter((_, i) => i !== index)),
+                      },
+                    ])
+                  }
+                  style={[styles.iconButton, { backgroundColor: theme.soft }]}
+                >
                   <Feather name="trash-2" size={14} color={theme.danger} />
                 </Pressable>
               </View>
             </View>
           </SwipeDeleteRow>
         )}
-        ListEmptyComponent={
-          <Empty title="Nothing dumped yet." body="Tap + and blab — or type. Get it out of your head first." />
-        }
+        ListEmptyComponent={<Empty title="Nothing dumped yet." body="Tap + and get it out of your head." />}
       />
       <QuickCaptureModal visible={captureOpen} onClose={() => setCaptureOpen(false)} />
     </Page>
@@ -116,12 +117,16 @@ export function BrainScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, gap: 12 },
-  grow: { flex: 1 },
+  list: { padding: 0, paddingBottom: 120, gap: 10 },
+  headerBlock: { gap: 14, paddingBottom: 8 },
+  sectionRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingHorizontal: 20 },
+  grow: { flex: 1, minWidth: 0 },
+  sectionEyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 0.6 },
+  sectionTitle: { fontSize: 22, fontWeight: "800", marginTop: 2 },
+  sectionBody: { fontSize: 13, lineHeight: 18, marginTop: 4 },
   addButton: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  list: { padding: 20, paddingBottom: 28, gap: 10 },
-  row: { borderWidth: 1, borderRadius: 14, padding: 14, gap: 10 },
-  text: { fontSize: 15, lineHeight: 21 },
-  actions: { flexDirection: "row", gap: 8, justifyContent: "flex-end" },
-  iconButton: { width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  row: { marginHorizontal: 20, borderRadius: 16, borderWidth: 1, padding: 14, gap: 12 },
+  text: { fontSize: 15, lineHeight: 22 },
+  actions: { flexDirection: "row", gap: 8 },
+  iconButton: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
 });

@@ -42,9 +42,13 @@ import {
 } from "../lib/recurrence";
 import { SPACE_COLORS } from "../lib/theme";
 import { mergeCalendarWithWorkMeetings } from "../lib/workos";
-import type { CalendarEvent, EventRepeatFrequency, UserCalendar } from "../types";
+import type { CalendarDefaultView, CalendarEvent, EventRepeatFrequency, UserCalendar } from "../types";
 
-type Mode = "upcoming" | "month" | "day";
+type Mode = CalendarDefaultView;
+
+function normalizeCalendarDefaultView(value: unknown): Mode {
+  return value === "month" || value === "day" || value === "upcoming" ? value : "upcoming";
+}
 
 function normalizeTime(value: string) {
   const match = value.trim().match(/^(\d{1,2}):(\d{2})$/);
@@ -94,7 +98,8 @@ export function CalendarScreen() {
   const navigation = useNavigation<any>();
   const colorScheme = useColorScheme();
   const pickerTheme = colorScheme === "dark" ? "dark" : "light";
-  const [mode, setMode] = useState<Mode>("upcoming");
+  const defaultView = normalizeCalendarDefaultView(workspace.settings.defaultCalendarView);
+  const [mode, setMode] = useState<Mode>(defaultView);
   const [cursor, setCursor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => toDateKey(new Date()));
   const [importOpen, setImportOpen] = useState(false);
@@ -117,6 +122,10 @@ export function CalendarScreen() {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [showUntilPicker, setShowUntilPicker] = useState(false);
+
+  useEffect(() => {
+    setMode(defaultView);
+  }, [defaultView]);
 
   const calendars = useMemo(() => normalizeCalendars(workspace.calendars), [workspace.calendars]);
 

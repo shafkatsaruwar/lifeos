@@ -19,14 +19,16 @@ import { useLifeOS } from "../lib/LifeOSContext";
 import { dueRank, taskIsOpen } from "../lib/helpers";
 import { primaryPageForNotebook } from "../lib/notebooks";
 import { SPACE_COLORS } from "../lib/theme";
+import { removeWorkProject } from "../lib/workos";
 import type { Project, ProjectKind } from "../types";
 
 export function ProjectDetailScreen() {
-  const { theme, workspace, updateTasks, updateProjects, updateNotes, updateResources, updateNotebookHub } =
+  const { theme, workspace, updateTasks, updateProjects, updateNotes, updateResources, updateNotebookHub, updateWork } =
     useLifeOS();
   const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const projectName = route.params?.projectName as string;
   const project = workspace.projects.find((p) => p.name === projectName);
   const [editOpen, setEditOpen] = useState(false);
@@ -103,6 +105,10 @@ export function ProjectDetailScreen() {
           await updateNotes(
             workspace.notes.map((n) => (n.projectName === projectName ? { ...n, projectName: undefined } : n)),
           );
+          const workProject = workspace.work.projects.find((p) => p.name === projectName);
+          if (workProject) {
+            await updateWork(removeWorkProject(workspace.work, workProject.id));
+          }
           navigation.goBack();
         },
       },
@@ -216,22 +222,14 @@ export function ProjectDetailScreen() {
               <Pressable
                 key={note.id}
                 onPress={() => {
-                  const nb = workspace.notebookHub.notebooks.find((n) => n.context?.legacyNoteId === note.id);
-                  const page = nb
-                    ? Object.values(workspace.notebookPages).find((p) => p.notebookId === nb.id)
-                    : undefined;
-                  if (nb && page) {
-                    navigation.navigate("LibraryTab", {
-                      screen: "PageCanvas",
-                      params: { notebookId: nb.id, pageId: page.id },
-                    });
-                  } else {
-                    navigation.navigate("LibraryTab", { screen: "NotebooksList" });
-                  }
+                  navigation.navigate("LibraryTab", {
+                    screen: "NoteEditor",
+                    params: { noteId: note.id },
+                  });
                 }}
                 style={[styles.simpleRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
               >
-                <Feather name="file-text" size={15} color={theme.accent} />
+                <Feather name="type" size={15} color={theme.accent} />
                 <Text style={{ color: theme.text, fontWeight: "700", flex: 1 }} numberOfLines={1}>
                   {note.title || "Untitled note"}
                 </Text>
@@ -240,7 +238,7 @@ export function ProjectDetailScreen() {
           </>
         ) : (
           <Card>
-            <Empty title="No notes yet." body="Create one in Library → Notes and link this space." />
+            <Empty title="No notes yet." body="Create handwritten pages or text notes in Library and link this space." />
           </Card>
         )}
 
