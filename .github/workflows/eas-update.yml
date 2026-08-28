@@ -37,18 +37,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20.19.4"
+          node-version: "22"
           cache: npm
           cache-dependency-path: lifeos-mobile/package-lock.json
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
-
-      - name: Setup EAS
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Publish update
         env:
@@ -64,4 +58,4 @@ jobs:
             echo "Missing GitHub secret EXPO_TOKEN."
             exit 1
           fi
-          npx eas-cli update --channel "$CHANNEL" --message "main@${GITHUB_SHA::7}" --non-interactive
+          npx eas-cli@latest update --channel "$CHANNEL" --message "main@${GITHUB_SHA::7}" --non-interactive
