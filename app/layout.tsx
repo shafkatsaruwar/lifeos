@@ -1,3 +1,4 @@
+import { ReticleDev } from './reticle-dev';
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -35,7 +36,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={inter.className}>{process.env.NODE_ENV === 'development' ? <ReticleDev /> : null}
         <ErrorBoundary>{children}</ErrorBoundary>
       </body>
     </html>

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "name": "dev-test-login",
+  "projectId": "lifeos-8af22c44",
+  "createdAt": 1787610689701,
+  "steps": [
+    {
+      "tool": "reticle_act",
+      "anchor": {
+        "kind": "role",
+        "role": "button",
+        "name": "Work"
+      },
+      "args": {},
+      "action": "click"
+    }
+  ]
+}
