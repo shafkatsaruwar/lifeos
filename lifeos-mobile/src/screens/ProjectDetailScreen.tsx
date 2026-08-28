@@ -25,6 +25,7 @@ import type { Project, ProjectKind } from "../types";
 export function ProjectDetailScreen() {
   const { theme, workspace, updateTasks, updateProjects, updateNotes, updateResources, updateNotebookHub, updateWork } =
     useLifeOS();
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const tabBarPad = useFloatingTabBarContentPadding(28);

@@ -68,6 +68,7 @@ function priorityColor(priority: string) {
 }
 
 export function WorkDashboardScreen() {
+  const tabBarPad = useFloatingTabBarContentPadding(28);
   const { theme, workspace, updateWork, updateTasks, updateProjects } = useLifeOS();
   const navigation = useNavigation<any>();
   const tabBarPad = useFloatingTabBarContentPadding(40);
@@ -659,7 +660,7 @@ export function WorkDashboardScreen() {
   return (
     <Page>
       <ScrollView
-        contentContainerStyle={[styles.screen, styles.screenGrow]}
+        contentContainerStyle={[styles.screen, styles.screenGrow, { paddingBottom: tabBarPad }]}
         scrollIndicatorInsets={{ bottom: tabBarPad }}
         keyboardShouldPersistTaps="handled"
       >
