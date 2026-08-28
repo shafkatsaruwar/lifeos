@@ -83,21 +83,110 @@ export async function planPdfImport(_fileUri?: string): Promise<PdfImportPlan | 
   return { fileName, localUri: storagePath, storagePath, pageCount };
 }
 
+/** One extracted PDF page — always a single-page file for reliable WKWebView display. */
+export type PdfPageSlice = {
+  storagePath: string;
+  /** Original page index inside the imported source PDF (0-based). */
+  sourcePageIndex: number;
+};
+
+function pdfSliceCacheKey(sourcePath: string, pageIndex: number) {
+  const base = sourcePath.split("/").pop() || "pdf";
+  return `${base.replace(/[^\w.\-]+/g, "_")}-p${pageIndex + 1}`;
+}
+
+/**
+ * WKWebView ignores `#page=` on local PDFs — extract one page into its own file.
+ * Cached under notebookPdfs/split/ so legacy imports self-heal on first view.
+ */
+export async function extractSinglePagePdf(
+  sourcePath: string,
+  pageIndex: number,
+): Promise<string> {
+  const dir = `${FileSystem.documentDirectory}notebookPdfs/split/`;
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(() => undefined);
+  const cachePath = `${dir}${pdfSliceCacheKey(sourcePath, pageIndex)}.pdf`;
+  const cached = await FileSystem.getInfoAsync(cachePath);
+  if (cached.exists) return cachePath;
+
+  const bytes = await FileSystem.readAsStringAsync(sourcePath, { encoding: BASE64 });
+  const source = await PDFDocument.load(bytes, { ignoreEncryption: true });
+  const idx = Math.min(Math.max(0, pageIndex), source.getPageCount() - 1);
+  const doc = await PDFDocument.create();
+  const [copied] = await doc.copyPages(source, [idx]);
+  doc.addPage(copied);
+  const outB64 = await doc.saveAsBase64({ dataUri: false });
+  await FileSystem.writeAsStringAsync(cachePath, outB64, { encoding: BASE64 });
+  return cachePath;
+}
+
+/** Split an imported PDF into single-page files (capped for safety). */
+export async function splitPdfToSinglePageFiles(
+  plan: PdfImportPlan,
+  maxPages = 40,
+): Promise<PdfPageSlice[]> {
+  const count = Math.min(plan.pageCount, maxPages);
+  const dir = `${FileSystem.documentDirectory}notebookPdfs/split/`;
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(() => undefined);
+  const stamp = Date.now();
+  const baseName = plan.fileName.replace(/\.pdf$/i, "").replace(/[^\w.\-]+/g, "_");
+
+  const bytes = await FileSystem.readAsStringAsync(plan.storagePath, { encoding: BASE64 });
+  const source = await PDFDocument.load(bytes, { ignoreEncryption: true });
+
+  const slices: PdfPageSlice[] = [];
+  for (let i = 0; i < count; i++) {
+    const cachePath = `${dir}${stamp}-${baseName}-p${i + 1}.pdf`;
+    const doc = await PDFDocument.create();
+    const [copied] = await doc.copyPages(source, [i]);
+    doc.addPage(copied);
+    const outB64 = await doc.saveAsBase64({ dataUri: false });
+    await FileSystem.writeAsStringAsync(cachePath, outB64, { encoding: BASE64 });
+    slices.push({ storagePath: cachePath, sourcePageIndex: i });
+  }
+  return slices;
+}
+
+/**
+ * Resolve a display URI for WKWebView. iOS cannot jump to arbitrary PDF pages via URL fragments,
+ * so each notebook page must point at a single-page PDF file.
+ */
+export async function resolvePdfDisplayUri(
+  ref: NonNullable<NotebookPage["pdfRef"]>,
+): Promise<string | null> {
+  if (!ref.storagePath) return null;
+  try {
+    const info = await FileSystem.getInfoAsync(ref.storagePath);
+    if (!info.exists) return null;
+
+    if (ref.pageIndex <= 0) {
+      const bytes = await FileSystem.readAsStringAsync(ref.storagePath, { encoding: BASE64 });
+      const probe = await PDFDocument.load(bytes, { ignoreEncryption: true });
+      if (probe.getPageCount() <= 1) return ref.storagePath;
+    }
+
+    return await extractSinglePagePdf(ref.storagePath, ref.pageIndex);
+  } catch {
+    return null;
+  }
+}
+
 /** Create one NotebookPage per PDF page (capped for safety). */
-export function pagesFromPdfImport(
+export async function pagesFromPdfImport(
   notebookId: string,
   plan: PdfImportPlan,
   startIndex = 0,
   maxPages = 40,
-): NotebookPage[] {
-  const count = Math.min(plan.pageCount, maxPages);
+): Promise<NotebookPage[]> {
+  const slices = await splitPdfToSinglePageFiles(plan, maxPages);
   const pages: NotebookPage[] = [];
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < slices.length; i++) {
+    const slice = slices[i];
     const page = createPage(notebookId, startIndex + i, "blank");
-    page.title = `${plan.fileName.replace(/\.pdf$/i, "")} · p.${i + 1}`;
+    page.title = `${plan.fileName.replace(/\.pdf$/i, "")} · p.${slice.sourcePageIndex + 1}`;
     page.pdfRef = {
-      storagePath: plan.storagePath,
-      pageIndex: i,
+      storagePath: slice.storagePath,
+      pageIndex: slice.sourcePageIndex,
       pageCount: plan.pageCount,
       fileName: plan.fileName,
     };

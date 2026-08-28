@@ -1,25 +1,41 @@
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import type { NotebookPage } from "../types";
+import { resolvePdfDisplayUri } from "../lib/notebookPdf";
 import { useLifeOS } from "../lib/LifeOSContext";
 
 /**
  * Renders an imported PDF page behind PencilKit when `page.pdfRef` is set.
- * Uses WKWebView which can display local PDF files on iOS.
+ * Uses WKWebView with single-page PDF files — iOS ignores `#page=` URL fragments on local PDFs.
  */
 export function PdfPageUnderlay({ page }: { page: NotebookPage }) {
   const { theme } = useLifeOS();
   const ref = page.pdfRef;
-  if (!ref?.storagePath) return null;
+  const [displayPath, setDisplayPath] = useState<string | null>(null);
 
-  const uri = ref.storagePath.startsWith("file://") ? ref.storagePath : `file://${ref.storagePath}`;
-  // Jump to page via URL fragment when possible; WebView PDF viewer indexes from 1.
-  const sourceUri = `${uri}#page=${ref.pageIndex + 1}`;
+  useEffect(() => {
+    if (!ref?.storagePath) {
+      setDisplayPath(null);
+      return;
+    }
+    let cancelled = false;
+    resolvePdfDisplayUri(ref).then((path) => {
+      if (!cancelled) setDisplayPath(path);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ref?.storagePath, ref?.pageIndex]);
+
+  if (!ref?.storagePath || !displayPath) return null;
+
+  const uri = displayPath.startsWith("file://") ? displayPath : `file://${displayPath}`;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <WebView
-        source={{ uri: sourceUri }}
+        source={{ uri }}
         style={styles.web}
         originWhitelist={["*"]}
         allowFileAccess

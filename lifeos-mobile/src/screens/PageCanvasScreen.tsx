@@ -1209,7 +1209,7 @@ export function PageCanvasScreen() {
                 if (!isPdfPipelineAvailable()) return;
                 const plan = await planPdfImport();
                 if (!plan) return;
-                const created = pagesFromPdfImport(notebookId, plan, pages.length);
+                const created = await pagesFromPdfImport(notebookId, plan, pages.length);
                 await Promise.all(created.map((p) => upsertNotebookPage(p)));
                 await touchPageCount(pages.length + created.length);
                 if (created[0]) await openCreatedPage(created[0].id);
