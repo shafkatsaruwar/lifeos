@@ -205,6 +205,7 @@ export function callTool(
           "Does not read browser localStorage or iOS AsyncStorage directly.",
           "Does not scrape Apple Calendar, Gmail, or Outlook — those are separate connectors.",
           "Encrypted gmail/outlook/icloud connection blobs under the Firebase user node are never returned.",
+          "When Firebase env is complete, live RTDB wins over a leftover ~/.lifeos/export.json.",
         ],
       });
     case "list_tasks":
