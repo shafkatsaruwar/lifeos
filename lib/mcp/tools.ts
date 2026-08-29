@@ -205,6 +205,7 @@ export function callTool(
           "Does not read browser localStorage or iOS AsyncStorage directly.",
           "Does not scrape Apple Calendar, Gmail, or Outlook — those are separate connectors.",
           "Encrypted gmail/outlook/icloud connection blobs under the Firebase user node are never returned.",
+          "Google-signed-in users stay live with LIFEOS_FIREBASE_REFRESH_TOKEN (Settings → Assistant access). ID tokens expire.",
         ],
       });
     case "list_tasks":

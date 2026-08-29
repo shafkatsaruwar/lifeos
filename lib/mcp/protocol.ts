@@ -3,8 +3,8 @@ import { MCP_TOOLS, callTool } from "./tools";
 import type { StoreConfig } from "./store";
 
 export const MCP_SERVER_NAME = "lifeos";
-export const MCP_SERVER_VERSION = "0.1.0";
-export const MCP_PROTOCOL_VERSION = "2024-11-05";
+export const MCP_SERVER_VERSION = "0.2.0";
+export const MCP_PROTOCOL_VERSION = "2025-03-26";
 
 export type JsonRpcId = string | number | null;
 

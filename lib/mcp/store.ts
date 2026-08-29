@@ -2,17 +2,22 @@ import { existsSync, readFileSync, statSync } from "fs";
 import { homedir } from "os";
 import { join, resolve } from "path";
 import { FIREBASE_PATHS } from "../constants";
+import {
+  FirebaseReadError,
+  authConfigForRetry,
+  canRemint,
+  pickFirebaseAuthMode,
+  resetFirebaseAuthCache,
+  resolveFirebaseCredentials,
+  type FirebaseAuthConfig,
+  type ResolvedFirebaseAuth,
+} from "./firebaseAuth";
 import { emptyWorkspace, normalizeWorkspace } from "./workspace";
 import type { LifeOSWorkspace, StoreSource } from "./types";
 
-export type StoreConfig = {
+export type StoreConfig = FirebaseAuthConfig & {
   dataPath?: string;
   firebaseDbUrl?: string;
-  firebaseAuth?: string;
-  firebaseApiKey?: string;
-  firebaseEmail?: string;
-  firebasePassword?: string;
-  userId?: string;
   cwd?: string;
   home?: string;
   fetchImpl?: typeof fetch;
@@ -34,9 +39,17 @@ export function readStoreConfig(env: NodeJS.ProcessEnv = process.env, cwd = proc
     firebaseApiKey: (env.LIFEOS_FIREBASE_API_KEY || env.NEXT_PUBLIC_FIREBASE_API_KEY || "").trim() || undefined,
     firebaseEmail: (env.LIFEOS_FIREBASE_EMAIL || "").trim() || undefined,
     firebasePassword: (env.LIFEOS_FIREBASE_PASSWORD || "").trim() || undefined,
+    firebaseRefreshToken: (env.LIFEOS_FIREBASE_REFRESH_TOKEN || "").trim() || undefined,
+    serviceAccountJson: (env.FIREBASE_SERVICE_ACCOUNT_JSON || "").trim() || undefined,
+    serviceAccountPath: (env.GOOGLE_APPLICATION_CREDENTIALS || "").trim() || undefined,
     userId: (env.LIFEOS_USER_ID || "").trim() || undefined,
     cwd,
   };
+}
+
+/** Live Firebase is ready when URL + uid + any auth method are set. A leftover export file does not count. */
+export function isFirebaseConfigured(config: StoreConfig): boolean {
+  return Boolean(config.firebaseDbUrl && config.userId && pickFirebaseAuthMode(config));
 }
 
 export function discoverDataFiles(cwd: string, home = homedir()): string[] {
@@ -63,50 +76,80 @@ function parseJsonFile(filePath: string): unknown {
   }
 }
 
-async function signInWithPassword(
-  apiKey: string,
-  email: string,
-  password: string,
-  fetchImpl: typeof fetch,
-): Promise<string> {
-  const response = await fetchImpl(
-    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, password, returnSecureToken: true }),
-    },
-  );
-  const body = (await response.json().catch(() => null)) as { idToken?: string; error?: { message?: string } } | null;
-  if (!response.ok || !body?.idToken) {
-    throw new Error(body?.error?.message || "Firebase email/password sign-in failed.");
-  }
-  return body.idToken;
-}
-
-async function fetchFirebaseUser(
-  config: Required<Pick<StoreConfig, "firebaseDbUrl" | "firebaseAuth" | "userId">> & { fetchImpl: typeof fetch },
-): Promise<unknown> {
-  const base = config.firebaseDbUrl.replace(/\/$/, "");
-  const path = FIREBASE_PATHS.user(config.userId);
-  const url = `${base}/${path}.json?auth=${encodeURIComponent(config.firebaseAuth)}`;
-  const response = await config.fetchImpl(url, { cache: "no-store" });
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    const detail = body && typeof body === "object" && "error" in body ? String((body as { error: unknown }).error) : response.statusText;
-    throw new Error(
-      `Firebase read failed (${response.status}): ${detail}. Use a Firebase ID token for LIFEOS_FIREBASE_AUTH whose uid matches LIFEOS_USER_ID.`,
-    );
-  }
-  return body;
-}
-
 function resolveFetch(config: StoreConfig): typeof fetch {
   if (config.fetchImpl) return config.fetchImpl;
   if (typeof fetch === "function") return fetch;
   throw new Error("fetch is not available in this runtime. Pass fetchImpl or run on Node 18+.");
 }
 
+function firebaseReadUrl(dbUrl: string, userId: string, creds: ResolvedFirebaseAuth): string {
+  const base = dbUrl.replace(/\/$/, "");
+  const path = FIREBASE_PATHS.user(userId);
+  if (creds.accessToken) {
+    return `${base}/${path}.json?access_token=${encodeURIComponent(creds.accessToken)}`;
+  }
+  return `${base}/${path}.json?auth=${encodeURIComponent(creds.idToken || "")}`;
+}
+
+async function fetchFirebaseUser(
+  config: Required<Pick<StoreConfig, "firebaseDbUrl" | "userId">> & { fetchImpl: typeof fetch },
+  creds: ResolvedFirebaseAuth,
+): Promise<unknown> {
+  const url = firebaseReadUrl(config.firebaseDbUrl, config.userId, creds);
+  const response = await config.fetchImpl(url, { cache: "no-store" });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    const detail =
+      body && typeof body === "object" && "error" in body
+        ? String((body as { error: unknown }).error)
+        : response.statusText;
+    throw new FirebaseReadError(
+      `Firebase read failed (${response.status}): ${detail}. Use a Firebase ID token, refresh token, or service account scoped to LIFEOS_USER_ID.`,
+      response.status,
+    );
+  }
+  return body;
+}
+
+async function loadFromFirebase(config: StoreConfig): Promise<LoadedStore> {
+  const fetchImpl = resolveFetch(config);
+  let creds = await resolveFirebaseCredentials(config, fetchImpl);
+  let raw: unknown;
+  try {
+    raw = await fetchFirebaseUser(
+      { firebaseDbUrl: config.firebaseDbUrl!, userId: config.userId!, fetchImpl },
+      creds,
+    );
+  } catch (error) {
+    if (error instanceof FirebaseReadError && error.status === 401 && canRemint(config)) {
+      resetFirebaseAuthCache();
+      creds = await resolveFirebaseCredentials(authConfigForRetry(config), fetchImpl, { forceRefresh: true });
+      raw = await fetchFirebaseUser(
+        { firebaseDbUrl: config.firebaseDbUrl!, userId: config.userId!, fetchImpl },
+        creds,
+      );
+    } else {
+      throw error;
+    }
+  }
+
+  if (raw == null) {
+    return {
+      workspace: emptyWorkspace({ source: "firebase", userId: config.userId }),
+      warning: `Firebase user ${config.userId} has no data yet.`,
+    };
+  }
+  return {
+    workspace: normalizeWorkspace(raw, { source: "firebase", userId: config.userId }),
+  };
+}
+
+/**
+ * Store order:
+ * 1. Explicit LIFEOS_DATA_PATH — always a file.
+ * 2. Complete Firebase env — live RTDB, even if ~/.lifeos/export.json exists.
+ * 3. Discovered export file — only when Firebase env is incomplete.
+ */
 export async function loadWorkspace(config: StoreConfig): Promise<LoadedStore> {
   const cwd = config.cwd ?? process.cwd();
 
@@ -124,6 +167,10 @@ export async function loadWorkspace(config: StoreConfig): Promise<LoadedStore> {
     };
   }
 
+  if (isFirebaseConfigured(config)) {
+    return loadFromFirebase(config);
+  }
+
   const discovered = discoverDataFiles(cwd, config.home ?? homedir());
   if (discovered[0]) {
     return {
@@ -132,49 +179,25 @@ export async function loadWorkspace(config: StoreConfig): Promise<LoadedStore> {
         sourcePath: discovered[0],
         userId: config.userId,
       }),
-      warning: `Using discovered snapshot ${discovered[0]}. Set LIFEOS_DATA_PATH to pin a file.`,
-    };
-  }
-
-  let auth = config.firebaseAuth;
-  const needsNetwork = Boolean(
-    (!auth && config.firebaseApiKey && config.firebaseEmail && config.firebasePassword) ||
-    (config.firebaseDbUrl && (auth || (config.firebaseApiKey && config.firebaseEmail && config.firebasePassword)) && config.userId),
-  );
-  const fetchImpl = needsNetwork ? resolveFetch(config) : undefined;
-
-  if (!auth && config.firebaseApiKey && config.firebaseEmail && config.firebasePassword) {
-    auth = await signInWithPassword(config.firebaseApiKey, config.firebaseEmail, config.firebasePassword, fetchImpl!);
-  }
-
-  if (config.firebaseDbUrl && auth && config.userId) {
-    const raw = await fetchFirebaseUser({
-      firebaseDbUrl: config.firebaseDbUrl,
-      firebaseAuth: auth,
-      userId: config.userId,
-      fetchImpl: fetchImpl!,
-    });
-    if (raw == null) {
-      return {
-        workspace: emptyWorkspace({ source: "firebase", userId: config.userId }),
-        warning: `Firebase user ${config.userId} has no data yet.`,
-      };
-    }
-    return {
-      workspace: normalizeWorkspace(raw, { source: "firebase", userId: config.userId }),
+      warning:
+        `Using discovered snapshot ${discovered[0]}. Set LIFEOS_DATA_PATH to pin a file, or set Firebase env ` +
+        `(LIFEOS_USER_ID + LIFEOS_FIREBASE_DB_URL + LIFEOS_FIREBASE_REFRESH_TOKEN) to use live data instead.`,
     };
   }
 
   const missing: string[] = [];
-  if (!config.dataPath) missing.push("LIFEOS_DATA_PATH (Settings → Export JSON)");
   if (!config.firebaseDbUrl) missing.push("LIFEOS_FIREBASE_DB_URL or NEXT_PUBLIC_FIREBASE_DB_URL");
-  if (!auth) missing.push("LIFEOS_FIREBASE_AUTH (Firebase ID token) or LIFEOS_FIREBASE_EMAIL + LIFEOS_FIREBASE_PASSWORD");
+  if (!pickFirebaseAuthMode(config)) {
+    missing.push(
+      "LIFEOS_FIREBASE_AUTH, or LIFEOS_FIREBASE_REFRESH_TOKEN + API key, or LIFEOS_FIREBASE_EMAIL + PASSWORD, or FIREBASE_SERVICE_ACCOUNT_JSON",
+    );
+  }
   if (!config.userId) missing.push("LIFEOS_USER_ID");
 
   return {
     workspace: emptyWorkspace({ source: "empty" }),
     warning:
-      "No LifeOS store found. Point LIFEOS_DATA_PATH at a Settings export, or set Firebase env vars. Missing: " +
+      "No LifeOS store found. Set Firebase env vars for live data, or LIFEOS_DATA_PATH for an export. Missing: " +
       missing.join("; ") +
       ". Browser localStorage / mobile AsyncStorage are not readable from this process.",
   };

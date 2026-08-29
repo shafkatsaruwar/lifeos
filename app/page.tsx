@@ -48,6 +48,7 @@ import {
   type LifeOSNotification,
   type NotificationAction,
 } from "@/lib/notifications";
+import { AssistantAccessPanel } from "@/app/components/AssistantAccessPanel";
 import { NLTaskCreationModal } from "@/app/components/NLTaskCreationModal";
 import { FocusFlowView, type FlowScreen } from "@/app/components/FocusFlow/FocusFlowView";
 import {
@@ -2224,6 +2225,7 @@ export default function LifeOS() {
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} />}
             {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} />}
+            {view === "Settings" && <AssistantAccessPanel user={user} userId={cloudUserId} flash={flash} />}
             {view === "Settings" && <CalendarConnections user={user} flash={flash} />}
             {view === "Settings" && <SynapseDayPlanImport flash={flash} />}
             {!["Life", "School", "Work", "Study Abroad", "Now", "Flow", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}

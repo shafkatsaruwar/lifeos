@@ -1,10 +1,24 @@
+import { generateKeyPairSync } from "crypto";
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { buildAssistantEnvBlock, maskSecret, sessionRefreshToken } from "@/lib/mcp/assistantAccess";
 import { extractBearerToken, tokensMatch } from "@/lib/mcp/auth";
 import { loadEnvFile, loadLifeOSEnvFiles } from "@/lib/mcp/env";
+import {
+  mintIdTokenFromRefreshToken,
+  pickFirebaseAuthMode,
+  resetFirebaseAuthCache,
+} from "@/lib/mcp/firebaseAuth";
+import {
+  encodeSseMessage,
+  encodeSsePayload,
+  isAllowedOrigin,
+  isNotificationOrResponseOnly,
+  wantsSse,
+} from "@/lib/mcp/http";
 import { handleMcpPayload, handleMcpRequest, listToolDescriptors } from "@/lib/mcp/protocol";
-import { discoverDataFiles, loadWorkspace, readStoreConfig } from "@/lib/mcp/store";
+import { discoverDataFiles, isFirebaseConfigured, loadWorkspace, readStoreConfig } from "@/lib/mcp/store";
 import { callTool } from "@/lib/mcp/tools";
 import { deriveTaskStatus, normalizeWorkspace } from "@/lib/mcp/workspace";
 
@@ -155,10 +169,156 @@ describe("store loader", () => {
       LIFEOS_DATA_PATH: "./export.json",
       LIFEOS_USER_ID: "abc",
       NEXT_PUBLIC_FIREBASE_DB_URL: "https://db.example.com",
+      LIFEOS_FIREBASE_REFRESH_TOKEN: "refresh-xyz",
+      LIFEOS_FIREBASE_API_KEY: "web-key",
+      FIREBASE_SERVICE_ACCOUNT_JSON: '{"client_email":"a@b","private_key":"k"}',
     });
     expect(config.dataPath).toBe("./export.json");
     expect(config.userId).toBe("abc");
     expect(config.firebaseDbUrl).toBe("https://db.example.com");
+    expect(config.firebaseRefreshToken).toBe("refresh-xyz");
+    expect(config.firebaseApiKey).toBe("web-key");
+    expect(config.serviceAccountJson).toContain("client_email");
+  });
+
+  it("treats Firebase as configured only when url, uid, and an auth method are set", () => {
+    expect(isFirebaseConfigured({ firebaseDbUrl: "https://db.example.com", userId: "u" })).toBe(false);
+    expect(isFirebaseConfigured({
+      firebaseDbUrl: "https://db.example.com",
+      userId: "u",
+      firebaseRefreshToken: "r",
+      firebaseApiKey: "k",
+    })).toBe(true);
+  });
+
+  it("uses Firebase even when a discovered export file exists", async () => {
+    resetFirebaseAuthCache();
+    const dir = mkdtempSync(join(tmpdir(), "lifeos-mcp-shadow-"));
+    mkdirSync(join(dir, ".lifeos"));
+    writeFileSync(join(dir, ".lifeos", "export.json"), JSON.stringify({ tasks: [{ id: 1, title: "Stale export" }] }));
+
+    const fetchImpl: typeof fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ tasks: [{ id: 2, title: "Live firebase" }] }),
+    })) as unknown as typeof fetch;
+
+    const loaded = await loadWorkspace({
+      cwd: dir,
+      home: dir,
+      firebaseDbUrl: "https://example.firebaseio.com",
+      firebaseAuth: "id-token",
+      userId: "user-1",
+      fetchImpl,
+    });
+    expect(loaded.workspace.source).toBe("firebase");
+    expect(loaded.workspace.tasks[0].title).toBe("Live firebase");
+    expect(fetchImpl).toHaveBeenCalled();
+  });
+
+  it("uses an explicit LIFEOS_DATA_PATH even when Firebase env is complete", async () => {
+    const fetchImpl: typeof fetch = jest.fn() as unknown as typeof fetch;
+    const loaded = await loadWorkspace({
+      dataPath: fixture,
+      firebaseDbUrl: "https://example.firebaseio.com",
+      firebaseAuth: "id-token",
+      userId: "user-1",
+      fetchImpl,
+    });
+    expect(loaded.workspace.source).toBe("file");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("falls back to a discovered export only when Firebase env is incomplete", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "lifeos-mcp-fileonly-"));
+    writeFileSync(join(dir, "lifeos-export.json"), JSON.stringify({ tasks: [{ id: 3, title: "Discovered" }] }));
+    const loaded = await loadWorkspace({
+      cwd: dir,
+      home: join(dir, "no-home"),
+      firebaseDbUrl: "https://example.firebaseio.com",
+      userId: "user-1",
+    });
+    expect(loaded.workspace.source).toBe("file");
+    expect(loaded.workspace.tasks[0].title).toBe("Discovered");
+    expect(loaded.warning).toMatch(/discovered snapshot/);
+  });
+
+  it("mints an ID token from a refresh token before reading Firebase", async () => {
+    resetFirebaseAuthCache();
+    const fetchImpl: typeof fetch = jest.fn(async (url) => {
+      if (String(url).includes("securetoken.googleapis.com")) {
+        return { ok: true, json: async () => ({ id_token: "refreshed-id", expires_in: "3600" }) };
+      }
+      expect(String(url)).toContain("auth=refreshed-id");
+      return { ok: true, json: async () => ({ tasks: [{ id: 4, title: "From refresh" }] }) };
+    }) as unknown as typeof fetch;
+
+    const loaded = await loadWorkspace({
+      firebaseDbUrl: "https://example.firebaseio.com",
+      firebaseApiKey: "api-key",
+      firebaseRefreshToken: "google-refresh",
+      userId: "user-1",
+      fetchImpl,
+    });
+    expect(loaded.workspace.source).toBe("firebase");
+    expect(loaded.workspace.tasks[0].title).toBe("From refresh");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes on 401 when a refresh token is available", async () => {
+    resetFirebaseAuthCache();
+    let rtdbCalls = 0;
+    const fetchImpl: typeof fetch = jest.fn(async (url) => {
+      const href = String(url);
+      if (href.includes("securetoken.googleapis.com")) {
+        return { ok: true, json: async () => ({ id_token: "new-id", expires_in: "3600" }) };
+      }
+      rtdbCalls += 1;
+      if (href.includes("expired-id")) {
+        return { ok: false, status: 401, statusText: "Unauthorized", json: async () => ({ error: "Permission denied" }) };
+      }
+      return { ok: true, json: async () => ({ tasks: [{ id: 5, title: "After refresh" }] }) };
+    }) as unknown as typeof fetch;
+
+    const loaded = await loadWorkspace({
+      firebaseDbUrl: "https://example.firebaseio.com",
+      firebaseAuth: "expired-id",
+      firebaseApiKey: "api-key",
+      firebaseRefreshToken: "google-refresh",
+      userId: "user-1",
+      fetchImpl,
+    });
+    expect(loaded.workspace.tasks[0].title).toBe("After refresh");
+    expect(rtdbCalls).toBe(2);
+  });
+
+  it("reads Firebase with a service account access token", async () => {
+    resetFirebaseAuthCache();
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const serviceAccount = {
+      client_email: "mcp@test.iam.gserviceaccount.com",
+      private_key: privateKey,
+    };
+    const fetchImpl: typeof fetch = jest.fn(async (url) => {
+      if (String(url).includes("oauth2.googleapis.com/token")) {
+        return { ok: true, json: async () => ({ access_token: "ya29.admin", expires_in: 3600 }) };
+      }
+      expect(String(url)).toContain("access_token=ya29.admin");
+      expect(String(url)).toContain("/users/user-1.json");
+      return { ok: true, json: async () => ({ tasks: [{ id: 6, title: "Admin read" }] }) };
+    }) as unknown as typeof fetch;
+
+    const loaded = await loadWorkspace({
+      firebaseDbUrl: "https://example.firebaseio.com",
+      userId: "user-1",
+      serviceAccountJson: JSON.stringify(serviceAccount),
+      fetchImpl,
+    });
+    expect(loaded.workspace.source).toBe("firebase");
+    expect(loaded.workspace.tasks[0].title).toBe("Admin read");
   });
 
   it("rejects a missing or invalid export file", async () => {
@@ -235,6 +395,79 @@ describe("MCP tools", () => {
     expect(status.counts.openTasks).toBe(2);
     expect(status.warning).toBe("hi");
     expect(status.limitations.join(" ")).toMatch(/Read-only/);
+  });
+});
+
+describe("Firebase auth helpers", () => {
+  beforeEach(() => resetFirebaseAuthCache());
+
+  it("picks auth methods in documented order", () => {
+    expect(pickFirebaseAuthMode({ firebaseAuth: "id", firebaseRefreshToken: "r", firebaseApiKey: "k" })).toBe("id-token");
+    expect(pickFirebaseAuthMode({
+      firebaseEmail: "a@b.com",
+      firebasePassword: "pw",
+      firebaseApiKey: "k",
+      firebaseRefreshToken: "r",
+    })).toBe("password");
+    expect(pickFirebaseAuthMode({ firebaseRefreshToken: "r", firebaseApiKey: "k" })).toBe("refresh-token");
+    expect(pickFirebaseAuthMode({
+      serviceAccountJson: JSON.stringify({ client_email: "a@b", private_key: "k" }),
+    })).toBe("service-account");
+    expect(pickFirebaseAuthMode({})).toBeNull();
+  });
+
+  it("mints an ID token from Identity Toolkit refresh_token grant", async () => {
+    const fetchImpl: typeof fetch = jest.fn(async (url, init) => {
+      expect(String(url)).toContain("https://securetoken.googleapis.com/v1/token?key=api-key");
+      expect(String(init?.body)).toContain("grant_type=refresh_token");
+      expect(String(init?.body)).toContain("refresh_token=rtok");
+      return { ok: true, json: async () => ({ id_token: "minted", expires_in: "1800" }) };
+    }) as unknown as typeof fetch;
+    const minted = await mintIdTokenFromRefreshToken("api-key", "rtok", fetchImpl);
+    expect(minted.idToken).toBe("minted");
+    expect(minted.expiresInMs).toBe(1800 * 1000);
+  });
+});
+
+describe("Assistant access helpers", () => {
+  it("masks secrets and builds the stdio env block", () => {
+    expect(maskSecret("")).toBe("not available");
+    expect(maskSecret("abcd")).toBe("••••");
+    expect(maskSecret("refresh-token-wxyz")).toBe("••••wxyz");
+    expect(sessionRefreshToken({ refreshToken: "abc" })).toBe("abc");
+    expect(sessionRefreshToken({ stsTokenManager: { refreshToken: "nested" } })).toBe("nested");
+    expect(buildAssistantEnvBlock({
+      userId: "uid-1",
+      dbUrl: "https://db.example.com",
+      apiKey: "key",
+      refreshToken: "rt",
+    })).toBe(
+      "LIFEOS_USER_ID=uid-1\nLIFEOS_FIREBASE_DB_URL=https://db.example.com\nLIFEOS_FIREBASE_API_KEY=key\nLIFEOS_FIREBASE_REFRESH_TOKEN=rt",
+    );
+  });
+});
+
+describe("MCP Streamable HTTP helpers", () => {
+  it("detects SSE accept and encodes message events", () => {
+    expect(wantsSse("application/json, text/event-stream")).toBe(true);
+    expect(wantsSse("application/json")).toBe(false);
+    expect(encodeSseMessage({ jsonrpc: "2.0", id: 1, result: {} })).toBe(
+      "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n\n",
+    );
+    expect(encodeSsePayload([{ id: 1 }, { id: 2 }])).toContain("event: message");
+  });
+
+  it("treats notifications and client responses as 202 bodies", () => {
+    expect(isNotificationOrResponseOnly({ jsonrpc: "2.0", method: "notifications/initialized" })).toBe(true);
+    expect(isNotificationOrResponseOnly({ jsonrpc: "2.0", id: 1, method: "initialize" })).toBe(false);
+    expect(isNotificationOrResponseOnly({ jsonrpc: "2.0", id: 1, result: {} })).toBe(true);
+  });
+
+  it("blocks remote origins against localhost (DNS rebinding) and allows hosted clients", () => {
+    expect(isAllowedOrigin("https://evil.example", "localhost:3000")).toBe(false);
+    expect(isAllowedOrigin("http://localhost:3000", "localhost:3000")).toBe(true);
+    expect(isAllowedOrigin(null, "lifeos-mu-three.vercel.app")).toBe(true);
+    expect(isAllowedOrigin("https://cursor.com", "lifeos-mu-three.vercel.app")).toBe(true);
   });
 });
 
