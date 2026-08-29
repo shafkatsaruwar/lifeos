@@ -98,7 +98,12 @@ export default function App() {
         mergedPages[id] = localPage;
       }
     }
-    return { ...remote, notebookPages: mergedPages };
+    const mergedSettings = { ...remote.settings };
+    if (local.settings.onboardingCompletedAt && !remote.settings.onboardingCompletedAt) {
+      mergedSettings.onboardingCompletedAt = local.settings.onboardingCompletedAt;
+      mergedSettings.onboardingVersion = local.settings.onboardingVersion ?? mergedSettings.onboardingVersion;
+    }
+    return { ...remote, settings: mergedSettings, notebookPages: mergedPages };
   }, []);
 
   const sync = useCallback(async () => {

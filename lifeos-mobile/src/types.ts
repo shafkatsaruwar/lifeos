@@ -306,6 +306,8 @@ export type SettingsState = {
   enableMasterOS?: boolean;
   /** Local notification preferences (mobile). */
   notifications?: NotificationPrefs;
+  /** ISO timestamp when the v1 onboarding flow was opened (blocks legacy auto-skip). */
+  onboardingStartedAt?: string;
   /** ISO timestamp when first-run onboarding finished (or was skipped / migrated). */
   onboardingCompletedAt?: string;
   /** Bump to offer a short “what’s new” flow later without replaying v1. */
