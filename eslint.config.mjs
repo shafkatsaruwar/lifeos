@@ -17,6 +17,7 @@ const eslintConfig = [
       "lifeos-mobile-backup-*/**",
       "lifeos-context-radar/**",
       "src-tauri/target/**",
+      "mcp/run.cjs",
       "app/page.old.tsx",
       "next-env.d.ts",
     ],

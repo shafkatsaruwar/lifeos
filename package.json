@@ -13,7 +13,12 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "npm run build && tauri build",
-    "postinstall": "node ./scripts/eas-ensure-mobile-deps.js"
+    "postinstall": "node ./scripts/eas-ensure-mobile-deps.js",
+    "mcp": "node mcp/run.cjs",
+    "mcp:smoke": "tsx mcp/smoke.ts"
+  },
+  "bin": {
+    "lifeos-mcp": "./mcp/run.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -25,6 +30,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.54.2",
+    "tsx": "^4.23.12",
     "zod": "^3.24.1"
   },
   "devDependencies": {
