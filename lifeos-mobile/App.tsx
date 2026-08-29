@@ -5,6 +5,8 @@ import { ActivityIndicator, Alert, AppState as RNAppState, StyleSheet, Text, use
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { auth, deleteNotebookPageRemote, loadWorkspace, saveNotebookPage, saveWorkspacePart, subscribeWorkspacePart } from "./src/lib/firebase";
+import { readOnboardingComplete, writeOnboardingComplete } from "./src/lib/onboardingCache";
+import { shouldPersistOnboardingComplete } from "./src/lib/onboardingGate";
 import { clearCachedPageInk } from "./src/lib/inkCache";
 import type { NotebookPage, Task, Workspace } from "./src/types";
 import { LifeOSContext, type AppState } from "./src/lib/LifeOSContext";
@@ -98,12 +100,17 @@ export default function App() {
         mergedPages[id] = localPage;
       }
     }
-    const mergedSettings = { ...remote.settings };
-    if (local.settings.onboardingCompletedAt && !remote.settings.onboardingCompletedAt) {
-      mergedSettings.onboardingCompletedAt = local.settings.onboardingCompletedAt;
-      mergedSettings.onboardingVersion = local.settings.onboardingVersion ?? mergedSettings.onboardingVersion;
-    }
-    return { ...remote, settings: mergedSettings, notebookPages: mergedPages };
+    return {
+      ...remote,
+      notebookPages: mergedPages,
+      settings: {
+        ...remote.settings,
+        onboardingCompletedAt:
+          local.settings.onboardingCompletedAt || remote.settings.onboardingCompletedAt,
+        onboardingVersion: remote.settings.onboardingVersion ?? local.settings.onboardingVersion,
+        onboardingStartedAt: remote.settings.onboardingStartedAt ?? local.settings.onboardingStartedAt,
+      },
+    };
   }, []);
 
   const sync = useCallback(async () => {
@@ -134,6 +141,32 @@ export default function App() {
     // Initial load is a full replace (no local optimistic state yet).
     loadWorkspace(user.uid)
       .then(async (next) => {
+        const cachedAt = await readOnboardingComplete(user.uid);
+        if (!next.settings.onboardingCompletedAt) {
+          const healedAt =
+            cachedAt ||
+            (shouldPersistOnboardingComplete({ settings: next.settings, workspace: next, deviceCompletedAt: cachedAt })
+              ? new Date().toISOString()
+              : null);
+          if (healedAt) {
+            const settings = {
+              ...next.settings,
+              onboardingCompletedAt: healedAt,
+              onboardingVersion: next.settings.onboardingVersion ?? 1,
+            };
+            next = { ...next, settings };
+            pendingWrites.current += 1;
+            try {
+              await writeOnboardingComplete(user.uid, healedAt);
+              await saveWorkspacePart(user.uid, "settings", settings);
+              lastWriteAt.current = Date.now();
+            } finally {
+              pendingWrites.current = Math.max(0, pendingWrites.current - 1);
+            }
+          }
+        } else {
+          void writeOnboardingComplete(user.uid, next.settings.onboardingCompletedAt);
+        }
         const { hub, pages, migratedIds } = migrateLegacyNotesToNotebooks(
           next.notes,
           next.notebookHub,
@@ -314,7 +347,12 @@ export default function App() {
     updateTasks: (value) => savePart("tasks", value),
     updateProjects: (value) => savePart("projects", value),
     updateNotes: (value) => savePart("notes", value),
-    updateSettings: (value) => savePart("settings", value),
+    updateSettings: (value) => {
+      if (value.onboardingCompletedAt) {
+        void writeOnboardingComplete(user.uid, value.onboardingCompletedAt);
+      }
+      return savePart("settings", value);
+    },
     updateClasses: (value) => savePart("classes", value),
     updateCalendar: (value) => savePart("calendar", value),
     updateCalendars: (value) => savePart("calendars", value),

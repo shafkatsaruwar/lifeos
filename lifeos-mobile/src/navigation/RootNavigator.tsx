@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OnboardingFlow } from "../components/OnboardingFlow";
 import { FloatingTabBar, FLOATING_TAB_BAR_HEIGHT } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { shouldPersistOnboardingComplete, shouldShowOnboarding } from "../lib/onboardingGate";
 import { useLayout } from "../lib/layout";
 import { linking } from "../lib/notifications";
 import type { OnboardingDestination } from "../types";
@@ -210,36 +211,26 @@ export function RootNavigator() {
 
   const settings = workspace.settings;
   // Replay is local state — Firebase silent sync cannot cancel “Show intro again”.
-  const needsOnboarding = onboardingReplay || !settings.onboardingCompletedAt;
+  const needsOnboarding = shouldShowOnboarding({
+    signedIn: true,
+    replay: onboardingReplay,
+    settings,
+    workspace,
+  });
 
-  // One-time legacy skip: accounts that predate onboarding shouldn't be forced
-  // through the intro. Never run during an explicit replay.
+  // Heal a missing Firebase flag for returning accounts (web once stripped
+  // onboardingCompletedAt on save). Never run during an explicit replay.
   useEffect(() => {
     if (onboardingReplay) return;
-    if (migrated.current || settings.onboardingCompletedAt) return;
-    if (settings.onboardingStartedAt) return;
-    const hasName = Boolean(settings.preferredName?.trim());
-    const hasData =
-      workspace.tasks.length > 0 ||
-      workspace.brain.length > 0 ||
-      workspace.notebookHub.notebooks.length > 0 ||
-      Object.keys(workspace.notebookPages || {}).length > 0;
-    if (!hasName && !hasData) return;
+    if (migrated.current) return;
+    if (!shouldPersistOnboardingComplete({ settings, workspace })) return;
     migrated.current = true;
     void updateSettings({
       ...settings,
       onboardingCompletedAt: new Date().toISOString(),
-      onboardingVersion: 1,
+      onboardingVersion: settings.onboardingVersion ?? 1,
     });
-  }, [
-    onboardingReplay,
-    settings,
-    workspace.tasks.length,
-    workspace.brain.length,
-    workspace.notebookHub.notebooks.length,
-    workspace.notebookPages,
-    updateSettings,
-  ]);
+  }, [onboardingReplay, settings, workspace, updateSettings]);
 
   // After onboarding completes, tabs mount — then honor the chosen first move.
   useEffect(() => {
