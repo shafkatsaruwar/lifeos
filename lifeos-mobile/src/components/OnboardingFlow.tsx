@@ -73,26 +73,32 @@ export function OnboardingFlow({ onFinished }: Props) {
   const totalSteps = 5;
   const progress = useMemo(() => Array.from({ length: totalSteps }, (_, i) => i <= step), [step]);
 
-  // Claim the flow immediately so saving a name mid-onboarding cannot trigger
-  // the legacy "existing user" auto-complete in RootNavigator.
+  // Mark flow started so saving a name mid-onboarding cannot trigger legacy auto-complete.
+  // Do not write onboardingVersion here — that blocked recovery when completion never saved.
   useEffect(() => {
-    if (workspace.settings.onboardingVersion != null) return;
-    void updateSettings({ ...workspace.settings, onboardingVersion: 1 });
+    if (workspace.settings.onboardingStartedAt) return;
+    void updateSettings({
+      ...workspace.settings,
+      onboardingStartedAt: new Date().toISOString(),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once per flow
   }, []);
+
+  const persistCompletion = async (extra?: Partial<typeof workspace.settings>) => {
+    const completedAt = workspace.settings.onboardingCompletedAt ?? new Date().toISOString();
+    await updateSettings({
+      ...workspace.settings,
+      ...extra,
+      onboardingCompletedAt: completedAt,
+      onboardingVersion: 1,
+    });
+  };
 
   const finish = async (destination?: OnboardingDestination, extra?: Partial<typeof workspace.settings>) => {
     setBusy(true);
     try {
-      // Tell the parent the destination before flipping onboardingCompletedAt
-      // so navigation can run as soon as tabs mount.
-      onFinished(destination);
-      await updateSettings({
-        ...workspace.settings,
-        ...extra,
-        onboardingCompletedAt: new Date().toISOString(),
-        onboardingVersion: 1,
-      });
+      await persistCompletion(extra);
+      onFinished(destination ?? pendingDest);
     } finally {
       setBusy(false);
     }
@@ -106,6 +112,8 @@ export function OnboardingFlow({ onFinished }: Props) {
     setPendingDest(destination);
     setPendingExtra(extra);
     setStep(4);
+    // Persist before "Open LifeOS" so force-quit on the done screen does not replay onboarding.
+    void persistCompletion(extra);
   };
 
   const toggleInterest = (id: Interest) => {
@@ -359,7 +367,6 @@ export function OnboardingFlow({ onFinished }: Props) {
               void updateSettings({
                 ...workspace.settings,
                 preferredName: name.trim(),
-                onboardingVersion: 1,
               });
               setStep(2);
             }}

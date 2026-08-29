@@ -92,6 +92,10 @@ export const SettingsSchema = z.object({
   enableStudyAbroad: z.boolean().optional(),
   enableMasterOS: z.boolean().optional(),
   preferredName: z.string().optional(),
+  /** Mobile first-run onboarding — preserve across web sync. */
+  onboardingStartedAt: z.string().optional(),
+  onboardingCompletedAt: z.string().optional(),
+  onboardingVersion: z.number().optional(),
 });
 
 export const ResourceSchema = z.object({

@@ -217,7 +217,7 @@ export function RootNavigator() {
   useEffect(() => {
     if (onboardingReplay) return;
     if (migrated.current || settings.onboardingCompletedAt) return;
-    if (settings.onboardingVersion != null) return;
+    if (settings.onboardingStartedAt) return;
     const hasName = Boolean(settings.preferredName?.trim());
     const hasData =
       workspace.tasks.length > 0 ||

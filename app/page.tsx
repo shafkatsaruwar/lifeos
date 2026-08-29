@@ -153,6 +153,10 @@ type SettingsState = {
   showCaptureCommands?: boolean;
   /** Ordered upcoming task ids for the Now queue (excludes the current nowTaskId). */
   nowQueueIds?: number[];
+  /** Mobile first-run onboarding — preserved when web syncs settings. */
+  onboardingStartedAt?: string;
+  onboardingCompletedAt?: string;
+  onboardingVersion?: number;
 };
 
 const projectIcons: Record<ProjectIcon, typeof Home> = { Zap, Aperture, Sparkles, FileText, UserRound, FolderKanban, BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, BookOpen };
