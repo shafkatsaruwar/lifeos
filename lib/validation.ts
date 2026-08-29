@@ -92,11 +92,13 @@ export const SettingsSchema = z.object({
   enableStudyAbroad: z.boolean().optional(),
   enableMasterOS: z.boolean().optional(),
   preferredName: z.string().optional(),
+  defaultCalendarView: z.enum(['upcoming', 'month', 'day']).optional(),
   /** Mobile first-run onboarding — preserve across web sync. */
   onboardingStartedAt: z.string().optional(),
   onboardingCompletedAt: z.string().optional(),
   onboardingVersion: z.number().optional(),
-});
+  themeMode: z.enum(['system', 'light', 'dark']).optional(),
+}).passthrough();
 
 export const ResourceSchema = z.object({
   id: z.string(),
@@ -221,7 +223,15 @@ export const validateCalendarEvents = (data: unknown) => {
 };
 
 export const validateSettings = (data: unknown) => {
-  return SettingsSchema.safeParse(data);
+  const parsed = SettingsSchema.safeParse(data);
+  if (parsed.success) return parsed;
+  // Soft-parse: a single bad known field must not drop onboardingCompletedAt
+  // (or other mobile-only keys). The web client writes this object back.
+  if (data && typeof data === 'object') {
+    const loose = SettingsSchema.partial().passthrough().safeParse(data);
+    if (loose.success) return { success: true as const, data: loose.data };
+  }
+  return parsed;
 };
 
 export const validateResources = (data: unknown) => {

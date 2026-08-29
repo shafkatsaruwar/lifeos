@@ -33,7 +33,8 @@ import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { syncDataToFirebase, loadDataFromFirebase, loadTasksFromFirebase, listenToFirebaseChanges, stopListeningToFirebaseChanges, pullAllDataFromFirebase, setUserId, clearUserId, getUserId } from "@/lib/dataSync";
 import { readTaskBackup, writeTaskBackup } from "@/lib/taskBackup";
-import { signInWithGoogle, signOut, onAuthStateChanged, getClientAuth } from "@/lib/firebase";
+import { signInWithGoogle, signOut, onAuthStateChanged, whenClientAuthReady } from "@/lib/firebase";
+import { shouldPersistOnboardingComplete } from "@/lib/onboardingGate";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
@@ -155,6 +156,7 @@ type SettingsState = {
   nowQueueIds?: number[];
   /** Mobile first-run onboarding — preserved when web syncs settings. */
   onboardingStartedAt?: string;
+  /** ISO timestamp when first-run onboarding finished. Synced with mobile. */
   onboardingCompletedAt?: string;
   onboardingVersion?: number;
 };
@@ -1029,8 +1031,6 @@ export default function LifeOS() {
   }, [focus]);
 
   useEffect(() => {
-    const auth = getClientAuth();
-
     // Check for test user ID in dev mode
     const testUserId = typeof window !== 'undefined' ? sessionStorage.getItem(STORAGE_KEYS.USER_ID) : null;
     if (testUserId === TEST_USER.ID) {
@@ -1042,27 +1042,39 @@ export default function LifeOS() {
       return;
     }
 
-    if (!auth) {
-      logger.warn('Firebase auth not initialized');
-      setAuthLoading(false);
-      return;
-    }
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
 
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        logger.info('User authenticated', { uid: currentUser.uid, email: currentUser.email });
-        setUser(currentUser);
-        setUserId(currentUser.uid);
-        setCloudUserId(currentUser.uid);
-      } else {
-        logger.info('User not authenticated');
-        setUser(null);
-        setCloudUserId(null);
-        clearUserId();
+    void (async () => {
+      const readyAuth = await whenClientAuthReady();
+      if (cancelled) return;
+      if (!readyAuth) {
+        logger.warn('Firebase auth not initialized');
+        setAuthLoading(false);
+        return;
       }
-      setAuthLoading(false);
-    });
-    return () => unsubscribe();
+
+      unsubscribe = onAuthStateChanged(readyAuth, (currentUser) => {
+        if (cancelled) return;
+        if (currentUser) {
+          logger.info('User authenticated', { uid: currentUser.uid, email: currentUser.email });
+          setUser(currentUser);
+          setUserId(currentUser.uid);
+          setCloudUserId(currentUser.uid);
+        } else {
+          logger.info('User not authenticated');
+          setUser(null);
+          setCloudUserId(null);
+          clearUserId();
+        }
+        setAuthLoading(false);
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, []);
   useEffect(() => {
     if (cloudUserId === null) {
@@ -1092,7 +1104,19 @@ export default function LifeOS() {
         if (firebaseDark !== null && firebaseDark !== undefined) setDark(firebaseDark);
 
         const firebaseSettings = await loadDataFromFirebase('settings');
-        if (firebaseSettings) setSettingsState({ ...initialSettings, ...firebaseSettings });
+        const cachedAt = typeof window !== 'undefined' && cloudUserId
+          ? window.localStorage.getItem(`lifeos-onboarding-complete:${cloudUserId}`)
+          : null;
+        const merged = firebaseSettings
+          ? { ...initialSettings, ...firebaseSettings }
+          : initialSettings;
+        if (!merged.onboardingCompletedAt && cachedAt) {
+          merged.onboardingCompletedAt = cachedAt;
+          merged.onboardingVersion = merged.onboardingVersion ?? 1;
+        }
+        if (firebaseSettings || merged.onboardingCompletedAt) {
+          setSettingsState(merged);
+        }
       } catch (error) {
         console.error('Failed to load settings from Firebase:', error);
       } finally {
@@ -1125,7 +1149,33 @@ export default function LifeOS() {
     document.documentElement.classList.toggle("compact", settingsState.compactMode);
     document.documentElement.classList.toggle("reduce-motion", settingsState.reduceMotion);
     syncDataToFirebase('settings', settingsState);
+    if (settingsState.onboardingCompletedAt && typeof window !== "undefined") {
+      window.localStorage.setItem(`lifeos-onboarding-complete:${cloudUserId}`, settingsState.onboardingCompletedAt);
+      window.localStorage.setItem("lifeos-onboarding-seen", "true");
+    }
   }, [cloudUserId, settingsState, settingsHydrated]);
+  useEffect(() => {
+    if (!cloudUserId || !settingsHydrated || settingsState.onboardingCompletedAt) return;
+    if (!tasksHydrated || !projectsHydrated || !calendarHydrated) return;
+    const cachedAt = typeof window !== "undefined"
+      ? window.localStorage.getItem(`lifeos-onboarding-complete:${cloudUserId}`)
+      : null;
+    const realTasks = isStarterTaskSet(tasks) ? [] : tasks;
+    const starterProjectNames = initialProjects.map(project => project.name).join("|");
+    const realProjects =
+      projectItems.map(project => project.name).join("|") === starterProjectNames ? [] : projectItems;
+    if (!shouldPersistOnboardingComplete({
+      settings: settingsState,
+      workspace: { tasks: realTasks, projects: realProjects, calendar: calendarEvents, classes, notes, brain: brainItems },
+      deviceCompletedAt: cachedAt,
+    })) return;
+    const at = cachedAt || new Date().toISOString();
+    setSettingsState(current => (
+      current.onboardingCompletedAt
+        ? current
+        : { ...current, onboardingCompletedAt: at, onboardingVersion: current.onboardingVersion ?? 1 }
+    ));
+  }, [brainItems, calendarEvents, calendarHydrated, classes, cloudUserId, notes, projectItems, projectsHydrated, settingsHydrated, settingsState, tasks, tasksHydrated]);
   useEffect(() => {
     if (!cloudUserId) return;
     setTasksHydrated(false);
@@ -2219,7 +2269,7 @@ export default function LifeOS() {
               flash(`Deleted ${name}`);
             }} />}
             {view === "Study Abroad" && <StudyAbroadDashboard hub={studyAbroadHub} studyView={studyAbroadView} onChangeView={setStudyAbroadView} onChange={setStudyAbroadHub} workspaceName={workspaceName} onOpenCalendar={() => go("Calendar")} onFocusStudyTask={focusStudyAbroadTask} focusEntity={studyAbroadFocusEntity} onFocusEntityConsumed={() => setStudyAbroadFocusEntity(null)} />}
-            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableMasterOS={settingsState.enableMasterOS !== false} flash={flash} />}
+            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableMasterOS={settingsState.enableMasterOS !== false} onboardingCompletedAt={settingsState.onboardingCompletedAt} onMarkOnboarded={() => setSettingsState(current => ({ ...current, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} flash={flash} />}
             {view === "Flow" && <FocusFlowView screen={flowScreen} onScreenChange={setFlowScreen} tasks={tasks} projects={[...projectItems.map(project => project.name), ...classes.map(item => item.code)]} events={calendarFeed} weeklyPlan={weeklyPlan} momentumLog={settingsState.momentumLog ?? []} nowTaskId={settingsState.nowTaskId ?? null} today={toDateKey(new Date())} onFocus={openFocus} onChoose={chooseNowTask} onComplete={complete} onAddTask={(title, options, projectName) => addTask(title, undefined, projectName && projectName !== "Inbox" ? projectName : "", options)} onAddProject={(name) => addProject(name)} onUpdateTask={updateTaskDetails} onAddCalendarEvent={addCalendarEvent} onSetWeeklyPlan={setWeeklyPlan} onOpenCalendar={() => go("Calendar")} flash={flash} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
             {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} />}
@@ -2239,7 +2289,7 @@ export default function LifeOS() {
       </main>
       {!focus && floatingFocusTask && <FloatingFocusDock task={floatingFocusTask} onResume={(session) => { updateFocusSession(floatingFocusTask.id, session); setActiveTaskId(floatingFocusTask.id); chooseNowTask(floatingFocusTask.id); setFocus(true); }} onUpdateSession={(session) => updateFocusSession(floatingFocusTask.id, session)} onEnd={() => updateFocusSession(floatingFocusTask.id, { remainingSeconds: getTaskFocusSeconds(floatingFocusTask), hasStarted: false, isRunning: false, halfwayPrompted: Boolean(floatingFocusTask.focusHalfwayPrompted) })} />}
       <AnimatePresence>
-        {needsWorkspaceName && <WelcomeNameModal key="welcome-name-modal" suggestedName={user?.displayName} save={(preferredName) => setSettingsState(current => ({ ...current, preferredName }))} />}
+        {needsWorkspaceName && <WelcomeNameModal key="welcome-name-modal" suggestedName={user?.displayName} save={(preferredName) => setSettingsState(current => ({ ...current, preferredName, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} />}
         {palette && <CommandPalette key="command-palette" query={query} setQuery={setQuery} results={filtered} close={() => { setPalette(false); setQuery(""); }} go={go} onFocus={() => { setPalette(false); openFocus(); }} onCapture={() => { setPalette(false); setCapture(true); }} onNewTask={() => { setPalette(false); setComposer("task"); }} onResult={(result) => {
           const task = activeTasks.find(item => item.title === result);
           const project = projectItems.find(item => item.name === result);
@@ -2317,7 +2367,7 @@ export default function LifeOS() {
   );
 }
 
-function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableWorkOS, enableStudyAbroad, enableMasterOS, flash }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableWorkOS: boolean; enableStudyAbroad: boolean; enableMasterOS: boolean; flash: (message: string) => void }) {
+function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableWorkOS, enableStudyAbroad, enableMasterOS, onboardingCompletedAt, onMarkOnboarded, flash }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableWorkOS: boolean; enableStudyAbroad: boolean; enableMasterOS: boolean; onboardingCompletedAt?: string; onMarkOnboarded: () => void; flash: (message: string) => void }) {
   const [handoff, setHandoff] = useState("");
   const [captureInput, setCaptureInput] = useState("");
   const [captureFocused, setCaptureFocused] = useState(false);
@@ -2328,9 +2378,13 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   const captureBlurTimer = useRef<number | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false;
+    if (onboardingCompletedAt) return false;
     const seen = localStorage.getItem('lifeos-onboarding-seen');
     return !seen;
   });
+  useEffect(() => {
+    if (onboardingCompletedAt) setShowOnboarding(false);
+  }, [onboardingCompletedAt]);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
   useEffect(() => () => { if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current); }, []);
@@ -2379,6 +2433,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   const closeOnboarding = () => {
     setShowOnboarding(false);
     if (typeof window !== 'undefined') localStorage.setItem('lifeos-onboarding-seen', 'true');
+    onMarkOnboarded();
   };
   const commands = [
     { shortcut: '/t', label: 'Add task', desc: 'Create a new task' },

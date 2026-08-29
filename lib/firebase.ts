@@ -116,6 +116,25 @@ export function getClientAuth() {
   return auth;
 }
 
+/**
+ * Wait until browser persistence has restored the last Google session
+ * (or confirmed there is none) before treating the user as signed out.
+ */
+export async function whenClientAuthReady() {
+  initializeFirebase();
+  if (persistenceReady) {
+    try {
+      await persistenceReady;
+    } catch {
+      // Persistence failed; still resolve the current auth state.
+    }
+  }
+  if (auth && typeof auth.authStateReady === 'function') {
+    await auth.authStateReady();
+  }
+  return auth;
+}
+
 export function getClientStorage() {
   initializeFirebase();
   return storage;
