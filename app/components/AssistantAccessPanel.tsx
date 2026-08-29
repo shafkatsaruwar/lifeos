@@ -115,8 +115,12 @@ export function AssistantAccessPanel({ user, userId, flash }: AssistantAccessPan
         />
         <div className="assistant-access-steps">
           <strong>Stdio MCP env (Cursor / Grok Bot)</strong>
+          <pre className="assistant-access-env">{`LIFEOS_USER_ID=
+LIFEOS_FIREBASE_DB_URL=
+LIFEOS_FIREBASE_API_KEY=
+LIFEOS_FIREBASE_REFRESH_TOKEN=`}</pre>
           <ol>
-            <li>Copy the four values above into the assistant&apos;s MCP <code>env</code>.</li>
+            <li>Paste the four copied values into that block (refresh token is a secret).</li>
             <li>
               Command: <code>node</code> · args: <code>/ABSOLUTE/PATH/TO/lifeos/mcp/run.cjs</code>
             </li>
