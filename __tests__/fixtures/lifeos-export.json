@@ -1,0 +1,140 @@
+{
+  "exportedAt": "2026-08-29T12:00:00.000Z",
+  "tasks": [
+    {
+      "id": 101,
+      "title": "Finish MCP connector brief",
+      "project": "LifeOS",
+      "color": "#625af6",
+      "due": "2026-08-30",
+      "priority": "High",
+      "focusMinutes": 45,
+      "energy": "High",
+      "status": "In progress",
+      "nextAction": "Write MCP.md"
+    },
+    {
+      "id": 102,
+      "title": "Read chapter 4",
+      "project": "Inbox",
+      "color": "#4b8bdc",
+      "due": "2026-09-02",
+      "priority": "Medium",
+      "focusMinutes": 30,
+      "energy": "Medium",
+      "classId": "class-chem",
+      "academicType": "Reading"
+    },
+    {
+      "id": 103,
+      "title": "Old inbox zero",
+      "project": "LifeOS",
+      "color": "#47a47b",
+      "due": "2026-01-01",
+      "priority": "Low",
+      "focusMinutes": 15,
+      "energy": "Low",
+      "done": true,
+      "completedAt": "2026-01-02T00:00:00.000Z"
+    }
+  ],
+  "projects": [
+    {
+      "name": "LifeOS",
+      "kind": "finishable",
+      "iconName": "Zap",
+      "color": "#625af6",
+      "desc": "Personal cockpit"
+    }
+  ],
+  "events": [
+    {
+      "id": "evt-1",
+      "title": "Office hours",
+      "start": "2026-08-30T15:00:00.000Z",
+      "end": "2026-08-30T16:00:00.000Z",
+      "source": "LifeOS",
+      "color": "#625af6"
+    },
+    {
+      "id": "evt-icloud",
+      "title": "Dentist",
+      "start": "2026-08-31T18:00:00.000Z",
+      "source": "iCal",
+      "color": "#cf625a"
+    }
+  ],
+  "classes": [
+    {
+      "id": "class-chem",
+      "code": "CHEM 201",
+      "name": "Organic Chemistry",
+      "term": "Fall 2026",
+      "instructor": "Dr. Stone",
+      "color": "#4b8bdc"
+    }
+  ],
+  "notes": [
+    {
+      "id": "note-1",
+      "title": "Lab recap",
+      "body": "Titration notes",
+      "classId": "class-chem",
+      "updatedAt": "2026-08-28T00:00:00.000Z"
+    }
+  ],
+  "brainItems": ["buy oat milk"],
+  "school": {
+    "profile": { "major": "Chemistry", "classOf": "2028" },
+    "topics": [{ "id": "t1", "title": "SN1 vs SN2" }],
+    "professors": [{ "id": "p1", "title": "Dr. Stone" }],
+    "goals": [{ "id": "g1", "title": "A in CHEM 201" }]
+  },
+  "work": {
+    "projects": [
+      {
+        "id": "wp-1",
+        "name": "Q3 launch",
+        "color": "#625af6",
+        "status": "active",
+        "createdAt": "2026-07-01T00:00:00.000Z"
+      }
+    ],
+    "deliverables": [
+      {
+        "id": "wd-1",
+        "projectId": "wp-1",
+        "title": "Spec",
+        "type": "document",
+        "status": "in_progress",
+        "priority": "high",
+        "dueDate": "2026-09-01",
+        "createdAt": "2026-07-02T00:00:00.000Z"
+      }
+    ],
+    "tasks": [
+      {
+        "id": "wt-1",
+        "deliverableId": "wd-1",
+        "title": "Draft API section",
+        "status": "open",
+        "priority": "high",
+        "createdAt": "2026-07-03T00:00:00.000Z"
+      }
+    ],
+    "meetings": [
+      {
+        "id": "wm-1",
+        "title": "Standup",
+        "start": "2026-08-29T14:00:00.000Z",
+        "type": "standup",
+        "projectId": "wp-1"
+      }
+    ]
+  },
+  "settings": {
+    "preferredName": "Alex",
+    "enableSchoolOS": true,
+    "enableWorkOS": true
+  }
+}
