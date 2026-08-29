@@ -14,6 +14,7 @@ export type StoreConfig = {
   firebasePassword?: string;
   userId?: string;
   cwd?: string;
+  home?: string;
   fetchImpl?: typeof fetch;
 };
 
@@ -100,8 +101,13 @@ async function fetchFirebaseUser(
   return body;
 }
 
+function resolveFetch(config: StoreConfig): typeof fetch {
+  if (config.fetchImpl) return config.fetchImpl;
+  if (typeof fetch === "function") return fetch;
+  throw new Error("fetch is not available in this runtime. Pass fetchImpl or run on Node 18+.");
+}
+
 export async function loadWorkspace(config: StoreConfig): Promise<LoadedStore> {
-  const fetchImpl = config.fetchImpl ?? fetch;
   const cwd = config.cwd ?? process.cwd();
 
   if (config.dataPath) {
@@ -118,7 +124,7 @@ export async function loadWorkspace(config: StoreConfig): Promise<LoadedStore> {
     };
   }
 
-  const discovered = discoverDataFiles(cwd);
+  const discovered = discoverDataFiles(cwd, config.home ?? homedir());
   if (discovered[0]) {
     return {
       workspace: normalizeWorkspace(parseJsonFile(discovered[0]), {
@@ -131,8 +137,14 @@ export async function loadWorkspace(config: StoreConfig): Promise<LoadedStore> {
   }
 
   let auth = config.firebaseAuth;
+  const needsNetwork = Boolean(
+    (!auth && config.firebaseApiKey && config.firebaseEmail && config.firebasePassword) ||
+    (config.firebaseDbUrl && (auth || (config.firebaseApiKey && config.firebaseEmail && config.firebasePassword)) && config.userId),
+  );
+  const fetchImpl = needsNetwork ? resolveFetch(config) : undefined;
+
   if (!auth && config.firebaseApiKey && config.firebaseEmail && config.firebasePassword) {
-    auth = await signInWithPassword(config.firebaseApiKey, config.firebaseEmail, config.firebasePassword, fetchImpl);
+    auth = await signInWithPassword(config.firebaseApiKey, config.firebaseEmail, config.firebasePassword, fetchImpl!);
   }
 
   if (config.firebaseDbUrl && auth && config.userId) {
@@ -140,7 +152,7 @@ export async function loadWorkspace(config: StoreConfig): Promise<LoadedStore> {
       firebaseDbUrl: config.firebaseDbUrl,
       firebaseAuth: auth,
       userId: config.userId,
-      fetchImpl,
+      fetchImpl: fetchImpl!,
     });
     if (raw == null) {
       return {

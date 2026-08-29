@@ -65,6 +65,12 @@ export async function handleMcpRequest(
       case "initialize": {
         const params = (message.params ?? {}) as { protocolVersion?: string };
         const protocolVersion = params.protocolVersion || MCP_PROTOCOL_VERSION;
+        let storeHint = "unknown";
+        try {
+          storeHint = sourceLabel((await loadWorkspace(config)).workspace.source);
+        } catch {
+          storeHint = "unavailable until tools/call";
+        }
         return ok(message.id ?? null, {
           protocolVersion: protocolVersion.startsWith("2024") || protocolVersion.startsWith("2025")
             ? protocolVersion
@@ -73,7 +79,7 @@ export async function handleMcpRequest(
           serverInfo: { name: MCP_SERVER_NAME, version: MCP_SERVER_VERSION },
           instructions:
             "LifeOS personal cockpit. Prefer lifeos_status, then list_tasks / list_projects / list_classes / list_work / list_events. " +
-            `Store: ${sourceLabel((await loadWorkspace(config)).workspace.source)}.`,
+            `Store: ${storeHint}.`,
         });
       }
       case "notifications/initialized":

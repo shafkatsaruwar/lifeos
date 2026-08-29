@@ -25,7 +25,7 @@ describe("MCP env loader", () => {
   it("loads key=value without overriding existing vars", () => {
     const dir = mkdtempSync(join(tmpdir(), "lifeos-mcp-env-"));
     const file = join(dir, ".env");
-    writeFileSync(file, "LIFEOS_USER_ID=from-file\n# comment\nLIFEOS_MCP_TOKEN=tok\n");
+    writeFileSync(file, "LIFEOS_USER_ID=from-file\n# comment\nLIFEOS_MCP_TOKEN=\"tok\"\n");
     const env: NodeJS.ProcessEnv = { LIFEOS_USER_ID: "already" };
     loadEnvFile(file, env);
     expect(env.LIFEOS_USER_ID).toBe("already");
@@ -70,7 +70,7 @@ describe("workspace normalize", () => {
       },
       { source: "firebase", userId: "uid-1" },
     );
-    expect(workspace.tasks.map((task) => task.id).sort()).toEqual([9, 10]);
+    expect(workspace.tasks.map((task) => task.id).sort((a, b) => a - b)).toEqual([9, 10]);
     expect(workspace.projects[0].name).toBe("Alpha");
     expect(workspace.calendar[0].id).toBe("c1");
   });
@@ -100,7 +100,8 @@ describe("store loader", () => {
   });
 
   it("returns an empty workspace with a warning when nothing is configured", async () => {
-    const loaded = await loadWorkspace({ cwd: join(tmpdir(), "lifeos-mcp-missing-" + Date.now()) });
+    const isolated = mkdtempSync(join(tmpdir(), "lifeos-mcp-missing-"));
+    const loaded = await loadWorkspace({ cwd: isolated, home: isolated });
     expect(loaded.workspace.source).toBe("empty");
     expect(loaded.warning).toMatch(/No LifeOS store found/);
   });
@@ -159,6 +160,30 @@ describe("store loader", () => {
     expect(config.userId).toBe("abc");
     expect(config.firebaseDbUrl).toBe("https://db.example.com");
   });
+
+  it("rejects a missing or invalid export file", async () => {
+    await expect(loadWorkspace({ dataPath: join(tmpdir(), "no-such-lifeos.json") })).rejects.toThrow(/does not exist/);
+    const dir = mkdtempSync(join(tmpdir(), "lifeos-mcp-badjson-"));
+    const file = join(dir, "broken.json");
+    writeFileSync(file, "{not json");
+    await expect(loadWorkspace({ dataPath: file })).rejects.toThrow(/not valid JSON/);
+  });
+
+  it("surfaces Firebase HTTP errors", async () => {
+    const fetchImpl: typeof fetch = jest.fn(async () => ({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      json: async () => ({ error: "Permission denied" }),
+    })) as unknown as typeof fetch;
+
+    await expect(loadWorkspace({
+      firebaseDbUrl: "https://example.firebaseio.com",
+      firebaseAuth: "bad-token",
+      userId: "user-1",
+      fetchImpl,
+    })).rejects.toThrow(/Firebase read failed \(401\)/);
+  });
 });
 
 describe("MCP tools", () => {
@@ -188,6 +213,7 @@ describe("MCP tools", () => {
     expect(school.academicTasks).toHaveLength(1);
     const work = JSON.parse(callTool("list_work", { kind: "tasks" }, workspace).content[0].text);
     expect(work.tasks[0].title).toBe("Draft API section");
+    expect(callTool("list_work", { kind: "nope" }, workspace).isError).toBe(true);
   });
 
   it("hides stored iCal events unless asked", () => {
@@ -270,5 +296,25 @@ describe("MCP protocol", () => {
 
     const missing = await handleMcpRequest({ jsonrpc: "2.0", id: 9, method: "nope" }, config);
     expect(missing?.error?.code).toBe(-32601);
+  });
+
+  it("validates JSON-RPC shape and tools/call params", async () => {
+    const badVersion = await handleMcpRequest({ jsonrpc: "1.0", id: 1, method: "ping" }, config);
+    expect(badVersion?.error?.code).toBe(-32600);
+
+    const noMethod = await handleMcpRequest({ jsonrpc: "2.0", id: 2 }, config);
+    expect(noMethod?.error?.code).toBe(-32600);
+
+    const noName = await handleMcpRequest({ jsonrpc: "2.0", id: 3, method: "tools/call", params: {} }, config);
+    expect(noName?.error?.code).toBe(-32602);
+
+    const resources = await handleMcpRequest({ jsonrpc: "2.0", id: 4, method: "resources/list" }, config);
+    expect(resources?.result).toEqual({ resources: [] });
+
+    const prompts = await handleMcpRequest({ jsonrpc: "2.0", id: 5, method: "prompts/list" }, config);
+    expect(prompts?.result).toEqual({ prompts: [] });
+
+    const invalid = await handleMcpPayload("nope", config);
+    expect((invalid as { error?: { code: number } }).error?.code).toBe(-32700);
   });
 });
