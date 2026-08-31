@@ -7,6 +7,7 @@ import {
   entryDurationMinutes,
   exportTimesheetCsv,
   getActiveEntry,
+  isActiveEntry,
   normalizeTimeTracking,
   saveContractor,
   updateTimeEntry,
@@ -26,6 +27,19 @@ describe("timeTracking", () => {
     expect(entry.durationMinutes).toBe(150);
     expect(entry.clientName).toBe("Acme");
     expect(state.defaultClientName).toBe("Acme");
+  });
+
+  it("treats empty clockOutAt as still active", () => {
+    const entry = {
+      id: "e1",
+      clockInAt: "2026-08-31T09:00:00.000Z",
+      clockOutAt: "   ",
+      source: "clock" as const,
+      createdAt: "",
+      updatedAt: "",
+    };
+    expect(isActiveEntry(entry)).toBe(true);
+    expect(getActiveEntry({ entries: [entry], savedClients: [] })?.id).toBe("e1");
   });
 
   it("prevents double clock-in", () => {

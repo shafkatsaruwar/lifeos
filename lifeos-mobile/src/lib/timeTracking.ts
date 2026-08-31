@@ -56,8 +56,12 @@ function withDefaultClient(state: TimeTrackingState, clientName?: string): TimeT
   return clientName?.trim() ? saveContractor(state, clientName) : state;
 }
 
+export function isActiveEntry(entry: TimeEntry): boolean {
+  return !entry.clockOutAt || entry.clockOutAt.trim() === "";
+}
+
 export function getActiveEntry(state: TimeTrackingState): TimeEntry | undefined {
-  return state.entries.find((entry) => !entry.clockOutAt);
+  return state.entries.find(isActiveEntry);
 }
 
 export function entryDurationMinutes(entry: TimeEntry, now = Date.now()): number {

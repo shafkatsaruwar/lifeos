@@ -23,59 +23,50 @@ type Props = {
 
 export function TimesheetNowStrip({ theme, timeTracking, workTitle, onChange, onOpenTimesheet }: Props) {
   const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
   const active = getActiveEntry(timeTracking);
   const client = timeTracking.defaultClientName;
 
-  if (active) {
-    const label = active.clientName || client || "Contractor";
-    return (
-      <View style={[styles.strip, { backgroundColor: theme.soft, borderColor: theme.border }]}>
-        <View style={styles.grow}>
-          <Text style={[styles.title, { color: theme.text }]}>{active.title || "Work session"}</Text>
-          <Text style={[styles.meta, { color: theme.muted }]}>
-            {label} · started {formatClockTime(active.clockInAt)} · {formatDurationMinutes(entryDurationMinutes(active, now))} so far
-          </Text>
-        </View>
-        <View style={styles.actions}>
-          <ActionButton
-            label="Clock out"
-            icon="clock"
-            onPress={() => onChange(clockOut(timeTracking))}
-          />
-          <ActionButton label="Timesheet" icon="external-link" quiet onPress={onOpenTimesheet} />
-        </View>
-      </View>
-    );
-  }
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [active?.id]);
+
+  const handleToggle = () => {
+    if (active) onChange(clockOut(timeTracking));
+    else {
+      onChange(
+        clockIn(timeTracking, {
+          clientName: client,
+          title: workTitle?.trim() || "Work session",
+        }),
+      );
+    }
+  };
 
   return (
     <View style={[styles.strip, { backgroundColor: theme.soft, borderColor: theme.border }]}>
       <View style={styles.grow}>
-        <Text style={[styles.title, { color: theme.text }]}>Timesheet</Text>
+        <Text style={[styles.title, { color: theme.text }]}>{active ? (active.title || "Work session") : "Timesheet"}</Text>
         <Text style={[styles.meta, { color: theme.muted }]}>
-          {client ? `${client} · ready to clock in` : "Track billable hours for your contractor"}
+          {active
+            ? `${active.clientName || client || "Contractor"} · started ${formatClockTime(active.clockInAt)} · ${formatDurationMinutes(entryDurationMinutes(active, now))} so far`
+            : client
+              ? `${client} · ready to clock in`
+              : "Track billable hours for your contractor"}
         </Text>
       </View>
       <View style={styles.actions}>
         <ActionButton
-          label="Clock in"
+          label={active ? "Clock out" : "Clock in"}
           icon="clock"
-          onPress={() =>
-            onChange(
-              clockIn(timeTracking, {
-                clientName: client,
-                title: workTitle?.trim() || "Work session",
-              }),
-            )
-          }
+          danger={Boolean(active)}
+          onPress={handleToggle}
         />
         <Pressable onPress={onOpenTimesheet} style={styles.linkBtn} hitSlop={8}>
-          <Text style={{ color: theme.accent, fontWeight: "800", fontSize: 12 }}>Open timesheet</Text>
+          <Text style={{ color: theme.accent, fontWeight: "800", fontSize: 12 }}>
+            {active ? "Timesheet" : "Open timesheet"}
+          </Text>
           <Feather name="arrow-right" size={14} color={theme.accent} />
         </Pressable>
       </View>

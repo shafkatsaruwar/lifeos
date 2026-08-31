@@ -63,6 +63,7 @@ export function TimesheetPanel({ theme, timeTracking, projects, weekStartsMonday
   const [editingTime, setEditingTime] = useState<EditingTime>(null);
   const savedClients = timeTracking.savedClients ?? [];
   const active = getActiveEntry(timeTracking);
+  const [tick, setTick] = useState(() => Date.now());
   const weekEntries = useMemo(() => entriesForWeek(timeTracking, weekKey), [timeTracking, weekKey]);
   const weekTotal = weekTotalMinutes(weekEntries);
   const projectName = (projectId?: string) => projects.find((item) => item.id === projectId)?.name ?? "";
@@ -70,6 +71,19 @@ export function TimesheetPanel({ theme, timeTracking, projects, weekStartsMonday
   useEffect(() => {
     if (timeTracking.defaultClientName) setDraftClient(timeTracking.defaultClientName);
   }, [timeTracking.defaultClientName]);
+
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [active?.id]);
+
+  useEffect(() => {
+    if (!active) return;
+    setDraftClient(active.clientName ?? timeTracking.defaultClientName ?? "");
+    setDraftTitle(active.title ?? "");
+    setDraftProjectId(active.projectId ?? "");
+  }, [active?.id, active?.clientName, active?.title, active?.projectId, timeTracking.defaultClientName]);
 
   const handleSaveContractor = () => {
     const trimmed = draftClient.trim();
@@ -160,7 +174,7 @@ export function TimesheetPanel({ theme, timeTracking, projects, weekStartsMonday
         </Text>
         <Text style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>
           {active
-            ? `${formatClockDate(active.clockInAt)} · ${formatClockTime(active.clockInAt)} · ${formatDurationMinutes(entryDurationMinutes(active))} so far`
+            ? `${formatClockDate(active.clockInAt)} · ${formatClockTime(active.clockInAt)} · ${formatDurationMinutes(entryDurationMinutes(active, tick))} so far`
             : "Track billable hours for your contractor timesheet."}
         </Text>
         <TextInput
@@ -198,6 +212,7 @@ export function TimesheetPanel({ theme, timeTracking, projects, weekStartsMonday
           <ActionButton
             label={active ? "Clock out" : "Clock in"}
             icon="clock"
+            danger={Boolean(active)}
             onPress={() => {
               if (active) onChange(clockOut(timeTracking));
               else {

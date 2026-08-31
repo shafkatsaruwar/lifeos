@@ -40,10 +40,20 @@ export function TimesheetPanel({ timeTracking, projects, weekStartsMonday = fals
   const [draftProjectId, setDraftProjectId] = useState("");
   const savedClients = timeTracking.savedClients ?? [];
   const active = getActiveEntry(timeTracking);
+  const [tick, setTick] = useState(() => Date.now());
 
   useEffect(() => {
-    if (timeTracking.defaultClientName) setDraftClient(timeTracking.defaultClientName);
-  }, [timeTracking.defaultClientName]);
+    if (!active) return;
+    const id = window.setInterval(() => setTick(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [active?.id]);
+
+  useEffect(() => {
+    if (!active) return;
+    setDraftClient(active.clientName ?? timeTracking.defaultClientName ?? "");
+    setDraftTitle(active.title ?? "");
+    setDraftProjectId(active.projectId ?? "");
+  }, [active?.id, active?.clientName, active?.title, active?.projectId, timeTracking.defaultClientName]);
   const weekEntries = useMemo(() => entriesForWeek(timeTracking, weekKey), [timeTracking, weekKey]);
   const weekTotal = weekTotalMinutes(weekEntries);
   const projectName = (projectId?: string) => projects.find((item) => item.id === projectId)?.name ?? "";
@@ -108,7 +118,7 @@ export function TimesheetPanel({ timeTracking, projects, weekStartsMonday = fals
           <strong>{active ? "Clocked in" : "Ready to clock in"}</strong>
           <p className="timesheet-sub">
             {active
-              ? `${formatClockDate(active.clockInAt)} · ${formatClockTime(active.clockInAt)} · ${formatDurationMinutes(entryDurationMinutes(active))} so far`
+              ? `${formatClockDate(active.clockInAt)} · ${formatClockTime(active.clockInAt)} · ${formatDurationMinutes(entryDurationMinutes(active, tick))} so far`
               : "Track billable hours for your contractor timesheet."}
           </p>
         </div>
