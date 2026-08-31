@@ -1,4 +1,10 @@
-import { filterLifeProjects, isWorkLinkedTask, isWorkProjectName } from "../lifeos-mobile/src/lib/workos";
+import {
+  allOpenWorkAreaTasks,
+  filterLifeProjects,
+  isWorkLinkedTask,
+  isWorkProjectName,
+  openTaskCountForWorkProject,
+} from "../lifeos-mobile/src/lib/workos";
 import type { Project, Task } from "../lifeos-mobile/src/types";
 
 describe("work project life filters", () => {
@@ -33,5 +39,32 @@ describe("work project life filters", () => {
       checklistProgress: [],
     };
     expect(isWorkLinkedTask(task, work)).toBe(true);
+  });
+
+  it("counts life tasks assigned to a work project in Work OS totals", () => {
+    const lifeTasks: Task[] = [
+      {
+        id: 1,
+        title: "Check Bullhorn Access",
+        project: "UML",
+        due: "2026-09-01",
+        status: "Not started",
+        checklist: [],
+        checklistProgress: [],
+      },
+      {
+        id: 2,
+        title: "Check ServiceNow Access",
+        project: "UML",
+        due: "2026-09-01",
+        status: "Not started",
+        checklist: [],
+        checklistProgress: [],
+      },
+    ];
+    expect(openTaskCountForWorkProject(work, lifeTasks, work.projects[0])).toBe(2);
+    const merged = allOpenWorkAreaTasks(work, lifeTasks);
+    expect(merged.workTasks).toHaveLength(0);
+    expect(merged.lifeTasks).toHaveLength(2);
   });
 });

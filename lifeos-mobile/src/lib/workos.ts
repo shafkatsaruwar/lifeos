@@ -1,6 +1,7 @@
 /** WorkOS hub — parity with web `OSDashboards.tsx`. */
 
 import type { CalendarEvent, Priority, Project, Task, TaskStatus } from "../types";
+import { taskIsOpen } from "./helpers";
 
 export type WorkProject = {
   id: string;
@@ -255,6 +256,59 @@ export function isWorkLinkedTask(task: Task, work: WorkHubState): boolean {
 /** Personal/Life projects only — excludes Work OS mirrors from Home and Spaces. */
 export function filterLifeProjects(projects: Project[], work: WorkHubState): Project[] {
   return projects.filter((project) => !isWorkProjectName(project.name, work));
+}
+
+export function getLinkedWorkTaskId(task: Task): string | undefined {
+  return task.customProperties?.find((prop) => prop.name === "workTaskId")?.value;
+}
+
+/** Life task already represented by a row in the Work hub. */
+export function isLifeTaskMirroredInWorkHub(task: Task, work: WorkHubState): boolean {
+  const linkedId = getLinkedWorkTaskId(task);
+  if (!linkedId) return false;
+  return work.tasks.some((item) => item.id === linkedId);
+}
+
+/** Open Life tasks assigned to a Work project that are not mirrored in work.tasks. */
+export function openLifeTasksForWorkProject(
+  lifeTasks: Task[],
+  work: WorkHubState,
+  workProject: WorkProject,
+): Task[] {
+  return lifeTasks.filter(
+    (task) =>
+      taskIsOpen(task) &&
+      task.project === workProject.name &&
+      !isLifeTaskMirroredInWorkHub(task, work),
+  );
+}
+
+export function openTaskCountForWorkProject(
+  work: WorkHubState,
+  lifeTasks: Task[],
+  workProject: WorkProject,
+): number {
+  const workCount = work.tasks.filter(
+    (task) => task.status !== "done" && projectForTask(work, task)?.id === workProject.id,
+  ).length;
+  return workCount + openLifeTasksForWorkProject(lifeTasks, work, workProject).length;
+}
+
+/** Merge Work hub tasks with orphan Life tasks routed to Work project names. */
+export function allOpenWorkAreaTasks(
+  work: WorkHubState,
+  lifeTasks: Task[],
+): { workTasks: WorkTask[]; lifeTasks: Task[] } {
+  const workTasks = work.tasks.filter((task) => task.status !== "done");
+  const workProjectNames = new Set(work.projects.map((project) => project.name));
+  const lifeOnly = lifeTasks.filter(
+    (task) =>
+      taskIsOpen(task) &&
+      task.project &&
+      workProjectNames.has(task.project) &&
+      !isLifeTaskMirroredInWorkHub(task, work),
+  );
+  return { workTasks, lifeTasks: lifeOnly };
 }
 
 export function projectForTask(hub: WorkHubState, task: WorkTask) {

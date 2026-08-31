@@ -21,9 +21,11 @@ import { SwipeDeleteRow } from "../components/SwipeDeleteRow";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatDueDate, toDateKey } from "../lib/helpers";
 import {
+  allOpenWorkAreaTasks,
   bridgeWorkTaskToLife,
   ensureLifeProjectForWork,
   formatWorkMeetingWhere,
+  openTaskCountForWorkProject,
   projectForDeliverable,
   projectForTask,
   removeWorkProject,
@@ -36,6 +38,7 @@ import {
   type WorkTask,
   type WorkView,
 } from "../lib/workos";
+import type { Task } from "../types";
 
 type CreateKind = "project" | "deliverable" | "task" | "meeting";
 
@@ -114,10 +117,12 @@ export function WorkDashboardScreen() {
     () => work.projects.filter((p) => p.status === "active"),
     [work.projects],
   );
-  const openTasks = useMemo(
-    () => work.tasks.filter((t) => t.status !== "done"),
-    [work.tasks],
+  const { workTasks: openWorkTasks, lifeTasks: openLifeWorkTasks } = useMemo(
+    () => allOpenWorkAreaTasks(work, workspace.tasks),
+    [work, workspace.tasks],
   );
+  const openTasks = openWorkTasks;
+  const openTaskTotal = openWorkTasks.length + openLifeWorkTasks.length;
   const blockedTasks = useMemo(
     () => openTasks.filter((t) => t.status === "blocked"),
     [openTasks],
@@ -346,6 +351,44 @@ export function WorkDashboardScreen() {
     }
   };
 
+  const renderLifeTaskRow = (task: Task) => {
+    const tone = priorityColor((task.priority ?? "medium").toLowerCase());
+    return (
+      <SwipeDeleteRow
+        key={`life-${task.id}`}
+        label={task.title}
+        onDelete={() => void updateTasks(workspace.tasks.filter((t) => t.id !== task.id))}
+      >
+        <View style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Complete ${task.title}`}
+            onPress={() =>
+              void updateTasks(
+                workspace.tasks.map((t) =>
+                  t.id === task.id ? { ...t, done: true, status: "Done", completedAt: new Date().toISOString() } : t,
+                ),
+              )
+            }
+            style={[styles.check, { borderColor: theme.border }]}
+          />
+          <Pressable
+            style={styles.grow}
+            onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+          >
+            <Text style={{ color: theme.text, fontWeight: "700" }}>{task.title}</Text>
+            <Text style={{ color: theme.muted, fontSize: 12 }}>
+              {task.project || "Work"} · Due {formatDueDate(task.due)}
+            </Text>
+          </Pressable>
+          <Text style={[styles.priorityTag, { color: tone, backgroundColor: `${tone}18` }]}>
+            {(task.priority ?? "Medium").toLowerCase()}
+          </Text>
+        </View>
+      </SwipeDeleteRow>
+    );
+  };
+
   const renderTaskRow = (task: WorkTask) => {
     const project = projectForTask(work, task);
     const tone = priorityColor(task.priority);
@@ -376,7 +419,7 @@ export function WorkDashboardScreen() {
     <>
       <View style={styles.statRow}>
         {[
-          { label: "Active tasks", count: openTasks.length, onPress: () => { setTaskFilter("all"); setView("tasks"); } },
+          { label: "Active tasks", count: openTaskTotal, onPress: () => { setTaskFilter("all"); setView("tasks"); } },
           { label: "Deliverables", count: deliverables.length, onPress: () => setView("deliverables") },
           { label: "Blocked", count: blockedTasks.length, onPress: () => { setTaskFilter("blocked"); setView("tasks"); } },
         ].map((stat) => (
@@ -415,7 +458,7 @@ export function WorkDashboardScreen() {
       <Text style={[styles.section, { color: theme.text }]}>Active projects</Text>
       {activeProjects.length ? (
         activeProjects.map((p) => {
-          const count = work.tasks.filter((t) => projectForTask(work, t)?.id === p.id && t.status !== "done").length;
+          const count = openTaskCountForWorkProject(work, workspace.tasks, p);
           return (
             <SwipeDeleteRow key={p.id} label={p.name} onDelete={() => deleteProject(p)}>
               <Pressable
@@ -442,7 +485,12 @@ export function WorkDashboardScreen() {
       )}
 
       <Text style={[styles.section, { color: theme.text }]}>Open work tasks</Text>
-      {openTasks.length ? openTasks.slice(0, 6).map(renderTaskRow) : (
+      {openTaskTotal ? (
+        <>
+          {openWorkTasks.slice(0, 6).map(renderTaskRow)}
+          {openLifeWorkTasks.slice(0, Math.max(0, 6 - openWorkTasks.length)).map(renderLifeTaskRow)}
+        </>
+      ) : (
         <Card>
           <Empty title="Clear board" body="Add a work task when something lands." />
         </Card>
@@ -541,7 +589,12 @@ export function WorkDashboardScreen() {
               );
             })}
           </ScrollView>
-          {filteredTasks.length ? filteredTasks.map(renderTaskRow) : (
+          {filteredTasks.length || (taskFilter === "all" && openLifeWorkTasks.length) ? (
+            <>
+              {filteredTasks.map(renderTaskRow)}
+              {taskFilter === "all" ? openLifeWorkTasks.map(renderLifeTaskRow) : null}
+            </>
+          ) : (
             <Card><Empty title="No tasks here" body="Try another filter or create a task." /></Card>
           )}
         </>
