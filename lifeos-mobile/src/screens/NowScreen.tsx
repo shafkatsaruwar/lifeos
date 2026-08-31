@@ -7,12 +7,14 @@ import { TimesheetNowStrip } from "../components/TimesheetNowStrip";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { SearchModal } from "../components/SearchModal";
 import { useLifeOS } from "../lib/LifeOSContext";
-import { formatAmbientDuration, getGreeting, taskIsOpen } from "../lib/helpers";
+import { formatAmbientDuration, getGreeting, taskIsOpen, toDateKey } from "../lib/helpers";
+import { useLayout } from "../lib/layout";
 import { clockIn, clockOut, getActiveEntry } from "../lib/timeTracking";
 import { FocusModal } from "../components/FocusModal";
 import { TodayBriefSection } from "../components/TodayBriefSection";
 import { buildNowGlance } from "../lib/nowGlance";
 import { AmbientStartModal, AmbientWrapupModal, BreakModal } from "../components/AmbientModals";
+import { AiTaskModal } from "../components/AiTaskModal";
 import { RecordMemoryModal } from "../components/RecordMemoryModal";
 import {
   buildCaptureCommands,
@@ -21,7 +23,12 @@ import {
   resolveCaptureAction,
 } from "../lib/captureCommands";
 import { createNotebook, createPage } from "../lib/notebooks";
-import { captureAddWorkTask } from "../lib/workos";
+import {
+  captureAddWorkDeliverable,
+  captureAddWorkMeeting,
+  captureAddWorkProject,
+  captureAddWorkTask,
+} from "../lib/workos";
 import type { Project, Task } from "../types";
 
 export function NowScreen() {
@@ -38,8 +45,10 @@ export function NowScreen() {
   } = useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const { isTablet } = useLayout();
   const tabBarPad = useFloatingTabBarContentPadding(28);
   const [focusOpen, setFocusOpen] = useState(false);
+  const [aiTaskOpen, setAiTaskOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [ambientWrapupOpen, setAmbientWrapupOpen] = useState(false);
@@ -87,7 +96,12 @@ export function NowScreen() {
 
   const showCaptureCommands = workspace.settings.showCaptureCommands !== false;
   const enableWorkOS = workspace.settings.enableWorkOS !== false;
-  const commands = useMemo(() => buildCaptureCommands({ enableWorkOS }), [enableWorkOS]);
+  const enableStudyAbroad = workspace.settings.enableStudyAbroad !== false;
+  const enableMasterOS = workspace.settings.enableMasterOS !== false;
+  const commands = useMemo(
+    () => buildCaptureCommands({ enableWorkOS, enableStudyAbroad, enableMasterOS }),
+    [enableWorkOS, enableStudyAbroad, enableMasterOS],
+  );
   const captureQuery = captureInput.startsWith("/") ? captureInput.trim().toLowerCase() : "";
   const filteredCommands = useMemo(() => {
     if (!captureQuery) return showCaptureCommands && captureFocused ? commands : [];
@@ -121,11 +135,49 @@ export function NowScreen() {
     }
   };
 
+  const addCapturedAssignment = (title: string) => {
+    const activeClasses = workspace.classes.filter((course) => !course.archived);
+    if (!activeClasses.length) {
+      Alert.alert("Add a course first", "Assignments need a course in School OS.");
+      navigation.navigate("SchoolTab", { screen: "AcademicCreate", params: { kind: "course" } });
+      return;
+    }
+    const course = activeClasses[0];
+    void updateTasks([
+      ...workspace.tasks,
+      {
+        id: Date.now(),
+        title: title.trim() || "New assignment",
+        classId: course.id,
+        project: "Inbox",
+        color: course.color ?? theme.accent,
+        due: toDateKey(new Date()),
+        priority: "Medium",
+        academicType: "Assignment",
+        focusMinutes: workspace.settings.defaultFocusMinutes ?? 45,
+        energy: workspace.settings.defaultEnergy ?? "Medium",
+        status: "Not started",
+        checklist: [],
+        checklistProgress: [],
+      },
+    ]);
+  };
+
   const runCaptureCommand = (raw: string) => {
-    const action = resolveCaptureAction(raw, { enableWorkOS });
+    const action = resolveCaptureAction(raw, { enableWorkOS, enableStudyAbroad, enableMasterOS });
     if (action.type === "none") return false;
     if (action.type === "insertPrefix") {
       setCaptureInput(action.text);
+      return true;
+    }
+    if (action.type === "workDisabled") {
+      Alert.alert("Work OS off", "Enable Work OS in Settings to use /w work commands.");
+      finishCaptureCommand();
+      return true;
+    }
+    if (action.type === "studyAbroadWebOnly") {
+      Alert.alert("Study Abroad", "Study Abroad capture commands are available on the LifeOS web app.");
+      finishCaptureCommand();
       return true;
     }
     if (action.type === "instant") {
@@ -158,12 +210,27 @@ export function NowScreen() {
         case "ambient":
           setAmbientStartOpen(true);
           break;
+        case "ai":
+          setAiTaskOpen(true);
+          break;
+        case "spaces":
+          navigation.navigate("LifeTab", { screen: "ProjectsDirectory" });
+          break;
+        case "masteros":
+          if (isTablet) navigation.navigate("MasterOS");
+          else Alert.alert("MasterOS", "MasterOS is available on iPad and at lifeos web /masteros.");
+          break;
       }
       finishCaptureCommand();
       return true;
     }
     if (action.type === "addTask") {
       addCapturedTask(action.title, action.minor);
+      finishCaptureCommand();
+      return true;
+    }
+    if (action.type === "addAssignment") {
+      addCapturedAssignment(action.title);
       finishCaptureCommand();
       return true;
     }
@@ -199,11 +266,22 @@ export function NowScreen() {
       return true;
     }
     if (action.type === "addWorkTask") {
-      if (enableWorkOS) {
-        void updateWork(captureAddWorkTask(workspace.work, action.title));
-      } else {
-        Alert.alert("Work OS off", "Enable Work OS in Settings to use /w task commands.");
-      }
+      void updateWork(captureAddWorkTask(workspace.work, action.title));
+      finishCaptureCommand();
+      return true;
+    }
+    if (action.type === "addWorkProject") {
+      void updateWork(captureAddWorkProject(workspace.work, action.name));
+      finishCaptureCommand();
+      return true;
+    }
+    if (action.type === "addWorkDeliverable") {
+      void updateWork(captureAddWorkDeliverable(workspace.work, action.title));
+      finishCaptureCommand();
+      return true;
+    }
+    if (action.type === "addWorkMeeting") {
+      void updateWork(captureAddWorkMeeting(workspace.work, action.title));
       finishCaptureCommand();
       return true;
     }
@@ -276,7 +354,9 @@ export function NowScreen() {
               />
             </View>
             <Text style={[styles.captureHint, { color: theme.muted }]}>
-              /t · /tm · /break · /focus · /clock{enableWorkOS ? " · /w task" : ""}
+              /t · /tm · /asg · /break · /focus · /a · /clock
+              {enableWorkOS ? " · /w task" : ""}
+              {enableMasterOS ? " · /mos" : ""}
             </Text>
             {showSuggestions ? (
               <View style={[styles.captureSuggestions, { borderColor: theme.border, backgroundColor: theme.surface }]}>
@@ -479,6 +559,7 @@ export function NowScreen() {
       />
       <AmbientStartModal visible={ambientStartOpen} onClose={() => setAmbientStartOpen(false)} />
       <BreakModal visible={breakOpen} onClose={() => setBreakOpen(false)} />
+      <AiTaskModal visible={aiTaskOpen} onClose={() => setAiTaskOpen(false)} />
     </Page>
   );
 }

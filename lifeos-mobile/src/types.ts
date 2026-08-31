@@ -308,6 +308,8 @@ export type SettingsState = {
   enableWorkOS?: boolean;
   /** MasterOS teaching workspace — web + iPad; not shown on iPhone. */
   enableMasterOS?: boolean;
+  /** Study Abroad workspace — web-first; capture commands open web guidance on mobile. */
+  enableStudyAbroad?: boolean;
   /** Local notification preferences (mobile). */
   notifications?: NotificationPrefs;
   /** ISO timestamp when the v1 onboarding flow was opened (blocks legacy auto-skip). */
