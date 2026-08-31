@@ -273,7 +273,7 @@ export async function pullAllDataFromFirebase() {
   if (typeof window === 'undefined') return null;
 
   try {
-    const [tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school, work, studyAbroad] = await Promise.all([
+    const [tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school, work, timeTracking, studyAbroad] = await Promise.all([
       loadDataFromFirebase('tasks'),
       loadDataFromFirebase('projects'),
       loadDataFromFirebase('calendar'),
@@ -286,10 +286,11 @@ export async function pullAllDataFromFirebase() {
       loadDataFromFirebase('life'),
       loadDataFromFirebase('school'),
       loadDataFromFirebase('work'),
+      loadDataFromFirebase('timeTracking'),
       loadDataFromFirebase('studyAbroad'),
     ]);
 
-    return { tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school, work, studyAbroad };
+    return { tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school, work, timeTracking, studyAbroad };
   } catch (error) {
     console.error('Failed to pull data from Firebase:', error);
     return null;

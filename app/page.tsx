@@ -40,6 +40,8 @@ import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
 import { formatFocusMinutesShort, formatFocusSessionLabel, formatFocusTime } from "@/lib/focusTime";
 import { buildTasksFromNote } from "@/lib/noteToTask";
+import { emptyTimeTracking, normalizeTimeTracking } from "@/lib/timeTracking";
+import type { TimeTrackingState } from "@/lib/timeTracking";
 import { getFileStorage } from "@/lib/fileStorage";
 import { GlobalNotificationShell } from "@/app/components/NotificationCenter";
 import {
@@ -545,6 +547,8 @@ export default function LifeOS() {
   const [schoolHubHydrated, setSchoolHubHydrated] = useState(false);
   const [workHub, setWorkHub] = useState<WorkHubState>(emptyWorkHub);
   const [workHubHydrated, setWorkHubHydrated] = useState(false);
+  const [timeTracking, setTimeTracking] = useState<TimeTrackingState>(emptyTimeTracking());
+  const [timeTrackingHydrated, setTimeTrackingHydrated] = useState(false);
   const [studyAbroadHub, setStudyAbroadHub] = useState<StudyAbroadHub>(emptyStudyAbroadHub);
   const [studyAbroadHubHydrated, setStudyAbroadHubHydrated] = useState(false);
   const [studyAbroadView, setStudyAbroadView] = useState<StudyAbroadView>("dashboard");
@@ -1472,6 +1476,25 @@ export default function LifeOS() {
 
   useEffect(() => {
     if (!cloudUserId) return;
+    setTimeTrackingHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('timeTracking');
+        if (data && typeof data === "object") setTimeTracking(normalizeTimeTracking(data));
+      } catch (error) {
+        console.error('Failed to load time tracking from Firebase:', error);
+      } finally {
+        setTimeTrackingHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !timeTrackingHydrated) return;
+    syncDataToFirebase('timeTracking', timeTracking);
+  }, [cloudUserId, timeTracking, timeTrackingHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId) return;
     setStudyAbroadHubHydrated(false);
     (async () => {
       try {
@@ -2012,6 +2035,7 @@ export default function LifeOS() {
       if (data.life && typeof data.life === "object") setLifeHub({ ...emptyLifeHub, ...data.life });
       if (data.school && typeof data.school === "object") setSchoolHub({ ...emptySchoolHub, ...data.school, profile: { ...emptySchoolHub.profile, ...data.school.profile } });
       if (data.work && typeof data.work === "object") setWorkHub({ ...emptyWorkHub, ...data.work });
+      if (data.timeTracking && typeof data.timeTracking === "object") setTimeTracking(normalizeTimeTracking(data.timeTracking));
       if (data.studyAbroad && typeof data.studyAbroad === "object") setStudyAbroadHub(ensureCountriesFromUniversities(normalizeStudyAbroadHub(data.studyAbroad)));
       if (data.settings) setSettingsState(current => ({ ...current, ...data.settings }));
       if (data.dark !== undefined) setDark(data.dark);
@@ -2023,7 +2047,7 @@ export default function LifeOS() {
   };
 
   const exportData = () => {
-    const payload = { exportedAt: new Date().toISOString(), tasks, projects: projectItems.map(({ icon: _, ...project }) => project), events: calendarEvents, brainItems, classes, notes, resources, life: lifeHub, school: schoolHub, work: workHub, studyAbroad: studyAbroadHub, settings: settingsState, dark };
+    const payload = { exportedAt: new Date().toISOString(), tasks, projects: projectItems.map(({ icon: _, ...project }) => project), events: calendarEvents, brainItems, classes, notes, resources, life: lifeHub, school: schoolHub, work: workHub, timeTracking, studyAbroad: studyAbroadHub, settings: settingsState, dark };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -2046,6 +2070,7 @@ export default function LifeOS() {
     setLifeHub(emptyLifeHub);
     setSchoolHub(emptySchoolHub);
     setWorkHub(emptyWorkHub);
+    setTimeTracking(emptyTimeTracking());
     setStudyAbroadHub(emptyStudyAbroadHub);
     setSettingsState(initialSettings);
     setDark(false);
@@ -2117,6 +2142,11 @@ export default function LifeOS() {
             const nextWork = { ...emptyWorkHub, ...data.work };
             setWorkHub(nextWork);
             await syncDataToFirebase('work', nextWork);
+          }
+          if (data.timeTracking && typeof data.timeTracking === "object") {
+            const nextTimeTracking = normalizeTimeTracking(data.timeTracking);
+            setTimeTracking(nextTimeTracking);
+            await syncDataToFirebase('timeTracking', nextTimeTracking);
           }
           if (data.studyAbroad && typeof data.studyAbroad === "object") {
             const nextStudy = ensureCountriesFromUniversities(normalizeStudyAbroadHub(data.studyAbroad));
@@ -2297,7 +2327,7 @@ export default function LifeOS() {
           <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Work" || view === "Study Abroad" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
             {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarFeed} workspaceName={workspaceName} onComplete={complete} onOpenTask={openTaskPage} onOpenProject={openProjectSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => openSpacesList("Projects")} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} enableMasterOS={settingsState.enableMasterOS !== false} />}
             {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} schoolView={schoolView} onChangeView={setSchoolView} schoolFocusTaskId={schoolFocusTaskId} onSelectFocusTask={setSchoolFocusTaskId} onComplete={complete} onOpenTask={openTaskPage} onOpenClass={openClassSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={(id) => { setSchoolFocusTaskId(id); openFocus(id); }} onOpenCalendar={() => go("Calendar")} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} enableMasterOS={settingsState.enableMasterOS !== false} />}
-            {view === "Work" && <WorkDashboard workHub={workHub} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => setWorkView("projects")} onProjectDeleted={(name) => {
+            {view === "Work" && <WorkDashboard workHub={workHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onTimesheetFlash={flash} weekStartsMonday={settingsState.weekStartsMonday} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => setWorkView("projects")} onProjectDeleted={(name) => {
               setProjectItems(items => items.filter(project => project.name !== name));
               setTasks(items => items.map(task => task.project === name ? { ...task, project: "Inbox", color: "#625af6" } : task));
               setNotes(items => items.map(note => note.projectName === name ? { ...note, projectName: undefined } : note));

@@ -8,6 +8,8 @@ import {
   Target, Trash2, UserRound, Users, Utensils, Video, X, BriefcaseBusiness, Zap, LayoutGrid,
 } from "lucide-react";
 import { getCountdownText, getUrgencyColor } from "@/lib/helpers";
+import { TimesheetPanel } from "@/app/components/TimesheetPanel";
+import type { TimeTrackingState } from "@/lib/timeTracking";
 
 export type HubRecord = {
   id: string;
@@ -633,7 +635,7 @@ export function formatWorkMeetingWhere(meeting: Pick<WorkMeeting, "format" | "lo
 }
 
 export const emptyWorkHub: WorkHubState = { projects: [], deliverables: [], tasks: [], meetings: [] };
-export type WorkView = "dashboard" | "tasks" | "projects" | "deliverables" | "kanban" | "calendar" | "activity";
+export type WorkView = "dashboard" | "tasks" | "projects" | "deliverables" | "kanban" | "calendar" | "activity" | "timesheet";
 
 const workColors = ["#625af6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b"];
 
@@ -948,8 +950,12 @@ function WorkTaskRow({ task, hub, today, onComplete, onOpen }: { task: WorkTask;
   );
 }
 
-export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, onChangeView, onChange, onFocusWork, onOpenWorkTask, onOpenCalendar, onOpenProject, onBrowseProjects, onProjectDeleted }: {
+export function WorkDashboard({ workHub, timeTracking, onTimeTrackingChange, onTimesheetFlash, weekStartsMonday, focusTaskId, workView: controlledView, onChangeView, onChange, onFocusWork, onOpenWorkTask, onOpenCalendar, onOpenProject, onBrowseProjects, onProjectDeleted }: {
   workHub: WorkHubState;
+  timeTracking: TimeTrackingState;
+  onTimeTrackingChange: (next: TimeTrackingState) => void;
+  onTimesheetFlash?: (message: string) => void;
+  weekStartsMonday?: boolean;
   focusTaskId?: string | null;
   workView?: WorkView;
   onChangeView?: (view: WorkView) => void;
@@ -1291,6 +1297,18 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
         </Section>
       </>;
     }
+    if (workView === "timesheet") {
+      return <>
+        <WorkSubviewHeader title="Timesheet" subtitle="Clock in/out, edit hours, export for your contractor" />
+        <TimesheetPanel
+          timeTracking={timeTracking}
+          projects={workHub.projects}
+          weekStartsMonday={weekStartsMonday}
+          onChange={onTimeTrackingChange}
+          onFlash={onTimesheetFlash}
+        />
+      </>;
+    }
     return null;
   })();
 
@@ -1308,6 +1326,7 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
       <QuickAction icon={FolderKanban} label="New project" onClick={() => setCreateKind("project")} />
       <QuickAction icon={FileText} label="New deliverable" onClick={() => setCreateKind("deliverable")} />
       <QuickAction icon={ListTodo} label="New task" onClick={() => setCreateKind("task")} />
+      <QuickAction icon={Clock3} label="Timesheet" onClick={() => setWorkView("timesheet")} />
       <QuickAction icon={Clock3} label="Schedule meeting" onClick={() => setCreateKind("meeting")} />
     </div>
 
@@ -1320,6 +1339,7 @@ export function WorkDashboard({ workHub, focusTaskId, workView: controlledView, 
           { id: "deliverables", label: "Deliverables" },
           { id: "kanban", label: "Kanban" },
           { id: "calendar", label: "Calendar" },
+          { id: "timesheet", label: "Timesheet" },
           { id: "activity", label: "Activity" },
         ] as const).map(item => (
           <button key={item.id} type="button" className={workView === item.id ? "selected" : ""} onClick={() => setWorkView(item.id)}>{item.label}</button>

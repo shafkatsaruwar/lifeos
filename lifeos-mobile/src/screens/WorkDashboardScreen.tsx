@@ -8,6 +8,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -19,6 +20,23 @@ import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { SwipeDeleteRow } from "../components/SwipeDeleteRow";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatDueDate, toDateKey } from "../lib/helpers";
+import {
+  addDaysToDateKey,
+  addManualEntry,
+  clockIn,
+  clockOut,
+  deleteTimeEntry,
+  entriesForWeek,
+  entryDurationMinutes,
+  exportTimesheetCsv,
+  formatClockDate,
+  formatClockTime,
+  formatDurationMinutes,
+  getActiveEntry,
+  updateTimeEntry,
+  weekStartKey,
+  weekTotalMinutes,
+} from "../lib/timeTracking";
 import {
   bridgeWorkTaskToLife,
   ensureLifeProjectForWork,
@@ -45,6 +63,7 @@ const VIEW_TABS: { id: WorkView; label: string }[] = [
   { id: "deliverables", label: "Deliverables" },
   { id: "kanban", label: "Board" },
   { id: "calendar", label: "Meetings" },
+  { id: "timesheet", label: "Timesheet" },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -68,16 +87,22 @@ function priorityColor(priority: string) {
 }
 
 export function WorkDashboardScreen() {
-  const { theme, workspace, updateWork, updateTasks, updateProjects } = useLifeOS();
+  const { theme, workspace, updateWork, updateTasks, updateProjects, updateTimeTracking } = useLifeOS();
   const navigation = useNavigation<any>();
   const tabBarPad = useFloatingTabBarContentPadding(40);
   const work = workspace.work;
+  const timeTracking = workspace.timeTracking;
+  const weekStartsMonday = workspace.settings.weekStartsMonday ?? false;
   const today = toDateKey(new Date());
   const colorScheme = useColorScheme();
 
   const [view, setView] = useState<WorkView>("dashboard");
   const [taskFilter, setTaskFilter] = useState<"all" | "high" | "medium" | "low" | "blocked" | "completed">("all");
   const [composer, setComposer] = useState<CreateKind | null>(null);
+  const [weekKey, setWeekKey] = useState(() => weekStartKey(new Date(), weekStartsMonday));
+  const [draftClient, setDraftClient] = useState("");
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftProjectId, setDraftProjectId] = useState("");
 
   // Shared create fields
   const [title, setTitle] = useState("");
@@ -135,6 +160,43 @@ export function WorkDashboardScreen() {
 
   const focusTask =
     openTasks.find((t) => t.priority === "high") ?? openTasks[0] ?? null;
+
+  const activeTimeEntry = getActiveEntry(timeTracking);
+  const weekEntries = useMemo(() => entriesForWeek(timeTracking, weekKey), [timeTracking, weekKey]);
+  const weekTotal = weekTotalMinutes(weekEntries);
+  const projectName = (projectId?: string) => work.projects.find((item) => item.id === projectId)?.name ?? "";
+
+  const handleClockToggle = () => {
+    if (activeTimeEntry) {
+      void updateTimeTracking(clockOut(timeTracking));
+      return;
+    }
+    void updateTimeTracking(clockIn(timeTracking, {
+      projectId: draftProjectId || undefined,
+      clientName: draftClient,
+      title: draftTitle || "Work session",
+    }));
+  };
+
+  const handleAddManualEntry = () => {
+    const now = new Date();
+    const start = new Date(now);
+    start.setHours(9, 0, 0, 0);
+    const end = new Date(now);
+    end.setHours(10, 0, 0, 0);
+    void updateTimeTracking(addManualEntry(timeTracking, {
+      clockInAt: start.toISOString(),
+      clockOutAt: end.toISOString(),
+      projectId: draftProjectId || undefined,
+      clientName: draftClient,
+      title: draftTitle || "Manual entry",
+    }));
+  };
+
+  const handleExportTimesheet = async () => {
+    const csv = exportTimesheetCsv(weekEntries, projectName);
+    await Share.share({ message: csv, title: `lifeos-timesheet-${weekKey}.csv` });
+  };
 
   const resetComposer = () => {
     setComposer(null);
@@ -644,6 +706,146 @@ export function WorkDashboardScreen() {
         </Card>
       );
     }
+    if (view === "timesheet") {
+      return (
+        <>
+          <Card>
+            <Text style={[styles.sectionInline, { color: theme.text }]}>
+              {activeTimeEntry ? "Clocked in" : "Ready to clock in"}
+            </Text>
+            <Text style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>
+              {activeTimeEntry
+                ? `${formatClockDate(activeTimeEntry.clockInAt)} · ${formatClockTime(activeTimeEntry.clockInAt)} · ${formatDurationMinutes(entryDurationMinutes(activeTimeEntry))} so far`
+                : "Track billable hours for your contractor timesheet."}
+            </Text>
+            <TextInput
+              value={draftClient}
+              onChangeText={setDraftClient}
+              placeholder="Client / contractor"
+              placeholderTextColor={theme.muted}
+              style={[styles.input, { color: theme.text, borderColor: theme.border, marginTop: 12 }]}
+            />
+            <TextInput
+              value={draftTitle}
+              onChangeText={setDraftTitle}
+              placeholder="What are you working on?"
+              placeholderTextColor={theme.muted}
+              style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+            />
+            {activeProjects.length ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                <Pressable
+                  onPress={() => setDraftProjectId("")}
+                  style={[
+                    styles.filterChip,
+                    {
+                      borderColor: !draftProjectId ? theme.accent : theme.border,
+                      backgroundColor: !draftProjectId ? theme.soft : "transparent",
+                    },
+                  ]}
+                >
+                  <Text style={{ color: theme.text, fontWeight: "700", fontSize: 12 }}>No project</Text>
+                </Pressable>
+                {activeProjects.map((p) => {
+                  const on = draftProjectId === p.id;
+                  return (
+                    <Pressable
+                      key={p.id}
+                      onPress={() => setDraftProjectId(p.id)}
+                      style={[
+                        styles.filterChip,
+                        {
+                          borderColor: on ? theme.accent : theme.border,
+                          backgroundColor: on ? theme.soft : "transparent",
+                        },
+                      ]}
+                    >
+                      <Text style={{ color: theme.text, fontWeight: "700", fontSize: 12 }}>{p.name}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
+            <View style={[styles.quickRow, { marginTop: 8 }]}>
+              <ActionButton
+                label={activeTimeEntry ? "Clock out" : "Clock in"}
+                icon="clock"
+                onPress={handleClockToggle}
+              />
+              <ActionButton label="Manual entry" icon="plus" quiet onPress={handleAddManualEntry} />
+              <ActionButton label="Export CSV" icon="share" quiet onPress={() => void handleExportTimesheet()} />
+            </View>
+          </Card>
+
+          <View style={styles.sectionRow}>
+            <Pressable onPress={() => setWeekKey(addDaysToDateKey(weekKey, -7))} hitSlop={8}>
+              <Feather name="chevron-left" size={18} color={theme.accent} />
+            </Pressable>
+            <View style={{ alignItems: "center", flex: 1 }}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>
+                Week of {formatClockDate(`${weekKey}T12:00:00`)}
+              </Text>
+              <Text style={{ color: theme.muted, fontSize: 12 }}>{formatDurationMinutes(weekTotal)} logged</Text>
+            </View>
+            <Pressable onPress={() => setWeekKey(addDaysToDateKey(weekKey, 7))} hitSlop={8}>
+              <Feather name="chevron-right" size={18} color={theme.accent} />
+            </Pressable>
+          </View>
+
+          {weekEntries.length ? (
+            weekEntries.map((entry) => (
+              <SwipeDeleteRow
+                key={entry.id}
+                label={entry.title || "Time entry"}
+                onDelete={() => void updateTimeTracking(deleteTimeEntry(timeTracking, entry.id))}
+              >
+                <View style={[styles.timesheetCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <Text style={{ color: theme.text, fontWeight: "800" }}>{entry.title || "Work session"}</Text>
+                  <Text style={{ color: theme.muted, fontSize: 12, marginTop: 2 }}>
+                    {entry.clockInAt.slice(0, 10)} · {(entryDurationMinutes(entry) / 60).toFixed(2)}h
+                  </Text>
+                  <TextInput
+                    value={entry.clientName ?? ""}
+                    onChangeText={(value) =>
+                      void updateTimeTracking(updateTimeEntry(timeTracking, entry.id, { clientName: value }))
+                    }
+                    placeholder="Client"
+                    placeholderTextColor={theme.muted}
+                    style={[styles.input, { color: theme.text, borderColor: theme.border, marginTop: 10, marginBottom: 8 }]}
+                  />
+                  <TextInput
+                    value={entry.title ?? ""}
+                    onChangeText={(value) =>
+                      void updateTimeTracking(updateTimeEntry(timeTracking, entry.id, { title: value }))
+                    }
+                    placeholder="Work description"
+                    placeholderTextColor={theme.muted}
+                    style={[styles.input, { color: theme.text, borderColor: theme.border, marginBottom: 8 }]}
+                  />
+                  <TextInput
+                    value={entry.note ?? ""}
+                    onChangeText={(value) =>
+                      void updateTimeTracking(updateTimeEntry(timeTracking, entry.id, { note: value }))
+                    }
+                    placeholder="Notes"
+                    placeholderTextColor={theme.muted}
+                    style={[styles.input, { color: theme.text, borderColor: theme.border, marginBottom: 0 }]}
+                  />
+                  <Text style={{ color: theme.muted, fontSize: 11, marginTop: 8 }}>
+                    {formatClockTime(entry.clockInAt)}
+                    {entry.clockOutAt ? ` → ${formatClockTime(entry.clockOutAt)}` : " · still running"}
+                  </Text>
+                </View>
+              </SwipeDeleteRow>
+            ))
+          ) : (
+            <Card>
+              <Empty title="No time entries this week" body="Clock in when you start work, or add a manual row." />
+            </Card>
+          )}
+        </>
+      );
+    }
     return null;
   })();
 
@@ -683,6 +885,7 @@ export function WorkDashboardScreen() {
           <ActionButton label="New project" icon="briefcase" quiet onPress={() => openComposer("project")} />
           <ActionButton label="New deliverable" icon="package" quiet onPress={() => openComposer("deliverable")} />
           <ActionButton label="New task" icon="check-square" quiet onPress={() => openComposer("task")} />
+          <ActionButton label="Timesheet" icon="clock" quiet onPress={() => setView("timesheet")} />
           <ActionButton label="Meeting" icon="calendar" quiet onPress={() => openComposer("meeting")} />
         </View>
 
@@ -1023,4 +1226,9 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   modalBody: { paddingHorizontal: 20, paddingBottom: 40 },
+  timesheetCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+  },
 });
