@@ -56,7 +56,7 @@ import { AssistantAccessPanel } from "@/app/components/AssistantAccessPanel";
 import { FocusFlowView, type FlowScreen } from "@/app/components/FocusFlow/FocusFlowView";
 import {
   HubCollectionModal, LifeDashboard, SchoolClassPickerModal, SchoolDashboard, SchoolProfileModal, WorkDashboard,
-  emptyLifeHub, emptySchoolHub, emptyWorkHub, isSampleWorkHub, formatWorkMeetingWhere, removeWorkProject,
+  emptyLifeHub, emptySchoolHub, emptyWorkHub, isSampleWorkHub, formatWorkMeetingWhere, removeWorkProject, captureAddWorkTask,
   type HubCollectionTarget, type LifeHubKey, type LifeHubState, type SchoolHubKey, type SchoolHubState,
   type WorkHubState, type WorkProject, type WorkDeliverable, type WorkTask, type WorkMeeting, type WorkView, type SchoolView,
 } from "@/app/components/OSDashboards";
@@ -2487,6 +2487,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       { shortcut: '/w proj', label: 'Work project', desc: 'Start a work project' },
       { shortcut: '/w deliver', label: 'Deliverable', desc: 'Add a work deliverable' },
       { shortcut: '/w task', label: 'Work task', desc: 'Add a work task' },
+      { shortcut: '/w tasks', label: 'Work task', desc: 'Add a work task (alias)' },
       { shortcut: '/w meet', label: 'Schedule meeting', desc: 'Schedule a meeting' },
     ] : []),
     ...(enableStudyAbroad ? [
@@ -2615,14 +2616,13 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             return { ...current, deliverables: [...current.deliverables, deliverable] };
           });
           finishCaptureCommand();
-        } else if (enableWorkOS && val.startsWith('/w task ')) {
-          const title = val.slice(8).trim() || 'New task';
-          onSetWorkHub((current: WorkHubState) => {
-            const deliverable = current.deliverables[0];
-            if (!deliverable) return current;
-            const task: WorkTask = { id: `task-${Date.now()}`, deliverableId: deliverable.id, title, status: 'open', priority: 'medium', dueDate: toDateKey(new Date()), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-            return { ...current, tasks: [...current.tasks, task] };
-          });
+        } else if (enableWorkOS && (val.startsWith('/w task ') || val.startsWith('/w tasks '))) {
+          const title = val.startsWith('/w tasks ') ? val.slice(9).trim() : val.slice(8).trim();
+          onSetWorkHub((current: WorkHubState) => captureAddWorkTask(current, title || "New task"));
+          flash(title ? `Work task added: ${title}` : "Work task added");
+          finishCaptureCommand();
+        } else if (!enableWorkOS && (val.startsWith('/w task ') || val.startsWith('/w tasks ') || val.startsWith('/w proj ') || val.startsWith('/w deliver ') || val.startsWith('/w meet '))) {
+          flash("Enable WorkOS in Settings to use /w work commands");
           finishCaptureCommand();
         } else if (enableWorkOS && val.startsWith('/w meet ')) {
           const meetTitle = val.slice(8).trim() || 'New Meeting';
