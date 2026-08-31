@@ -1,12 +1,14 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { ActionButton, Eyebrow, IconButton, Page, Title } from "../components/UI";
+import { TimesheetNowStrip } from "../components/TimesheetNowStrip";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { SearchModal } from "../components/SearchModal";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatAmbientDuration, getGreeting, taskIsOpen } from "../lib/helpers";
+import { clockIn, clockOut, getActiveEntry } from "../lib/timeTracking";
 import { FocusModal } from "../components/FocusModal";
 import { TodayBriefSection } from "../components/TodayBriefSection";
 import { buildNowGlance } from "../lib/nowGlance";
@@ -14,7 +16,7 @@ import { AmbientWrapupModal } from "../components/AmbientModals";
 import { RecordMemoryModal } from "../components/RecordMemoryModal";
 
 export function NowScreen() {
-  const { workspace, theme, updateSettings, updateTasks } = useLifeOS();
+  const { workspace, theme, updateSettings, updateTasks, updateTimeTracking } = useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const tabBarPad = useFloatingTabBarContentPadding(28);
@@ -22,7 +24,11 @@ export function NowScreen() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [ambientWrapupOpen, setAmbientWrapupOpen] = useState(false);
+  const [captureInput, setCaptureInput] = useState("");
   const [now, setNow] = useState(() => Date.now());
+
+  const openTimesheet = () =>
+    navigation.navigate("WorkTab", { screen: "WorkDashboard", params: { openTimesheet: true } });
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30000);
@@ -48,6 +54,30 @@ export function NowScreen() {
     current ||
     workspace.tasks.find((t) => t.focusSessionRunning && taskIsOpen(t)) ||
     workspace.tasks.find((t) => t.focusSessionStarted && taskIsOpen(t) && (t.focusRemainingSeconds ?? 0) > 0);
+
+  const runCaptureCommand = (raw: string) => {
+    const val = raw.trim().toLowerCase();
+    if (!val.startsWith("/")) return false;
+    if (val === "/clock") {
+      const active = getActiveEntry(workspace.timeTracking);
+      if (active) void updateTimeTracking(clockOut(workspace.timeTracking));
+      else {
+        void updateTimeTracking(
+          clockIn(workspace.timeTracking, {
+            clientName: workspace.timeTracking.defaultClientName,
+            title: current?.title || "Work session",
+          }),
+        );
+      }
+      return true;
+    }
+    if (val === "/timesheet") {
+      openTimesheet();
+      return true;
+    }
+    return false;
+  };
+
   const greeting = getGreeting(new Date(), workspace.settings.preferredName || "there");
   const ambient = workspace.settings.ambientActivity;
   const glance = useMemo(
@@ -81,6 +111,29 @@ export function NowScreen() {
         <Text style={[styles.lede, { color: theme.muted }]}>
           One thing in front of you. The rest of the house is a glance away.
         </Text>
+
+        <View style={[styles.captureBar, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+          <Feather name="terminal" size={16} color={theme.accent} />
+          <TextInput
+            value={captureInput}
+            onChangeText={setCaptureInput}
+            placeholder="Type /clock or /timesheet"
+            placeholderTextColor={theme.muted}
+            returnKeyType="go"
+            onSubmitEditing={() => {
+              if (runCaptureCommand(captureInput)) setCaptureInput("");
+            }}
+            style={[styles.captureInput, { color: theme.text }]}
+          />
+        </View>
+
+        <TimesheetNowStrip
+          theme={theme}
+          timeTracking={workspace.timeTracking}
+          workTitle={current?.title}
+          onChange={(next) => void updateTimeTracking(next)}
+          onOpenTimesheet={openTimesheet}
+        />
 
         {ambient ? (
           <Pressable
@@ -289,6 +342,16 @@ const styles = StyleSheet.create({
   screen: { padding: 20, paddingBottom: 36, gap: 14 },
   headerRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   lede: { fontSize: 13, lineHeight: 18, marginTop: -6 },
+  captureBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  captureInput: { flex: 1, fontSize: 14, minHeight: 28, padding: 0 },
   block: { borderWidth: 1, borderRadius: 16, overflow: "hidden" },
   weekHead: {
     flexDirection: "row",

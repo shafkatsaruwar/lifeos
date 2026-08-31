@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, AppState as RNAppState, StyleSheet, Text, use
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { auth, deleteNotebookPageRemote, loadWorkspace, saveNotebookPage, saveWorkspacePart, subscribeWorkspacePart } from "./src/lib/firebase";
+import { normalizeTimeTracking } from "./src/lib/timeTracking";
 import { readOnboardingComplete, writeOnboardingComplete } from "./src/lib/onboardingCache";
 import { shouldPersistOnboardingComplete } from "./src/lib/onboardingGate";
 import { clearCachedPageInk } from "./src/lib/inkCache";
@@ -209,7 +210,15 @@ export default function App() {
     });
   }, [user]);
 
-  // Keep phone + web in step: refresh from Firebase every 60s while active,
+  useEffect(() => {
+    if (!user) return;
+    return subscribeWorkspacePart(user.uid, "timeTracking", (value) => {
+      if (pendingWrites.current > 0) return;
+      setWorkspace((current) => (current ? { ...current, timeTracking: normalizeTimeTracking(value) } : current));
+    });
+  }, [user]);
+
+  // Keep phone + web in step:
   // and once immediately when returning from background. No toasts/alerts.
   useEffect(() => {
     if (!user) return;

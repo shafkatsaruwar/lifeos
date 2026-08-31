@@ -2838,7 +2838,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             onKeyDown={handleCaptureKeyDown}
             title="Click to see capture commands"
           />
-          <span className="capture-hint">/t · /tm · /break · /focus{enableMasterOS ? " · /mos" : ""}</span>
+          <span className="capture-hint">/t · /tm · /break · /focus · /clock{enableMasterOS ? " · /mos" : ""}</span>
         </section>
         {showSuggestions ? (
           <div className="capture-suggestions" onMouseDown={(e) => e.preventDefault()}>
