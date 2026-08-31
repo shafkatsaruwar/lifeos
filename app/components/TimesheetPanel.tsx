@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Clock3, Download, ListTodo, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Bookmark, Clock3, Download, ListTodo, Plus, Trash2 } from "lucide-react";
 import type { WorkProject } from "@/app/components/OSDashboards";
 import {
   addDaysToDateKey,
@@ -21,6 +21,7 @@ import {
   weekStartKey,
   weekTotalMinutes,
   exportTimesheetCsv,
+  saveContractor,
   type TimeTrackingState,
 } from "@/lib/timeTracking";
 
@@ -35,9 +36,14 @@ type Props = {
 export function TimesheetPanel({ timeTracking, projects, weekStartsMonday = false, onChange, onFlash }: Props) {
   const [weekKey, setWeekKey] = useState(() => weekStartKey(new Date(), weekStartsMonday));
   const [draftTitle, setDraftTitle] = useState("");
-  const [draftClient, setDraftClient] = useState("");
+  const [draftClient, setDraftClient] = useState(() => timeTracking.defaultClientName ?? "");
   const [draftProjectId, setDraftProjectId] = useState("");
+  const savedClients = timeTracking.savedClients ?? [];
   const active = getActiveEntry(timeTracking);
+
+  useEffect(() => {
+    if (timeTracking.defaultClientName) setDraftClient(timeTracking.defaultClientName);
+  }, [timeTracking.defaultClientName]);
   const weekEntries = useMemo(() => entriesForWeek(timeTracking, weekKey), [timeTracking, weekKey]);
   const weekTotal = weekTotalMinutes(weekEntries);
   const projectName = (projectId?: string) => projects.find((item) => item.id === projectId)?.name ?? "";
@@ -84,6 +90,16 @@ export function TimesheetPanel({ timeTracking, projects, weekStartsMonday = fals
     onFlash?.("Timesheet exported for contractor");
   };
 
+  const handleSaveContractor = () => {
+    const trimmed = draftClient.trim();
+    if (!trimmed) {
+      onFlash?.("Enter a contractor name to save");
+      return;
+    }
+    onChange(saveContractor(timeTracking, trimmed));
+    onFlash?.(`Saved contractor: ${trimmed}`);
+  };
+
   return (
     <div className="timesheet-panel">
       <div className="timesheet-clock-card">
@@ -97,7 +113,22 @@ export function TimesheetPanel({ timeTracking, projects, weekStartsMonday = fals
           </p>
         </div>
         <div className="timesheet-clock-fields">
-          <input value={draftClient} onChange={(event) => setDraftClient(event.target.value)} placeholder="Client / contractor" />
+          <div className="timesheet-client-field">
+            <input
+              value={draftClient}
+              onChange={(event) => setDraftClient(event.target.value)}
+              list="timesheet-saved-contractors"
+              placeholder="Client / contractor"
+            />
+            <datalist id="timesheet-saved-contractors">
+              {savedClients.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+            <button type="button" className="timesheet-save-contractor" onClick={handleSaveContractor} title="Save contractor">
+              <Bookmark size={14} /> Save
+            </button>
+          </div>
           <select value={draftProjectId} onChange={(event) => setDraftProjectId(event.target.value)}>
             <option value="">Project (optional)</option>
             {projects.map((project) => (

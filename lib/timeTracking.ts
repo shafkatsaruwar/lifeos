@@ -14,16 +14,46 @@ export type TimeEntry = {
 
 export type TimeTrackingState = {
   entries: TimeEntry[];
+  /** Last-used contractor/client — pre-fills clock-in form */
+  defaultClientName?: string;
+  /** Saved contractor names for quick pick */
+  savedClients?: string[];
 };
 
-export const emptyTimeTracking = (): TimeTrackingState => ({ entries: [] });
+export const emptyTimeTracking = (): TimeTrackingState => ({ entries: [], savedClients: [] });
 
 export function normalizeTimeTracking(value: unknown): TimeTrackingState {
   if (!value || typeof value !== "object") return emptyTimeTracking();
-  const entries = Array.isArray((value as TimeTrackingState).entries)
-    ? (value as TimeTrackingState).entries.filter((entry) => entry && typeof entry.id === "string" && typeof entry.clockInAt === "string")
+  const raw = value as TimeTrackingState;
+  const entries = Array.isArray(raw.entries)
+    ? raw.entries.filter((entry) => entry && typeof entry.id === "string" && typeof entry.clockInAt === "string")
     : [];
-  return { entries };
+  const savedClients = Array.isArray(raw.savedClients)
+    ? [...new Set(raw.savedClients.map((name) => (typeof name === "string" ? name.trim() : "")).filter(Boolean))]
+    : [];
+  let defaultClientName = typeof raw.defaultClientName === "string" ? raw.defaultClientName.trim() : undefined;
+  if (!defaultClientName) {
+    defaultClientName = entries.find((entry) => entry.clientName?.trim())?.clientName?.trim();
+  }
+  const mergedClients = defaultClientName && !savedClients.includes(defaultClientName)
+    ? [defaultClientName, ...savedClients]
+    : savedClients;
+  return {
+    entries,
+    defaultClientName,
+    savedClients: mergedClients.length ? mergedClients : undefined,
+  };
+}
+
+export function saveContractor(state: TimeTrackingState, name: string): TimeTrackingState {
+  const trimmed = name.trim();
+  if (!trimmed) return state;
+  const savedClients = [...new Set([trimmed, ...(state.savedClients ?? [])])];
+  return { ...state, defaultClientName: trimmed, savedClients };
+}
+
+function withDefaultClient(state: TimeTrackingState, clientName?: string): TimeTrackingState {
+  return clientName?.trim() ? saveContractor(state, clientName) : state;
 }
 
 export function getActiveEntry(state: TimeTrackingState): TimeEntry | undefined {
@@ -123,7 +153,7 @@ export function clockIn(
     createdAt: stamp,
     updatedAt: stamp,
   };
-  return { entries: [entry, ...state.entries] };
+  return withDefaultClient({ ...state, entries: [entry, ...state.entries] }, input.clientName);
 }
 
 export function clockOut(state: TimeTrackingState, now = new Date()): TimeTrackingState {
@@ -132,6 +162,7 @@ export function clockOut(state: TimeTrackingState, now = new Date()): TimeTracki
   const stamp = now.toISOString();
   const durationMinutes = entryDurationMinutes({ ...active, clockOutAt: stamp }, now.getTime());
   return {
+    ...state,
     entries: state.entries.map((entry) =>
       entry.id === active.id
         ? { ...entry, clockOutAt: stamp, durationMinutes, updatedAt: stamp }
@@ -147,6 +178,7 @@ export function updateTimeEntry(
 ): TimeTrackingState {
   const stamp = new Date().toISOString();
   return {
+    ...state,
     entries: state.entries.map((entry) => {
       if (entry.id !== id) return entry;
       const next = { ...entry, ...patch, updatedAt: stamp, source: "manual" as const };
@@ -190,11 +222,11 @@ export function addManualEntry(
       updatedAt: createdAt,
     }),
   };
-  return { entries: [entry, ...state.entries] };
+  return withDefaultClient({ ...state, entries: [entry, ...state.entries] }, input.clientName);
 }
 
 export function deleteTimeEntry(state: TimeTrackingState, id: string): TimeTrackingState {
-  return { entries: state.entries.filter((entry) => entry.id !== id) };
+  return { ...state, entries: state.entries.filter((entry) => entry.id !== id) };
 }
 
 export function exportTimesheetCsv(

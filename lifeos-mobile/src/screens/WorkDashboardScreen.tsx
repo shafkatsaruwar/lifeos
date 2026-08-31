@@ -1,7 +1,7 @@
 import Feather from "@expo/vector-icons/Feather";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNavigation } from "@react-navigation/native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Modal,
@@ -33,6 +33,7 @@ import {
   formatClockTime,
   formatDurationMinutes,
   getActiveEntry,
+  saveContractor,
   updateTimeEntry,
   weekStartKey,
   weekTotalMinutes,
@@ -100,9 +101,13 @@ export function WorkDashboardScreen() {
   const [taskFilter, setTaskFilter] = useState<"all" | "high" | "medium" | "low" | "blocked" | "completed">("all");
   const [composer, setComposer] = useState<CreateKind | null>(null);
   const [weekKey, setWeekKey] = useState(() => weekStartKey(new Date(), weekStartsMonday));
-  const [draftClient, setDraftClient] = useState("");
+  const [draftClient, setDraftClient] = useState(() => timeTracking.defaultClientName ?? "");
   const [draftTitle, setDraftTitle] = useState("");
   const [draftProjectId, setDraftProjectId] = useState("");
+
+  useEffect(() => {
+    if (timeTracking.defaultClientName) setDraftClient(timeTracking.defaultClientName);
+  }, [timeTracking.defaultClientName]);
 
   // Shared create fields
   const [title, setTitle] = useState("");
@@ -196,6 +201,15 @@ export function WorkDashboardScreen() {
   const handleExportTimesheet = async () => {
     const csv = exportTimesheetCsv(weekEntries, projectName);
     await Share.share({ message: csv, title: `lifeos-timesheet-${weekKey}.csv` });
+  };
+
+  const handleSaveContractor = () => {
+    const trimmed = draftClient.trim();
+    if (!trimmed) {
+      Alert.alert("Enter a contractor name", "Type the client or contractor name first.");
+      return;
+    }
+    void updateTimeTracking(saveContractor(timeTracking, trimmed));
   };
 
   const resetComposer = () => {
@@ -725,6 +739,9 @@ export function WorkDashboardScreen() {
               placeholderTextColor={theme.muted}
               style={[styles.input, { color: theme.text, borderColor: theme.border, marginTop: 12 }]}
             />
+            <View style={[styles.quickRow, { marginTop: 8 }]}>
+              <ActionButton label="Save contractor" icon="bookmark" quiet onPress={handleSaveContractor} />
+            </View>
             <TextInput
               value={draftTitle}
               onChangeText={setDraftTitle}

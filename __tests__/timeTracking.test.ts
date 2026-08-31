@@ -8,6 +8,7 @@ import {
   exportTimesheetCsv,
   getActiveEntry,
   normalizeTimeTracking,
+  saveContractor,
   updateTimeEntry,
   weekStartKey,
 } from "../lib/timeTracking";
@@ -24,6 +25,7 @@ describe("timeTracking", () => {
     const entry = state.entries[0];
     expect(entry.durationMinutes).toBe(150);
     expect(entry.clientName).toBe("Acme");
+    expect(state.defaultClientName).toBe("Acme");
   });
 
   it("prevents double clock-in", () => {
@@ -84,6 +86,30 @@ describe("timeTracking", () => {
     expect(normalizeTimeTracking(null)).toEqual(emptyTimeTracking());
     expect(normalizeTimeTracking({ entries: [{ id: "x", clockInAt: "2026-01-01T00:00:00.000Z", source: "manual", createdAt: "", updatedAt: "" }] }).entries).toHaveLength(1);
     expect(normalizeTimeTracking({ entries: [{ bad: true }] }).entries).toHaveLength(0);
+  });
+
+  it("saves contractor as default and remembers saved clients", () => {
+    const state = saveContractor(emptyTimeTracking(), "UML");
+    expect(state.defaultClientName).toBe("UML");
+    expect(state.savedClients).toEqual(["UML"]);
+    const again = saveContractor(saveContractor(state, "Acme Corp"), "UML");
+    expect(again.savedClients).toEqual(["UML", "Acme Corp"]);
+  });
+
+  it("infers default contractor from existing entries", () => {
+    const state = normalizeTimeTracking({
+      entries: [{
+        id: "e1",
+        clockInAt: "2026-08-31T09:00:00.000Z",
+        clockOutAt: "2026-08-31T17:00:00.000Z",
+        clientName: "UML",
+        source: "manual",
+        createdAt: "",
+        updatedAt: "",
+      }],
+    });
+    expect(state.defaultClientName).toBe("UML");
+    expect(state.savedClients).toEqual(["UML"]);
   });
 
   it("recalculates hours when clock times are edited", () => {
