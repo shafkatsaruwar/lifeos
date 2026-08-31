@@ -31,11 +31,13 @@ export function getActiveEntry(state: TimeTrackingState): TimeEntry | undefined 
 }
 
 export function entryDurationMinutes(entry: TimeEntry, now = Date.now()): number {
-  if (entry.durationMinutes != null && entry.clockOutAt) return entry.durationMinutes;
   const start = Date.parse(entry.clockInAt);
   const end = entry.clockOutAt ? Date.parse(entry.clockOutAt) : now;
-  if (Number.isNaN(start) || Number.isNaN(end)) return 0;
-  return Math.max(0, Math.round((end - start) / 60_000));
+  if (!Number.isNaN(start) && !Number.isNaN(end)) {
+    return Math.max(0, Math.round((end - start) / 60_000));
+  }
+  if (entry.durationMinutes != null) return entry.durationMinutes;
+  return 0;
 }
 
 export function formatDurationMinutes(totalMinutes: number): string {
@@ -149,7 +151,7 @@ export function updateTimeEntry(
       if (entry.id !== id) return entry;
       const next = { ...entry, ...patch, updatedAt: stamp, source: "manual" as const };
       if (next.clockInAt && next.clockOutAt) {
-        next.durationMinutes = entryDurationMinutes(next);
+        next.durationMinutes = entryDurationMinutes({ ...next, durationMinutes: undefined });
       }
       return next;
     }),

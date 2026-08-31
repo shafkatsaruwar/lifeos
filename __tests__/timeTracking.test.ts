@@ -86,6 +86,21 @@ describe("timeTracking", () => {
     expect(normalizeTimeTracking({ entries: [{ bad: true }] }).entries).toHaveLength(0);
   });
 
+  it("recalculates hours when clock times are edited", () => {
+    let state = addManualEntry(emptyTimeTracking(), {
+      clockInAt: "2026-08-31T13:00:00.000Z",
+      clockOutAt: "2026-08-31T14:00:00.000Z",
+      title: "Manual entry",
+    });
+    expect(entryDurationMinutes(state.entries[0])).toBe(60);
+    state = updateTimeEntry(state, state.entries[0].id, {
+      clockInAt: "2026-08-31T13:00:00.000Z",
+      clockOutAt: "2026-08-31T21:00:00.000Z",
+    });
+    expect(entryDurationMinutes(state.entries[0])).toBe(480);
+    expect(state.entries[0].durationMinutes).toBe(480);
+  });
+
   it("computes live duration for open entries", () => {
     const entry = {
       id: "e1",
