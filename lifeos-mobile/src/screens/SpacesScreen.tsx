@@ -5,6 +5,7 @@ import { Empty, Eyebrow, Page, Subtitle, Title } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { taskIsOpen } from "../lib/helpers";
+import { filterLifeProjects } from "../lib/workos";
 
 // Mirrors web's SpacesView: a unified grid of projects + classes. Drilling
 // into either opens a dedicated detail screen (ProjectDetailScreen /
@@ -16,8 +17,10 @@ export function SpacesScreen() {
   const tabBarPad = useFloatingTabBarContentPadding(28);
   const navigation = useNavigation<any>();
 
+  const lifeProjects = filterLifeProjects(workspace.projects, workspace.work);
+
   const items = [
-    ...workspace.projects.map((p) => ({ kind: "project" as const, key: `p-${p.name}`, title: p.name, subtitle: p.desc, color: p.color || theme.accent, id: p.name })),
+    ...lifeProjects.map((p) => ({ kind: "project" as const, key: `p-${p.name}`, title: p.name, subtitle: p.desc, color: p.color || theme.accent, id: p.name })),
     ...workspace.classes.filter((c) => !c.archived).map((c) => ({ kind: "class" as const, key: `c-${c.id}`, title: c.code, subtitle: c.name, color: c.color || theme.accent, id: c.id })),
   ];
 
