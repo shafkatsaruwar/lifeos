@@ -321,6 +321,8 @@ export type SettingsState = {
   momentumLog?: MomentumEntry[];
   /** Voice/text memories keyed by capture — feeds Day signals. */
   dayMemories?: DayMemory[];
+  /** When true (default), focusing the Now capture bar shows command suggestions. */
+  showCaptureCommands?: boolean;
   dailyReviewDate?: string;
   weeklyReviewDate?: string;
   /** Week plan buckets by day-of-week (0=Sun) — used by Focus Flow. */

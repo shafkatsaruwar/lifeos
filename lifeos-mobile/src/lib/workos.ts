@@ -109,6 +109,64 @@ export const emptyWorkHub: WorkHubState = {
 
 export const WORK_COLORS = ["#625af6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b"];
 
+/** Add a Work OS task from the Now capture bar — bootstraps project/deliverable when missing. */
+export function captureAddWorkTask(hub: WorkHubState, title: string, now = new Date()): WorkHubState {
+  const stamp = now.toISOString();
+  const dueDate = toDateKey(now);
+  const cleanTitle = title.trim() || "New task";
+  let next = hub;
+  let deliverable =
+    next.deliverables.find((item) => item.status !== "delivered" && item.status !== "canceled") ??
+    next.deliverables[0];
+
+  if (!deliverable) {
+    let project = next.projects.find((item) => item.status === "active") ?? next.projects[0];
+    if (!project) {
+      const projectId = `proj-${Date.now()}`;
+      project = {
+        id: projectId,
+        name: "Work",
+        description: "Captured from Now",
+        color: WORK_COLORS[0],
+        status: "active",
+        createdAt: stamp,
+      };
+      next = { ...next, projects: [...next.projects, project] };
+    }
+    const deliverableId = `del-${Date.now()}`;
+    deliverable = {
+      id: deliverableId,
+      projectId: project.id,
+      title: "Inbox",
+      type: "document",
+      status: "in_progress",
+      priority: "medium",
+      dueDate,
+      createdAt: stamp,
+    };
+    next = { ...next, deliverables: [...next.deliverables, deliverable] };
+  }
+
+  const task: WorkTask = {
+    id: `task-${Date.now()}`,
+    deliverableId: deliverable.id,
+    title: cleanTitle,
+    status: "open",
+    priority: "medium",
+    dueDate,
+    createdAt: stamp,
+    updatedAt: stamp,
+  };
+  return { ...next, tasks: [...next.tasks, task] };
+}
+
+function toDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export const WORK_MEETING_ALERT_OPTIONS: { value: WorkMeetingAlertMinutes | "none"; label: string }[] = [
   { value: "none", label: "None" },
   { value: 0, label: "At time of event" },
