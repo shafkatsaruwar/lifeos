@@ -17,11 +17,7 @@ type Task = {
   focusUpdatedAt?: string;
 };
 
-function formatTime(totalSeconds: number) {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
+import { formatFocusTime } from "@/lib/focusTime";
 
 function liveSeconds(task: Task) {
   const total = task.focusMinutes * 60;
@@ -59,7 +55,7 @@ export function FocusSessionPanel({
         <div className="focus-flow-session-top">
           <div>
             <p className="eyebrow">Focused time</p>
-            <strong className="focus-flow-timer">{formatTime(remaining)}</strong>
+            <strong className="focus-flow-timer">{formatFocusTime(remaining)}</strong>
           </div>
           <div className="focus-flow-session-actions">
             <button type="button" className="ghost" disabled={!task.focusSessionStarted}>

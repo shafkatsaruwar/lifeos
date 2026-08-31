@@ -53,9 +53,15 @@ export function taskRemaining(task: Task) {
 }
 
 export function durationText(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  if (totalMinutes >= 60) {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  }
+  return `${String(totalMinutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
 export const PRIORITY_RANK: Record<string, number> = { High: 0, Medium: 1, Low: 2 };
