@@ -11,7 +11,8 @@ import { Page, SegmentedControl } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { htmlToPlainText } from "../lib/helpers";
-import type { NoteInk, NoteTemplate } from "../types";
+import { buildTasksFromNote } from "../lib/noteToTask";
+import type { NoteInk, NoteTemplate, Task } from "../types";
 
 // Web renders templates as contentEditable HTML transforms (ruled/dotted
 // background images, a two-column Cornell layout, a structured meeting
@@ -42,7 +43,7 @@ function noteHasInk(ink: NoteInk | undefined) {
 
 export function NoteEditorScreen() {
   const tabBarPad = useFloatingTabBarContentPadding(28);
-  const { theme, workspace, updateNotes } = useLifeOS();
+  const { theme, workspace, updateNotes, updateTasks } = useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const noteId = route.params?.noteId as string;
@@ -67,6 +68,52 @@ export function NoteEditorScreen() {
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: () => { updateNotes(workspace.notes.filter((n) => n.id !== noteId)); navigation.goBack(); } },
     ]);
+  };
+
+  const routeToTasks = () => {
+    const plainBody = htmlToPlainText(note.body || "");
+    const hasInk = noteHasInk(note.ink);
+    if (!note.title.trim() && !plainBody.trim() && !hasInk) {
+      Alert.alert("Nothing to route", "Add a title or some text before creating a task.");
+      return;
+    }
+    if (!plainBody.trim() && hasInk) {
+      Alert.alert("Handwriting only", "Typed notes can become tasks here. For handwritten pages, use MindDump or add typed action items.");
+      return;
+    }
+    const payloads = buildTasksFromNote(
+      { title: note.title, body: note.body, classId: note.classId, projectName: note.projectName, template: note.template },
+      {
+        defaultFocusMinutes: workspace.settings.defaultFocusMinutes ?? 45,
+        defaultEnergy: workspace.settings.defaultEnergy ?? "Medium",
+      },
+    );
+    const linkedClass = note.classId ? workspace.classes.find((item) => item.id === note.classId) : undefined;
+    const linkedProject = !note.classId && note.projectName
+      ? workspace.projects.find((item) => item.name === note.projectName)
+      : undefined;
+    const stamp = Date.now();
+    const newTasks: Task[] = payloads.map((payload, index) => ({
+      id: stamp + index,
+      title: payload.title,
+      project: linkedProject?.name ?? "Inbox",
+      classId: linkedClass?.id,
+      academicType: linkedClass ? "Assignment" : undefined,
+      color: linkedClass?.color ?? linkedProject?.color ?? "#625af6",
+      due: "",
+      priority: "Medium",
+      focusMinutes: workspace.settings.defaultFocusMinutes ?? 45,
+      energy: workspace.settings.defaultEnergy ?? "Medium",
+      status: "Not started",
+      notes: payload.notes,
+      checklist: [],
+      checklistProgress: [],
+    }));
+    updateTasks([...workspace.tasks, ...newTasks]);
+    Alert.alert(
+      newTasks.length > 1 ? `${newTasks.length} tasks created` : "Task created",
+      newTasks.length > 1 ? "Action items from this note are now tasks." : "This note is now a task.",
+    );
   };
 
   const applyTemplate = (template: NoteTemplate) => {
@@ -101,6 +148,9 @@ export function NoteEditorScreen() {
           />
           <Text style={[styles.spaceLabel, { color: theme.muted }]} numberOfLines={1}>{note.projectName || "Personal"}</Text>
         </View>
+        <Pressable accessibilityLabel="Create task from note" accessibilityRole="button" onPress={routeToTasks} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
+          <Feather name="check-square" size={18} color={theme.accent} />
+        </Pressable>
         <Pressable accessibilityLabel="Delete note" accessibilityRole="button" onPress={deleteNote} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
           <Feather name="trash-2" size={18} color={theme.danger} />
         </Pressable>
