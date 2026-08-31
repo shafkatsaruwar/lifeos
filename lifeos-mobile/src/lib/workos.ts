@@ -109,6 +109,113 @@ export const emptyWorkHub: WorkHubState = {
 
 export const WORK_COLORS = ["#625af6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b"];
 
+/** Add a Work OS task from the Now capture bar — bootstraps project/deliverable when missing. */
+export function captureAddWorkTask(hub: WorkHubState, title: string, now = new Date()): WorkHubState {
+  const stamp = now.toISOString();
+  const dueDate = toDateKey(now);
+  const cleanTitle = title.trim() || "New task";
+  let next = hub;
+  let deliverable =
+    next.deliverables.find((item) => item.status !== "delivered" && item.status !== "canceled") ??
+    next.deliverables[0];
+
+  if (!deliverable) {
+    let project = next.projects.find((item) => item.status === "active") ?? next.projects[0];
+    if (!project) {
+      const projectId = `proj-${Date.now()}`;
+      project = {
+        id: projectId,
+        name: "Work",
+        description: "Captured from Now",
+        color: WORK_COLORS[0],
+        status: "active",
+        createdAt: stamp,
+      };
+      next = { ...next, projects: [...next.projects, project] };
+    }
+    const deliverableId = `del-${Date.now()}`;
+    deliverable = {
+      id: deliverableId,
+      projectId: project.id,
+      title: "Inbox",
+      type: "document",
+      status: "in_progress",
+      priority: "medium",
+      dueDate,
+      createdAt: stamp,
+    };
+    next = { ...next, deliverables: [...next.deliverables, deliverable] };
+  }
+
+  const task: WorkTask = {
+    id: `task-${Date.now()}`,
+    deliverableId: deliverable.id,
+    title: cleanTitle,
+    status: "open",
+    priority: "medium",
+    dueDate,
+    createdAt: stamp,
+    updatedAt: stamp,
+  };
+  return { ...next, tasks: [...next.tasks, task] };
+}
+
+/** Start a Work OS project from the Now capture bar. */
+export function captureAddWorkProject(hub: WorkHubState, name: string, now = new Date()): WorkHubState {
+  const stamp = now.toISOString();
+  const project: WorkProject = {
+    id: `proj-${Date.now()}`,
+    name: name.trim() || "New Project",
+    color: WORK_COLORS[hub.projects.length % WORK_COLORS.length],
+    status: "active",
+    createdAt: stamp,
+  };
+  return { ...hub, projects: [...hub.projects, project] };
+}
+
+/** Add a deliverable to the active Work project (bootstraps project when missing). */
+export function captureAddWorkDeliverable(hub: WorkHubState, title: string, now = new Date()): WorkHubState {
+  const stamp = now.toISOString();
+  const dueDate = toDateKey(now);
+  let next = hub;
+  let project = next.projects.find((item) => item.status === "active") ?? next.projects[0];
+  if (!project) {
+    next = captureAddWorkProject(next, "Work", now);
+    project = next.projects[0];
+  }
+  const deliverable: WorkDeliverable = {
+    id: `del-${Date.now()}`,
+    projectId: project.id,
+    title: title.trim() || "New deliverable",
+    type: "document",
+    status: "planned",
+    priority: "medium",
+    dueDate,
+    createdAt: stamp,
+  };
+  return { ...next, deliverables: [...next.deliverables, deliverable] };
+}
+
+/** Schedule a Work meeting from the Now capture bar. */
+export function captureAddWorkMeeting(hub: WorkHubState, title: string, now = new Date()): WorkHubState {
+  const stamp = now.toISOString();
+  const meeting: WorkMeeting = {
+    id: `meet-${Date.now()}`,
+    title: title.trim() || "New Meeting",
+    start: stamp,
+    type: "other",
+    createdAt: stamp,
+  };
+  return { ...hub, meetings: [...hub.meetings, meeting] };
+}
+
+function toDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export const WORK_MEETING_ALERT_OPTIONS: { value: WorkMeetingAlertMinutes | "none"; label: string }[] = [
   { value: "none", label: "None" },
   { value: 0, label: "At time of event" },

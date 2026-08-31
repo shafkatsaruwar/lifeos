@@ -308,6 +308,8 @@ export type SettingsState = {
   enableWorkOS?: boolean;
   /** MasterOS teaching workspace — web + iPad; not shown on iPhone. */
   enableMasterOS?: boolean;
+  /** Study Abroad workspace — web-first; capture commands open web guidance on mobile. */
+  enableStudyAbroad?: boolean;
   /** Local notification preferences (mobile). */
   notifications?: NotificationPrefs;
   /** ISO timestamp when the v1 onboarding flow was opened (blocks legacy auto-skip). */
@@ -321,6 +323,8 @@ export type SettingsState = {
   momentumLog?: MomentumEntry[];
   /** Voice/text memories keyed by capture — feeds Day signals. */
   dayMemories?: DayMemory[];
+  /** When true (default), focusing the Now capture bar shows command suggestions. */
+  showCaptureCommands?: boolean;
   dailyReviewDate?: string;
   weeklyReviewDate?: string;
   /** Week plan buckets by day-of-week (0=Sun) — used by Focus Flow. */
