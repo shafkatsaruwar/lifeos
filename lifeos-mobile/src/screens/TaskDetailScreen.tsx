@@ -290,7 +290,7 @@ export function TaskDetailScreen() {
               </Pressable>
             ) : null}
           </View>
-          {Platform.OS === "ios" && task.due ? (
+          {Platform.OS === "ios" ? (
             <View style={styles.pickerRow}>
               <DateTimePicker
                 value={parseDueDate(task.due)}
@@ -302,16 +302,6 @@ export function TaskDetailScreen() {
                 }}
               />
             </View>
-          ) : Platform.OS === "ios" ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Pick due date"
-              onPress={() => persist({ due: formatDueDate(new Date()) })}
-              style={[styles.pickerButton, { borderColor: theme.border }]}
-            >
-              <Feather name="calendar" size={16} color={theme.accent} />
-              <Text style={{ color: theme.muted, fontSize: 15, fontWeight: "600" }}>Pick a date</Text>
-            </Pressable>
           ) : (
             <>
               <Pressable
@@ -356,7 +346,7 @@ export function TaskDetailScreen() {
               </Pressable>
             ) : null}
           </View>
-          {Platform.OS === "ios" && task.startTime ? (
+          {Platform.OS === "ios" ? (
             <View style={styles.pickerRow}>
               <DateTimePicker
                 value={parseStartTime(task.startTime)}
@@ -369,16 +359,6 @@ export function TaskDetailScreen() {
                 }}
               />
             </View>
-          ) : Platform.OS === "ios" ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Pick start time"
-              onPress={() => persist({ startTime: formatStartTime(parseStartTime()) })}
-              style={[styles.pickerButton, { borderColor: theme.border }]}
-            >
-              <Feather name="clock" size={16} color={theme.accent} />
-              <Text style={{ color: theme.muted, fontSize: 15, fontWeight: "600" }}>Pick a time</Text>
-            </Pressable>
           ) : (
             <>
               <Pressable
