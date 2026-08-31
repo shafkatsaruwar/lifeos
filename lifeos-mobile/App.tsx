@@ -361,6 +361,7 @@ export default function App() {
     updateLife: (value) => savePart("life", value),
     updateSchool: (value) => savePart("school", value),
     updateWork: (value) => savePart("work", value),
+    updateTimeTracking: (value) => savePart("timeTracking", value),
     updateNotebookHub: (value) => savePart("notebookHub", value),
     upsertNotebookPage,
     deleteNotebookPage,

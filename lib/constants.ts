@@ -23,6 +23,7 @@ export const FIREBASE_PATHS = {
   resources: (userId: string) => `users/${userId}/resources`,
   life: (userId: string) => `users/${userId}/life`,
   work: (userId: string) => `users/${userId}/work`,
+  timeTracking: (userId: string) => `users/${userId}/timeTracking`,
   studyAbroad: (userId: string) => `users/${userId}/studyAbroad`,
   settings: (userId: string) => `users/${userId}/settings`,
   dark: (userId: string) => `users/${userId}/dark`,

@@ -1,5 +1,7 @@
 import type { WorkHubState } from "./lib/workos";
+import type { TimeTrackingState } from "./lib/timeTracking";
 export type { WorkHubState };
+export type { TimeTrackingState };
 
 export type EnergyLevel = "Low" | "Medium" | "High";
 export type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
@@ -514,6 +516,8 @@ export type Workspace = {
   school: SchoolHubState;
   /** WorkOS hub — same Firebase `work` key as web */
   work: WorkHubState;
+  /** Clock in/out and contractor timesheet entries */
+  timeTracking: TimeTrackingState;
   /** Notebook library metadata */
   notebookHub: NotebookHub;
   /**

@@ -97,6 +97,7 @@ export type WorkView =
   | "deliverables"
   | "kanban"
   | "calendar"
+  | "timesheet"
   | "activity";
 
 export const emptyWorkHub: WorkHubState = {
