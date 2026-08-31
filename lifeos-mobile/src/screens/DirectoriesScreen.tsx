@@ -5,6 +5,7 @@ import { Empty, Page } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { taskIsOpen } from "../lib/helpers";
+import { filterLifeProjects } from "../lib/workos";
 
 function DirectoryHeader({ eyebrow, title, onBack, onAdd }: { eyebrow: string; title: string; onBack: () => void; onAdd: () => void }) {
   const { theme } = useLifeOS();
@@ -28,6 +29,8 @@ export function ProjectsDirectoryScreen() {
   const { theme, workspace, updateProjects } = useLifeOS();
   const navigation = useNavigation<any>();
   const tabBarPad = useFloatingTabBarContentPadding(28);
+
+  const lifeProjects = filterLifeProjects(workspace.projects, workspace.work);
 
   const add = () => {
     Alert.prompt(
@@ -56,7 +59,7 @@ export function ProjectsDirectoryScreen() {
     <Page>
       <DirectoryHeader eyebrow="LIFE OS" title="Projects" onBack={() => navigation.goBack()} onAdd={add} />
       <FlatList
-        data={workspace.projects}
+        data={lifeProjects}
         keyExtractor={(item) => item.name}
         contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}
         renderItem={({ item }) => {

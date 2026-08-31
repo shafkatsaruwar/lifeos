@@ -240,6 +240,23 @@ export function uidWork(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** True when a Life project name mirrors a Work OS project (e.g. UML). */
+export function isWorkProjectName(name: string | undefined, work: WorkHubState): boolean {
+  if (!name || name === "Inbox") return false;
+  return work.projects.some((project) => project.name === name);
+}
+
+/** Life tasks that were bridged from Work OS or routed to a work project name. */
+export function isWorkLinkedTask(task: Task, work: WorkHubState): boolean {
+  if (task.customProperties?.some((prop) => prop.name === "workTaskId" && prop.value)) return true;
+  return isWorkProjectName(task.project, work);
+}
+
+/** Personal/Life projects only — excludes Work OS mirrors from Home and Spaces. */
+export function filterLifeProjects(projects: Project[], work: WorkHubState): Project[] {
+  return projects.filter((project) => !isWorkProjectName(project.name, work));
+}
+
 export function projectForTask(hub: WorkHubState, task: WorkTask) {
   const deliverable = hub.deliverables.find((item) => item.id === task.deliverableId);
   return hub.projects.find((item) => item.id === deliverable?.projectId);

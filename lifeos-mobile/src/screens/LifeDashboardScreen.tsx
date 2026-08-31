@@ -19,6 +19,7 @@ import {
 import { buildInbox } from "../lib/notifications";
 import { useLayout } from "../lib/layout";
 import { createNotebook, createPage, primaryPageForNotebook } from "../lib/notebooks";
+import { filterLifeProjects, isWorkLinkedTask } from "../lib/workos";
 
 function periodProgress(now: Date) {
   const day = (now.getHours() * 60 + now.getMinutes()) / 1440;
@@ -56,7 +57,15 @@ export function LifeDashboardScreen() {
   const progress = periodProgress(now);
   const name = workspace.settings.preferredName?.trim() || "there";
 
-  const openTasks = useMemo(() => workspace.tasks.filter((t) => !t.classId && taskIsOpen(t)), [workspace.tasks]);
+  const lifeProjects = useMemo(
+    () => filterLifeProjects(workspace.projects, workspace.work),
+    [workspace.projects, workspace.work],
+  );
+
+  const openTasks = useMemo(
+    () => workspace.tasks.filter((t) => !t.classId && !isWorkLinkedTask(t, workspace.work) && taskIsOpen(t)),
+    [workspace.tasks, workspace.work],
+  );
 
   const attention = useMemo(() => {
     return openTasks
@@ -114,7 +123,7 @@ export function LifeDashboardScreen() {
   }, [workspace.calendar, openTasks, today, weekEndKey, theme.blue, theme.warning, navigation]);
 
   const areas = useMemo(() => {
-    return workspace.projects.slice(0, 6).map((project) => {
+    return lifeProjects.slice(0, 6).map((project) => {
       const open = workspace.tasks.filter((task) => task.project === project.name && taskIsOpen(task)).length;
       const hint = AREA_HINTS.find((h) => h.match.test(project.name));
       const tintKey = hint?.tint ?? "accent";
@@ -136,7 +145,7 @@ export function LifeDashboardScreen() {
         color,
       };
     });
-  }, [workspace.projects, workspace.tasks, theme]);
+  }, [lifeProjects, workspace.tasks, theme]);
 
   const inboxCount = buildInbox(workspace).filter((i) => i.bucket === "today").length;
   const habitsDone = workspace.life.habits.filter((habit) => isHabitDone(habit, today)).length;
