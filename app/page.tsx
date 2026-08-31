@@ -38,6 +38,7 @@ import { shouldPersistOnboardingComplete } from "@/lib/onboardingGate";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
+import { buildMonthEventSegments, eventOccursOnDate, getEventDateRange, type MonthEventSegment } from "@/lib/calendarEvents";
 import { formatFocusMinutesShort, formatFocusSessionLabel, formatFocusTime } from "@/lib/focusTime";
 import { buildTasksFromNote } from "@/lib/noteToTask";
 import { emptyTimeTracking, normalizeTimeTracking, clockIn, clockOut, getActiveEntry } from "@/lib/timeTracking";
@@ -104,7 +105,7 @@ type SpaceKind = "class" | "project" | "maintenance";
 type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban" | "BriefcaseBusiness" | "Camera" | "Code2" | "HeartPulse" | "Utensils" | "BookOpen";
 type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string; classId?: string; projectName?: string; storagePath?: string; storage?: "cloud" | "local" };
 type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind };
-type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work" | "Synapse"; color: string; notes?: string; location?: string };
+type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work" | "Synapse"; color: string; notes?: string; location?: string; weekdaysOnly?: boolean };
 type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterStart?: string; semesterEnd?: string; archived?: boolean };
 type Note = { id: string; title: string; body: string; classId?: string; projectName?: string; template?: "blank" | "lined" | "dotted" | "cornell" | "meeting"; /** Handwriting from mobile (Apple PencilKit PKDrawing base64, or legacy strokes); preserved on web updates */ ink?: { version?: 1 | 2; format?: "pencilkit"; data?: string; pencilKitData?: string; strokes?: Array<{ id: string; color: string; width: number; tool: "pen" | "highlighter" | "eraser"; points: Array<{ x: number; y: number; t?: number }> }>; height?: number; updatedAt?: number }; updatedAt: string };
 type AmbientActivity = { title: string; startedAt: string; note?: string; spaceName?: string; spaceColor?: string };
@@ -319,66 +320,21 @@ const mergeTasksFocus = (local: Task[], remote: Task[]) => {
     };
   });
 };
-const getEventDateRange = (event: CalendarEvent) => {
-  const startKey = event.start.slice(0, 10);
-  const candidateEnd = event.end?.slice(0, 10) ?? startKey;
-  return { startKey, endKey: candidateEnd < startKey ? startKey : candidateEnd };
-};
-const eventOccursOnDate = (event: CalendarEvent, dateKey: string) => {
-  const { startKey, endKey } = getEventDateRange(event);
-  return dateKey >= startKey && dateKey <= endKey;
-};
 const formatEventRange = (event: CalendarEvent) => {
   const { startKey, endKey } = getEventDateRange(event);
-  if (startKey === endKey) return `${formatEventTime(event.start)}${event.end ? ` – ${formatEventTime(event.end)}` : ""}`;
+  const weekdayNote = event.weekdaysOnly ? " · weekdays" : "";
+  if (startKey === endKey) return `${formatEventTime(event.start)}${event.end ? ` – ${formatEventTime(event.end)}` : ""}${weekdayNote}`;
   const start = new Date(event.start);
   const end = new Date(event.end ?? `${endKey}T23:59`);
   const startLabel = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const endLabel = end.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  return `${startLabel}, ${formatEventTime(event.start)} → ${endLabel}, ${formatEventTime(event.end ?? `${endKey}T23:59`)}`;
+  return `${startLabel}, ${formatEventTime(event.start)} → ${endLabel}, ${formatEventTime(event.end ?? `${endKey}T23:59`)}${weekdayNote}`;
 };
 const formatAmbientDuration = (milliseconds: number) => {
   const minutes = Math.max(0, Math.floor(milliseconds / 60_000));
   if (minutes < 1) return "just started";
   if (minutes < 60) return String(minutes) + " min";
   return String(Math.floor(minutes / 60)) + "h " + String(minutes % 60) + "m";
-};
-type MonthEventSegment = { event: CalendarEvent; week: number; startColumn: number; endColumn: number; lane: number; startsEvent: boolean; endsEvent: boolean };
-const buildMonthEventSegments = (events: CalendarEvent[], days: Date[]): MonthEventSegment[] => {
-  const keys = days.map(toDateKey);
-  if (!keys.length) return [];
-  const drafts: Omit<MonthEventSegment, "lane">[] = [];
-  events.forEach(event => {
-    const range = getEventDateRange(event);
-    if (range.endKey < keys[0] || range.startKey > keys[keys.length - 1]) return;
-    const clippedStart = range.startKey < keys[0] ? keys[0] : range.startKey;
-    const clippedEnd = range.endKey > keys[keys.length - 1] ? keys[keys.length - 1] : range.endKey;
-    let cursor = keys.indexOf(clippedStart);
-    const finalIndex = keys.indexOf(clippedEnd);
-    while (cursor >= 0 && cursor <= finalIndex) {
-      const week = Math.floor(cursor / 7);
-      const segmentEnd = Math.min(finalIndex, week * 7 + 6);
-      drafts.push({
-        event,
-        week,
-        startColumn: cursor % 7 + 1,
-        endColumn: segmentEnd % 7 + 1,
-        startsEvent: keys[cursor] === range.startKey,
-        endsEvent: keys[segmentEnd] === range.endKey,
-      });
-      cursor = segmentEnd + 1;
-    }
-  });
-  drafts.sort((a, b) => a.week - b.week || a.startColumn - b.startColumn || b.endColumn - a.endColumn);
-  const occupied = new Map<number, Array<{ lane: number; start: number; end: number }>>();
-  return drafts.map(segment => {
-    const weekItems = occupied.get(segment.week) ?? [];
-    let lane = 0;
-    while (weekItems.some(item => item.lane === lane && item.start <= segment.endColumn && item.end >= segment.startColumn)) lane += 1;
-    weekItems.push({ lane, start: segment.startColumn, end: segment.endColumn });
-    occupied.set(segment.week, weekItems);
-    return { ...segment, lane };
-  });
 };
 const getGreeting = (date: Date, name = "there") => {
   const hour = date.getHours();
@@ -4935,6 +4891,7 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, onTaskActi
   const [end, setEnd] = useState(event?.end?.slice(11, 16) ?? "10:00");
   const [notes, setNotes] = useState(event?.notes ?? "");
   const [color, setColor] = useState(event?.color ?? "#665df6");
+  const [weekdaysOnly, setWeekdaysOnly] = useState(Boolean(event?.weekdaysOnly));
   const isEditing = Boolean(event);
   const datesValid = endDay >= day;
   const timesValid = endDay > day || !end || end > start;
@@ -4954,6 +4911,7 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, onTaskActi
       source: event?.source ?? "LifeOS",
       color,
       notes: notes.trim() || undefined,
+      weekdaysOnly: weekdaysOnly || undefined,
     });
   };
   return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -4970,6 +4928,11 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, onTaskActi
         <label>End time<input aria-label="End time" type="time" value={end} onChange={inputEvent => setEnd(inputEvent.target.value)} /></label>
       </div>
       {!rangeValid && <p className="calendar-range-error">The event needs to end after it starts.</p>}
+      <label className="calendar-weekdays-only">
+        <input type="checkbox" checked={weekdaysOnly} onChange={(inputEvent) => setWeekdaysOnly(inputEvent.target.checked)} />
+        <span>Weekdays only (Mon–Fri)</span>
+      </label>
+      <p className="calendar-weekdays-hint">Use this for work blocks that run until a date but skip weekends.</p>
       <label htmlFor="event-notes">Notes / location</label>
       <textarea id="event-notes" className="event-notes" placeholder="Location, link, reminder, whatever helps…" value={notes} onChange={inputEvent => setNotes(inputEvent.target.value)} />
       <ColorSwatches value={color} onChange={setColor} />

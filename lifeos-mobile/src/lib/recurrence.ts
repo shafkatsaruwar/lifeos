@@ -29,11 +29,16 @@ function parseDay(dateKey: string): Date {
   return new Date(y, (m || 1) - 1, d || 1, 12, 0, 0);
 }
 
-function advance(date: Date, freq: EventRepeatFrequency): Date {
+function advance(date: Date, freq: EventRepeatFrequency, weekdaysOnly = false): Date {
   const next = new Date(date);
   switch (freq) {
     case "daily":
       next.setDate(next.getDate() + 1);
+      if (weekdaysOnly) {
+        while (next.getDay() === 0 || next.getDay() === 6) {
+          next.setDate(next.getDate() + 1);
+        }
+      }
       break;
     case "weekly":
       next.setDate(next.getDate() + 7);
@@ -98,6 +103,9 @@ export function expandEventsInRange(
       if (key > rangeEnd) break;
 
       if (key >= rangeStart && key >= seriesStartKey && !exceptions.has(key)) {
+        if (event.weekdaysOnly && (cursor.getDay() === 0 || cursor.getDay() === 6)) {
+          // skip weekend occurrence
+        } else {
         out.push({
           ...event,
           id: makeOccurrenceId(event.id, key),
@@ -105,9 +113,10 @@ export function expandEventsInRange(
           end: event.end ? shiftDateTime(event.end, seriesStartKey, key) : undefined,
           recurringEventId: event.id,
         });
+        }
       }
 
-      const next = advance(cursor, freq);
+      const next = advance(cursor, freq, Boolean(event.weekdaysOnly));
       if (next.getTime() <= cursor.getTime()) break;
       cursor = next;
     }

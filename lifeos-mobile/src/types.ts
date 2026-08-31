@@ -107,6 +107,8 @@ export type CalendarEvent = {
   repeatUntil?: string;
   /** Occurrence dates skipped from the series (YYYY-MM-DD) */
   repeatExceptions?: string[];
+  /** When true, a multi-day range only appears Mon–Fri. */
+  weekdaysOnly?: boolean;
   /**
    * Present on expanded occurrence views only (not persisted).
    * Points at the master series id.

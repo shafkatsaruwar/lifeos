@@ -10,6 +10,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   useColorScheme,
@@ -111,14 +112,17 @@ export function CalendarScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [day, setDay] = useState(() => toDateKey(new Date()));
+  const [endDay, setEndDay] = useState(() => toDateKey(new Date()));
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
   const [notes, setNotes] = useState("");
+  const [weekdaysOnly, setWeekdaysOnly] = useState(false);
   const [calendarId, setCalendarId] = useState(CAL_PERSONAL_ID);
   const [repeat, setRepeat] = useState<EventRepeatFrequency>("never");
   const [repeatUntil, setRepeatUntil] = useState<string | undefined>();
   const [occurrenceKey, setOccurrenceKey] = useState<string | undefined>();
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showEndDayPicker, setShowEndDayPicker] = useState(false);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [showUntilPicker, setShowUntilPicker] = useState(false);
@@ -213,10 +217,14 @@ export function CalendarScreen() {
       setEditingId(seriesId);
       setOccurrenceKey(dateKey);
       setTitle(master.title);
-      setDay(master.start.slice(0, 10));
+      const startDay = master.start.slice(0, 10);
+      const masterEndDay = master.end?.slice(0, 10) ?? startDay;
+      setDay(startDay);
+      setEndDay(masterEndDay < startDay ? startDay : masterEndDay);
       setStartTime(master.start.slice(11, 16) || "09:00");
       setEndTime(master.end?.slice(11, 16) || "10:00");
       setNotes(master.notes ?? "");
+      setWeekdaysOnly(Boolean(master.weekdaysOnly));
       setCalendarId(cal?.id || CAL_PERSONAL_ID);
       setRepeat(master.repeat && master.repeat !== "never" ? master.repeat : "never");
       setRepeatUntil(master.repeatUntil);
@@ -226,14 +234,17 @@ export function CalendarScreen() {
       setOccurrenceKey(undefined);
       setTitle("");
       setDay(defaultDay || selected || todayKey);
+      setEndDay(defaultDay || selected || todayKey);
       setStartTime("09:00");
       setEndTime("10:00");
       setNotes("");
+      setWeekdaysOnly(false);
       setCalendarId(fallback?.id || CAL_PERSONAL_ID);
       setRepeat("never");
       setRepeatUntil(undefined);
     }
     setShowDatePicker(false);
+    setShowEndDayPicker(false);
     setShowStartPicker(false);
     setShowEndPicker(false);
     setShowUntilPicker(false);
@@ -320,7 +331,8 @@ export function CalendarScreen() {
     }
     const cal = findCalendar(calendars, calendarId) || calendars[0];
     const start = `${day.trim()}T${normalizeTime(startTime)}`;
-    const end = `${day.trim()}T${normalizeTime(endTime)}`;
+    const endDayValue = endDay.trim() < day.trim() ? day.trim() : endDay.trim();
+    const end = `${endDayValue}T${normalizeTime(endTime)}`;
     const master = workspace.calendar.find((event) => event.id === editingId);
     const payload: CalendarEvent = {
       id: editingId ?? `lifeos-${Date.now()}`,
@@ -331,6 +343,7 @@ export function CalendarScreen() {
       calendarId: cal?.id || CAL_PERSONAL_ID,
       color: cal?.color,
       notes: notes.trim() || undefined,
+      weekdaysOnly: weekdaysOnly || undefined,
       repeat: repeat === "never" ? undefined : repeat,
       repeatUntil: repeat === "never" ? undefined : repeatUntil,
       repeatExceptions: repeat === "never" ? undefined : master?.repeatExceptions,
@@ -628,7 +641,11 @@ export function CalendarScreen() {
                     display="compact"
                     themeVariant={pickerTheme}
                     onChange={(_, date) => {
-                      if (date) setDay(toDateKey(date));
+                      if (date) {
+                        const next = toDateKey(date);
+                        setDay(next);
+                        if (endDay < next) setEndDay(next);
+                      }
                     }}
                   />
                 </View>
@@ -656,6 +673,52 @@ export function CalendarScreen() {
                   ) : null}
                 </>
               )}
+              <Text style={[styles.fieldLabel, { color: theme.muted }]}>Ends on</Text>
+              {Platform.OS === "ios" ? (
+                <View style={styles.pickerRow}>
+                  <DateTimePicker
+                    value={dateFromDayKey(endDay)}
+                    mode="date"
+                    display="compact"
+                    minimumDate={dateFromDayKey(day)}
+                    themeVariant={pickerTheme}
+                    onChange={(_, date) => {
+                      if (date) setEndDay(toDateKey(date));
+                    }}
+                  />
+                </View>
+              ) : (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Pick end date"
+                    onPress={() => setShowEndDayPicker(true)}
+                    style={[styles.pickerButton, { borderColor: theme.border }]}
+                  >
+                    <Feather name="calendar" size={16} color={theme.accent} />
+                    <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>{formatDayLabel(endDay)}</Text>
+                  </Pressable>
+                  {showEndDayPicker ? (
+                    <DateTimePicker
+                      value={dateFromDayKey(endDay)}
+                      mode="date"
+                      display="default"
+                      minimumDate={dateFromDayKey(day)}
+                      onChange={(event, date) => {
+                        setShowEndDayPicker(false);
+                        if (event.type !== "dismissed" && date) setEndDay(toDateKey(date));
+                      }}
+                    />
+                  ) : null}
+                </>
+              )}
+              <View style={styles.weekdayRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.fieldLabel, { color: theme.text, marginTop: 0 }]}>Weekdays only</Text>
+                  <Text style={{ color: theme.muted, fontSize: 12, marginTop: 2 }}>Mon–Fri until the end date</Text>
+                </View>
+                <Switch value={weekdaysOnly} onValueChange={setWeekdaysOnly} />
+              </View>
               <View style={styles.timeRow}>
                 <View style={styles.timeField}>
                   <Text style={[styles.fieldLabel, { color: theme.muted }]}>Start</Text>
@@ -1034,6 +1097,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  weekdayRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 8, marginBottom: 4 },
   row: { flexDirection: "row", gap: 10 },
   connectWebLink: { fontSize: 12, fontWeight: "700", textAlign: "center", marginTop: 4 },
   deleteLink: { fontSize: 13, fontWeight: "700", textAlign: "center", marginTop: 2 },

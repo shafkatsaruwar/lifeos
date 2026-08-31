@@ -49,6 +49,8 @@ export const CalendarEventSchema = z.object({
   color: z.string(),
   notes: z.string().optional(),
   location: z.string().optional(),
+  /** When true, a multi-day range only appears Mon–Fri. */
+  weekdaysOnly: z.boolean().optional(),
 });
 
 export const SettingsSchema = z.object({

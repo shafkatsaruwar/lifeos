@@ -96,21 +96,29 @@ export function getEventDateRange(event: CalendarEvent) {
   return { startKey, endKey: candidateEnd < startKey ? startKey : candidateEnd };
 }
 
+function isWeekendDateKey(dateKey: string): boolean {
+  const day = new Date(`${dateKey}T12:00:00`).getDay();
+  return day === 0 || day === 6;
+}
+
 export function eventOccursOnDate(event: CalendarEvent, dateKey: string) {
   const { startKey, endKey } = getEventDateRange(event);
-  return dateKey >= startKey && dateKey <= endKey;
+  if (dateKey < startKey || dateKey > endKey) return false;
+  if (event.weekdaysOnly && isWeekendDateKey(dateKey)) return false;
+  return true;
 }
 
 export function formatEventRange(event: CalendarEvent) {
   const { startKey, endKey } = getEventDateRange(event);
+  const weekdayNote = event.weekdaysOnly ? " · weekdays" : "";
   if (startKey === endKey) {
-    return `${formatEventTime(event.start)}${event.end ? ` – ${formatEventTime(event.end)}` : ""}`;
+    return `${formatEventTime(event.start)}${event.end ? ` – ${formatEventTime(event.end)}` : ""}${weekdayNote}`;
   }
   const start = new Date(event.start);
   const end = new Date(event.end ?? `${endKey}T23:59`);
   const startLabel = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const endLabel = end.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  return `${startLabel}, ${formatEventTime(event.start)} → ${endLabel}, ${formatEventTime(event.end ?? `${endKey}T23:59`)}`;
+  return `${startLabel}, ${formatEventTime(event.start)} → ${endLabel}, ${formatEventTime(event.end ?? `${endKey}T23:59`)}${weekdayNote}`;
 }
 
 export function formatAmbientDuration(milliseconds: number) {
