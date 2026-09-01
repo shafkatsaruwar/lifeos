@@ -1,4 +1,6 @@
 import type { NotifPayload } from "./types";
+import { parseTaskRouteId } from "../helpers";
+import { parseTaskIdFromWidgetPath, parseWidgetDeepLinkPath } from "../widgetDeepLinks";
 import { navigationRef } from "../../navigation/navigationRef";
 
 /** Navigate from a notification tap. Uses React Navigation (not expo-router). */
@@ -25,8 +27,8 @@ export function navigateFromNotification(payload: Partial<NotifPayload> | null |
   }
 
   if ((category === "task" || category === "deadline" || category === "important") && id) {
-    const taskId = Number(id);
-    if (!Number.isNaN(taskId)) {
+    const taskId = parseTaskRouteId(id);
+    if (taskId != null) {
       navigationRef.navigate("TasksTab" as never, {
         screen: "TaskDetail",
         params: { taskId },
@@ -53,13 +55,10 @@ export function navigateFromWidgetUrl(url: string | null | undefined): boolean {
 
   let path = "";
   try {
-    const parsed = new URL(url);
-    // `lifeos://calendar` → host "calendar"; `lifeos:///calendar` → pathname "/calendar"
-    path = [parsed.host, parsed.pathname.replace(/^\//, "")].filter(Boolean).join("/");
+    path = parseWidgetDeepLinkPath(url);
   } catch {
-    path = url.replace(/^[^:]+:\/\//, "").replace(/^\//, "");
+    path = "";
   }
-  path = path.replace(/\/+$/, "");
 
   if (!path || path === "now") {
     navigationRef.navigate("NowTab" as never, { screen: "NowHome" } as never);
@@ -91,16 +90,13 @@ export function navigateFromWidgetUrl(url: string | null | undefined): boolean {
     return true;
   }
 
-  const taskMatch = path.match(/^task\/(\d+)$/) || path.match(/^now\/task\/(\d+)$/);
-  if (taskMatch) {
-    const taskId = Number(taskMatch[1]);
-    if (!Number.isNaN(taskId)) {
-      navigationRef.navigate("TasksTab" as never, {
-        screen: "TaskDetail",
-        params: { taskId },
-      } as never);
-      return true;
-    }
+  const taskId = parseTaskIdFromWidgetPath(path);
+  if (taskId != null) {
+    navigationRef.navigate("TasksTab" as never, {
+      screen: "TaskDetail",
+      params: { taskId },
+    } as never);
+    return true;
   }
 
   return false;

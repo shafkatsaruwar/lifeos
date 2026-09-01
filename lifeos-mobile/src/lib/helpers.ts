@@ -32,6 +32,16 @@ export function taskIsOpen(task: Task) {
   return !task.done && !task.canceled && task.status !== "Done" && task.status !== "Canceled";
 }
 
+/** Coerce React Navigation / widget route params to numeric task ids. */
+export function parseTaskRouteId(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 export function taskIsRecentlyDone(task: Task, days = 10) {
   if (taskIsOpen(task) || task.canceled || task.status === "Canceled") return false;
   if (!task.done && task.status !== "Done") return false;
