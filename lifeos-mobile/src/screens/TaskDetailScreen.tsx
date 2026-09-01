@@ -17,6 +17,7 @@ import { ActionButton, Card, Page, SegmentedControl } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { FocusModal } from "../components/FocusModal";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { parseTaskRouteId } from "../lib/helpers";
 import { PRIORITY_COLOR } from "../lib/theme";
 import type { EnergyLevel, Priority, Task, TaskStatus } from "../types";
 
@@ -74,8 +75,8 @@ export function TaskDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const tabBarPad = useFloatingTabBarContentPadding(28);
-  const taskId = route.params?.taskId as number;
-  const task = workspace.tasks.find((t) => t.id === taskId);
+  const taskId = parseTaskRouteId(route.params?.taskId);
+  const task = taskId != null ? workspace.tasks.find((t) => t.id === taskId) : undefined;
   const [focusOpen, setFocusOpen] = useState(false);
   const [showDuePicker, setShowDuePicker] = useState(false);
   const [showStartPicker, setShowStartPicker] = useState(false);
@@ -107,7 +108,7 @@ export function TaskDetailScreen() {
     ];
   }, [theme.accent, theme.muted, workspace.classes, workspace.projects]);
 
-  if (!task) {
+  if (taskId == null || !task) {
     return (
       <Page>
         <View style={styles.missing}><Text style={{ color: theme.muted }}>Task not found.</Text></View>
