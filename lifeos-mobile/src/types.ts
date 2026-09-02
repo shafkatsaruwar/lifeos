@@ -327,7 +327,7 @@ export type SettingsState = {
   showCaptureCommands?: boolean;
   dailyReviewDate?: string;
   weeklyReviewDate?: string;
-  /** Week plan buckets by day-of-week (0=Sun) — used by Focus Flow. */
+  /** Week plan buckets by day-of-week (0=Sun) — used by Plan the week on Now. */
   weeklyPlan?: { [dayOfWeek: number]: { id: string; text: string }[] };
   spaceContext?: Record<string, { lastTaskId?: number; lastFilter?: string; updatedAt?: string }>;
 };
