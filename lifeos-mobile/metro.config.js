@@ -11,7 +11,6 @@ config.watchFolders = [
   __dirname,
   path.resolve(__dirname, "../lib"),
   path.resolve(__dirname, "../lib/focusEnforcer"),
-  path.resolve(__dirname, "../lib/focusFlow"),
   path.resolve(__dirname, "../lib/masteros"),
 ];
 

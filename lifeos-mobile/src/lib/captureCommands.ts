@@ -9,7 +9,6 @@ export type CaptureInstantCommand =
   | "timesheet"
   | "focus"
   | "break"
-  | "flow"
   | "ambient"
   | "ai"
   | "spaces"
@@ -36,7 +35,6 @@ const INSTANT = new Set([
   "/timesheet",
   "/focus",
   "/break",
-  "/flow",
   "/w",
   "/a",
   "/spaces",
@@ -56,7 +54,6 @@ export function buildCaptureCommands(options: {
     { shortcut: "/asg", label: "Add assignment", desc: "School mode only" },
     { shortcut: "/note", label: "Add note", desc: "Capture a quick note" },
     { shortcut: "/focus", label: "Start focus", desc: "Enter a focus session" },
-    { shortcut: "/flow", label: "Focus flow", desc: "Talk → plan, coach, strength" },
     { shortcut: "/break", label: "Break", desc: "I need a break" },
     { shortcut: "/clock", label: "Clock in/out", desc: "Start or stop contractor timesheet" },
     { shortcut: "/timesheet", label: "Timesheet", desc: "Open full timesheet editor" },
@@ -116,7 +113,6 @@ export function resolveCaptureAction(
   if (val === "/timesheet") return { type: "instant", command: "timesheet" };
   if (val === "/focus") return { type: "instant", command: "focus" };
   if (val === "/break") return { type: "instant", command: "break" };
-  if (val === "/flow") return { type: "instant", command: "flow" };
   if (val === "/w") return { type: "instant", command: "ambient" };
   if (val === "/a") return { type: "instant", command: "ai" };
   if (val === "/spaces") return { type: "instant", command: "spaces" };
