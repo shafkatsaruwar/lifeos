@@ -153,6 +153,12 @@ export function CalendarScreen() {
   };
 
   const todayKey = toDateKey(new Date());
+
+  const goToToday = () => {
+    const now = new Date();
+    setSelected(todayKey);
+    setCursor(new Date(now.getFullYear(), now.getMonth(), 1));
+  };
   const masters = useMemo(() => {
     if (workspace.settings.enableWorkOS === false) return workspace.calendar;
     return mergeCalendarWithWorkMeetings(workspace.calendar, workspace.work);
@@ -562,13 +568,34 @@ export function CalendarScreen() {
       ) : (
         <ScrollView contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}>
           <View style={styles.dayToolbar}>
-            <Pressable onPress={() => { const d = new Date(`${selected}T12:00`); d.setDate(d.getDate() - 1); setSelected(toDateKey(d)); }}>
+            <Pressable
+              onPress={() => {
+                const d = new Date(`${selected}T12:00`);
+                d.setDate(d.getDate() - 1);
+                setSelected(toDateKey(d));
+              }}
+              hitSlop={8}
+            >
               <Feather name="chevron-left" size={20} color={theme.text} />
             </Pressable>
-            <Text style={[styles.monthLabel, { color: theme.text }]}>
-              {new Date(`${selected}T12:00`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
-            </Text>
-            <Pressable onPress={() => { const d = new Date(`${selected}T12:00`); d.setDate(d.getDate() + 1); setSelected(toDateKey(d)); }}>
+            <View style={styles.dayToolbarCenter}>
+              <Text style={[styles.monthLabel, { color: theme.text }]}>
+                {new Date(`${selected}T12:00`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+              </Text>
+              {selected !== todayKey ? (
+                <Pressable onPress={goToToday} hitSlop={8} style={[styles.todayPill, { borderColor: theme.accent, backgroundColor: theme.soft }]}>
+                  <Text style={{ color: theme.accent, fontWeight: "800", fontSize: 12 }}>Today</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <Pressable
+              onPress={() => {
+                const d = new Date(`${selected}T12:00`);
+                d.setDate(d.getDate() + 1);
+                setSelected(toDateKey(d));
+              }}
+              hitSlop={8}
+            >
               <Feather name="chevron-right" size={20} color={theme.text} />
             </Pressable>
           </View>
@@ -1070,6 +1097,8 @@ const styles = StyleSheet.create({
   dayDots: { flexDirection: "row", gap: 2, marginTop: 4 },
   miniDot: { width: 4, height: 4, borderRadius: 2 },
   dayToolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
+  dayToolbarCenter: { flex: 1, alignItems: "center", gap: 6, paddingHorizontal: 8 },
+  todayPill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 },
   dayEventCard: { borderWidth: 1.5, borderRadius: 14, padding: 14, gap: 4 },
   dayEventTitle: { fontSize: 15, fontWeight: "800" },
   dayEventMeta: { fontSize: 13 },
