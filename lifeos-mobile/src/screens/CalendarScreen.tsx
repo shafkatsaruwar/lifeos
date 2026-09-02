@@ -166,6 +166,13 @@ export function CalendarScreen() {
     setSelected(todayKey);
     setCursor(new Date(now.getFullYear(), now.getMonth(), 1));
   };
+
+  const shiftSelectedDay = (offset: number) => {
+    const next = new Date(`${selected}T12:00`);
+    next.setDate(next.getDate() + offset);
+    setSelected(toDateKey(next));
+    setCursor(new Date(next.getFullYear(), next.getMonth(), 1));
+  };
   const masters = useMemo(() => {
     if (workspace.settings.enableWorkOS === false) return workspace.calendar;
     return mergeCalendarWithWorkMeetings(workspace.calendar, workspace.work);
@@ -649,36 +656,48 @@ export function CalendarScreen() {
       ) : (
         <ScrollView contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}>
           <View style={styles.dayToolbar}>
-            <Pressable
-              onPress={() => {
-                const d = new Date(`${selected}T12:00`);
-                d.setDate(d.getDate() - 1);
-                setSelected(toDateKey(d));
-              }}
-              hitSlop={8}
-            >
+            <Pressable onPress={() => shiftSelectedDay(-1)} hitSlop={8}>
               <Feather name="chevron-left" size={20} color={theme.text} />
             </Pressable>
             <View style={styles.dayToolbarCenter}>
               <Text style={[styles.monthLabel, { color: theme.text }]}>
                 {new Date(`${selected}T12:00`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
               </Text>
-              {selected !== todayKey ? (
-                <Pressable onPress={goToToday} hitSlop={8} style={[styles.todayPill, { borderColor: theme.accent, backgroundColor: theme.soft }]}>
-                  <Text style={{ color: theme.accent, fontWeight: "800", fontSize: 12 }}>Today</Text>
-                </Pressable>
-              ) : null}
             </View>
-            <Pressable
-              onPress={() => {
-                const d = new Date(`${selected}T12:00`);
-                d.setDate(d.getDate() + 1);
-                setSelected(toDateKey(d));
-              }}
-              hitSlop={8}
-            >
+            <Pressable onPress={() => shiftSelectedDay(1)} hitSlop={8}>
               <Feather name="chevron-right" size={20} color={theme.text} />
             </Pressable>
+          </View>
+          <View style={styles.dayJumpRow}>
+            {(
+              [
+                { label: "Yesterday", onPress: () => shiftSelectedDay(-1), active: false },
+                { label: "Today", onPress: goToToday, active: selected === todayKey },
+                { label: "Tomorrow", onPress: () => shiftSelectedDay(1), active: false },
+              ] as const
+            ).map((jump) => (
+              <Pressable
+                key={jump.label}
+                onPress={jump.onPress}
+                style={[
+                  styles.dayJumpBtn,
+                  {
+                    borderColor: jump.active ? theme.accent : theme.border,
+                    backgroundColor: jump.active ? theme.accent : theme.surface,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: jump.active ? "#fff" : theme.text,
+                    fontWeight: "800",
+                    fontSize: 13,
+                  }}
+                >
+                  {jump.label}
+                </Text>
+              </Pressable>
+            ))}
           </View>
           {selectedEvents.length ? (
             selectedEvents.map((event) => {
@@ -1187,7 +1206,16 @@ const styles = StyleSheet.create({
   miniDot: { width: 4, height: 4, borderRadius: 2 },
   dayToolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
   dayToolbarCenter: { flex: 1, alignItems: "center", gap: 6, paddingHorizontal: 8 },
-  todayPill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 },
+  dayJumpRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  dayJumpBtn: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderRadius: 999,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 40,
+  },
   dayEventCard: { borderWidth: 1.5, borderRadius: 14, padding: 14, gap: 4 },
   dayEventTitle: { fontSize: 15, fontWeight: "800" },
   dayEventMeta: { fontSize: 13 },
