@@ -414,6 +414,61 @@ export function NowScreen() {
         ) : null}
 
         <View style={[styles.block, shell]}>
+          <View style={styles.nowHead}>
+            <View style={styles.grow}>
+              <Text style={[styles.kicker, { color: theme.muted }]}>NOW</Text>
+              {current ? (
+                <>
+                  <Text style={[styles.nowTitle, { color: theme.text }]}>{current.title}</Text>
+                  <Text style={[styles.nowMeta, { color: theme.muted }]}>
+                    {current.project || "Personal"} · {current.focusMinutes ?? 25} min
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.nowTitle, { color: theme.text }]}>Nothing claiming you</Text>
+                  <Text style={[styles.nowMeta, { color: theme.muted }]}>
+                    Pick a next choice when you’re ready.
+                  </Text>
+                </>
+              )}
+            </View>
+            {current ? (
+              <Pressable onPress={() => updateSettings({ ...workspace.settings, nowTaskId: null })} hitSlop={8}>
+                <Text style={{ color: theme.accent, fontWeight: "800", fontSize: 12 }}>Clear</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {current ? (
+            <View style={[styles.nowActions, { borderTopColor: theme.border }]}>
+              <ActionButton label="Focus" icon="target" onPress={() => setFocusOpen(true)} />
+              <ActionButton
+                label="Open"
+                icon="external-link"
+                quiet
+                onPress={() => navigation.navigate("TaskDetail", { taskId: current.id })}
+              />
+              <ActionButton
+                label="Done"
+                icon="check"
+                quiet
+                onPress={() => {
+                  updateTasks(
+                    workspace.tasks.map((task) =>
+                      task.id === current.id
+                        ? { ...task, done: true, completedAt: new Date().toISOString(), status: "Done" }
+                        : task,
+                    ),
+                  );
+                  updateSettings({ ...workspace.settings, nowTaskId: null });
+                }}
+              />
+            </View>
+          ) : null}
+          <TodayBriefSection variant="inset" onOpenFocus={() => setFocusOpen(true)} />
+        </View>
+
+        <View style={[styles.block, shell]}>
           <View style={[styles.weekHead, { borderBottomColor: theme.border }]}>
             <View style={styles.grow}>
               <Text style={[styles.kicker, { color: theme.muted }]}>THIS WEEK · {glance.rangeLabel}</Text>
@@ -477,61 +532,6 @@ export function NowScreen() {
               onPress={() => setMemoryOpen(true)}
             />
           </View>
-        </View>
-
-        <View style={[styles.block, shell]}>
-          <View style={styles.nowHead}>
-            <View style={styles.grow}>
-              <Text style={[styles.kicker, { color: theme.muted }]}>NOW</Text>
-              {current ? (
-                <>
-                  <Text style={[styles.nowTitle, { color: theme.text }]}>{current.title}</Text>
-                  <Text style={[styles.nowMeta, { color: theme.muted }]}>
-                    {current.project || "Personal"} · {current.focusMinutes ?? 25} min
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <Text style={[styles.nowTitle, { color: theme.text }]}>Nothing claiming you</Text>
-                  <Text style={[styles.nowMeta, { color: theme.muted }]}>
-                    Pick a next choice when you’re ready.
-                  </Text>
-                </>
-              )}
-            </View>
-            {current ? (
-              <Pressable onPress={() => updateSettings({ ...workspace.settings, nowTaskId: null })} hitSlop={8}>
-                <Text style={{ color: theme.accent, fontWeight: "800", fontSize: 12 }}>Clear</Text>
-              </Pressable>
-            ) : null}
-          </View>
-          {current ? (
-            <View style={[styles.nowActions, { borderTopColor: theme.border }]}>
-              <ActionButton label="Focus" icon="target" onPress={() => setFocusOpen(true)} />
-              <ActionButton
-                label="Open"
-                icon="external-link"
-                quiet
-                onPress={() => navigation.navigate("TaskDetail", { taskId: current.id })}
-              />
-              <ActionButton
-                label="Done"
-                icon="check"
-                quiet
-                onPress={() => {
-                  updateTasks(
-                    workspace.tasks.map((task) =>
-                      task.id === current.id
-                        ? { ...task, done: true, completedAt: new Date().toISOString(), status: "Done" }
-                        : task,
-                    ),
-                  );
-                  updateSettings({ ...workspace.settings, nowTaskId: null });
-                }}
-              />
-            </View>
-          ) : null}
-          <TodayBriefSection variant="inset" onOpenFocus={() => setFocusOpen(true)} />
         </View>
       </ScrollView>
 
