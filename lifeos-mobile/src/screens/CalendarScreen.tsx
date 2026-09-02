@@ -30,7 +30,14 @@ import {
   normalizeCalendars,
 } from "../lib/calendars";
 import {
+  parseTaskCalendarEventId,
+  taskDueDateKey,
+  tasksReadyToPlaceOnDay,
+  tasksToCalendarEvents,
+} from "../lib/calendarTasks";
+import {
   eventOccursOnDate,
+  formatDueDate,
   formatEventRange,
   toDateKey,
 } from "../lib/helpers";
@@ -164,6 +171,11 @@ export function CalendarScreen() {
     return mergeCalendarWithWorkMeetings(workspace.calendar, workspace.work);
   }, [workspace.calendar, workspace.work, workspace.settings.enableWorkOS]);
 
+  const taskEvents = useMemo(
+    () => tasksToCalendarEvents(workspace.tasks),
+    [workspace.tasks],
+  );
+
   const events = useMemo(() => {
     const monthPadStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
     monthPadStart.setDate(monthPadStart.getDate() - 7);
@@ -173,8 +185,10 @@ export function CalendarScreen() {
     horizon.setDate(horizon.getDate() + 366);
     const rangeStart = [toDateKey(monthPadStart), todayKey, selected].sort()[0];
     const rangeEnd = [toDateKey(monthPadEnd), toDateKey(horizon), selected].sort().at(-1)!;
-    return expandEventsInRange(masters, rangeStart, rangeEnd).filter((e) => isEventVisible(e, calendars));
-  }, [masters, calendars, cursor, todayKey, selected]);
+    const expanded = expandEventsInRange(masters, rangeStart, rangeEnd).filter((e) => isEventVisible(e, calendars));
+    const datedTasks = taskEvents.filter((e) => e.start.slice(0, 10) >= rangeStart && e.start.slice(0, 10) <= rangeEnd);
+    return [...expanded, ...datedTasks];
+  }, [masters, calendars, cursor, todayKey, selected, taskEvents]);
 
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const firstDayOffset = monthStart.getDay();
@@ -192,11 +206,20 @@ export function CalendarScreen() {
   );
 
   const upcomingItems = useMemo(() => {
-    return events
+    const fromEvents = events
       .filter((e) => (e.end ?? e.start).slice(0, 10) >= todayKey)
-      .sort((a, b) => a.start.localeCompare(b.start))
-      .slice(0, 7)
       .map((e) => {
+        const taskId = parseTaskCalendarEventId(e.id);
+        if (taskId !== null) {
+          return {
+            id: e.id,
+            kind: "task" as const,
+            title: e.title,
+            date: e.start,
+            color: e.color || theme.accent,
+            meta: e.notes ? `Task · ${e.notes}` : "Task",
+          };
+        }
         const cal = findCalendar(calendars, eventCalendarId(e));
         const series = e.repeat && e.repeat !== "never" ? ` · ${repeatLabel(e.repeat)}` : "";
         return {
@@ -208,11 +231,52 @@ export function CalendarScreen() {
           meta: `${formatEventRange(e)} · ${cal?.name || e.source || "LifeOS"}${series}`,
         };
       });
-  }, [events, calendars, todayKey]);
 
-  const readyToPlace = workspace.tasks
-    .filter((t) => !t.done && !t.canceled && (!t.startTime || t.due !== selected))
-    .slice(0, 6);
+    const unscheduledTasks = workspace.tasks
+      .filter(
+        (task) =>
+          taskDueDateKey(task.due) &&
+          taskDueDateKey(task.due)! >= todayKey &&
+          !task.startTime?.trim() &&
+          !task.calendarEventId &&
+          !task.done &&
+          !task.canceled,
+      )
+      .map((task) => ({
+        id: `task-${task.id}`,
+        kind: "task" as const,
+        title: task.title,
+        date: `${taskDueDateKey(task.due)!}T09:00`,
+        color: task.color || theme.accent,
+        meta: `Task · due ${formatDueDate(task.due)} · ${task.focusMinutes ?? 30}m`,
+      }));
+
+    return [...fromEvents, ...unscheduledTasks]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 7);
+  }, [events, calendars, todayKey, theme.accent, workspace.tasks]);
+
+  const readyToPlace = useMemo(
+    () => tasksReadyToPlaceOnDay(workspace.tasks, selected).slice(0, 6),
+    [workspace.tasks, selected],
+  );
+
+  const openTaskDetail = (taskId: number) => {
+    navigation.navigate("TasksTab", { screen: "TaskDetail", params: { taskId } });
+  };
+
+  const openCalendarItem = (event: CalendarEvent) => {
+    const taskId = parseTaskCalendarEventId(event.id);
+    if (taskId !== null) {
+      openTaskDetail(taskId);
+      return;
+    }
+    if (event.id.startsWith("work-meet-")) {
+      navigation.navigate("WorkTab");
+      return;
+    }
+    openComposer(event);
+  };
 
   const openComposer = (event?: CalendarEvent, defaultDay?: string) => {
     if (event) {
@@ -507,8 +571,13 @@ export function CalendarScreen() {
             return (
               <Pressable
                 onPress={() => {
+                  if (item.kind === "task") {
+                    const taskId = parseTaskCalendarEventId(item.id);
+                    if (taskId !== null) openTaskDetail(taskId);
+                    return;
+                  }
                   const event = events.find((e) => e.id === item.id);
-                  if (event) openComposer(event);
+                  if (event) openCalendarItem(event);
                 }}
                 style={[styles.upcomingRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
               >
@@ -518,7 +587,9 @@ export function CalendarScreen() {
                 </View>
                 <View style={[styles.eventDot, { backgroundColor: item.color }]} />
                 <View style={styles.grow}>
-                  <Text style={[styles.kindLabel, { color: theme.muted }]}>Calendar event</Text>
+                  <Text style={[styles.kindLabel, { color: theme.muted }]}>
+                    {item.kind === "task" ? "Task" : "Calendar event"}
+                  </Text>
                   <Text style={[styles.upcomingTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
                   <Text style={[styles.upcomingMeta, { color: theme.muted }]} numberOfLines={1}>{item.meta}</Text>
                 </View>
@@ -543,7 +614,17 @@ export function CalendarScreen() {
             {days.map((dayCell) => {
               const key = toDateKey(dayCell);
               const dayEvents = events.filter((e) => eventOccursOnDate(e, key));
+              const dayTaskMarkers = workspace.tasks.filter(
+                (t) => taskDueDateKey(t.due) === key && !t.calendarEventId,
+              );
               const muted = dayCell.getMonth() !== cursor.getMonth();
+              const dotColors = [
+                ...dayEvents.slice(0, 3).map((e) => eventDisplayColor(e, calendars)),
+                ...dayTaskMarkers
+                  .filter((t) => !dayEvents.some((e) => e.id === `task-${t.id}`))
+                  .slice(0, 3 - dayEvents.length)
+                  .map((t) => t.color || theme.accent),
+              ].slice(0, 3);
               return (
                 <Pressable
                   key={key}
@@ -556,8 +637,8 @@ export function CalendarScreen() {
                 >
                   <Text style={[styles.dayNum, { color: muted ? theme.muted : theme.text, opacity: muted ? 0.4 : 1 }]}>{dayCell.getDate()}</Text>
                   <View style={styles.dayDots}>
-                    {dayEvents.slice(0, 3).map((e, i) => (
-                      <View key={i} style={[styles.miniDot, { backgroundColor: eventDisplayColor(e, calendars) }]} />
+                    {dotColors.map((color, i) => (
+                      <View key={i} style={[styles.miniDot, { backgroundColor: color }]} />
                     ))}
                   </View>
                 </Pressable>
@@ -600,21 +681,29 @@ export function CalendarScreen() {
             </Pressable>
           </View>
           {selectedEvents.length ? (
-            selectedEvents.map((event) => (
-              <Pressable
-                key={event.id}
-                onPress={() => openComposer(event)}
-                style={[styles.dayEventCard, { borderColor: eventDisplayColor(event, calendars), backgroundColor: theme.surface }]}
-              >
-                <Text style={[styles.dayEventTitle, { color: theme.text }]}>{event.title}</Text>
-                <Text style={[styles.dayEventMeta, { color: theme.muted }]}>
-                  {formatEventRange(event)}
-                  {" · "}
-                  {findCalendar(calendars, eventCalendarId(event))?.name || event.source || "LifeOS"}
-                </Text>
-                {event.notes ? <Text style={[styles.dayEventNotes, { color: theme.muted }]}>{event.notes}</Text> : null}
-              </Pressable>
-            ))
+            selectedEvents.map((event) => {
+              const taskId = parseTaskCalendarEventId(event.id);
+              const borderColor = taskId !== null ? event.color || theme.accent : eventDisplayColor(event, calendars);
+              const sourceLabel =
+                taskId !== null
+                  ? "Task"
+                  : findCalendar(calendars, eventCalendarId(event))?.name || event.source || "LifeOS";
+              return (
+                <Pressable
+                  key={event.id}
+                  onPress={() => openCalendarItem(event)}
+                  style={[styles.dayEventCard, { borderColor, backgroundColor: theme.surface }]}
+                >
+                  <Text style={[styles.dayEventTitle, { color: theme.text }]}>{event.title}</Text>
+                  <Text style={[styles.dayEventMeta, { color: theme.muted }]}>
+                    {formatEventRange(event)}
+                    {" · "}
+                    {sourceLabel}
+                  </Text>
+                  {event.notes ? <Text style={[styles.dayEventNotes, { color: theme.muted }]}>{event.notes}</Text> : null}
+                </Pressable>
+              );
+            })
           ) : (
             <Card>
               <Empty title="Nothing scheduled." body="That white space is not a bug. Protect it — or add something." />
@@ -634,7 +723,7 @@ export function CalendarScreen() {
                 <View style={styles.grow}>
                   <Text style={{ color: theme.text, fontWeight: "700" }}>{task.title}</Text>
                   <Text style={{ color: theme.muted, fontSize: 12 }}>
-                    Tap to schedule on this day · {task.focusMinutes ?? 30}m
+                    Tap to add a start time · {task.focusMinutes ?? 30}m · {formatDueDate(task.due)}
                   </Text>
                 </View>
                 <Feather name="calendar" size={16} color={theme.accent} />
