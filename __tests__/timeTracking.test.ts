@@ -11,7 +11,9 @@ import {
   normalizeTimeTracking,
   saveContractor,
   updateTimeEntry,
+  updateWorkHours,
   weekStartKey,
+  shouldShowTimesheetStrip,
 } from "../lib/timeTracking";
 
 describe("timeTracking", () => {
@@ -150,5 +152,27 @@ describe("timeTracking", () => {
       updatedAt: "",
     };
     expect(entryDurationMinutes(entry, Date.parse("2026-08-31T10:00:00.000Z"))).toBe(60);
+  });
+
+  it("shows timesheet strip outside schedule when disabled", () => {
+    const state = emptyTimeTracking();
+    const night = new Date(2026, 7, 31, 22, 0, 0);
+    expect(shouldShowTimesheetStrip(state, night)).toBe(true);
+  });
+
+  it("hides timesheet strip outside padded work hours when enabled", () => {
+    let state = updateWorkHours(emptyTimeTracking(), { enabled: true, start: "09:00", end: "17:00", paddingMinutes: 60 });
+    const beforeWindow = new Date(2026, 7, 31, 7, 30, 0);
+    const duringWindow = new Date(2026, 7, 31, 8, 30, 0);
+    const afterWindow = new Date(2026, 7, 31, 18, 30, 0);
+    expect(shouldShowTimesheetStrip(state, beforeWindow)).toBe(false);
+    expect(shouldShowTimesheetStrip(state, duringWindow)).toBe(true);
+    expect(shouldShowTimesheetStrip(state, afterWindow)).toBe(false);
+  });
+
+  it("always shows timesheet strip while clocked in", () => {
+    let state = updateWorkHours(emptyTimeTracking(), { enabled: true, start: "09:00", end: "17:00" });
+    state = clockIn(state, { title: "Late shift" }, new Date(2026, 7, 31, 22, 0, 0));
+    expect(shouldShowTimesheetStrip(state, new Date(2026, 7, 31, 22, 0, 0))).toBe(true);
   });
 });

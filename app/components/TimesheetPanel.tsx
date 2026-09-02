@@ -8,20 +8,24 @@ import {
   addManualEntry,
   clockIn,
   clockOut,
+  DEFAULT_WORK_HOURS,
   deleteTimeEntry,
   entriesForWeek,
   entryDurationMinutes,
   formatClockDate,
   formatClockTime,
   formatDurationMinutes,
+  formatHmDisplay,
   fromDatetimeLocalValue,
   getActiveEntry,
   toDatetimeLocalValue,
   updateTimeEntry,
+  updateWorkHours,
   weekStartKey,
   weekTotalMinutes,
   exportTimesheetCsv,
   saveContractor,
+  workHoursStripWindowLabel,
   type TimeTrackingState,
 } from "@/lib/timeTracking";
 
@@ -57,6 +61,7 @@ export function TimesheetPanel({ timeTracking, projects, weekStartsMonday = fals
   const weekEntries = useMemo(() => entriesForWeek(timeTracking, weekKey), [timeTracking, weekKey]);
   const weekTotal = weekTotalMinutes(weekEntries);
   const projectName = (projectId?: string) => projects.find((item) => item.id === projectId)?.name ?? "";
+  const workHours = timeTracking.workHours ?? DEFAULT_WORK_HOURS;
 
   const handleClockToggle = () => {
     if (active) {
@@ -154,6 +159,49 @@ export function TimesheetPanel({ timeTracking, projects, weekStartsMonday = fals
           <button type="button" onClick={handleAddManual}><Plus size={15} /> Add manual entry</button>
           <button type="button" onClick={handleExport}><Download size={15} /> Export CSV</button>
         </div>
+      </div>
+
+      <div className="timesheet-schedule-card">
+        <div>
+          <p className="eyebrow">NOW PAGE STRIP</p>
+          <strong>Work hours visibility</strong>
+          <p className="timesheet-sub">
+            Hide the clock-in bar on Now outside your work window. It always stays visible while you’re clocked in.
+          </p>
+        </div>
+        <label className="timesheet-schedule-toggle">
+          <input
+            type="checkbox"
+            checked={workHours.enabled}
+            onChange={(event) => onChange(updateWorkHours(timeTracking, { enabled: event.target.checked }))}
+          />
+          <span>Only show during work hours</span>
+        </label>
+        {workHours.enabled ? (
+          <div className="timesheet-schedule-fields">
+            <p className="timesheet-sub">
+              Shows on Now {workHoursStripWindowLabel(workHours)} ({formatHmDisplay(workHours.start)}–{formatHmDisplay(workHours.end)} work, ±{workHours.paddingMinutes ?? 60}m)
+            </p>
+            <div className="timesheet-schedule-times">
+              <label>
+                <span>Start</span>
+                <input
+                  type="time"
+                  value={workHours.start}
+                  onChange={(event) => onChange(updateWorkHours(timeTracking, { start: event.target.value }))}
+                />
+              </label>
+              <label>
+                <span>End</span>
+                <input
+                  type="time"
+                  value={workHours.end}
+                  onChange={(event) => onChange(updateWorkHours(timeTracking, { end: event.target.value }))}
+                />
+              </label>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="timesheet-week-bar">
