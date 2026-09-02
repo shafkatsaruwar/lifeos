@@ -9,6 +9,7 @@ import {
   formatClockTime,
   formatDurationMinutes,
   getActiveEntry,
+  shouldShowTimesheetStrip,
   type TimeTrackingState,
 } from "@/lib/timeTracking";
 
@@ -25,14 +26,18 @@ export function TimesheetNowStrip({ timeTracking, onChange, onOpenTimesheet, now
   const [tick, setTick] = useState(() => nowMs ?? Date.now());
   const active = getActiveEntry(timeTracking);
   const client = timeTracking.defaultClientName;
+  const scheduleEnabled = Boolean(timeTracking.workHours?.enabled);
 
   useEffect(() => {
-    if (!active) return;
-    const id = window.setInterval(() => setTick(Date.now()), 1000);
+    if (!active && !scheduleEnabled) return;
+    const intervalMs = active ? 1000 : 60_000;
+    const id = window.setInterval(() => setTick(Date.now()), intervalMs);
     return () => window.clearInterval(id);
-  }, [active?.id]);
+  }, [active?.id, scheduleEnabled]);
 
-  const now = active ? tick : (nowMs ?? Date.now());
+  const now = active ? tick : (nowMs ?? tick);
+
+  if (!shouldShowTimesheetStrip(timeTracking, new Date(now))) return null;
 
   const handleToggle = () => {
     if (active) {

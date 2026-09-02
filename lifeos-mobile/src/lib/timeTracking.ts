@@ -12,13 +12,106 @@ export type TimeEntry = {
   updatedAt: string;
 };
 
+/** When enabled, the Now-page timesheet strip only appears during work hours ± padding. */
+export type WorkHoursSchedule = {
+  enabled: boolean;
+  /** Local HH:mm, e.g. "09:00" */
+  start: string;
+  /** Local HH:mm, e.g. "17:00" */
+  end: string;
+  /** Minutes before start and after end to show the strip (default 60). */
+  paddingMinutes?: number;
+};
+
 export type TimeTrackingState = {
   entries: TimeEntry[];
   /** Last-used contractor/client — pre-fills clock-in form */
   defaultClientName?: string;
   /** Saved contractor names for quick pick */
   savedClients?: string[];
+  workHours?: WorkHoursSchedule;
 };
+
+export const DEFAULT_WORK_HOURS: WorkHoursSchedule = {
+  enabled: false,
+  start: "09:00",
+  end: "17:00",
+  paddingMinutes: 60,
+};
+
+export function parseHm(value: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return null;
+  }
+  return hours * 60 + minutes;
+}
+
+export function formatHmFromMinutes(totalMinutes: number): string {
+  const clamped = Math.max(0, Math.min(23 * 60 + 59, Math.round(totalMinutes)));
+  const hours = Math.floor(clamped / 60);
+  const minutes = clamped % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+export function formatHmDisplay(hm: string): string {
+  const minutes = parseHm(hm);
+  if (minutes == null) return hm;
+  const date = new Date();
+  date.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+export function normalizeWorkHours(value: unknown): WorkHoursSchedule | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as WorkHoursSchedule;
+  const startMinutes = parseHm(typeof raw.start === "string" ? raw.start : "") ?? parseHm(DEFAULT_WORK_HOURS.start)!;
+  const endMinutes = parseHm(typeof raw.end === "string" ? raw.end : "") ?? parseHm(DEFAULT_WORK_HOURS.end)!;
+  const paddingRaw = Number(raw.paddingMinutes);
+  const paddingMinutes = Number.isFinite(paddingRaw)
+    ? Math.max(0, Math.min(180, Math.round(paddingRaw)))
+    : DEFAULT_WORK_HOURS.paddingMinutes ?? 60;
+  return {
+    enabled: Boolean(raw.enabled),
+    start: formatHmFromMinutes(startMinutes),
+    end: formatHmFromMinutes(endMinutes),
+    paddingMinutes,
+  };
+}
+
+export function workHoursStripWindowLabel(schedule: WorkHoursSchedule): string {
+  const padding = schedule.paddingMinutes ?? DEFAULT_WORK_HOURS.paddingMinutes ?? 60;
+  const start = parseHm(schedule.start) ?? parseHm(DEFAULT_WORK_HOURS.start)!;
+  const end = parseHm(schedule.end) ?? parseHm(DEFAULT_WORK_HOURS.end)!;
+  return `${formatHmDisplay(formatHmFromMinutes(start - padding))} – ${formatHmDisplay(formatHmFromMinutes(end + padding))}`;
+}
+
+export function shouldShowTimesheetStrip(state: TimeTrackingState, now = new Date()): boolean {
+  if (getActiveEntry(state)) return true;
+  const schedule = state.workHours;
+  if (!schedule?.enabled) return true;
+
+  const padding = schedule.paddingMinutes ?? DEFAULT_WORK_HOURS.paddingMinutes ?? 60;
+  const start = parseHm(schedule.start) ?? parseHm(DEFAULT_WORK_HOURS.start)!;
+  const end = parseHm(schedule.end) ?? parseHm(DEFAULT_WORK_HOURS.end)!;
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const windowStart = start - padding;
+  const windowEnd = end + padding;
+
+  if (end >= start) {
+    return minutes >= windowStart && minutes <= windowEnd;
+  }
+  return minutes >= windowStart || minutes <= windowEnd;
+}
+
+export function updateWorkHours(state: TimeTrackingState, patch: Partial<WorkHoursSchedule>): TimeTrackingState {
+  const current = state.workHours ?? { ...DEFAULT_WORK_HOURS };
+  const workHours = normalizeWorkHours({ ...current, ...patch });
+  return workHours ? { ...state, workHours } : state;
+}
 
 export const emptyTimeTracking = (): TimeTrackingState => ({ entries: [], savedClients: [] });
 
@@ -42,6 +135,7 @@ export function normalizeTimeTracking(value: unknown): TimeTrackingState {
     entries,
     defaultClientName,
     savedClients: mergedClients.length ? mergedClients : undefined,
+    workHours: normalizeWorkHours(raw.workHours),
   };
 }
 

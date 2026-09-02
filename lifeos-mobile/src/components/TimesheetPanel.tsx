@@ -8,6 +8,7 @@ import {
   ScrollView,
   Share,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   useColorScheme,
@@ -20,6 +21,7 @@ import {
   addManualEntry,
   clockIn,
   clockOut,
+  DEFAULT_WORK_HOURS,
   deleteTimeEntry,
   entriesForWeek,
   entryDurationMinutes,
@@ -27,11 +29,16 @@ import {
   formatClockDate,
   formatClockTime,
   formatDurationMinutes,
+  formatHmFromMinutes,
+  formatHmDisplay,
   getActiveEntry,
+  parseHm,
   saveContractor,
   updateTimeEntry,
+  updateWorkHours,
   weekStartKey,
   weekTotalMinutes,
+  workHoursStripWindowLabel,
   type TimeEntry,
   type TimeTrackingState,
 } from "../lib/timeTracking";
@@ -53,6 +60,13 @@ function parseIso(iso?: string) {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
+function dateFromHm(hm: string): Date {
+  const minutes = parseHm(hm) ?? parseHm(DEFAULT_WORK_HOURS.start)!;
+  const date = new Date();
+  date.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+  return date;
+}
+
 export function TimesheetPanel({ theme, timeTracking, projects, weekStartsMonday = false, onChange }: Props) {
   const colorScheme = useColorScheme();
   const activeProjects = useMemo(() => projects.filter((p) => p.status === "active"), [projects]);
@@ -67,6 +81,8 @@ export function TimesheetPanel({ theme, timeTracking, projects, weekStartsMonday
   const weekEntries = useMemo(() => entriesForWeek(timeTracking, weekKey), [timeTracking, weekKey]);
   const weekTotal = weekTotalMinutes(weekEntries);
   const projectName = (projectId?: string) => projects.find((item) => item.id === projectId)?.name ?? "";
+  const workHours = timeTracking.workHours ?? DEFAULT_WORK_HOURS;
+  const [editingWorkTime, setEditingWorkTime] = useState<"start" | "end" | null>(null);
 
   useEffect(() => {
     if (timeTracking.defaultClientName) setDraftClient(timeTracking.defaultClientName);
@@ -251,6 +267,118 @@ export function TimesheetPanel({ theme, timeTracking, projects, weekStartsMonday
         </View>
       </Card>
 
+      <Card>
+        <Text style={[styles.sectionInline, { color: theme.text }]}>Now page strip</Text>
+        <Text style={{ color: theme.muted, fontSize: 12, marginTop: 4, lineHeight: 17 }}>
+          Hide the clock-in bar on Now outside your work window. You’re always shown while clocked in.
+        </Text>
+        <View style={[styles.scheduleRow, { borderColor: theme.border }]}>
+          <Text style={{ color: theme.text, fontWeight: "700", flex: 1 }}>Only during work hours</Text>
+          <Switch
+            value={workHours.enabled}
+            onValueChange={(enabled) => onChange(updateWorkHours(timeTracking, { enabled }))}
+            trackColor={{ false: theme.border, true: theme.accent }}
+          />
+        </View>
+        {workHours.enabled ? (
+          <View style={{ gap: 10, marginTop: 10 }}>
+            <Text style={{ color: theme.muted, fontSize: 12 }}>
+              Shows on Now {workHoursStripWindowLabel(workHours)} ({formatHmDisplay(workHours.start)}–{formatHmDisplay(workHours.end)} work, ±{workHours.paddingMinutes ?? 60}m)
+            </Text>
+            <View style={styles.scheduleTimes}>
+              <View style={styles.scheduleTimeCol}>
+                <Text style={[styles.fieldLabel, { color: theme.muted }]}>Start</Text>
+                {Platform.OS === "ios" ? (
+                  <DateTimePicker
+                    value={dateFromHm(workHours.start)}
+                    mode="time"
+                    display="compact"
+                    themeVariant={colorScheme === "dark" ? "dark" : "light"}
+                    onChange={(_, date) => {
+                      if (!date) return;
+                      onChange(
+                        updateWorkHours(timeTracking, {
+                          start: formatHmFromMinutes(date.getHours() * 60 + date.getMinutes()),
+                        }),
+                      );
+                    }}
+                  />
+                ) : (
+                  <>
+                    <Pressable
+                      onPress={() => setEditingWorkTime("start")}
+                      style={[styles.input, styles.pickerBtn, { borderColor: theme.border }]}
+                    >
+                      <Text style={{ color: theme.text, fontWeight: "600" }}>{formatHmDisplay(workHours.start)}</Text>
+                    </Pressable>
+                    {editingWorkTime === "start" ? (
+                      <DateTimePicker
+                        value={dateFromHm(workHours.start)}
+                        mode="time"
+                        onChange={(event, date) => {
+                          setEditingWorkTime(null);
+                          if (event.type !== "dismissed" && date) {
+                            onChange(
+                              updateWorkHours(timeTracking, {
+                                start: formatHmFromMinutes(date.getHours() * 60 + date.getMinutes()),
+                              }),
+                            );
+                          }
+                        }}
+                      />
+                    ) : null}
+                  </>
+                )}
+              </View>
+              <View style={styles.scheduleTimeCol}>
+                <Text style={[styles.fieldLabel, { color: theme.muted }]}>End</Text>
+                {Platform.OS === "ios" ? (
+                  <DateTimePicker
+                    value={dateFromHm(workHours.end)}
+                    mode="time"
+                    display="compact"
+                    themeVariant={colorScheme === "dark" ? "dark" : "light"}
+                    onChange={(_, date) => {
+                      if (!date) return;
+                      onChange(
+                        updateWorkHours(timeTracking, {
+                          end: formatHmFromMinutes(date.getHours() * 60 + date.getMinutes()),
+                        }),
+                      );
+                    }}
+                  />
+                ) : (
+                  <>
+                    <Pressable
+                      onPress={() => setEditingWorkTime("end")}
+                      style={[styles.input, styles.pickerBtn, { borderColor: theme.border }]}
+                    >
+                      <Text style={{ color: theme.text, fontWeight: "600" }}>{formatHmDisplay(workHours.end)}</Text>
+                    </Pressable>
+                    {editingWorkTime === "end" ? (
+                      <DateTimePicker
+                        value={dateFromHm(workHours.end)}
+                        mode="time"
+                        onChange={(event, date) => {
+                          setEditingWorkTime(null);
+                          if (event.type !== "dismissed" && date) {
+                            onChange(
+                              updateWorkHours(timeTracking, {
+                                end: formatHmFromMinutes(date.getHours() * 60 + date.getMinutes()),
+                              }),
+                            );
+                          }
+                        }}
+                      />
+                    ) : null}
+                  </>
+                )}
+              </View>
+            </View>
+          </View>
+        ) : null}
+      </Card>
+
       <View style={styles.sectionRow}>
         <Pressable onPress={() => setWeekKey(addDaysToDateKey(weekKey, -7))} hitSlop={8}>
           <Feather name="chevron-left" size={18} color={theme.accent} />
@@ -335,4 +463,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   entryCard: { borderWidth: 1, borderRadius: 14, padding: 14 },
+  scheduleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  scheduleTimes: { flexDirection: "row", gap: 12 },
+  scheduleTimeCol: { flex: 1 },
 });
