@@ -510,7 +510,7 @@ export default function LifeOS() {
   const [workFocusTaskId, setWorkFocusTaskId] = useState<string | null>(null);
   const [workView, setWorkView] = useState<WorkView>("dashboard");
   const [schoolFocusTaskId, setSchoolFocusTaskId] = useState<number | null>(null);
-  const [schoolView, setSchoolView] = useState<SchoolView>("dashboard");
+  const [schoolView, setSchoolView] = useState<SchoolView>("home");
   const [notificationsTick, setNotificationsTick] = useState(0);
   const [dismissedNotificationIds, setDismissedNotificationIds] = useState<Set<string>>(() => loadDismissedNotificationIds());
   const [hubCollection, setHubCollection] = useState<HubCollectionTarget | null>(null);
@@ -2280,7 +2280,30 @@ export default function LifeOS() {
         <AnimatePresence mode="wait">
           <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Work" || view === "Study Abroad" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
             {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarFeed} workspaceName={workspaceName} onComplete={complete} onOpenTask={openTaskPage} onOpenProject={openProjectSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => openSpacesList("Projects")} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} enableMasterOS={settingsState.enableMasterOS !== false} />}
-            {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} schoolView={schoolView} onChangeView={setSchoolView} schoolFocusTaskId={schoolFocusTaskId} onSelectFocusTask={setSchoolFocusTaskId} onComplete={complete} onOpenTask={openTaskPage} onOpenClass={openClassSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={(id) => { setSchoolFocusTaskId(id); openFocus(id); }} onOpenCalendar={() => go("Calendar")} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} enableMasterOS={settingsState.enableMasterOS !== false} />}
+            {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} events={calendarFeed} school={schoolHub} schoolView={schoolView} onChangeView={setSchoolView} schoolFocusTaskId={schoolFocusTaskId} onSelectFocusTask={setSchoolFocusTaskId} workspaceName={workspaceName} workspaceEmail={user?.email} onComplete={complete} onOpenTask={openTaskPage} onOpenClass={openClassSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={(id) => { setSchoolFocusTaskId(id); openFocus(id); }} onOpenCalendar={() => go("Calendar")} onOpenSettings={() => go("Settings")} onImportTimetable={() => setCalendarImporter(true)} onQuickCapture={(payload) => {
+              if (payload.kind === "Note") {
+                createNote(payload.classId, undefined, payload.title);
+                return;
+              }
+              const dueBase = new Date();
+              if (payload.when === "tomorrow") dueBase.setDate(dueBase.getDate() + 1);
+              const due = payload.when === "custom" && payload.customDate ? payload.customDate : toDateKey(dueBase);
+              const academicType = "Assignment";
+              if (payload.classId && classes.some(item => item.id === payload.classId && !isClassArchived(item))) {
+                addAcademicTask(payload.classId, { title: payload.title, due, priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType });
+              } else if (classes.some(item => !isClassArchived(item))) {
+                const fallback = classes.find(item => !isClassArchived(item))!;
+                addAcademicTask(fallback.id, { title: payload.title, due, priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType });
+              } else {
+                flash("Add a course first");
+                setSpaceComposer("class");
+              }
+            }} onAddCalendarEvent={(payload) => {
+              const start = payload.startTime ? `${payload.date}T${payload.startTime}:00` : `${payload.date}T09:00:00`;
+              const end = payload.endTime ? `${payload.date}T${payload.endTime}:00` : undefined;
+              addCalendarEvent({ id: `school-${Date.now()}`, title: payload.label ? `${payload.title} · ${payload.label}` : payload.title, start, end, source: "LifeOS", color: payload.color, notes: payload.type });
+              flash("Added to calendar");
+            }} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} enableMasterOS={settingsState.enableMasterOS !== false} />}
             {view === "Work" && <WorkDashboard workHub={workHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onTimesheetFlash={flash} weekStartsMonday={settingsState.weekStartsMonday} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => setWorkView("projects")} onProjectDeleted={(name) => {
               setProjectItems(items => items.filter(project => project.name !== name));
               setTasks(items => items.map(task => task.project === name ? { ...task, project: "Inbox", color: "#625af6" } : task));
