@@ -221,7 +221,7 @@ export function SchoolDashboardScreen() {
     );
 
   const renderHome = () => (
-    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad + 88 }]} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
       <View style={styles.homeHeader}>
         <View style={styles.grow}>
           <Text style={styles.dateKicker}>
@@ -247,7 +247,7 @@ export function SchoolDashboardScreen() {
           <View style={styles.alertDot} />
           <Text style={styles.alertText}>
             No classes on your timetable yet.{" "}
-            <Text style={styles.alertStrong}>Add one from the Timetable tab.</Text>
+            <Text style={styles.alertStrong}>Add one from Timetable.</Text>
           </Text>
         </Pressable>
       ) : null}
@@ -292,7 +292,7 @@ export function SchoolDashboardScreen() {
   );
 
   const renderTimetable = () => (
-    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad + 88 }]} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
       <View style={styles.pageHead}>
         <View style={styles.grow}>
           <Text style={styles.sectionKicker}>Your classes</Text>
@@ -383,7 +383,7 @@ export function SchoolDashboardScreen() {
   );
 
   const renderAssignments = () => (
-    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad + 88 }]} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
       <View style={styles.pageHead}>
         <View style={styles.grow}>
           <Text style={styles.pageTitle}>Assignments</Text>
@@ -426,7 +426,7 @@ export function SchoolDashboardScreen() {
   );
 
   const renderDue = () => (
-    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad + 88 }]} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
       <Pressable style={styles.backLink} onPress={() => setTab("home")}>
         <Feather name="chevron-left" size={14} color={SP.muted} />
         <Text style={styles.backLinkText}>Home</Text>
@@ -475,7 +475,7 @@ export function SchoolDashboardScreen() {
   ];
 
   const renderMore = () => (
-    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad + 88 }]} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
       <View style={styles.moreProfile}>
         <View style={[styles.avatar, { width: 48, height: 48 }]}>
           <Text style={[styles.avatarText, { fontSize: 16 }]}>{initials.slice(0, 1)}</Text>
@@ -527,18 +527,24 @@ export function SchoolDashboardScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]} testID="school-planner">
-      {body}
-
-      <View style={[styles.bottomNav, { marginBottom: tabBarPad }]} testID="school-bottom-nav">
-        <NavItem icon="home" label="Home" selected={tab === "home" || tab === "due"} onPress={() => setTab("home")} testID="school-nav-home" />
-        <NavItem icon="grid" label="Timetable" selected={tab === "timetable"} onPress={() => setTab("timetable")} testID="school-nav-timetable" />
-        <Pressable style={styles.fabWrap} onPress={openCalendarSheet} accessibilityLabel="Add to calendar" testID="school-nav-calendar">
-          <View style={styles.fab}><Feather name="plus" size={26} color="#FFF" /></View>
-          <Text style={styles.fabLabel}>Calendar</Text>
+      <View style={styles.topChrome} testID="school-top-nav">
+        <View style={styles.segmentRow}>
+          <SegmentItem label="Home" selected={tab === "home" || tab === "due"} onPress={() => setTab("home")} testID="school-nav-home" />
+          <SegmentItem label="Timetable" selected={tab === "timetable"} onPress={() => setTab("timetable")} testID="school-nav-timetable" />
+          <SegmentItem label="Assignments" selected={tab === "assignments"} onPress={() => setTab("assignments")} testID="school-nav-assignments" />
+          <SegmentItem label="More" selected={tab === "more"} onPress={() => setTab("more")} testID="school-nav-more" />
+        </View>
+        <Pressable
+          style={styles.calendarChip}
+          onPress={openCalendarSheet}
+          accessibilityLabel="Add to calendar"
+          testID="school-nav-calendar"
+        >
+          <Feather name="plus" size={18} color="#FFF" />
         </Pressable>
-        <NavItem icon="clipboard" label="Assignments" selected={tab === "assignments"} onPress={() => setTab("assignments")} testID="school-nav-assignments" />
-        <NavItem icon="more-horizontal" label="More" selected={tab === "more"} onPress={() => setTab("more")} testID="school-nav-more" />
       </View>
+
+      {body}
 
       <Modal visible={sheet === "capture"} animationType="slide" transparent onRequestClose={() => setSheet(null)}>
         <Pressable style={styles.sheetBackdrop} onPress={() => setSheet(null)}>
@@ -675,23 +681,24 @@ export function SchoolDashboardScreen() {
   );
 }
 
-function NavItem({
-  icon,
+function SegmentItem({
   label,
   selected,
   onPress,
   testID,
 }: {
-  icon: keyof typeof Feather.glyphMap;
   label: string;
   selected: boolean;
   onPress: () => void;
   testID?: string;
 }) {
   return (
-    <Pressable style={styles.navItem} onPress={onPress} testID={testID}>
-      <Feather name={icon} size={20} color={selected ? SP.teal : SP.muted} />
-      <Text style={[styles.navLabel, selected && { color: SP.teal }]}>{label}</Text>
+    <Pressable
+      style={[styles.segmentItem, selected && styles.segmentItemSelected]}
+      onPress={onPress}
+      testID={testID}
+    >
+      <Text style={[styles.segmentLabel, selected && styles.segmentLabelSelected]}>{label}</Text>
     </Pressable>
   );
 }
@@ -833,22 +840,29 @@ const styles = StyleSheet.create({
   },
   menuLabel: { flex: 1, fontSize: 14, fontWeight: "500", color: SP.ink },
   menuMeta: { color: SP.teal, fontSize: 13, fontWeight: "600" },
-  bottomNav: {
-    position: "absolute", left: 16, right: 16, bottom: 0,
-    height: 72, borderRadius: 28, backgroundColor: "rgba(255,255,255,0.94)",
-    borderWidth: 1, borderColor: "rgba(213,224,231,0.9)",
-    flexDirection: "row", alignItems: "flex-end", paddingHorizontal: 6, paddingBottom: 10, paddingTop: 8,
-    shadowColor: "#0F5A64", shadowOpacity: 0.12, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 8,
+  topChrome: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: SP.line,
+    backgroundColor: SP.mist,
   },
-  navItem: { flex: 1, alignItems: "center", gap: 4 },
-  navLabel: { fontSize: 10, fontWeight: "600", color: SP.muted },
-  fabWrap: { width: 72, alignItems: "center", marginTop: -28 },
-  fab: {
-    width: 56, height: 56, borderRadius: 28, backgroundColor: SP.teal,
+  segmentRow: {
+    flex: 1, flexDirection: "row", backgroundColor: SP.mistDeep, borderRadius: 999, padding: 3, gap: 2,
+  },
+  segmentItem: {
+    flex: 1, height: 34, borderRadius: 999, alignItems: "center", justifyContent: "center", paddingHorizontal: 6,
+  },
+  segmentItemSelected: {
+    backgroundColor: SP.panel,
+    shadowColor: "#0F5A64", shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
+  },
+  segmentLabel: { fontSize: 12, fontWeight: "600", color: SP.muted },
+  segmentLabelSelected: { color: SP.teal },
+  calendarChip: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: SP.teal,
     alignItems: "center", justifyContent: "center",
-    shadowColor: SP.teal, shadowOpacity: 0.3, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 6,
+    shadowColor: SP.teal, shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3,
   },
-  fabLabel: { position: "absolute", bottom: -2, fontSize: 10, fontWeight: "600", color: SP.muted },
   sheetBackdrop: { flex: 1, backgroundColor: "rgba(26, 43, 51, 0.35)", justifyContent: "flex-end" },
   sheet: {
     backgroundColor: SP.mist, borderTopLeftRadius: 28, borderTopRightRadius: 28,
