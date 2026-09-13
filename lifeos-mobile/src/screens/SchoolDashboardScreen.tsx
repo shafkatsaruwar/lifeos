@@ -17,7 +17,7 @@ import { FocusModal } from "../components/FocusModal";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatDueDate, taskIsOpen, toDateKey, uid } from "../lib/helpers";
-import type { CalendarEvent, Task } from "../types";
+import type { CalendarEvent, ClassRecord, Task } from "../types";
 
 /** SchoolOS-only palette — mist canvas + teal accent (not the web cream/pink refs). */
 const SP = {
@@ -67,14 +67,63 @@ const formatWeekRange = (anchor: Date) => {
   return `${left} to ${right}`;
 };
 
+const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+const meetsOn = (course: ClassRecord, date: Date) => {
+  if (!course.meetingDays?.length) return false;
+  return course.meetingDays.includes(date.getDay());
+};
+
+const formatMeeting = (course: ClassRecord) => {
+  if (!course.meetingDays?.length) return "No meeting time set";
+  const days = [...course.meetingDays].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7))
+    .map((d) => DAY_SHORT[d]).join(" · ");
+  if (course.meetingStart && course.meetingEnd) return `${days} · ${course.meetingStart}–${course.meetingEnd}`;
+  if (course.meetingStart) return `${days} · ${course.meetingStart}`;
+  return days;
+};
+
+const parseSyllabusLines = (raw: string) => {
+  const lines = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  return lines.map((line) => {
+    const dateMatch = line.match(/(\d{4}-\d{2}-\d{2})|(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/);
+    let due: string | undefined;
+    let title = line;
+    if (dateMatch) {
+      title = line.replace(dateMatch[0], "").replace(/[–—:-]+$/, "").trim() || line;
+      const token = dateMatch[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(token)) due = token;
+      else {
+        const parts = token.split("/").map(Number);
+        if (parts.length >= 2) {
+          const year = parts[2] ? (parts[2] < 100 ? 2000 + parts[2] : parts[2]) : new Date().getFullYear();
+          due = `${year}-${String(parts[0]).padStart(2, "0")}-${String(parts[1]).padStart(2, "0")}`;
+        }
+      }
+    }
+    return { title, due };
+  });
+};
+
+
 export function SchoolDashboardScreen() {
-  const { workspace, updateTasks, updateNotes, updateCalendar } = useLifeOS();
+  const { workspace, updateTasks, updateNotes, updateCalendar, updateClasses, updateSchool } = useLifeOS();
   const tabBarPad = useFloatingTabBarContentPadding(12);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
 
   const [tab, setTab] = useState<SchoolTab>("home");
-  const [sheet, setSheet] = useState<"capture" | "calendar" | null>(null);
+  const [sheet, setSheet] = useState<"capture" | "calendar" | "syllabus" | "schedule" | null>(null);
+  const [panel, setPanel] = useState<"grades" | "exams" | "reading" | "progress" | "wellness" | null>(null);
+  const [selectedDay, setSelectedDay] = useState(() => new Date());
+  const [scheduleClassId, setScheduleClassId] = useState<string | undefined>();
+  const [scheduleDays, setScheduleDays] = useState<number[]>([1, 3, 5]);
+  const [scheduleStart, setScheduleStart] = useState("09:00");
+  const [scheduleEnd, setScheduleEnd] = useState("10:00");
+  const [syllabusText, setSyllabusText] = useState("");
+  const [syllabusClassId, setSyllabusClassId] = useState<string | undefined>();
+  const [wellnessNote, setWellnessNote] = useState("");
+
   const [timetableMode, setTimetableMode] = useState<"day" | "week">("day");
   const [weekAnchor, setWeekAnchor] = useState(() => new Date());
   const [focusTaskId, setFocusTaskId] = useState<number | null>(null);
@@ -220,6 +269,113 @@ export function SchoolDashboardScreen() {
       ),
     );
 
+
+  const exams = schoolTasks
+    .filter((task) => task.academicType === "Exam" || task.academicType === "Quiz")
+    .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
+  const readingTasks = schoolTasks
+    .filter((task) => task.academicType === "Reading")
+    .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
+  const weighted = workspace.tasks.filter((task) => task.classId && task.gradeWeight);
+  const completedThisWeek = workspace.tasks.filter(
+    (task) => task.classId && task.done && task.completedAt && task.completedAt.slice(0, 10) >= today && task.completedAt.slice(0, 10) <= weekEndKey,
+  );
+  const weekDays = useMemo(() => {
+    const start = startOfWeek(weekAnchor);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      return d;
+    });
+  }, [weekAnchor]);
+
+  const openSyllabus = () => {
+    setSyllabusText("");
+    setSyllabusClassId(courses[0]?.id);
+    setSheet("syllabus");
+  };
+
+  const openSchedule = (classId: string) => {
+    const course = courseFor(classId);
+    setScheduleClassId(classId);
+    setScheduleDays(course?.meetingDays?.length ? [...course.meetingDays] : [1, 3, 5]);
+    setScheduleStart(course?.meetingStart ?? "09:00");
+    setScheduleEnd(course?.meetingEnd ?? "10:00");
+    setSheet("schedule");
+  };
+
+  const saveSchedule = async () => {
+    if (!scheduleClassId) return;
+    await updateClasses(
+      workspace.classes.map((course) =>
+        course.id === scheduleClassId
+          ? {
+              ...course,
+              meetingDays: scheduleDays.length ? scheduleDays : undefined,
+              meetingStart: scheduleDays.length ? scheduleStart : undefined,
+              meetingEnd: scheduleDays.length ? scheduleEnd : undefined,
+            }
+          : course,
+      ),
+    );
+    setSheet(null);
+  };
+
+  const submitSyllabus = async () => {
+    if (!syllabusClassId) {
+      Alert.alert("Add a course first", "Syllabus items need a course.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Add course", onPress: () => { setSheet(null); openCreate("course"); } },
+      ]);
+      return;
+    }
+    const items = parseSyllabusLines(syllabusText);
+    if (!items.length) return;
+    const course = courseFor(syllabusClassId);
+    let stamp = Date.now();
+    const created: Task[] = items.map((item) => {
+      stamp += 1;
+      return {
+        id: stamp,
+        title: item.title,
+        classId: syllabusClassId,
+        color: course?.color ?? SP.teal,
+        project: "Inbox",
+        due: item.due,
+        priority: "Medium" as const,
+        academicType: "Assignment" as const,
+        focusMinutes: workspace.settings.defaultFocusMinutes ?? 45,
+        energy: workspace.settings.defaultEnergy ?? "Medium",
+        status: "Not started" as const,
+        checklist: [],
+        checklistProgress: [],
+      };
+    });
+    await updateTasks([...workspace.tasks, ...created]);
+    setSheet(null);
+    setTab("assignments");
+  };
+
+  const saveWellness = async (mood: string) => {
+    await updateSchool({
+      ...workspace.school,
+      goals: [
+        {
+          id: uid(),
+          title: `Wellness: ${mood}`,
+          subtitle: wellnessNote.trim() || undefined,
+          category: "Wellness",
+          date: today,
+          createdAt: new Date().toISOString(),
+        },
+        ...workspace.school.goals,
+      ],
+    });
+    setWellnessNote("");
+    setPanel(null);
+    Alert.alert("Logged", "Your check-in is saved under Goals → Wellness.");
+  };
+
   const renderHome = () => (
     <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
       <View style={styles.homeHeader}>
@@ -291,106 +447,175 @@ export function SchoolDashboardScreen() {
     </ScrollView>
   );
 
-  const renderTimetable = () => (
-    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
-      <View style={styles.pageHead}>
-        <View style={styles.grow}>
-          <Text style={styles.sectionKicker}>Your classes</Text>
-          <Text style={styles.pageTitle}>Timetable</Text>
-        </View>
-        <View style={styles.pageActions}>
-          <Pressable style={styles.outlineBtn} onPress={() => openCreate("course")}>
-            <Feather name="plus" size={14} color={SP.teal} />
-            <Text style={styles.outlineText}>Class</Text>
-          </Pressable>
-          <Pressable style={styles.outlineBtn} onPress={() => navigation.navigate("CalendarTab")}>
-            <Text style={styles.outlineText}>Import</Text>
-          </Pressable>
-        </View>
-      </View>
 
-      <View style={styles.toolbarRow}>
-        <View style={styles.toggle}>
-          <Pressable style={[styles.toggleBtn, timetableMode === "day" && styles.toggleSelected]} onPress={() => setTimetableMode("day")}>
-            <Text style={[styles.toggleText, timetableMode === "day" && styles.toggleTextSelected]}>Day</Text>
-          </Pressable>
-          <Pressable style={[styles.toggleBtn, timetableMode === "week" && styles.toggleSelected]} onPress={() => setTimetableMode("week")}>
-            <Text style={[styles.toggleText, timetableMode === "week" && styles.toggleTextSelected]}>Week</Text>
-          </Pressable>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-          {terms.map((item) => (
-            <Pressable key={item} style={[styles.termChip, term === item && styles.termChipSelected]} onPress={() => setTerm(item)}>
-              <Text style={[styles.termChipText, term === item && styles.termChipTextSelected]}>{item}</Text>
+  const renderTimetable = () => {
+    const dayCourses = termCourses
+      .filter((course) => meetsOn(course, selectedDay))
+      .sort((a, b) => (a.meetingStart ?? "99").localeCompare(b.meetingStart ?? "99"));
+    const unscheduled = termCourses.filter((course) => !course.meetingDays?.length);
+    const visible = timetableMode === "day" ? dayCourses : termCourses;
+
+    return (
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
+        <View style={styles.pageHead}>
+          <View style={styles.grow}>
+            <Text style={styles.sectionKicker}>Your classes</Text>
+            <Text style={styles.pageTitle} numberOfLines={1}>Timetable</Text>
+          </View>
+          <View style={styles.pageActions}>
+            <Pressable style={styles.outlineBtn} onPress={() => openCreate("course")}>
+              <Feather name="plus" size={14} color={SP.teal} />
+              <Text style={styles.outlineText}>Class</Text>
             </Pressable>
-          ))}
-        </ScrollView>
-      </View>
+            <Pressable style={styles.outlineBtn} onPress={() => navigation.navigate("CalendarTab")}>
+              <Text style={styles.outlineText}>Import</Text>
+            </Pressable>
+          </View>
+        </View>
 
-      <View style={styles.weekNav}>
-        <Pressable onPress={() => shiftWeek(-1)} style={styles.weekNavBtn} accessibilityLabel="Previous week">
-          <Feather name="chevron-left" size={16} color={SP.ink} />
-        </Pressable>
-        <Text style={styles.weekNavLabel}>This week {formatWeekRange(weekAnchor)}</Text>
-        <Pressable onPress={() => shiftWeek(1)} style={styles.weekNavBtn} accessibilityLabel="Next week">
-          <Feather name="chevron-right" size={16} color={SP.ink} />
-        </Pressable>
-      </View>
+        <View style={styles.toolbarRow}>
+          <View style={styles.toggle}>
+            <Pressable style={[styles.toggleBtn, timetableMode === "day" && styles.toggleSelected]} onPress={() => setTimetableMode("day")}>
+              <Text style={[styles.toggleText, timetableMode === "day" && styles.toggleTextSelected]}>Day</Text>
+            </Pressable>
+            <Pressable style={[styles.toggleBtn, timetableMode === "week" && styles.toggleSelected]} onPress={() => setTimetableMode("week")}>
+              <Text style={[styles.toggleText, timetableMode === "week" && styles.toggleTextSelected]}>Week</Text>
+            </Pressable>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+            {terms.map((item) => (
+              <Pressable key={item} style={[styles.termChip, term === item && styles.termChipSelected]} onPress={() => setTerm(item)}>
+                <Text style={[styles.termChipText, term === item && styles.termChipTextSelected]}>{item}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
 
-      {termCourses.length === 0 ? (
-        <View style={styles.emptyPanel}>
-          <Text style={styles.emptyText}>Nothing in your {term} term yet.</Text>
-          <Pressable style={styles.primaryBtn} onPress={() => navigation.navigate("CalendarTab")}>
-            <Text style={styles.primaryBtnText}>Import my timetable</Text>
+        <View style={styles.weekNav}>
+          <Pressable onPress={() => shiftWeek(-1)} style={styles.weekNavBtn} accessibilityLabel="Previous week">
+            <Feather name="chevron-left" size={16} color={SP.ink} />
           </Pressable>
-          <Text style={styles.hint}>Most universities export an .ics from Moodle, Canvas, TimeEdit or Outlook.</Text>
-          <Pressable style={styles.outlineBtnWide} onPress={() => openCreate("course")}>
-            <Text style={styles.outlineText}>Or add a class by hand</Text>
+          <Text style={styles.weekNavLabel}>This week {formatWeekRange(weekAnchor)}</Text>
+          <Pressable onPress={() => shiftWeek(1)} style={styles.weekNavBtn} accessibilityLabel="Next week">
+            <Feather name="chevron-right" size={16} color={SP.ink} />
           </Pressable>
         </View>
-      ) : (
-        <View style={styles.listGap}>
-          {termCourses.map((course) => (
-            <Pressable
-              key={course.id}
-              style={styles.classRow}
-              onPress={() => navigation.navigate("ClassDetail", { classId: course.id })}
-            >
-              <View style={[styles.classDot, { backgroundColor: course.color ?? SP.teal }]} />
-              <View style={styles.grow}>
-                <Text style={styles.classCode}>{course.code}</Text>
-                <Text style={styles.className}>{course.name}{course.instructor ? ` · ${course.instructor}` : ""}</Text>
+
+        {timetableMode === "day" ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayStrip}>
+            {weekDays.map((day) => {
+              const key = toDateKey(day);
+              const selected = toDateKey(selectedDay) === key;
+              const count = termCourses.filter((course) => meetsOn(course, day)).length;
+              return (
+                <Pressable key={key} style={[styles.dayChip, selected && styles.dayChipSelected]} onPress={() => setSelectedDay(day)}>
+                  <Text style={[styles.dayChipDow, selected && styles.dayChipSelectedText]}>{DAY_SHORT[day.getDay()]}</Text>
+                  <Text style={[styles.dayChipNum, selected && styles.dayChipSelectedText]}>{day.getDate()}</Text>
+                  {count ? <View style={[styles.dayDot, selected && { backgroundColor: "#FFF" }]} /> : <View style={styles.dayDotSpacer} />}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
+        {termCourses.length === 0 ? (
+          <View style={styles.emptyPanel}>
+            <Text style={styles.emptyText}>Nothing in your {term} term yet.</Text>
+            <Pressable style={styles.primaryBtn} onPress={() => navigation.navigate("CalendarTab")}>
+              <Text style={styles.primaryBtnText}>Import my timetable</Text>
+            </Pressable>
+            <Text style={styles.hint}>Most universities export an .ics from Moodle, Canvas, TimeEdit or Outlook.</Text>
+            <Pressable style={styles.outlineBtnWide} onPress={() => openCreate("course")}>
+              <Text style={styles.outlineText}>Or add a class by hand</Text>
+            </Pressable>
+          </View>
+        ) : timetableMode === "week" ? (
+          <View style={styles.listGap}>
+            {weekDays.map((day) => {
+              const rows = termCourses.filter((course) => meetsOn(course, day)).sort((a, b) => (a.meetingStart ?? "").localeCompare(b.meetingStart ?? ""));
+              return (
+                <View key={toDateKey(day)} style={styles.weekDayBlock}>
+                  <Text style={styles.weekDayLabel}>{DAY_SHORT[day.getDay()]} {day.getDate()}</Text>
+                  {rows.length ? rows.map((course) => (
+                    <Pressable key={course.id} style={styles.classRow} onPress={() => navigation.navigate("ClassDetail", { classId: course.id })}>
+                      <View style={[styles.classDot, { backgroundColor: course.color ?? SP.teal }]} />
+                      <View style={styles.grow}>
+                        <Text style={styles.classCode}>{course.code}{course.meetingStart ? ` · ${course.meetingStart}` : ""}</Text>
+                        <Text style={styles.className}>{course.name}{course.instructor ? ` · ${course.instructor}` : ""}</Text>
+                      </View>
+                      <Feather name="chevron-right" size={16} color={SP.muted} />
+                    </Pressable>
+                  )) : (
+                    <Text style={styles.weekEmpty}>No classes</Text>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <View style={styles.listGap}>
+            {visible.length ? visible.map((course) => (
+              <Pressable key={course.id} style={styles.classRow} onPress={() => navigation.navigate("ClassDetail", { classId: course.id })}>
+                <View style={[styles.classDot, { backgroundColor: course.color ?? SP.teal }]} />
+                <View style={styles.grow}>
+                  <Text style={styles.classCode}>{course.code}</Text>
+                  <Text style={styles.className}>{course.name}{course.instructor ? ` · ${course.instructor}` : ""}</Text>
+                  <Text style={styles.classMeta}>{formatMeeting(course)}</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={SP.muted} />
+              </Pressable>
+            )) : (
+              <View style={styles.dashedEmpty}>
+                <Text style={styles.emptyText}>No classes meet on {DAY_SHORT[selectedDay.getDay()]}. Free block — drop a study session?</Text>
+                <Pressable style={[styles.primaryBtn, { marginTop: 12 }]} onPress={openCapture}>
+                  <Text style={styles.primaryBtnText}>Plan a study block</Text>
+                </Pressable>
               </View>
-              <Feather name="chevron-right" size={16} color={SP.muted} />
-            </Pressable>
-          ))}
-        </View>
-      )}
+            )}
+            {unscheduled.length ? (
+              <View style={styles.listGap}>
+                <Text style={styles.sectionKicker}>Needs a meeting time</Text>
+                {unscheduled.map((course) => (
+                  <Pressable key={course.id} style={styles.classRow} onPress={() => openSchedule(course.id)}>
+                    <View style={[styles.classDot, { backgroundColor: course.color ?? SP.teal }]} />
+                    <View style={styles.grow}>
+                      <Text style={styles.classCode}>{course.code}</Text>
+                      <Text style={styles.className}>{course.name}</Text>
+                      <Text style={styles.classMeta}>Tap to set days and time</Text>
+                    </View>
+                    <Feather name="clock" size={16} color={SP.teal} />
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        )}
 
-      <Pressable style={styles.linkRow} onPress={openCapture}>
-        <View style={styles.alertDot} />
-        <Text style={[styles.linkRowText, { color: SP.tealDeep, flex: 1 }]}>Free blocks this week, drop a study session?</Text>
-      </Pressable>
-      <Pressable style={styles.linkRow} onPress={() => navigation.navigate("CoursesDirectory")}>
-        <Text style={[styles.linkRowText, { flex: 1 }]}>Semester overview</Text>
-        <Feather name="chevron-right" size={16} color={SP.muted} />
-      </Pressable>
-      <Pressable style={styles.linkRow} onPress={openCalendarSheet}>
-        <Text style={[styles.linkRowText, { flex: 1 }]}>Clubs, appointments and everything else</Text>
-        <Text style={styles.linkRowAction}>Calendar ›</Text>
-      </Pressable>
-    </ScrollView>
-  );
+        <Pressable style={styles.linkRow} onPress={openCapture}>
+          <View style={styles.alertDot} />
+          <Text style={[styles.linkRowText, { color: SP.tealDeep, flex: 1 }]}>Free blocks this week, drop a study session?</Text>
+        </Pressable>
+        <Pressable style={styles.linkRow} onPress={() => navigation.navigate("CoursesDirectory")}>
+          <Text style={[styles.linkRowText, { flex: 1 }]}>Semester overview</Text>
+          <Feather name="chevron-right" size={16} color={SP.muted} />
+        </Pressable>
+        <Pressable style={styles.linkRow} onPress={openCalendarSheet}>
+          <Text style={[styles.linkRowText, { flex: 1 }]}>Clubs, appointments and everything else</Text>
+          <Text style={styles.linkRowAction}>Calendar ›</Text>
+        </Pressable>
+      </ScrollView>
+    );
+  };
 
   const renderAssignments = () => (
     <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
       <View style={styles.pageHead}>
         <View style={styles.grow}>
-          <Text style={styles.pageTitle}>Assignments</Text>
+          <Text style={styles.pageTitle} numberOfLines={1}>Assignments</Text>
           <Text style={styles.pageSub}>Soonest due first · {assignments.length} to do</Text>
         </View>
         <View style={styles.pageActions}>
-          <Pressable style={styles.outlineBtn} onPress={() => openCreate("assignment")}>
+          <Pressable style={styles.outlineBtn} onPress={openSyllabus}>
             <Text style={styles.outlineText}>Paste syllabus</Text>
           </Pressable>
           <Pressable style={styles.outlineBtn} onPress={() => openCreate("assignment")} testID="school-new-assignment">
@@ -407,11 +632,20 @@ export function SchoolDashboardScreen() {
               style={styles.taskRow}
               onPress={() => navigation.navigate("TasksTab", { screen: "TaskDetail", params: { taskId: task.id } })}
             >
+              <Pressable
+                onPress={() => completeTask(task.id)}
+                hitSlop={10}
+                accessibilityLabel={`Complete ${task.title}`}
+                style={styles.checkHit}
+              >
+                <Feather name="circle" size={20} color={SP.teal} />
+              </Pressable>
               <View style={[styles.taskDot, { backgroundColor: courseFor(task.classId)?.color ?? SP.teal }]} />
               <View style={styles.grow}>
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 <Text style={styles.taskMeta}>
                   {courseFor(task.classId)?.code ?? "School"} · {task.academicType ?? "Assignment"} · {formatDueDate(task.due)}
+                  {task.gradeWeight ? ` · ${task.gradeWeight}%` : ""}
                 </Text>
               </View>
             </Pressable>
@@ -419,7 +653,7 @@ export function SchoolDashboardScreen() {
         </View>
       ) : (
         <View style={styles.dashedEmpty}>
-          <Text style={styles.emptyText}>No assignments yet. Tap &apos;+ New&apos; to add your first.</Text>
+          <Text style={styles.emptyText}>No assignments yet. Tap + New or paste a syllabus to add your first.</Text>
         </View>
       )}
     </ScrollView>
@@ -462,63 +696,235 @@ export function SchoolDashboardScreen() {
     </ScrollView>
   );
 
+  const renderPanel = () => {
+    if (!panel) return null;
+    const title =
+      panel === "grades" ? "Grades & what-if"
+        : panel === "exams" ? "Exam tracker"
+          : panel === "reading" ? "Reading tracker"
+            : panel === "progress" ? "Weekly progress"
+              : "Wellness check-in";
+
+    return (
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
+        <Pressable style={styles.backLink} onPress={() => setPanel(null)}>
+          <Feather name="chevron-left" size={14} color={SP.muted} />
+          <Text style={styles.backLinkText}>More</Text>
+        </Pressable>
+        <Text style={styles.pageTitle}>{title}</Text>
+
+        {panel === "grades" ? (
+          <>
+            <Text style={styles.pageSub}>Weighted work across your courses</Text>
+            {weighted.length ? (
+              <View style={[styles.listGap, { marginTop: 16 }]}>
+                {weighted.map((task) => {
+                  const earned = task.pointsEarned;
+                  const possible = task.pointsPossible;
+                  const score = earned != null && possible ? `${earned}/${possible}` : task.done ? "Done" : "Open";
+                  return (
+                    <Pressable key={task.id} style={styles.taskRow} onPress={() => navigation.navigate("TasksTab", { screen: "TaskDetail", params: { taskId: task.id } })}>
+                      <View style={styles.grow}>
+                        <Text style={styles.taskTitle}>{task.title}</Text>
+                        <Text style={styles.taskMeta}>
+                          {courseFor(task.classId)?.code ?? "School"} · {task.gradeWeight}% · {score}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+                <View style={styles.statCard}>
+                  <Text style={styles.statLabel}>Logged weight</Text>
+                  <Text style={styles.statValue}>{weighted.reduce((sum, task) => sum + (task.gradeWeight ?? 0), 0)}%</Text>
+                </View>
+              </View>
+            ) : (
+              <View style={[styles.dashedEmpty, { marginTop: 16 }]}>
+                <Text style={styles.emptyText}>Add grade weight when you create an assignment to track what-if scores here.</Text>
+                <Pressable style={[styles.outlineBtn, { marginTop: 12, alignSelf: "center" }]} onPress={() => openCreate("assignment")}>
+                  <Text style={styles.outlineText}>New weighted assignment</Text>
+                </Pressable>
+              </View>
+            )}
+          </>
+        ) : null}
+
+        {panel === "exams" ? (
+          <>
+            <Text style={styles.pageSub}>{exams.length} exams & quizzes ahead</Text>
+            <View style={[styles.pageActions, { marginTop: 12 }]}>
+              <Pressable style={styles.outlineBtn} onPress={() => openCreate("assignment")}>
+                <Feather name="plus" size={14} color={SP.teal} />
+                <Text style={styles.outlineText}>Add exam</Text>
+              </Pressable>
+            </View>
+            {exams.length ? (
+              <View style={[styles.listGap, { marginTop: 12 }]}>
+                {exams.map((task) => (
+                  <Pressable key={task.id} style={styles.taskRow} onPress={() => navigation.navigate("TasksTab", { screen: "TaskDetail", params: { taskId: task.id } })}>
+                    <View style={styles.grow}>
+                      <Text style={styles.taskTitle}>{task.title}</Text>
+                      <Text style={styles.taskMeta}>{courseFor(task.classId)?.code ?? "School"} · {task.academicType} · {formatDueDate(task.due)}</Text>
+                    </View>
+                    <Pressable onPress={() => setFocusTaskId(task.id)} hitSlop={8}>
+                      <Feather name="play-circle" size={20} color={SP.teal} />
+                    </Pressable>
+                  </Pressable>
+                ))}
+              </View>
+            ) : (
+              <View style={[styles.dashedEmpty, { marginTop: 16 }]}>
+                <Text style={styles.emptyText}>No exams yet. Add one with type Exam or Quiz.</Text>
+              </View>
+            )}
+          </>
+        ) : null}
+
+        {panel === "reading" ? (
+          <>
+            <Text style={styles.pageSub}>{readingTasks.length} readings on your list</Text>
+            <View style={[styles.pageActions, { marginTop: 12 }]}>
+              <Pressable style={styles.outlineBtn} onPress={() => openCreate("task")}>
+                <Feather name="plus" size={14} color={SP.teal} />
+                <Text style={styles.outlineText}>Add reading</Text>
+              </Pressable>
+            </View>
+            {readingTasks.length ? (
+              <View style={[styles.listGap, { marginTop: 12 }]}>
+                {readingTasks.map((task) => (
+                  <Pressable key={task.id} style={styles.taskRow} onPress={() => completeTask(task.id)}>
+                    <Feather name="book-open" size={16} color={SP.teal} />
+                    <View style={styles.grow}>
+                      <Text style={styles.taskTitle}>{task.title}</Text>
+                      <Text style={styles.taskMeta}>{courseFor(task.classId)?.code ?? "School"} · {formatDueDate(task.due)}</Text>
+                    </View>
+                    <Text style={styles.linkRowAction}>Done</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : (
+              <View style={[styles.dashedEmpty, { marginTop: 16 }]}>
+                <Text style={styles.emptyText}>Nothing to read yet. Capture chapters as Reading tasks.</Text>
+              </View>
+            )}
+          </>
+        ) : null}
+
+        {panel === "progress" ? (
+          <>
+            <Text style={styles.pageSub}>This week at a glance</Text>
+            <View style={[styles.statRow, { marginTop: 16 }]}>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>Due</Text>
+                <Text style={styles.statValue}>{dueThisWeek.length}</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>Finished</Text>
+                <Text style={styles.statValue}>{completedThisWeek.length}</Text>
+              </View>
+            </View>
+            <View style={[styles.statRow, { marginTop: 12 }]}>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>Classes</Text>
+                <Text style={styles.statValue}>{termCourses.filter((c) => c.meetingDays?.length).length}</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>Open work</Text>
+                <Text style={styles.statValue}>{schoolTasks.length}</Text>
+              </View>
+            </View>
+            <Pressable style={[styles.primaryBtn, { marginTop: 18 }]} onPress={() => (schoolTasks[0] ? setFocusTaskId(schoolTasks[0].id) : openCapture())}>
+              <Text style={styles.primaryBtnText}>{schoolTasks[0] ? "Start a focus block" : "Capture next task"}</Text>
+            </Pressable>
+          </>
+        ) : null}
+
+        {panel === "wellness" ? (
+          <>
+            <Text style={styles.pageSub}>How are you feeling about school today?</Text>
+            <View style={[styles.pillRow, { marginTop: 16 }]}>
+              {["Great", "Okay", "Stressed", "Tired", "Stuck"].map((mood) => (
+                <Pressable key={mood} style={styles.pill} onPress={() => saveWellness(mood)}>
+                  <Text style={styles.pillText}>{mood}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <TextInput
+              style={[styles.textarea, { marginTop: 14 }]}
+              placeholder="Optional note..."
+              placeholderTextColor={SP.muted}
+              value={wellnessNote}
+              onChangeText={setWellnessNote}
+              multiline
+            />
+            <Text style={styles.helper}>Check-ins save to Goals with the Wellness tag.</Text>
+          </>
+        ) : null}
+      </ScrollView>
+    );
+  };
+
   const moreLinks: { key: string; label: string; icon: keyof typeof Feather.glyphMap; onPress: () => void }[] = [
     { key: "study", label: "Study", icon: "clock", onPress: () => (schoolTasks[0] ? setFocusTaskId(schoolTasks[0].id) : openCapture()) },
-    { key: "grades", label: "Grades & what-if", icon: "pie-chart", onPress: () => setTab("due") },
-    { key: "exams", label: "Exam tracker", icon: "grid", onPress: () => setTab("assignments") },
+    { key: "grades", label: "Grades & what-if", icon: "pie-chart", onPress: () => setPanel("grades") },
+    { key: "exams", label: "Exam tracker", icon: "grid", onPress: () => setPanel("exams") },
     { key: "goals", label: "Goals", icon: "target", onPress: () => navigation.navigate("HubCollection", { scope: "school", collection: "goals" }) },
-    { key: "wellness", label: "Wellness check-in", icon: "heart", onPress: () => navigation.navigate("SchoolProfile") },
+    { key: "wellness", label: "Wellness check-in", icon: "heart", onPress: () => setPanel("wellness") },
     { key: "reminders", label: "Reminders", icon: "bell", onPress: () => openCreate("task") },
-    { key: "reading", label: "Reading tracker", icon: "book", onPress: () => openCreate("lecture") },
+    { key: "reading", label: "Reading tracker", icon: "book", onPress: () => setPanel("reading") },
     { key: "subjects", label: "Subjects", icon: "star", onPress: () => navigation.navigate("HubCollection", { scope: "school", collection: "topics" }) },
-    { key: "progress", label: "Weekly progress", icon: "activity", onPress: () => setTab("due") },
+    { key: "progress", label: "Weekly progress", icon: "activity", onPress: () => setPanel("progress") },
   ];
 
-  const renderMore = () => (
-    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
-      <View style={styles.moreProfile}>
-        <View style={[styles.avatar, { width: 48, height: 48 }]}>
-          <Text style={[styles.avatarText, { fontSize: 16 }]}>{initials.slice(0, 1)}</Text>
+  const renderMore = () => {
+    if (panel) return renderPanel();
+    return (
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
+        <View style={styles.moreProfile}>
+          <View style={[styles.avatar, { width: 48, height: 48 }]}>
+            <Text style={[styles.avatarText, { fontSize: 16 }]}>{initials.slice(0, 1)}</Text>
+          </View>
+          <View style={styles.grow}>
+            <Text style={styles.moreName}>{displayName}</Text>
+            <Text style={styles.moreEmail}>
+              {workspace.school.profile.major || "Personal workspace"} · synced ♥
+            </Text>
+          </View>
         </View>
-        <View style={styles.grow}>
-          <Text style={styles.moreName}>{displayName}</Text>
-          <Text style={styles.moreEmail}>
-            {workspace.school.profile.major || "Personal workspace"} · synced ♥
-          </Text>
-        </View>
-      </View>
 
-      <View style={styles.menuCard}>
-        {moreLinks.map((item) => (
-          <Pressable key={item.key} style={styles.menuRow} onPress={item.onPress}>
-            <View style={styles.menuIcon}><Feather name={item.icon} size={16} color={SP.teal} /></View>
-            <Text style={styles.menuLabel}>{item.label}</Text>
+        <View style={styles.menuCard}>
+          {moreLinks.map((item) => (
+            <Pressable key={item.key} style={styles.menuRow} onPress={item.onPress}>
+              <View style={styles.menuIcon}><Feather name={item.icon} size={16} color={SP.teal} /></View>
+              <Text style={styles.menuLabel}>{item.label}</Text>
+              <Feather name="chevron-right" size={16} color={SP.muted} />
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={styles.menuCard}>
+          <Pressable style={styles.menuRow} onPress={() => navigation.navigate("NowTab", { screen: "Settings" })}>
+            <View style={styles.menuIcon}><Feather name="sun" size={16} color={SP.teal} /></View>
+            <Text style={styles.menuLabel}>Appearance</Text>
+            <Text style={styles.menuMeta}>Mist</Text>
+          </Pressable>
+          <Pressable style={styles.menuRow} onPress={() => navigation.navigate("SchoolProfile")}>
+            <View style={styles.menuIcon}><Feather name="user" size={16} color={SP.teal} /></View>
+            <Text style={styles.menuLabel}>Academic profile</Text>
             <Feather name="chevron-right" size={16} color={SP.muted} />
           </Pressable>
-        ))}
-      </View>
-
-      <View style={styles.menuCard}>
-        <Pressable style={styles.menuRow} onPress={() => navigation.navigate("NowTab", { screen: "Settings" })}>
-          <View style={styles.menuIcon}><Feather name="sun" size={16} color={SP.teal} /></View>
-          <Text style={styles.menuLabel}>Appearance</Text>
-          <Text style={styles.menuMeta}>Mist</Text>
-        </Pressable>
-        <Pressable style={styles.menuRow} onPress={() => navigation.navigate("SchoolProfile")}>
-          <View style={styles.menuIcon}><Feather name="user" size={16} color={SP.teal} /></View>
-          <Text style={styles.menuLabel}>Academic profile</Text>
-          <Feather name="chevron-right" size={16} color={SP.muted} />
-        </Pressable>
-        <Pressable style={styles.menuRow} onPress={() => openCreate("lecture")}>
-          <View style={styles.menuIcon}><Feather name="book-open" size={16} color={SP.teal} /></View>
-          <Text style={styles.menuLabel}>Lecture notes</Text>
-          <Feather name="chevron-right" size={16} color={SP.muted} />
-        </Pressable>
-      </View>
-    </ScrollView>
-  );
+          <Pressable style={styles.menuRow} onPress={() => openCreate("lecture")}>
+            <View style={styles.menuIcon}><Feather name="book-open" size={16} color={SP.teal} /></View>
+            <Text style={styles.menuLabel}>Lecture notes</Text>
+            <Feather name="chevron-right" size={16} color={SP.muted} />
+          </Pressable>
+        </View>
+      </ScrollView>
+    );
+  };
 
   const body =
+
     tab === "timetable" ? renderTimetable()
       : tab === "assignments" ? renderAssignments()
         : tab === "due" ? renderDue()
@@ -673,6 +1079,82 @@ export function SchoolDashboardScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+
+      <Modal visible={sheet === "syllabus"} animationType="slide" transparent onRequestClose={() => setSheet(null)}>
+        <Pressable style={styles.sheetBackdrop} onPress={() => setSheet(null)}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.grabber} />
+            <Text style={styles.sheetTitle}>Paste syllabus</Text>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.helper}>One assignment per line. Add a date like 2026-10-15 or 10/15 if you know it.</Text>
+              <Text style={styles.fieldLabel}>Course</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
+                {courses.map((course) => (
+                  <Pressable
+                    key={course.id}
+                    style={[styles.subjectPill, syllabusClassId === course.id && styles.subjectPillSelected]}
+                    onPress={() => setSyllabusClassId(course.id)}
+                  >
+                    <View style={[styles.miniDot, { backgroundColor: course.color ?? SP.teal }]} />
+                    <Text style={[styles.subjectPillText, syllabusClassId === course.id && { color: "#FFF" }]} numberOfLines={1}>
+                      {course.code}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              <TextInput
+                style={[styles.textarea, { minHeight: 160, marginTop: 12 }]}
+                placeholder={"Essay 1 2026-10-01\nMidterm 10/15\nLab report"}
+                placeholderTextColor={SP.muted}
+                value={syllabusText}
+                onChangeText={setSyllabusText}
+                multiline
+                autoFocus
+              />
+              <Pressable
+                style={[styles.primaryBtn, { marginTop: 18 }, !syllabusText.trim() && styles.primaryDisabled]}
+                disabled={!syllabusText.trim()}
+                onPress={submitSyllabus}
+              >
+                <Text style={styles.primaryBtnText}>Add {parseSyllabusLines(syllabusText).length || ""} items</Text>
+              </Pressable>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={sheet === "schedule"} animationType="slide" transparent onRequestClose={() => setSheet(null)}>
+        <Pressable style={styles.sheetBackdrop} onPress={() => setSheet(null)}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.grabber} />
+            <Text style={styles.sheetTitle}>Class meeting time</Text>
+            <Text style={styles.helper}>{courseFor(scheduleClassId)?.code ?? "Class"} · set days and hours for the timetable</Text>
+            <Text style={styles.fieldLabel}>Days</Text>
+            <View style={styles.pillRow}>
+              {[
+                { d: 1, label: "Mon" }, { d: 2, label: "Tue" }, { d: 3, label: "Wed" },
+                { d: 4, label: "Thu" }, { d: 5, label: "Fri" }, { d: 6, label: "Sat" }, { d: 0, label: "Sun" },
+              ].map((day) => {
+                const on = scheduleDays.includes(day.d);
+                return (
+                  <Pressable key={day.d} style={[styles.pill, on && styles.pillSelected]} onPress={() => setScheduleDays((cur) => on ? cur.filter((v) => v !== day.d) : [...cur, day.d])}>
+                    <Text style={[styles.pillText, on && styles.pillTextSelected]}>{day.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.fieldLabel}>Starts</Text>
+            <TextInput style={styles.input} value={scheduleStart} onChangeText={setScheduleStart} placeholder="09:00" placeholderTextColor={SP.muted} />
+            <Text style={styles.fieldLabel}>Ends</Text>
+            <TextInput style={styles.input} value={scheduleEnd} onChangeText={setScheduleEnd} placeholder="10:00" placeholderTextColor={SP.muted} />
+            <Pressable style={[styles.primaryBtn, { marginTop: 18 }]} onPress={saveSchedule}>
+              <Text style={styles.primaryBtnText}>Save schedule</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
 
       {focusTask ? (
         <FocusModal visible={Boolean(focusTaskId)} task={focusTask} onClose={() => setFocusTaskId(null)} />
@@ -915,4 +1397,27 @@ const styles = StyleSheet.create({
     backgroundColor: SP.panel, alignItems: "center", justifyContent: "center",
   },
   swatchAutoText: { fontSize: 9, fontWeight: "700", color: SP.ink },
+  dayStrip: { gap: 8, paddingVertical: 4 },
+  dayChip: {
+    width: 48, height: 64, borderRadius: 16, backgroundColor: SP.panel, borderWidth: 1, borderColor: SP.line,
+    alignItems: "center", justifyContent: "center", gap: 2,
+  },
+  dayChipSelected: { backgroundColor: SP.teal, borderColor: SP.teal },
+  dayChipDow: { fontSize: 10, fontWeight: "700", color: SP.muted, letterSpacing: 0.4 },
+  dayChipNum: { fontSize: 16, fontWeight: "700", color: SP.ink },
+  dayChipSelectedText: { color: "#FFF" },
+  dayDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: SP.teal, marginTop: 2 },
+  dayDotSpacer: { width: 5, height: 5, marginTop: 2 },
+  weekDayBlock: { gap: 8, marginBottom: 8 },
+  weekDayLabel: { color: SP.muted, fontSize: 12, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" },
+  weekEmpty: { color: SP.muted, fontSize: 13, paddingVertical: 8, paddingHorizontal: 4 },
+  classMeta: { color: SP.muted, fontSize: 12, marginTop: 3 },
+  checkHit: { paddingRight: 4, justifyContent: "center" },
+  moodRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  moodChip: {
+    height: 40, borderRadius: 999, backgroundColor: SP.panel, borderWidth: 1, borderColor: SP.line,
+    paddingHorizontal: 14, justifyContent: "center",
+  },
+  moodChipText: { color: SP.ink, fontWeight: "600", fontSize: 13 },
+  sectionLabel: { color: SP.muted, fontSize: 11, fontWeight: "700", letterSpacing: 1.1, textTransform: "uppercase", marginTop: 8 },
 });
