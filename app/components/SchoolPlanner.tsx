@@ -102,7 +102,7 @@ const friendlyDue = (value: string | undefined, today: string) => {
 };
 
 const EVENT_TYPES = ["Club", "Appointment", "Study", "To-do", "Personal", "Deadline", "Shift", "Exam"] as const;
-const EVENT_COLORS = ["#f3b18a", "#9fd6b5", "#c7b6f0", "#d4b24a", "#f0b6c8", "#7ec8c4", "#9ec5f0"] as const;
+const EVENT_COLORS = ["#3aa8c5", "#2bb8a4", "#5b9ad8", "#6db58a", "#4f8f9e", "#7ec4b8", "#4a7ea8"] as const;
 
 const MORE_LINKS: { key: SchoolHubKey | "grades" | "exams" | "wellness" | "reminders" | "reading" | "progress" | "study"; label: string; icon: typeof Clock3 }[] = [
   { key: "study", label: "Study", icon: Clock3 },
@@ -579,7 +579,7 @@ export function SchoolDashboard({
             <button type="button" onClick={() => onOpenSettings?.()}>
               <span className="sp-menu-icon"><Sun size={16} /></span>
               Appearance
-              <span className="sp-menu-meta">Cream</span>
+              <span className="sp-menu-meta">Mist</span>
             </button>
             <button type="button" onClick={onOpenProfile}>
               <span className="sp-menu-icon"><UserRound size={16} /></span>

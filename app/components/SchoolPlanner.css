@@ -1,17 +1,18 @@
 @import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap");
 
 .school-planner {
-  --sp-cream: #fdf8f2;
-  --sp-cream-deep: #f5efe6;
+  /* Cool mist + teal — deliberately not cream/pink from the reference */
+  --sp-cream: #eef3f6;
+  --sp-cream-deep: #e2eaef;
   --sp-panel: #ffffff;
-  --sp-ink: #2a2426;
-  --sp-muted: #8a8386;
-  --sp-line: #ebe4dc;
-  --sp-pink: #d45a8b;
-  --sp-pink-soft: #f4d6e3;
-  --sp-pink-deep: #b84472;
-  --sp-alert: #f8e8ef;
-  --sp-shadow: 0 10px 28px rgba(180, 90, 120, 0.12);
+  --sp-ink: #1a2b33;
+  --sp-muted: #6b7c86;
+  --sp-line: #d5e0e7;
+  --sp-pink: #0f8a7a;
+  --sp-pink-soft: #d4efe9;
+  --sp-pink-deep: #0b6b5e;
+  --sp-alert: #dff3ee;
+  --sp-shadow: 0 10px 28px rgba(15, 90, 100, 0.12);
   --sp-serif: "Fraunces", "Iowan Old Style", Baskerville, Georgia, serif;
   --sp-sans: "DM Sans", var(--font-inter), system-ui, sans-serif;
   --sp-radius: 22px;
@@ -21,8 +22,8 @@
   margin: -18px -8px 0;
   padding: 8px 18px 28px;
   background:
-    radial-gradient(120% 80% at 100% -10%, rgba(212, 90, 139, 0.08), transparent 55%),
-    radial-gradient(90% 60% at 0% 100%, rgba(232, 196, 150, 0.14), transparent 50%),
+    radial-gradient(120% 80% at 100% -10%, rgba(15, 138, 122, 0.10), transparent 55%),
+    radial-gradient(90% 60% at 0% 100%, rgba(90, 140, 170, 0.12), transparent 50%),
     var(--sp-cream);
   color: var(--sp-ink);
   font-family: var(--sp-sans);
@@ -106,7 +107,7 @@
   border-radius: 22px;
   padding: 18px 16px 16px;
   text-align: left;
-  box-shadow: 0 8px 24px rgba(40, 24, 30, 0.04);
+  box-shadow: 0 8px 24px rgba(15, 60, 80, 0.06);
 }
 .sp-stat-card span {
   display: block;
@@ -228,7 +229,7 @@
   background: var(--sp-panel);
   border-radius: 24px;
   padding: 22px 18px;
-  box-shadow: 0 10px 30px rgba(40, 24, 30, 0.045);
+  box-shadow: 0 10px 30px rgba(15, 60, 80, 0.07);
 }
 .sp-empty-card {
   min-height: 180px;
@@ -279,7 +280,7 @@
   gap: 12px;
   text-align: left;
   color: var(--sp-ink);
-  box-shadow: 0 6px 18px rgba(40, 24, 30, 0.04);
+  box-shadow: 0 6px 18px rgba(15, 60, 80, 0.06);
   font-size: 14px;
   font-weight: 550;
 }
@@ -304,7 +305,7 @@
   gap: 12px;
   align-items: center;
   text-align: left;
-  box-shadow: 0 6px 18px rgba(40, 24, 30, 0.04);
+  box-shadow: 0 6px 18px rgba(15, 60, 80, 0.06);
 }
 .sp-task strong { display: block; font-size: 14px; font-weight: 650; }
 .sp-task small { display: block; margin-top: 3px; color: var(--sp-muted); font-size: 12px; }
@@ -337,7 +338,7 @@
   background: var(--sp-panel);
   border-radius: 24px;
   overflow: hidden;
-  box-shadow: 0 10px 30px rgba(40, 24, 30, 0.045);
+  box-shadow: 0 10px 30px rgba(15, 60, 80, 0.07);
 }
 .sp-menu-card button {
   width: 100%;
@@ -373,7 +374,7 @@
   background: color-mix(in srgb, var(--sp-panel) 92%, transparent);
   backdrop-filter: blur(14px);
   border: 1px solid color-mix(in srgb, var(--sp-line) 80%, transparent);
-  box-shadow: 0 16px 40px rgba(40, 24, 30, 0.12);
+  box-shadow: 0 16px 40px rgba(15, 60, 80, 0.14);
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   align-items: end;
@@ -441,7 +442,7 @@
   to { transform: translateY(0); opacity: 1; }
 }
 .sp-grabber {
-  width: 42px; height: 4px; border-radius: 999px; background: #d7cfc6; margin: 4px auto 14px;
+  width: 42px; height: 4px; border-radius: 999px; background: #b7c7d0; margin: 4px auto 14px;
 }
 .sp-sheet-title {
   margin: 0 0 14px;
@@ -512,7 +513,7 @@
   font-weight: 650;
   text-align: left;
 }
-.sp-subject-pill i { width: 8px; height: 8px; border-radius: 50%; background: #f0a35a; display: block; }
+.sp-subject-pill i { width: 8px; height: 8px; border-radius: 50%; background: #3aa8c5; display: block; }
 .sp-subject-pill.idle {
   background: var(--sp-panel);
   color: var(--sp-ink);
@@ -536,7 +537,7 @@
 }
 .sp-type-chip.selected {
   border-color: transparent;
-  background: #c9a227;
+  background: #1a7f72;
   color: #fff;
 }
 .sp-color-row { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -564,7 +565,7 @@
 .sp-class-item {
   border: 0; background: var(--sp-panel); border-radius: 18px; padding: 14px 16px;
   display: flex; align-items: center; gap: 12px; text-align: left; width: 100%;
-  box-shadow: 0 6px 18px rgba(40, 24, 30, 0.04);
+  box-shadow: 0 6px 18px rgba(15, 60, 80, 0.06);
 }
 .sp-class-item i { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; }
 .sp-class-item strong { display: block; font-size: 14px; }
@@ -575,11 +576,14 @@
 }
 
 .dark .school-planner {
-  --sp-cream: #1c1816;
-  --sp-cream-deep: #2a2421;
-  --sp-panel: #26201d;
-  --sp-ink: #f6efe8;
-  --sp-muted: #a89b95;
-  --sp-line: #3a322e;
-  --sp-alert: #3a2430;
+  --sp-cream: #121a1e;
+  --sp-cream-deep: #1a252b;
+  --sp-panel: #1c272d;
+  --sp-ink: #e8f0f3;
+  --sp-muted: #8aa0ab;
+  --sp-line: #2c3a42;
+  --sp-pink: #2bb8a4;
+  --sp-pink-soft: #1d3d38;
+  --sp-pink-deep: #1fd0b8;
+  --sp-alert: #1a3430;
 }
