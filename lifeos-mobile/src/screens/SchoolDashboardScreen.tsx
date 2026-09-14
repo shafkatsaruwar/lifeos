@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { FocusModal } from "../components/FocusModal";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
-import { ActionButton, Eyebrow, IconButton, Page, SegmentedControl, Subtitle, Title } from "../components/UI";
+import { Eyebrow, IconButton, Page, SegmentedControl, Subtitle, Title } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { SPACE_COLORS, type Theme } from "../lib/theme";
 import { formatDueDate, taskIsOpen, toDateKey, uid } from "../lib/helpers";
@@ -28,14 +28,7 @@ type WhenOpt = "today" | "tomorrow" | "custom";
 const EVENT_TYPES = ["Club", "Appointment", "Study", "To-do", "Personal", "Deadline", "Shift", "Exam"] as const;
 const EVENT_COLORS = SPACE_COLORS.slice(0, 7);
 
-const greetingFor = (date = new Date()) => {
-  const hour = date.getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
-};
 
-const firstName = (name?: string) => (name?.trim().split(/\s+/)[0] || "there");
 
 const startOfWeek = (date: Date) => {
   const d = new Date(date);
@@ -133,7 +126,6 @@ export function SchoolDashboardScreen() {
     .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
 
   const courseFor = (classId?: string) => courses.find((c) => c.id === classId);
-  const displayName = workspace.settings.preferredName || "there";
   const focusTask = workspace.tasks.find((task) => task.id === focusTaskId);
 
   const openCreate = (kind: string) => navigation.navigate("AcademicCreate", { kind });
@@ -402,17 +394,6 @@ export function SchoolDashboardScreen() {
 
   const renderHome = () => (
     <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
-      <View style={styles.homeHeader}>
-        <View style={styles.grow}>
-          <Text style={styles.homeLede}>{greetingFor(now)}, {firstName(displayName)}.</Text>
-          <Text style={styles.homeMeta}>
-            {now.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
-            {dueThisWeek.length ? ` · ${dueThisWeek.length} due this week` : " · nothing due this week"}
-          </Text>
-        </View>
-        <ActionButton label="Profile" icon="user" quiet onPress={() => navigation.navigate("SchoolProfile")} />
-      </View>
-
       {courses.length === 0 ? (
         <Pressable style={styles.alert} onPress={() => setTab("timetable")}>
           <View style={styles.alertDot} />
@@ -1298,10 +1279,7 @@ function createStyles(theme: Theme) {
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 4 },
   segmentWrap: { paddingHorizontal: 18, paddingBottom: 8 },
   scroll: { paddingHorizontal: 18, paddingTop: 8, gap: 14 },
-  homeLede: { fontSize: 18, fontWeight: "700", color: theme.text, letterSpacing: -0.3 },
-  homeMeta: { color: theme.muted, fontSize: 13, marginTop: 4 },
   grow: { flex: 1, minWidth: 0 },
-  homeHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingTop: 4 },
   dateKicker: { color: theme.muted, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, marginBottom: 6 },
   greeting: { fontSize: 30, fontWeight: "700", color: theme.text, letterSpacing: -1.1, lineHeight: 34 },
   homeActions: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 4 },
