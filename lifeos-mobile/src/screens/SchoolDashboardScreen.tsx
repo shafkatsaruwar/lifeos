@@ -134,7 +134,6 @@ export function SchoolDashboardScreen() {
 
   const courseFor = (classId?: string) => courses.find((c) => c.id === classId);
   const displayName = workspace.settings.preferredName || "there";
-  const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "U";
   const focusTask = workspace.tasks.find((task) => task.id === focusTaskId);
 
   const openCreate = (kind: string) => navigation.navigate("AcademicCreate", { kind });
@@ -953,18 +952,6 @@ export function SchoolDashboardScreen() {
     if (panel) return renderPanel();
     return (
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
-        <View style={styles.moreProfile}>
-          <View style={[styles.avatar, { width: 48, height: 48 }]}>
-            <Text style={[styles.avatarText, { fontSize: 16 }]}>{initials.slice(0, 1)}</Text>
-          </View>
-          <View style={styles.grow}>
-            <Text style={styles.moreName}>{displayName}</Text>
-            <Text style={styles.moreEmail}>
-              {workspace.school.profile.major || "Personal workspace"} · synced ♥
-            </Text>
-          </View>
-        </View>
-
         <View style={styles.menuCard}>
           {moreLinks.map((item) => (
             <Pressable key={item.key} style={styles.menuRow} onPress={item.onPress}>
@@ -1327,11 +1314,6 @@ function createStyles(theme: Theme) {
     width: 36, height: 36, borderRadius: 18, backgroundColor: theme.surface,
     alignItems: "center", justifyContent: "center",
   },
-  avatar: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: theme.accent,
-    alignItems: "center", justifyContent: "center",
-  },
-  avatarText: { color: "#FFF", fontSize: 13, fontWeight: "700" },
   alert: {
     flexDirection: "row", alignItems: "flex-start", gap: 10,
     borderWidth: 1, borderColor: theme.border, backgroundColor: theme.soft,
@@ -1437,9 +1419,6 @@ function createStyles(theme: Theme) {
   taskMeta: { fontSize: 12, color: theme.muted, marginTop: 3 },
   backLink: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 8 },
   backLinkText: { color: theme.muted, fontSize: 13, fontWeight: "600" },
-  moreProfile: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 },
-  moreName: { fontSize: 15, fontWeight: "700", color: theme.text },
-  moreEmail: { fontSize: 12, color: theme.muted, marginTop: 3 },
   menuCard: {
     backgroundColor: theme.surface, borderRadius: 24, overflow: "hidden",
     shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 1,
