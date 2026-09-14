@@ -2,9 +2,9 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import {
-  BookOpen, CalendarDays, CheckSquare, ChevronLeft, ChevronRight, Clock3, Gem,
-  GraduationCap, Heart, LayoutGrid, MoreHorizontal, PieChart, Plus, Snowflake,
-  Sparkles, Sun, Target, Upload, UserRound, X,
+  BookOpen, CalendarDays, CheckSquare, ChevronLeft, ChevronRight, Clock3,
+  Database, FileText, FolderKanban, Gem, GraduationCap, Heart, LayoutGrid, ListTodo,
+  MoreHorizontal, PieChart, Plus, Snowflake, Sparkles, Sun, Target, Upload, UserRound, X, Zap,
 } from "lucide-react";
 import { extractTextFromFile, parseSyllabusText, type SyllabusItem } from "../../lib/syllabusImport";
 import "./SchoolPlanner.css";
@@ -137,6 +137,41 @@ const MORE_LINKS: { key: SchoolHubKey | "grades" | "exams" | "wellness" | "remin
   { key: "topics", label: "Subjects", icon: Sparkles },
   { key: "progress", label: "Weekly progress", icon: CheckSquare },
 ];
+
+function Section({ icon: Icon, title, action, onAction, children }: {
+  icon: typeof Database;
+  title: string;
+  action?: string;
+  onAction?: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className="os-module">
+      <header>
+        <div><Icon size={17} /><h2>{title}</h2></div>
+        {action && <button type="button" onClick={onAction}>{action}<ChevronRight size={14} /></button>}
+      </header>
+      <div className="os-module-body">{children}</div>
+    </section>
+  );
+}
+
+function Empty({ children }: { children: ReactNode }) {
+  return <div className="os-empty"><Database size={19} /><p>{children}</p></div>;
+}
+
+function QuickAction({ icon: Icon, label, onClick, testId }: {
+  icon: typeof Database;
+  label: string;
+  onClick: () => void;
+  testId?: string;
+}) {
+  return (
+    <button type="button" className="os-quick-action" onClick={onClick} data-testid={testId}>
+      <Icon size={17} /><span>{label}</span>
+    </button>
+  );
+}
 
 function Sheet({ title, onClose, children, testId }: { title: string; onClose: () => void; children: ReactNode; testId?: string }) {
   return (
@@ -537,11 +572,19 @@ export function SchoolDashboard({
   const termCourses = courses.filter((course) => !course.term || course.term === term || terms.length === 1);
 
   const schoolTasks = tasks.filter((task) => task.classId && openTask(task));
+  const allSchoolTasks = tasks.filter((task) => task.classId);
   const dueThisWeek = schoolTasks.filter((task) => task.due && task.due >= today && task.due <= end);
+  const overdue = schoolTasks.filter((task) => task.due && task.due < today);
   const assignments = schoolTasks
     .filter((task) => task.academicType && !["Reading", "Discussion"].includes(task.academicType))
     .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
+  const activeAssignments = assignments.length ? assignments : schoolTasks.sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
+  const completedSchool = allSchoolTasks.filter((task) => task.done).length;
+  const blockedSchool = schoolTasks.filter((task) => task.status === "Blocked").length;
+  const inProgressSchool = schoolTasks.filter((task) => task.status === "In progress").length;
+  const openSchool = schoolTasks.filter((task) => !task.status || task.status === "Not started").length;
   const courseFor = (id?: string) => courses.find((course) => course.id === id);
+  const focusTask = schoolTasks.find((task) => task.priority === "High" || task.priority === "high") ?? schoolTasks[0];
 
   const weekDays = useMemo(() => {
     const start = startOfWeek(weekAnchor);
@@ -573,7 +616,7 @@ export function SchoolDashboard({
     setSheet("syllabus");
   };
 
-  const segmentTab: Exclude<SchoolView, "due"> = schoolView === "due" ? "home" : schoolView;
+  const navView: Exclude<SchoolView, "due"> = schoolView === "due" ? "home" : schoolView;
 
   const body = (() => {
     if (schoolView === "timetable") {
@@ -804,176 +847,254 @@ export function SchoolDashboard({
     }
 
     return (
-      <div className="school-tab-panel" data-testid="school-home">
-        {courses.length === 0 && (
-          <button type="button" className="school-more-item" onClick={() => setSchoolView("timetable")} data-testid="school-empty-timetable-alert" style={{ marginBottom: 0 }}>
-            <span className="school-dot" style={{ background: "var(--sp-accent)", marginTop: 4 }} />
-            <span className="school-more-text">
-              <strong>No classes on your timetable yet.</strong>
-              <span>Add one from the Timetable tab.</span>
-            </span>
-          </button>
-        )}
+      <div className="work-layout" data-testid="school-home">
+        <div className="work-main">
+          <Section icon={LayoutGrid} title="Overview">
+            <div className="work-stat-grid">
+              {[
+                { label: "Due this week", count: dueThisWeek.length, onClick: () => setSchoolView("due"), testId: "school-due-stat" },
+                { label: "Classes", count: termCourses.length, onClick: () => setSchoolView("timetable"), testId: "school-stat-classes" },
+                { label: "Open work", count: activeAssignments.length, onClick: () => setSchoolView("assignments") },
+                { label: "Blocked", count: blockedSchool + overdue.length, onClick: () => setSchoolView("assignments") },
+              ].map((stat) => (
+                <button key={stat.label} type="button" className="work-stat-card" onClick={stat.onClick} data-testid={stat.testId}>
+                  <strong>{stat.count}</strong>
+                  <span>{stat.label}</span>
+                </button>
+              ))}
+            </div>
+          </Section>
 
-        <div className="school-metric-row">
-          <button type="button" className="school-metric" onClick={() => setSchoolView("due")} data-testid="school-due-stat">
-            <div className="school-metric-value">{dueThisWeek.length}</div>
-            <div className="school-metric-label">Due this week</div>
-          </button>
-          <button type="button" className="school-metric" onClick={() => setSchoolView("timetable")} data-testid="school-stat-classes">
-            <div className="school-metric-value">{termCourses.length}</div>
-            <div className="school-metric-label">Classes</div>
-          </button>
-          <button type="button" className="school-metric" onClick={() => setSchoolView("assignments")}>
-            <div className="school-metric-value">{assignments.length}</div>
-            <div className="school-metric-label">Open work</div>
-          </button>
-        </div>
-
-        <div className="os-quick-row school-dashboard" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
-          <button type="button" className="os-quick-action" onClick={() => setSheet("capture")} data-testid="school-open-capture">
-            <Plus size={16} /> Quick capture
-          </button>
-          <button type="button" className="os-quick-action" onClick={openSyllabus} data-testid="school-home-import-syllabus">
-            <Upload size={16} /> Import syllabus
-          </button>
-          <button type="button" className="os-quick-action" onClick={onNewAcademic}>
-            <BookOpen size={16} /> Add assignment
-          </button>
-          <button type="button" className="os-quick-action" onClick={() => setSheet("calendar")}>
-            <CalendarDays size={16} /> Add to calendar
-          </button>
-        </div>
-
-        <div className="school-home-layout">
-          <div className="school-home-main">
-            <section className="school-module">
-              <div className="school-module-head">
-                <h2>Coming up</h2>
-                <button type="button" className="school-link-btn" onClick={() => setSchoolView("assignments")}>Assignments</button>
-              </div>
-              <div className={`school-module-body ${dueThisWeek.length ? "" : "is-padded"}`}>
-                {dueThisWeek.length ? (
-                  dueThisWeek.slice(0, 8).map((task) => (
-                    <button key={task.id} type="button" className="school-row" style={{ padding: "12px 15px" }} onClick={() => onOpenTask(task.id)}>
-                      <span className="school-dot" style={{ background: courseFor(task.classId)?.color ?? "var(--sp-accent)" }} />
-                      <span className="school-row-body">
-                        <p className="school-row-title">{task.title}</p>
-                        <p className="school-row-meta">{courseFor(task.classId)?.code ?? "School"} · {friendlyDue(task.due, today)}</p>
-                      </span>
+          <div className="os-two-up">
+            <Section
+              icon={Zap}
+              title="Active assignments"
+              action={activeAssignments.length ? "View all" : undefined}
+              onAction={() => setSchoolView("assignments")}
+            >
+              {activeAssignments.length ? activeAssignments.slice(0, 5).map((task) => (
+                <div key={task.id} className="work-task-row">
+                  <button type="button" className="work-task-check" aria-label={`Complete ${task.title}`} onClick={() => onComplete(task.id)}>
+                    <span />
+                  </button>
+                  <div className="work-task-copy">
+                    <button type="button" onClick={() => onOpenTask(task.id)}>
+                      <strong>{task.title}</strong>
+                      <small>{courseFor(task.classId)?.code ?? "School"} · {friendlyDue(task.due, today)}</small>
                     </button>
-                  ))
-                ) : (
-                  <div className="school-empty-inline" style={{ border: "none", background: "transparent", padding: 0 }}>
-                    <p>Nothing due this week. Import a syllabus or capture your next deadline.</p>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button type="button" className="school-btn school-btn-primary school-btn-sm" onClick={openSyllabus}>Import syllabus</button>
-                      <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={onNewAcademic}>Add assignment</button>
-                    </div>
                   </div>
-                )}
-              </div>
-            </section>
+                  <span className="work-priority-tag" style={{ background: `${courseFor(task.classId)?.color ?? "var(--accent)"}18`, color: courseFor(task.classId)?.color ?? "var(--accent)" }}>
+                    {task.academicType ?? task.priority}
+                  </span>
+                  <span className="work-due">{friendlyDue(task.due, today)}</span>
+                </div>
+              )) : <Empty>No active assignments yet. Import a syllabus or add one to get moving.</Empty>}
+            </Section>
+
+            <Section
+              icon={FolderKanban}
+              title="Classes"
+              action={termCourses.length ? "View all" : undefined}
+              onAction={() => setSchoolView("timetable")}
+            >
+              {termCourses.length ? termCourses.slice(0, 3).map((course) => {
+                const courseTasks = schoolTasks.filter((task) => task.classId === course.id);
+                const done = allSchoolTasks.filter((task) => task.classId === course.id && task.done).length;
+                const total = courseTasks.length + done;
+                return (
+                  <article key={course.id} className="work-project-card">
+                    <button type="button" className="work-project-card-main" onClick={() => onOpenClass(course.id)}>
+                      <div className="work-project-head">
+                        <span className="work-project-icon" style={{ color: course.color, background: `${course.color}18` }}>
+                          <GraduationCap size={14} />
+                        </span>
+                        <div>
+                          <strong>{course.code || course.name}</strong>
+                          <p>{course.name}{course.instructor ? ` · ${course.instructor}` : ""}</p>
+                        </div>
+                      </div>
+                      {total > 0 && (
+                        <>
+                          <div className="work-project-progress"><i style={{ width: `${(done / total) * 100}%`, background: course.color }} /></div>
+                          <small>{done}/{total} tasks</small>
+                        </>
+                      )}
+                    </button>
+                  </article>
+                );
+              }) : <Empty>Add your first class to organize assignments and meetings.</Empty>}
+            </Section>
           </div>
 
-          <aside className="school-home-side">
-            <section className="school-module">
-              <div className="school-module-head">
-                <h2>Today</h2>
-                <button type="button" className="school-link-btn" onClick={() => setSchoolView("timetable")}>Timetable</button>
-              </div>
-              <div className={`school-module-body ${todayClasses.length ? "" : "is-padded"}`}>
-                {todayClasses.length ? (
-                  todayClasses.map((course) => (
-                    <button key={course.id} type="button" className="school-row" style={{ padding: "12px 15px" }} onClick={() => onOpenClass(course.id)} data-testid={`school-today-class-${course.id}`}>
-                      <span className="school-dot" style={{ background: course.color }} />
-                      <span className="school-row-body">
-                        <p className="school-row-title">
-                          {course.code}
-                          {course.meetingStart ? ` · ${course.meetingStart}${course.meetingEnd ? `–${course.meetingEnd}` : ""}` : ""}
-                        </p>
-                        <p className="school-row-meta">{course.name}{course.location ? ` · ${course.location}` : ""}</p>
-                      </span>
-                    </button>
-                  ))
-                ) : (
-                  <div className="school-empty-inline" style={{ border: "none", background: "transparent", padding: 0 }}>
-                    <p>
-                      {termCourses.length
-                        ? "No class meetings today — good day to catch up."
-                        : "Add a class from Timetable to see today’s schedule here."}
-                    </p>
-                    <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={() => (termCourses[0] ? onOpenClass(termCourses[0].id) : onNewCourse())}>
-                      {termCourses[0] ? "Open a class" : "Add a class"}
-                    </button>
+          <div className="os-two-up">
+            <Section
+              icon={FileText}
+              title="Due this week"
+              action={dueThisWeek.length ? "View all" : undefined}
+              onAction={() => setSchoolView("due")}
+            >
+              {dueThisWeek.length ? dueThisWeek.slice(0, 4).map((task) => (
+                <button key={task.id} type="button" className="work-deliverable-row" onClick={() => onOpenTask(task.id)}>
+                  <span className="work-deliverable-icon"><FileText size={15} /></span>
+                  <div>
+                    <strong>{task.title}</strong>
+                    <small>{courseFor(task.classId)?.code ?? "School"} · {friendlyDue(task.due, today)}</small>
                   </div>
-                )}
+                </button>
+              )) : <Empty>Nothing due this week. Import a syllabus or capture your next deadline.</Empty>}
+            </Section>
+
+            <Section icon={LayoutGrid} title="Assignment board" action="Open assignments" onAction={() => setSchoolView("assignments")}>
+              <div className="work-kanban-grid">
+                {[
+                  { label: "Open", count: openSchool },
+                  { label: "In progress", count: inProgressSchool },
+                  { label: "Blocked", count: blockedSchool },
+                ].map((item) => (
+                  <button key={item.label} type="button" className="work-kanban-card" onClick={() => setSchoolView("assignments")}>
+                    <strong>{item.count}</strong>
+                    <span>{item.label}</span>
+                  </button>
+                ))}
               </div>
-            </section>
-          </aside>
+            </Section>
+          </div>
         </div>
+
+        <aside className="work-sidebar">
+          {focusTask ? (
+            <div className="work-focus-card">
+              <div className="work-focus-head">
+                <span>Focus today</span>
+                <button type="button" onClick={() => onOpenTask(focusTask.id)}>Edit</button>
+              </div>
+              <strong>{focusTask.title}</strong>
+              <small>{courseFor(focusTask.classId)?.code ?? "School"}</small>
+              <p>{completedSchool} of {allSchoolTasks.length || completedSchool} school tasks completed</p>
+              <button type="button" className="work-focus-start" onClick={() => onFocus(focusTask.id)}>Start focus</button>
+            </div>
+          ) : (
+            <div className="work-focus-card">
+              <div className="work-focus-head"><span>Focus today</span></div>
+              <strong>Nothing to focus on yet</strong>
+              <small>Capture an assignment or import a syllabus</small>
+              <p>0 of 0 school tasks completed</p>
+              <button type="button" className="work-focus-start" onClick={() => setSheet("capture")}>Quick capture</button>
+            </div>
+          )}
+
+          <Section icon={ListTodo} title="All tasks" action="View all" onAction={() => setSchoolView("assignments")}>
+            <div className="work-priority-list">
+              {[
+                { label: "High priority", count: schoolTasks.filter((t) => /high/i.test(t.priority)).length, color: "#e25555" },
+                { label: "Medium priority", count: schoolTasks.filter((t) => /medium/i.test(t.priority)).length, color: "#e89b3a" },
+                { label: "Low priority", count: schoolTasks.filter((t) => /low/i.test(t.priority)).length, color: "#6b8fd4" },
+                { label: "Completed", count: completedSchool, color: "#47a47b" },
+                { label: "Blocked / overdue", count: blockedSchool + overdue.length, color: "#cf625a" },
+              ].map((item) => (
+                <button key={item.label} type="button" className="work-priority-row" onClick={() => setSchoolView("assignments")}>
+                  <span><i style={{ background: item.color }} />{item.label}</span>
+                  <strong>{item.count}</strong>
+                </button>
+              ))}
+            </div>
+          </Section>
+
+          <Section icon={Clock3} title="Calendar & classes" action="Timetable" onAction={() => setSchoolView("timetable")}>
+            {todayClasses.length ? todayClasses.map((course) => (
+              <button key={course.id} type="button" className="work-meeting-row" onClick={() => onOpenClass(course.id)} data-testid={`school-today-class-${course.id}`}>
+                <strong>{course.code}{course.meetingStart ? ` · ${course.meetingStart}` : ""}</strong>
+                <small>{course.name}{course.location ? ` · ${course.location}` : ""}</small>
+              </button>
+            )) : (
+              <Empty>
+                {termCourses.length
+                  ? "No class meetings today — good day to catch up."
+                  : "Add a class to see today’s schedule here."}
+              </Empty>
+            )}
+          </Section>
+
+          <Section icon={GraduationCap} title="Academic" action="More" onAction={() => setSchoolView("more")}>
+            {MORE_LINKS.slice(0, 4).map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  className="work-activity-row"
+                  onClick={() => {
+                    if (item.key === "topics" || item.key === "goals" || item.key === "professors") onOpenCollection(item.key);
+                    else if (item.key === "study") {
+                      if (schoolTasks[0]) onFocus(schoolTasks[0].id);
+                      else setSheet("capture");
+                    }
+                    else if (item.key === "exams") setSchoolView("assignments");
+                    else setSchoolView("more");
+                  }}
+                >
+                  <strong><Icon size={12} style={{ marginRight: 6, verticalAlign: "-1px" }} />{item.label}</strong>
+                  <small>Open</small>
+                </button>
+              );
+            })}
+          </Section>
+        </aside>
       </div>
     );
   })();
 
   return (
-    <div className="os-dashboard school-dashboard school-planner" data-testid="school-planner">
-      <div className="school-hub-chrome" data-testid="school-top-nav">
-        <div className="school-hub-hero">
-          <div style={{ minWidth: 0 }}>
-            <p className="school-hub-eyebrow">School OS</p>
-            <h1 className="school-hub-title">School</h1>
-            <p className="school-hub-lede">
-              Classes, assignments, and your week — same shell as the rest of LifeOS.
-            </p>
-          </div>
-          <div className="school-hub-actions">
-            <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={() => setSheet("calendar")}>
-              <CalendarDays size={15} />
-              <span className="school-btn-label">Calendar</span>
-            </button>
-            <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={openSyllabus}>
-              <Upload size={15} />
-              <span className="school-btn-label">Import syllabus</span>
-            </button>
-            <button type="button" className="school-btn school-btn-primary school-btn-sm" onClick={() => setSheet("capture")}>
-              <Plus size={15} />
-              <span className="school-btn-label">Capture</span>
-            </button>
-          </div>
+    <div className="os-dashboard work-dashboard school-dashboard school-planner" data-testid="school-planner">
+      <div className="os-hero" data-testid="school-top-nav">
+        <div>
+          <p className="eyebrow">Your school, in focus</p>
+          <h1>SchoolOS</h1>
+          <p>
+            {termCourses.length} class{termCourses.length === 1 ? "" : "es"} · {activeAssignments.length} open assignment{activeAssignments.length === 1 ? "" : "s"} · {dueThisWeek.length} due soon
+          </p>
         </div>
+        <button
+          type="button"
+          className="os-profile-button"
+          onClick={() => focusTask && onFocus(focusTask.id)}
+          disabled={!focusTask}
+        >
+          <Zap size={18} />
+          <span>Focus on school</span>
+        </button>
+      </div>
 
-        <div className="school-hub-tabs" role="tablist" aria-label="SchoolOS">
+      <div className="os-quick-row work-quick-row">
+        <QuickAction icon={FolderKanban} label="New class" onClick={onNewCourse} />
+        <QuickAction icon={FileText} label="New assignment" onClick={onNewAcademic} />
+        <QuickAction icon={ListTodo} label="Quick capture" onClick={() => setSheet("capture")} testId="school-open-capture" />
+        <QuickAction icon={Upload} label="Import syllabus" onClick={openSyllabus} testId="school-home-import-syllabus" />
+        <QuickAction icon={CalendarDays} label="Add to calendar" onClick={() => setSheet("calendar")} />
+      </div>
+
+      {schoolView !== "home" && (
+        <div className="work-view-nav" role="tablist" aria-label="SchoolOS">
           {SEGMENTS.map((item) => (
             <button
               key={item.key}
               type="button"
               role="tab"
-              aria-selected={segmentTab === item.key}
-              className={`school-hub-tab ${segmentTab === item.key ? "is-active" : ""}`}
+              aria-selected={navView === item.key}
+              className={navView === item.key ? "selected" : ""}
               onClick={() => setSchoolView(item.key)}
               data-testid={`school-nav-${item.key}`}
             >
               {item.label}
             </button>
           ))}
-        </div>
-
-        <div className="school-hub-segments" role="tablist" aria-label="SchoolOS mobile">
-          {SEGMENTS.map((item) => (
-            <button
-              key={`m-${item.key}`}
-              type="button"
-              role="tab"
-              aria-selected={segmentTab === item.key}
-              className={`school-hub-seg ${segmentTab === item.key ? "is-active" : ""}`}
-              onClick={() => setSchoolView(item.key)}
-            >
-              {item.label}
+          {schoolView === "due" && (
+            <button type="button" role="tab" aria-selected className="selected" onClick={() => setSchoolView("due")}>
+              Due
             </button>
-          ))}
+          )}
         </div>
-      </div>
+      )}
 
       <div className="school-planner-scroll">{body}</div>
 
