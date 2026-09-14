@@ -41,7 +41,7 @@ import {
   formatEventRange,
   toDateKey,
 } from "../lib/helpers";
-import { fetchIcsFromUrl, parseIcsEvents } from "../lib/api";
+import { fetchIcsFromUrl, hashIcalUrl, parseIcsEvents, removeIcalSubscriptionEvents, replaceIcalSubscriptionEvents } from "../lib/api";
 import {
   expandEventsInRange,
   parseOccurrenceId,
@@ -50,7 +50,7 @@ import {
 } from "../lib/recurrence";
 import { SPACE_COLORS } from "../lib/theme";
 import { mergeCalendarWithWorkMeetings } from "../lib/workos";
-import type { CalendarDefaultView, CalendarEvent, EventRepeatFrequency, UserCalendar } from "../types";
+import type { CalendarDefaultView, CalendarEvent, EventRepeatFrequency, IcalSubscription, UserCalendar } from "../types";
 
 type Mode = CalendarDefaultView;
 
@@ -102,7 +102,7 @@ function formatTimeLabel(time: string) {
 
 export function CalendarScreen() {
   const tabBarPad = useFloatingTabBarContentPadding(28);
-  const { theme, workspace, updateCalendar, updateCalendars, updateTasks } = useLifeOS();
+  const { theme, workspace, updateCalendar, updateCalendars, updateTasks, updateSettings } = useLifeOS();
   const navigation = useNavigation<any>();
   const colorScheme = useColorScheme();
   const pickerTheme = colorScheme === "dark" ? "dark" : "light";
@@ -112,8 +112,13 @@ export function CalendarScreen() {
   const [selected, setSelected] = useState(() => toDateKey(new Date()));
   const [importOpen, setImportOpen] = useState(false);
   const [icalUrl, setIcalUrl] = useState("");
+  const [icalName, setIcalName] = useState("");
+  const [icalColor, setIcalColor] = useState(SPACE_COLORS[3] || "#47a47b");
   const [importing, setImporting] = useState(false);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
   const [calendarsOpen, setCalendarsOpen] = useState(false);
+
+  const subscriptions = workspace.settings.icalSubscriptions ?? [];
 
   const [composerOpen, setComposerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -493,27 +498,85 @@ export function CalendarScreen() {
     );
   };
 
-  const doImport = async () => {
+  const doSubscribe = async () => {
     if (!icalUrl.trim()) return;
     setImporting(true);
     try {
-      const ics = await fetchIcsFromUrl(icalUrl.trim());
-      const parsed = parseIcsEvents(ics);
-      const merged = [
-        ...workspace.calendar.filter((e) => e.source !== "iCal" || !parsed.some((p) => p.id === e.id)),
-        ...parsed,
-      ];
-      const byId = new Map<string, CalendarEvent>();
-      merged.forEach((e) => byId.set(e.id, e));
-      await updateCalendar(Array.from(byId.values()));
-      setImportOpen(false);
+      const normalized = icalUrl.trim();
+      const id = hashIcalUrl(normalized);
+      if (subscriptions.some((feed) => feed.id === id || feed.url === normalized)) {
+        Alert.alert("Already subscribed", "That calendar feed is already in your list.");
+        return;
+      }
+      const ics = await fetchIcsFromUrl(normalized);
+      const feed: IcalSubscription = {
+        id,
+        url: normalized,
+        name: icalName.trim() || "Calendar feed",
+        color: icalColor,
+        lastSyncedAt: new Date().toISOString(),
+      };
+      const parsed = parseIcsEvents(ics, { subscriptionId: feed.id, color: feed.color });
+      await updateCalendar(replaceIcalSubscriptionEvents(workspace.calendar, feed.id, parsed));
+      await updateSettings({
+        ...workspace.settings,
+        icalSubscriptions: [...subscriptions, feed],
+      });
       setIcalUrl("");
-      Alert.alert("Calendar imported", `Added ${parsed.length} event${parsed.length === 1 ? "" : "s"} from the feed.`);
+      setIcalName("");
+      Alert.alert("Subscribed", `Added ${parsed.length} event${parsed.length === 1 ? "" : "s"} from ${feed.name}.`);
     } catch (err: any) {
-      Alert.alert("Import failed", err?.message || "Could not read that calendar link.");
+      Alert.alert("Subscribe failed", err?.message || "Could not read that calendar link.");
     } finally {
       setImporting(false);
     }
+  };
+
+  const syncFeed = async (feed: IcalSubscription) => {
+    setSyncingId(feed.id);
+    try {
+      const ics = await fetchIcsFromUrl(feed.url);
+      const parsed = parseIcsEvents(ics, { subscriptionId: feed.id, color: feed.color });
+      await updateCalendar(replaceIcalSubscriptionEvents(workspace.calendar, feed.id, parsed));
+      await updateSettings({
+        ...workspace.settings,
+        icalSubscriptions: subscriptions.map((item) =>
+          item.id === feed.id
+            ? { ...item, lastSyncedAt: new Date().toISOString(), lastError: undefined }
+            : item,
+        ),
+      });
+    } catch (err: any) {
+      const message = err?.message || "Could not refresh this feed.";
+      await updateSettings({
+        ...workspace.settings,
+        icalSubscriptions: subscriptions.map((item) =>
+          item.id === feed.id ? { ...item, lastError: message } : item,
+        ),
+      });
+      Alert.alert("Sync failed", message);
+    } finally {
+      setSyncingId(null);
+    }
+  };
+
+  const removeFeed = (feed: IcalSubscription) => {
+    Alert.alert("Unsubscribe?", `Remove ${feed.name} and its imported events?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            await updateCalendar(removeIcalSubscriptionEvents(workspace.calendar, feed.id));
+            await updateSettings({
+              ...workspace.settings,
+              icalSubscriptions: subscriptions.filter((item) => item.id !== feed.id),
+            });
+          })();
+        },
+      },
+    ]);
   };
 
   const goConnectWeb = () => {
@@ -532,7 +595,7 @@ export function CalendarScreen() {
         <View style={styles.headerActions}>
           <IconButton icon="layers" label="Calendars" onPress={() => setCalendarsOpen(true)} />
           <IconButton icon="plus" label="Add event" onPress={() => openComposer(undefined, selected)} />
-          <IconButton icon="link" label="Import iCal" onPress={() => setImportOpen(true)} />
+          <IconButton icon="link" label="Subscribe calendars" onPress={() => setImportOpen(true)} />
         </View>
       </View>
 
@@ -1111,26 +1174,97 @@ export function CalendarScreen() {
 
       <Modal visible={importOpen} transparent animationType="fade" onRequestClose={() => setImportOpen(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={[styles.importCard, { backgroundColor: theme.surface }]}>
-            <Text style={[styles.importTitle, { color: theme.text }]}>Import iCal feed</Text>
-            <Text style={[styles.importSub, { color: theme.muted }]}>Paste a public .ics subscription URL (Google Calendar, Outlook, Apple Calendar public link, etc).</Text>
-            <TextInput
-              value={icalUrl}
-              onChangeText={setIcalUrl}
-              placeholder="https://calendar.example.com/feed.ics"
-              placeholderTextColor={theme.muted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={[styles.importInput, { color: theme.text, borderColor: theme.border }]}
-            />
-            <View style={styles.row}>
-              <ActionButton label="Cancel" quiet onPress={() => setImportOpen(false)} />
-              <ActionButton label={importing ? "Importing…" : "Import"} onPress={doImport} disabled={importing || !icalUrl.trim()} />
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 20 }}>
+            <View style={[styles.importCard, { backgroundColor: theme.surface }]}>
+              <Text style={[styles.importTitle, { color: theme.text }]}>Subscribe to calendars</Text>
+              <Text style={[styles.importSub, { color: theme.muted }]}>
+                Add multiple public webcal / .ics feeds. Each syncs on its own and can be removed later.
+              </Text>
+
+              {subscriptions.length ? (
+                <View style={{ gap: 10, marginBottom: 14 }}>
+                  {subscriptions.map((feed) => (
+                    <View
+                      key={feed.id}
+                      style={{
+                        borderWidth: 1,
+                        borderColor: theme.border,
+                        borderRadius: 12,
+                        padding: 12,
+                        gap: 6,
+                      }}
+                    >
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: feed.color }} />
+                        <Text style={{ color: theme.text, fontWeight: "700", flex: 1 }}>{feed.name}</Text>
+                      </View>
+                      <Text style={{ color: theme.muted, fontSize: 11 }} numberOfLines={2}>{feed.url}</Text>
+                      <Text style={{ color: theme.muted, fontSize: 10 }}>
+                        {feed.lastError
+                          ? feed.lastError
+                          : feed.lastSyncedAt
+                            ? `Last synced ${new Date(feed.lastSyncedAt).toLocaleString()}`
+                            : "Not synced yet"}
+                      </Text>
+                      <View style={styles.row}>
+                        <ActionButton
+                          label={syncingId === feed.id ? "Syncing…" : "Sync"}
+                          quiet
+                          onPress={() => void syncFeed(feed)}
+                          disabled={syncingId === feed.id}
+                        />
+                        <ActionButton label="Remove" quiet onPress={() => removeFeed(feed)} />
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              <TextInput
+                value={icalName}
+                onChangeText={setIcalName}
+                placeholder="Name (e.g. School timetable)"
+                placeholderTextColor={theme.muted}
+                style={[styles.importInput, { color: theme.text, borderColor: theme.border, marginBottom: 8 }]}
+              />
+              <TextInput
+                value={icalUrl}
+                onChangeText={setIcalUrl}
+                placeholder="webcal://… or https://….ics"
+                placeholderTextColor={theme.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={[styles.importInput, { color: theme.text, borderColor: theme.border }]}
+              />
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10, marginBottom: 4 }}>
+                {SPACE_COLORS.slice(0, 8).map((swatch) => (
+                  <Pressable
+                    key={swatch}
+                    onPress={() => setIcalColor(swatch)}
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 11,
+                      backgroundColor: swatch,
+                      borderWidth: icalColor === swatch ? 2 : 0,
+                      borderColor: theme.text,
+                    }}
+                  />
+                ))}
+              </View>
+              <View style={styles.row}>
+                <ActionButton label="Close" quiet onPress={() => setImportOpen(false)} />
+                <ActionButton
+                  label={importing ? "Subscribing…" : "Subscribe"}
+                  onPress={() => void doSubscribe()}
+                  disabled={importing || !icalUrl.trim()}
+                />
+              </View>
+              <Pressable onPress={goConnectWeb}>
+                <Text style={[styles.connectWebLink, { color: theme.accent }]}>Connect Gmail / Outlook / iCloud on web →</Text>
+              </Pressable>
             </View>
-            <Pressable onPress={goConnectWeb}>
-              <Text style={[styles.connectWebLink, { color: theme.accent }]}>Connect Gmail / Outlook / iCloud on web →</Text>
-            </Pressable>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
     </Page>
