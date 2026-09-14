@@ -1,4 +1,4 @@
-/* SchoolOS — desktop hub layout (same language as Life / Work OS) */
+/* SchoolOS — WorkOS-parity dashboard shell; sheets + subviews keep school-* tokens */
 
 .school-planner {
   --sp-bg: var(--canvas);
@@ -37,176 +37,8 @@
   min-height: 0;
 }
 
-/* ── Desktop hub chrome ── */
-.school-hub-chrome {
-  display: grid;
-  gap: 14px;
-}
-
-.school-hub-hero {
-  min-height: 92px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
-  border-bottom: 1px solid var(--sp-line);
-  padding: 0 2px 18px;
-}
-
-.school-hub-eyebrow {
-  margin: 0 0 7px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--sp-muted);
-}
-
-.school-hub-title {
-  margin: 0;
-  font-family: var(--font-display), serif;
-  font-size: 34px;
-  font-weight: 400;
-  letter-spacing: -0.025em;
-  color: var(--sp-ink);
-  line-height: 1.05;
-}
-
-.school-hub-lede {
-  margin: 7px 0 0;
-  font-size: 12px;
-  color: var(--sp-muted);
-  line-height: 1.45;
-  max-width: 42rem;
-}
-
-.school-hub-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  flex-shrink: 0;
-  padding-bottom: 2px;
-}
-
-.school-hub-tabs {
-  display: flex;
-  gap: 2px;
-  border-bottom: 1px solid var(--sp-line);
-  overflow-x: auto;
-}
-
-.school-hub-tab {
-  border: none;
-  background: transparent;
-  color: var(--sp-muted);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 10px 14px 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color 0.12s ease, border-color 0.12s ease;
-}
-
-.school-hub-tab:hover {
-  color: var(--sp-ink);
-}
-
-.school-hub-tab.is-active {
-  color: var(--sp-ink);
-  border-bottom-color: var(--sp-ink);
-}
-
-/* Mobile-only pill segments (hidden on desktop) */
-.school-hub-segments {
-  display: none;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 999px;
-  border: 1px solid var(--sp-line);
-  background: color-mix(in srgb, var(--panel) 88%, var(--ink) 12%);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.school-hub-seg {
-  flex: 1 0 auto;
-  min-width: 0;
-  border: none;
-  background: transparent;
-  color: var(--sp-muted);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 8px 12px;
-  border-radius: 999px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.school-hub-seg.is-active {
-  background: var(--sp-surface);
-  color: var(--sp-ink);
-}
-
 .school-tab-panel {
   animation: school-fade-in 0.22s ease;
-}
-
-.school-home-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 16px;
-  align-items: start;
-}
-
-.school-home-main,
-.school-home-side {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-}
-
-.school-metric-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.school-metric {
-  border: 1px solid var(--sp-line);
-  border-radius: var(--sp-radius);
-  background: var(--sp-surface);
-  padding: 16px 18px;
-  text-align: left;
-  cursor: pointer;
-  color: inherit;
-  font: inherit;
-  transition: border-color 0.12s ease;
-}
-
-.school-metric:hover {
-  border-color: color-mix(in srgb, var(--sp-accent) 40%, var(--sp-line));
-}
-
-.school-metric-value {
-  font-family: var(--font-display), serif;
-  font-size: 28px;
-  font-weight: 400;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  color: var(--sp-ink);
-}
-
-.school-metric-label {
-  margin-top: 8px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--sp-muted);
 }
 
 .school-module {
@@ -953,38 +785,7 @@
   color: var(--sp-accent);
 }
 
-@media (max-width: 1100px) {
-  .school-home-layout {
-    grid-template-columns: minmax(0, 1fr) 260px;
-  }
-}
-
 @media (max-width: 900px) {
-  .school-hub-tabs {
-    display: none;
-  }
-
-  .school-hub-segments {
-    display: flex;
-  }
-
-  .school-hub-hero {
-    align-items: flex-start;
-    min-height: 0;
-  }
-
-  .school-hub-title {
-    font-size: 29px;
-  }
-
-  .school-home-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .school-metric-row {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .school-fab {
     display: grid;
     position: fixed;
@@ -1016,14 +817,6 @@
 }
 
 @media (max-width: 640px) {
-  .school-metric-row {
-    grid-template-columns: 1fr;
-  }
-
-  .school-hub-actions .school-btn-label {
-    display: none;
-  }
-
   .school-fab {
     right: 16px;
   }
