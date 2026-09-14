@@ -2303,7 +2303,31 @@ export default function LifeOS() {
               const end = payload.endTime ? `${payload.date}T${payload.endTime}:00` : undefined;
               addCalendarEvent({ id: `school-${Date.now()}`, title: payload.label ? `${payload.title} · ${payload.label}` : payload.title, start, end, source: "LifeOS", color: payload.color, notes: payload.type });
               flash("Added to calendar");
-            }} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} enableMasterOS={settingsState.enableMasterOS !== false} />}
+            }} onImportSyllabus={({ classId, items, fileName }) => {
+              const stamp = Date.now();
+              items.forEach((item, index) => {
+                addAcademicTask(classId, {
+                  title: item.title,
+                  due: item.due ?? "",
+                  priority: "Medium",
+                  focusMinutes: settingsState.defaultFocusMinutes,
+                  energy: settingsState.defaultEnergy,
+                  academicType: item.academicType,
+                });
+                if (item.due) {
+                  addCalendarEvent({
+                    id: `syllabus-${stamp}-${index}`,
+                    title: item.title,
+                    start: `${item.due}T09:00:00`,
+                    source: "LifeOS",
+                    color: classes.find((c) => c.id === classId)?.color || "#8B5CF6",
+                    notes: fileName ? `Due date from syllabus (${fileName})` : "Due date from syllabus",
+                  });
+                }
+              });
+              const dated = items.filter((item) => item.due).length;
+              flash(dated ? `Imported ${items.length} tasks · ${dated} on calendar` : `Imported ${items.length} tasks`);
+            }} appearanceLabel={dark ? "Dark" : "Light"} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} enableMasterOS={settingsState.enableMasterOS !== false} />}
             {view === "Work" && <WorkDashboard workHub={workHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onTimesheetFlash={flash} weekStartsMonday={settingsState.weekStartsMonday} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => setWorkView("projects")} onProjectDeleted={(name) => {
               setProjectItems(items => items.filter(project => project.name !== name));
               setTasks(items => items.map(task => task.project === name ? { ...task, project: "Inbox", color: "#625af6" } : task));

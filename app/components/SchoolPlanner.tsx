@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   BookOpen, CalendarDays, CheckSquare, ChevronLeft, ChevronRight, Clock3, Gem,
-  GraduationCap, Grid2X2, Heart, Home, LayoutGrid, MoreHorizontal, PieChart,
-  Plus, Search, Snowflake, Sparkles, Sun, Target, UserRound, X,
+  GraduationCap, Heart, LayoutGrid, MoreHorizontal, PieChart, Plus, Snowflake,
+  Sparkles, Sun, Target, Upload, UserRound, X,
 } from "lucide-react";
+import { extractTextFromFile, parseSyllabusText, type SyllabusItem } from "../../lib/syllabusImport";
 import "./SchoolPlanner.css";
 
 export type SchoolView = "home" | "timetable" | "assignments" | "due" | "more";
@@ -31,7 +32,19 @@ type DashboardTask = {
   canceled?: boolean;
   status?: string;
 };
-type DashboardClass = { id: string; code: string; name: string; term: string; instructor: string; color: string; archived?: boolean };
+type DashboardClass = {
+  id: string;
+  code: string;
+  name: string;
+  term: string;
+  instructor: string;
+  color: string;
+  archived?: boolean;
+  meetingDays?: number[];
+  meetingStart?: string;
+  meetingEnd?: string;
+  location?: string;
+};
 type DashboardNote = { id: string; title: string; body: string; classId?: string; updatedAt: string };
 type DashboardEvent = { id: string; title: string; start: string; end?: string; color: string; notes?: string };
 
@@ -53,6 +66,12 @@ export type SchoolCalendarPayload = {
   endTime?: string;
 };
 
+export type SyllabusImportPayload = {
+  classId: string;
+  items: SyllabusItem[];
+  fileName?: string;
+};
+
 const dateKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
@@ -63,15 +82,6 @@ const weekWindow = () => {
   end.setDate(end.getDate() + 7);
   return { today: dateKey(now), end: dateKey(end) };
 };
-
-const greetingFor = (date = new Date()) => {
-  const hour = date.getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
-};
-
-const firstName = (name: string) => name.trim().split(/\s+/)[0] || "there";
 
 const startOfWeek = (date: Date) => {
   const d = new Date(date);
@@ -101,8 +111,20 @@ const friendlyDue = (value: string | undefined, today: string) => {
   return new Date(`${key}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 };
 
+const meetsOn = (course: DashboardClass, date: Date) => {
+  if (!course.meetingDays?.length) return false;
+  return course.meetingDays.includes(date.getDay());
+};
+
 const EVENT_TYPES = ["Club", "Appointment", "Study", "To-do", "Personal", "Deadline", "Shift", "Exam"] as const;
-const EVENT_COLORS = ["#3aa8c5", "#2bb8a4", "#5b9ad8", "#6db58a", "#4f8f9e", "#7ec4b8", "#4a7ea8"] as const;
+const EVENT_COLORS = ["#8B5CF6", "#3aa8c5", "#2bb8a4", "#5b9ad8", "#6db58a", "#4f8f9e", "#7ec4b8"] as const;
+
+const SEGMENTS: { key: Exclude<SchoolView, "due">; label: string }[] = [
+  { key: "home", label: "Home" },
+  { key: "timetable", label: "Timetable" },
+  { key: "assignments", label: "Assignments" },
+  { key: "more", label: "More" },
+];
 
 const MORE_LINKS: { key: SchoolHubKey | "grades" | "exams" | "wellness" | "reminders" | "reading" | "progress" | "study"; label: string; icon: typeof Clock3 }[] = [
   { key: "study", label: "Study", icon: Clock3 },
@@ -116,14 +138,14 @@ const MORE_LINKS: { key: SchoolHubKey | "grades" | "exams" | "wellness" | "remin
   { key: "progress", label: "Weekly progress", icon: CheckSquare },
 ];
 
-function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Sheet({ title, onClose, children, testId }: { title: string; onClose: () => void; children: ReactNode; testId?: string }) {
   return (
-    <div className="sp-sheet-layer" onMouseDown={onClose} data-testid="school-sheet">
-      <div className="sp-sheet" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-label={title}>
-        <div className="sp-grabber" />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-          <p className="sp-sheet-title" style={{ margin: 0 }}>{title}</p>
-          <button type="button" aria-label="Close" onClick={onClose} style={{ position: "absolute", right: 0, border: 0, background: "transparent", color: "var(--sp-muted)" }}>
+    <div className="school-sheet-backdrop" onMouseDown={onClose} data-testid={testId ?? "school-sheet"}>
+      <div className="school-sheet" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-label={title}>
+        <div className="school-sheet-handle" />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>{title}</h2>
+          <button type="button" aria-label="Close" onClick={onClose} style={{ position: "absolute", right: 0, border: 0, background: "transparent", color: "var(--sp-muted)", cursor: "pointer" }}>
             <X size={18} />
           </button>
         </div>
@@ -159,16 +181,15 @@ function QuickCaptureSheet({
   return (
     <Sheet title="Quick Capture" onClose={onClose}>
       <textarea
-        className="sp-textarea"
         data-testid="school-capture-input"
         autoFocus
         value={title}
         onChange={(event) => setTitle(event.target.value)}
-        placeholder="Type anything, a task, deadline, note..."
+        placeholder="Type anything — a task, deadline, note…"
       />
-      <div className="sp-pill-row" style={{ marginTop: 12 }}>
+      <div className="school-filters" style={{ marginTop: 4 }}>
         {(["Task", "Deadline", "Note"] as const).map((item) => (
-          <button key={item} type="button" className={`sp-pill ${kind === item ? "selected" : ""}`} onClick={() => setKind(item)}>
+          <button key={item} type="button" className={`school-filter ${kind === item ? "is-active" : ""}`} onClick={() => setKind(item)}>
             {item}
           </button>
         ))}
@@ -176,48 +197,45 @@ function QuickCaptureSheet({
 
       {kind !== "Note" && (
         <>
-          <span className="sp-label">Subject</span>
-          <button
-            type="button"
-            className={`sp-subject-pill ${selected ? "" : "idle"}`}
-            onClick={() => setPickingSubject((value) => !value)}
-            data-testid="school-capture-subject"
-          >
-            {selected ? <><i style={{ background: selected.color }} />{selected.name}</> : "Pick a subject"}
+          <p className="school-card-title" style={{ marginTop: 12 }}>Subject</p>
+          <button type="button" className="school-btn school-btn-ghost school-btn-block" onClick={() => setPickingSubject((value) => !value)} data-testid="school-capture-subject">
+            {selected ? selected.name : "Pick a subject"}
           </button>
           {pickingSubject && (
-            <div className="sp-subject-list">
+            <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
               {courses.length ? courses.map((course) => (
                 <button
                   key={course.id}
                   type="button"
+                  className="school-btn school-btn-ghost school-btn-block school-btn-sm"
                   onClick={() => { setClassId(course.id); setPickingSubject(false); }}
                 >
-                  <i style={{ background: course.color }} />
+                  <span className="school-dot" style={{ background: course.color, marginTop: 0 }} />
                   {course.name}
                 </button>
-              )) : <p className="sp-helper">Add a class from Timetable first.</p>}
+              )) : <p className="school-sheet-lede">Add a class from Timetable first.</p>}
             </div>
           )}
 
-          <span className="sp-label">When</span>
-          <div className="sp-pill-row">
-            <button type="button" className={`sp-pill ${when === "today" ? "selected" : ""}`} onClick={() => setWhen("today")}>Today</button>
-            <button type="button" className={`sp-pill ${when === "tomorrow" ? "selected" : ""}`} onClick={() => setWhen("tomorrow")}>Tomorrow</button>
-            <button type="button" className={`sp-pill outline ${when === "custom" ? "selected" : ""}`} onClick={() => setWhen("custom")}>
+          <p className="school-card-title" style={{ marginTop: 12 }}>When</p>
+          <div className="school-filters">
+            <button type="button" className={`school-filter ${when === "today" ? "is-active" : ""}`} onClick={() => setWhen("today")}>Today</button>
+            <button type="button" className={`school-filter ${when === "tomorrow" ? "is-active" : ""}`} onClick={() => setWhen("tomorrow")}>Tomorrow</button>
+            <button type="button" className={`school-filter ${when === "custom" ? "is-active" : ""}`} onClick={() => setWhen("custom")}>
               {customDate || "Pick day"}
             </button>
           </div>
           {when === "custom" && (
-            <input className="sp-input" style={{ marginTop: 8 }} type="date" value={customDate} onChange={(event) => setCustomDate(event.target.value)} />
+            <input style={{ marginTop: 8, width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid var(--sp-line)", background: "var(--sp-bg)", color: "var(--sp-ink)", font: "inherit" }} type="date" value={customDate} onChange={(event) => setCustomDate(event.target.value)} />
           )}
-          <p className="sp-helper">A to-do for today, or pick a day ahead.</p>
         </>
       )}
 
-      <button type="button" className="sp-primary" data-testid="school-capture-submit" disabled={!title.trim()} onClick={submit}>
-        Capture it
-      </button>
+      <div className="school-sheet-actions">
+        <button type="button" className="school-btn school-btn-primary school-btn-block" data-testid="school-capture-submit" disabled={!title.trim()} onClick={submit}>
+          Capture it
+        </button>
+      </div>
     </Sheet>
   );
 }
@@ -252,45 +270,185 @@ function AddCalendarSheet({
     onClose();
   };
 
+  const field = { width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid var(--sp-line)", background: "var(--sp-bg)", color: "var(--sp-ink)", font: "inherit", marginBottom: 10 } as const;
+
   return (
     <Sheet title="Add to Calendar" onClose={onClose}>
-      <input className="sp-input" data-testid="school-event-title" autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Event title" />
-      <input className="sp-input" style={{ marginTop: 10 }} value={label} onChange={(event) => setLabel(event.target.value)} placeholder="e.g. Club, Appointment, Gym" />
-      <p className="sp-helper">Your own category name, shown instead of the type.</p>
+      <input style={field} data-testid="school-event-title" autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Event title" />
+      <input style={field} value={label} onChange={(event) => setLabel(event.target.value)} placeholder="e.g. Club, Appointment, Gym" />
+      <p className="school-sheet-lede">Your own category name, shown instead of the type.</p>
 
-      <span className="sp-label muted">Type</span>
-      <div className="sp-type-grid">
+      <p className="school-card-title">Type</p>
+      <div className="school-filters">
         {EVENT_TYPES.map((item) => (
-          <button key={item} type="button" className={`sp-type-chip ${type === item ? "selected" : ""}`} onClick={() => setType(item)}>
+          <button key={item} type="button" className={`school-filter ${type === item ? "is-active" : ""}`} onClick={() => setType(item)}>
             {item}
           </button>
         ))}
       </div>
 
-      <span className="sp-label muted">Colour</span>
-      <div className="sp-color-row">
-        <button type="button" className={`sp-swatch auto ${color === "auto" ? "selected" : ""}`} onClick={() => setColor("auto")}>Auto</button>
+      <p className="school-card-title" style={{ marginTop: 12 }}>Colour</p>
+      <div className="school-filters">
+        <button type="button" className={`school-filter ${color === "auto" ? "is-active" : ""}`} onClick={() => setColor("auto")}>Auto</button>
         {EVENT_COLORS.map((swatch) => (
-          <button key={swatch} type="button" className={`sp-swatch ${color === swatch ? "selected" : ""}`} style={{ background: swatch }} onClick={() => setColor(swatch)} aria-label={swatch} />
+          <button key={swatch} type="button" className={`school-filter ${color === swatch ? "is-active" : ""}`} style={{ background: swatch, color: "#fff", borderColor: swatch }} onClick={() => setColor(swatch)} aria-label={swatch} />
         ))}
       </div>
 
-      <span className="sp-label muted">Date</span>
-      <input className="sp-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-      <div className="sp-time-row" style={{ marginTop: 10 }}>
+      <p className="school-card-title" style={{ marginTop: 12 }}>Date</p>
+      <input style={field} type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         <div>
-          <span className="sp-label muted" style={{ marginTop: 0 }}>Starts (optional)</span>
-          <input className="sp-input" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} />
+          <p className="school-card-title">Starts</p>
+          <input style={field} type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} />
         </div>
         <div>
-          <span className="sp-label muted" style={{ marginTop: 0 }}>Ends (optional)</span>
-          <input className="sp-input" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} />
+          <p className="school-card-title">Ends</p>
+          <input style={field} type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} />
         </div>
       </div>
 
-      <button type="button" className="sp-primary" data-testid="school-event-submit" disabled={!title.trim()} onClick={submit}>
-        Add to calendar
-      </button>
+      <div className="school-sheet-actions">
+        <button type="button" className="school-btn school-btn-primary school-btn-block" data-testid="school-event-submit" disabled={!title.trim()} onClick={submit}>
+          Add to calendar
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
+function ImportSyllabusSheet({
+  courses,
+  onClose,
+  onImport,
+}: {
+  courses: DashboardClass[];
+  onClose: () => void;
+  onImport: (payload: SyllabusImportPayload) => void;
+}) {
+  const [text, setText] = useState("");
+  const [classId, setClassId] = useState(courses[0]?.id);
+  const [fileName, setFileName] = useState<string | undefined>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<SyllabusItem[]>([]);
+
+  const applyText = (next: string, name?: string) => {
+    setText(next);
+    setFileName(name);
+    setError(null);
+    setPreview(parseSyllabusText(next));
+  };
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const extracted = await extractTextFromFile(file);
+      applyText(extracted, file.name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not read that file.");
+      setPreview([]);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = () => {
+    if (!classId) {
+      setError("Pick a class for these assignments.");
+      return;
+    }
+    const items = preview.length ? preview : parseSyllabusText(text);
+    if (!items.length) {
+      setError("No dated or assignment-like lines found. Paste a syllabus with due dates.");
+      return;
+    }
+    onImport({ classId, items, fileName });
+    onClose();
+  };
+
+  return (
+    <Sheet title="Import syllabus" onClose={onClose} testId="school-syllabus-sheet">
+      <p className="school-sheet-lede">
+        Import a PDF, Word (.docx), or Markdown file — or paste text. We detect due dates and add them to Assignments and Calendar.
+      </p>
+
+      <label className="school-btn school-btn-ghost school-btn-block school-file-btn" data-testid="school-syllabus-import-file">
+        <Upload size={16} />
+        {busy ? "Reading…" : fileName ? "Choose another file" : "Import PDF / Word / Markdown"}
+        <input
+          type="file"
+          accept=".pdf,.docx,.md,.markdown,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+          disabled={busy}
+          onChange={(event) => {
+            void onFile(event.target.files?.[0]);
+            event.currentTarget.value = "";
+          }}
+        />
+      </label>
+      {fileName ? <p className="school-sheet-lede" style={{ marginTop: 8 }}>Loaded: {fileName}</p> : null}
+
+      <p className="school-card-title" style={{ marginTop: 14 }}>Class</p>
+      <div className="school-filters">
+        {courses.map((course) => (
+          <button
+            key={course.id}
+            type="button"
+            className={`school-filter ${classId === course.id ? "is-active" : ""}`}
+            onClick={() => setClassId(course.id)}
+          >
+            {course.code || course.name}
+          </button>
+        ))}
+      </div>
+      {!courses.length ? <p className="school-sheet-lede">Add a class from Timetable before importing.</p> : null}
+
+      <p className="school-card-title" style={{ marginTop: 14 }}>Or paste text</p>
+      <textarea
+        data-testid="school-syllabus-text"
+        value={text}
+        onChange={(event) => applyText(event.target.value, fileName)}
+        placeholder={"Assignment 1 — due Sep 20\nMidterm exam October 15\nFinal project due 12/5/2026"}
+      />
+
+      {error ? <p className="school-sheet-error">{error}</p> : null}
+
+      {preview.length ? (
+        <div className="school-sheet-preview" data-testid="school-syllabus-preview">
+          <p className="school-card-title" style={{ marginBottom: 8 }}>
+            Preview · {preview.length} item{preview.length === 1 ? "" : "s"} · {preview.filter((item) => item.due).length} with dates
+          </p>
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            {preview.slice(0, 12).map((item, index) => (
+              <li key={`${item.title}-${index}`}>
+                {item.title}
+                {item.due ? <span> · {item.due}</span> : null}
+                <span> · {item.academicType}</span>
+              </li>
+            ))}
+          </ul>
+          {preview.length > 12 ? <p className="school-sheet-lede">+{preview.length - 12} more…</p> : null}
+        </div>
+      ) : null}
+
+      <div className="school-sheet-actions">
+        <button
+          type="button"
+          className="school-btn school-btn-primary school-btn-block"
+          data-testid="school-syllabus-submit"
+          disabled={!preview.length || busy || !classId}
+          onClick={submit}
+        >
+          {preview.length
+            ? `Add ${preview.length} task${preview.length === 1 ? "" : "s"}` +
+              (preview.some((item) => item.due)
+                ? ` · ${preview.filter((item) => item.due).length} to calendar`
+                : "")
+            : "Add tasks"}
+        </button>
+      </div>
     </Sheet>
   );
 }
@@ -298,28 +456,26 @@ function AddCalendarSheet({
 export function SchoolDashboard({
   tasks,
   classes,
-  notes,
+  notes: _notes,
   events: _events = [],
   school: _school,
   schoolView: controlledView,
   onChangeView,
-  workspaceName = "there",
-  workspaceEmail,
+  appearanceLabel = "Light",
   onComplete,
   onOpenTask,
   onOpenClass,
-  onOpenNote,
   onNewCourse,
   onNewAcademic,
   onNewLecture,
   onOpenCollection,
   onOpenProfile,
   onFocus,
-  onOpenCalendar,
   onOpenSettings,
   onImportTimetable,
   onQuickCapture,
   onAddCalendarEvent,
+  onImportSyllabus,
   enableMasterOS = true,
 }: {
   tasks: DashboardTask[];
@@ -331,6 +487,7 @@ export function SchoolDashboard({
   onChangeView?: (view: SchoolView) => void;
   workspaceName?: string;
   workspaceEmail?: string;
+  appearanceLabel?: string;
   schoolFocusTaskId?: number | null;
   onSelectFocusTask?: (id: number) => void;
   onComplete: (id: number) => void;
@@ -348,6 +505,7 @@ export function SchoolDashboard({
   onImportTimetable?: () => void;
   onQuickCapture?: (payload: QuickCapturePayload) => void;
   onAddCalendarEvent?: (payload: SchoolCalendarPayload) => void;
+  onImportSyllabus?: (payload: SyllabusImportPayload) => void;
   onUpdateTaskStatus?: (id: number, status: "Not started" | "In progress" | "Blocked" | "Done") => void;
   enableMasterOS?: boolean;
 }) {
@@ -358,9 +516,10 @@ export function SchoolDashboard({
   };
 
   const [internalView, setInternalView] = useState<SchoolView>("home");
-  const [sheet, setSheet] = useState<"capture" | "calendar" | null>(null);
+  const [sheet, setSheet] = useState<"capture" | "calendar" | "syllabus" | null>(null);
   const [timetableMode, setTimetableMode] = useState<"day" | "week">("day");
   const [weekAnchor, setWeekAnchor] = useState(() => new Date());
+  const [selectedDay, setSelectedDay] = useState(() => new Date());
   const schoolView = normalizeView(controlledView ?? internalView);
   const setSchoolView = (view: SchoolView) => {
     onChangeView?.(view);
@@ -382,9 +541,21 @@ export function SchoolDashboard({
   const assignments = schoolTasks
     .filter((task) => task.academicType && !["Reading", "Discussion"].includes(task.academicType))
     .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
-  const classesThisWeek = termCourses.length;
   const courseFor = (id?: string) => courses.find((course) => course.id === id);
-  const initials = workspaceName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U";
+
+  const weekDays = useMemo(() => {
+    const start = startOfWeek(weekAnchor);
+    return Array.from({ length: 7 }, (_, index) => {
+      const day = new Date(start);
+      day.setDate(start.getDate() + index);
+      return day;
+    });
+  }, [weekAnchor]);
+
+  const hasMeetingData = termCourses.some((course) => course.meetingDays?.length);
+  const todayClasses = termCourses
+    .filter((course) => (hasMeetingData ? meetsOn(course, now) : false))
+    .sort((a, b) => (a.meetingStart ?? "99").localeCompare(b.meetingStart ?? "99"));
 
   const shiftWeek = (delta: number) => {
     setWeekAnchor((current) => {
@@ -394,71 +565,105 @@ export function SchoolDashboard({
     });
   };
 
-  const openFab = () => setSheet("calendar");
+  const openSyllabus = () => {
+    if (!courses.length) {
+      onNewCourse();
+      return;
+    }
+    setSheet("syllabus");
+  };
+
+  const segmentTab: Exclude<SchoolView, "due"> = schoolView === "due" ? "home" : schoolView;
 
   const body = (() => {
     if (schoolView === "timetable") {
+      const dayCourses = termCourses
+        .filter((course) => (hasMeetingData ? meetsOn(course, selectedDay) : true))
+        .sort((a, b) => (a.meetingStart ?? "99").localeCompare(b.meetingStart ?? "99"));
+      const visible = timetableMode === "day" ? dayCourses : termCourses;
+
       return (
-        <div className="sp-stack" data-testid="school-timetable">
-          <div className="sp-page-head">
+        <div className="school-tab-panel" data-testid="school-timetable">
+          <div className="school-section-head">
             <div>
-              <p className="sp-section-kicker">Your classes</p>
-              <h1 className="sp-section-title">Timetable</h1>
+              <p className="school-card-title" style={{ marginBottom: 4 }}>Your classes</p>
+              <h2 className="school-section-title">Timetable</h2>
             </div>
-            <div className="sp-page-actions">
-              <button type="button" className="sp-outline" onClick={onNewCourse}><Plus size={14} /> Class</button>
-              <button type="button" className="sp-outline" onClick={() => onImportTimetable?.()}>Import</button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={onNewCourse}><Plus size={14} /> Class</button>
+              <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={() => onImportTimetable?.()}>Import</button>
             </div>
           </div>
 
-          <div className="sp-toolbar-row">
-            <div className="sp-toggle" role="tablist" aria-label="Timetable mode">
-              <button type="button" className={timetableMode === "day" ? "selected" : ""} onClick={() => setTimetableMode("day")}>Day</button>
-              <button type="button" className={timetableMode === "week" ? "selected" : ""} onClick={() => setTimetableMode("week")}>Week</button>
-            </div>
-            <select className="sp-term-select" value={term} onChange={(event) => setTerm(event.target.value)} aria-label="Term">
-              {terms.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
+          <div className="school-filters">
+            <button type="button" className={`school-filter ${timetableMode === "day" ? "is-active" : ""}`} onClick={() => setTimetableMode("day")}>Day</button>
+            <button type="button" className={`school-filter ${timetableMode === "week" ? "is-active" : ""}`} onClick={() => setTimetableMode("week")}>Week</button>
+            {terms.map((item) => (
+              <button key={item} type="button" className={`school-filter ${term === item ? "is-active" : ""}`} onClick={() => setTerm(item)}>{item}</button>
+            ))}
           </div>
 
-          <div className="sp-week-nav">
-            <button type="button" aria-label="Previous week" onClick={() => shiftWeek(-1)}><ChevronLeft size={16} /></button>
-            <span>This week {formatWeekRange(weekAnchor)}</span>
-            <button type="button" aria-label="Next week" onClick={() => shiftWeek(1)}><ChevronRight size={16} /></button>
+          <div className="school-section-head" style={{ marginTop: 4 }}>
+            <button type="button" className="school-btn school-btn-ghost school-btn-sm" aria-label="Previous week" onClick={() => shiftWeek(-1)}><ChevronLeft size={16} /></button>
+            <span style={{ fontSize: 13, color: "var(--sp-muted)", fontWeight: 600 }}>This week {formatWeekRange(weekAnchor)}</span>
+            <button type="button" className="school-btn school-btn-ghost school-btn-sm" aria-label="Next week" onClick={() => shiftWeek(1)}><ChevronRight size={16} /></button>
           </div>
+
+          {timetableMode === "day" && hasMeetingData ? (
+            <div className="school-day-strip">
+              {weekDays.map((day) => {
+                const key = dateKey(day);
+                const active = dateKey(selectedDay) === key;
+                const isToday = key === today;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`school-day-pill ${active ? "is-active" : ""} ${isToday ? "is-today" : ""}`}
+                    onClick={() => setSelectedDay(day)}
+                  >
+                    <div className="school-day-dow">{day.toLocaleDateString(undefined, { weekday: "short" })}</div>
+                    <div className="school-day-num">{day.getDate()}</div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
 
           {termCourses.length === 0 ? (
-            <div className="sp-card sp-stack" style={{ textAlign: "center", padding: "36px 22px" }}>
-              <p style={{ margin: 0, fontSize: 15, color: "var(--sp-muted)" }}>Nothing in your {term} term yet.</p>
-              <button type="button" className="sp-primary" onClick={() => onImportTimetable?.()}>Import my timetable</button>
-              <p className="sp-hint">Most universities export an .ics from Moodle, Canvas, TimeEdit or Outlook.</p>
-              <button type="button" className="sp-outline" style={{ justifySelf: "center" }} onClick={onNewCourse}>Or add a class by hand</button>
+            <div className="school-card school-empty">
+              <h3>Nothing in your {term} term yet.</h3>
+              <p>Import an .ics from Moodle, Canvas, TimeEdit, or Outlook — or add a class by hand.</p>
+              <button type="button" className="school-btn school-btn-primary" onClick={() => onImportTimetable?.()}>Import my timetable</button>
+              <div style={{ height: 8 }} />
+              <button type="button" className="school-btn school-btn-ghost" onClick={onNewCourse}>Or add a class by hand</button>
             </div>
           ) : (
-            <div className="sp-class-list">
-              {termCourses.map((course) => (
-                <button key={course.id} type="button" className="sp-class-item" onClick={() => onOpenClass(course.id)}>
-                  <i style={{ background: course.color }} />
-                  <span>
-                    <strong>{course.code}</strong>
-                    <small>{course.name}{course.instructor ? ` · ${course.instructor}` : ""}</small>
-                  </span>
+            <div>
+              {visible.map((course) => (
+                <button key={course.id} type="button" className="school-block" onClick={() => onOpenClass(course.id)}>
+                  <span className="school-block-bar" style={{ background: course.color }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p className="school-block-title">
+                      {course.code}
+                      {course.meetingStart ? ` · ${course.meetingStart}${course.meetingEnd ? `–${course.meetingEnd}` : ""}` : ""}
+                    </p>
+                    <p className="school-block-meta">{course.name}{course.instructor ? ` · ${course.instructor}` : ""}</p>
+                  </div>
                 </button>
               ))}
+              {timetableMode === "day" && hasMeetingData && !dayCourses.length ? (
+                <div className="school-empty-inline">
+                  <p>No class meetings on this day.</p>
+                </div>
+              ) : null}
             </div>
           )}
 
-          <button type="button" className="sp-link-row" onClick={() => setSheet("capture")}>
-            <span className="sp-dot" />
-            <span style={{ flex: 1 }}>Free blocks this week, drop a study session?</span>
-          </button>
-          <button type="button" className="sp-link-row muted" onClick={onOpenProfile}>
-            <span style={{ flex: 1 }}>Semester overview</span>
-            <ChevronRight size={16} className="sp-chevron" />
-          </button>
-          <button type="button" className="sp-link-row" onClick={() => setSheet("calendar")}>
-            <span style={{ flex: 1 }}>Clubs, appointments and everything else</span>
-            <span>Calendar <ChevronRight size={14} /></span>
+          <button type="button" className="school-more-item" onClick={() => setSheet("calendar")}>
+            <span className="school-more-icon"><CalendarDays size={16} /></span>
+            <span className="school-more-text"><strong>Clubs, appointments and everything else</strong><span>Add to calendar</span></span>
+            <ChevronRight size={16} className="school-more-chevron" />
           </button>
         </div>
       );
@@ -466,31 +671,37 @@ export function SchoolDashboard({
 
     if (schoolView === "assignments") {
       return (
-        <div className="sp-stack" data-testid="school-assignments">
-          <div className="sp-page-head">
+        <div className="school-tab-panel" data-testid="school-assignments">
+          <div className="school-section-head">
             <div>
-              <h1 className="sp-section-title">Assignments</h1>
-              <p className="sp-section-sub">Soonest due first · {assignments.length} to do</p>
+              <h2 className="school-section-title">Assignments</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--sp-muted)" }}>Soonest due first · {assignments.length} to do</p>
             </div>
-            <div className="sp-page-actions">
-              <button type="button" className="sp-outline" onClick={onNewAcademic}>Paste syllabus</button>
-              <button type="button" className="sp-outline" onClick={onNewAcademic} data-testid="school-new-assignment"><Plus size={14} /> New</button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={openSyllabus} data-testid="school-import-syllabus">Import syllabus</button>
+              <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={onNewAcademic} data-testid="school-new-assignment"><Plus size={14} /> New</button>
             </div>
           </div>
           {assignments.length ? (
-            <div className="sp-task-list">
+            <div className="school-card" style={{ paddingTop: 8, paddingBottom: 8 }}>
               {assignments.map((task) => (
-                <button key={task.id} type="button" className="sp-task" onClick={() => onOpenTask(task.id)}>
-                  <span className="sp-task-dot" style={{ background: courseFor(task.classId)?.color ?? "var(--sp-pink)" }} />
-                  <span>
-                    <strong>{task.title}</strong>
-                    <small>{courseFor(task.classId)?.code ?? "School"} · {task.academicType ?? "Assignment"} · {friendlyDue(task.due, today)}</small>
+                <button key={task.id} type="button" className="school-row" onClick={() => onOpenTask(task.id)}>
+                  <span className="school-dot" style={{ background: courseFor(task.classId)?.color ?? "var(--sp-accent)" }} />
+                  <span className="school-row-body">
+                    <p className="school-row-title">{task.title}</p>
+                    <p className="school-row-meta">{courseFor(task.classId)?.code ?? "School"} · {task.academicType ?? "Assignment"} · {friendlyDue(task.due, today)}</p>
                   </span>
                 </button>
               ))}
             </div>
           ) : (
-            <div className="sp-empty-card">No assignments yet. Tap &apos;+ New&apos; to add your first.</div>
+            <div className="school-empty-inline">
+              <p>No assignments yet. Tap + New or import a syllabus to add your first.</p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button type="button" className="school-btn school-btn-primary school-btn-sm" onClick={openSyllabus}>Import syllabus</button>
+                <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={onNewAcademic}>Add assignment</button>
+              </div>
+            </div>
           )}
         </div>
       );
@@ -498,24 +709,24 @@ export function SchoolDashboard({
 
     if (schoolView === "due") {
       return (
-        <div className="sp-stack" data-testid="school-due">
-          <button type="button" className="sp-back" onClick={() => setSchoolView("home")}><ChevronLeft size={14} /> Home</button>
-          <h1 className="sp-section-title">What&apos;s due</h1>
-          <p className="sp-section-sub">{dueThisWeek.length} due this week</p>
+        <div className="school-tab-panel" data-testid="school-due">
+          <button type="button" className="school-link-btn" onClick={() => setSchoolView("home")} style={{ marginBottom: 8 }}><ChevronLeft size={14} /> Home</button>
+          <h2 className="school-section-title">What&apos;s due</h2>
+          <p style={{ margin: "4px 0 14px", fontSize: 13, color: "var(--sp-muted)" }}>{dueThisWeek.length} due this week</p>
           {dueThisWeek.length ? (
-            <div className="sp-task-list">
+            <div className="school-card" style={{ paddingTop: 8, paddingBottom: 8 }}>
               {dueThisWeek.map((task) => (
-                <button key={task.id} type="button" className="sp-task" onClick={() => onOpenTask(task.id)}>
-                  <span className="sp-task-dot" style={{ background: courseFor(task.classId)?.color ?? "var(--sp-pink)" }} />
-                  <span>
-                    <strong>{task.title}</strong>
-                    <small>{courseFor(task.classId)?.code ?? "School"} · {friendlyDue(task.due, today)}</small>
+                <button key={task.id} type="button" className="school-row" onClick={() => onOpenTask(task.id)}>
+                  <span className="school-dot" style={{ background: courseFor(task.classId)?.color ?? "var(--sp-accent)" }} />
+                  <span className="school-row-body">
+                    <p className="school-row-title">{task.title}</p>
+                    <p className="school-row-meta">{courseFor(task.classId)?.code ?? "School"} · {friendlyDue(task.due, today)}</p>
                   </span>
                   <button
                     type="button"
                     aria-label={`Complete ${task.title}`}
                     onClick={(event) => { event.stopPropagation(); onComplete(task.id); }}
-                    style={{ border: 0, background: "transparent", color: "var(--sp-muted)" }}
+                    style={{ border: 0, background: "transparent", color: "var(--sp-muted)", cursor: "pointer" }}
                   >
                     <CheckSquare size={18} />
                   </button>
@@ -523,8 +734,8 @@ export function SchoolDashboard({
               ))}
             </div>
           ) : (
-            <div className="sp-empty-card">
-              <span>Nothing due. Enjoy it <Heart size={14} className="sp-heart" fill="currentColor" style={{ display: "inline", verticalAlign: "-2px" }} /></span>
+            <div className="school-empty-inline">
+              <p>Nothing due. Enjoy it <Heart size={14} style={{ display: "inline", verticalAlign: "-2px" }} /></p>
             </div>
           )}
         </div>
@@ -533,22 +744,15 @@ export function SchoolDashboard({
 
     if (schoolView === "more") {
       return (
-        <div className="sp-stack" data-testid="school-more">
-          <div className="sp-more-profile">
-            <div className="sp-avatar">{initials}</div>
-            <div>
-              <strong>{workspaceName}</strong>
-              <small>{workspaceEmail || "Personal workspace"} · synced <Heart size={11} className="sp-heart" fill="currentColor" style={{ display: "inline", verticalAlign: "-1px" }} /></small>
-            </div>
-          </div>
-
-          <div className="sp-menu-card">
+        <div className="school-tab-panel" data-testid="school-more">
+          <div className="school-more-group">
             {MORE_LINKS.map((item) => {
               const Icon = item.icon;
               return (
                 <button
                   key={item.key}
                   type="button"
+                  className="school-more-item"
                   onClick={() => {
                     if (item.key === "topics" || item.key === "goals" || item.key === "professors") onOpenCollection(item.key);
                     else if (item.key === "study") {
@@ -560,36 +764,37 @@ export function SchoolDashboard({
                     else onOpenProfile();
                   }}
                 >
-                  <span className="sp-menu-icon"><Icon size={16} /></span>
-                  {item.label}
-                  <ChevronRight size={16} />
+                  <span className="school-more-icon"><Icon size={16} /></span>
+                  <span className="school-more-text"><strong>{item.label}</strong></span>
+                  <ChevronRight size={16} className="school-more-chevron" />
                 </button>
               );
             })}
             {enableMasterOS && (
-              <a href="/masteros" style={{ display: "flex", alignItems: "center", gap: 12, padding: "15px 16px", textDecoration: "none", color: "var(--sp-ink)", fontSize: 14, fontWeight: 550, borderTop: "1px solid var(--sp-line)" }}>
-                <span className="sp-menu-icon"><GraduationCap size={16} /></span>
-                MasterOS
-                <ChevronRight size={16} style={{ marginLeft: "auto", color: "var(--sp-muted)" }} />
+              <a href="/masteros" className="school-more-item" style={{ textDecoration: "none" }}>
+                <span className="school-more-icon"><GraduationCap size={16} /></span>
+                <span className="school-more-text"><strong>MasterOS</strong></span>
+                <ChevronRight size={16} className="school-more-chevron" />
               </a>
             )}
           </div>
 
-          <div className="sp-menu-card">
-            <button type="button" onClick={() => onOpenSettings?.()}>
-              <span className="sp-menu-icon"><Sun size={16} /></span>
-              Appearance
-              <span className="sp-menu-meta">Mist</span>
+          <div className="school-more-group">
+            <p className="school-more-label">Workspace</p>
+            <button type="button" className="school-more-item" onClick={() => onOpenSettings?.()}>
+              <span className="school-more-icon"><Sun size={16} /></span>
+              <span className="school-more-text"><strong>Appearance</strong><span>{appearanceLabel}</span></span>
+              <MoreHorizontal size={16} className="school-more-chevron" />
             </button>
-            <button type="button" onClick={onOpenProfile}>
-              <span className="sp-menu-icon"><UserRound size={16} /></span>
-              Academic profile
-              <ChevronRight size={16} />
+            <button type="button" className="school-more-item" onClick={onOpenProfile}>
+              <span className="school-more-icon"><UserRound size={16} /></span>
+              <span className="school-more-text"><strong>Academic profile</strong></span>
+              <ChevronRight size={16} className="school-more-chevron" />
             </button>
-            <button type="button" onClick={onNewLecture}>
-              <span className="sp-menu-icon"><BookOpen size={16} /></span>
-              Lecture notes
-              <ChevronRight size={16} />
+            <button type="button" className="school-more-item" onClick={onNewLecture}>
+              <span className="school-more-icon"><BookOpen size={16} /></span>
+              <span className="school-more-text"><strong>Lecture notes</strong></span>
+              <ChevronRight size={16} className="school-more-chevron" />
             </button>
           </div>
         </div>
@@ -597,90 +802,141 @@ export function SchoolDashboard({
     }
 
     return (
-      <div className="sp-stack" data-testid="school-home">
-        <div className="sp-home-header">
-          <div>
-            <p className="sp-date">{now.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }).toUpperCase()}</p>
-            <h1>{greetingFor(now)}, {firstName(workspaceName)}</h1>
-          </div>
-          <div className="sp-home-actions">
-            <button type="button" className="sp-ghost-btn" onClick={onOpenProfile}>Customize</button>
-            <button type="button" className="sp-icon-btn" aria-label="Search" onClick={() => setSheet("capture")}><Search size={16} /></button>
-            <button type="button" className="sp-avatar" aria-label="Profile" onClick={() => setSchoolView("more")}>{initials.slice(0, 1)}</button>
-          </div>
-        </div>
-
+      <div className="school-tab-panel" data-testid="school-home">
         {courses.length === 0 && (
-          <button type="button" className="sp-alert" onClick={() => setSchoolView("timetable")} data-testid="school-empty-timetable-alert">
-            <span className="sp-alert-dot" />
-            <span>No classes on your timetable yet. <strong>Add one from the Timetable tab.</strong></span>
+          <button type="button" className="school-more-item" onClick={() => setSchoolView("timetable")} data-testid="school-empty-timetable-alert" style={{ marginBottom: 12 }}>
+            <span className="school-dot" style={{ background: "var(--sp-accent)", marginTop: 4 }} />
+            <span className="school-more-text">
+              <strong>No classes on your timetable yet.</strong>
+              <span>Add one from the Timetable tab.</span>
+            </span>
           </button>
         )}
 
-        <div className="sp-stat-row">
-          <button type="button" className="sp-stat-card" onClick={() => setSchoolView("due")} data-testid="school-due-stat">
-            <span>Due this week</span>
-            <strong>{dueThisWeek.length}</strong>
+        <div className="school-stats">
+          <button type="button" className="school-stat" style={{ cursor: "pointer", border: "1px solid var(--sp-line)", background: "var(--sp-surface)", width: "100%" }} onClick={() => setSchoolView("due")} data-testid="school-due-stat">
+            <div className="school-stat-value">{dueThisWeek.length}</div>
+            <div className="school-stat-label">Due this week</div>
           </button>
-          <button type="button" className="sp-stat-card" onClick={() => setSchoolView("timetable")}>
-            <span>Class this week</span>
-            <strong>{classesThisWeek}</strong>
+          <button type="button" className="school-stat" style={{ cursor: "pointer", border: "1px solid var(--sp-line)", background: "var(--sp-surface)", width: "100%" }} onClick={() => setSchoolView("timetable")} data-testid="school-stat-classes">
+            <div className="school-stat-value">{termCourses.length}</div>
+            <div className="school-stat-label">Classes</div>
+          </button>
+          <button type="button" className="school-stat" style={{ cursor: "pointer", border: "1px solid var(--sp-line)", background: "var(--sp-surface)", width: "100%" }} onClick={() => setSchoolView("assignments")}>
+            <div className="school-stat-value">{assignments.length}</div>
+            <div className="school-stat-label">Open work</div>
           </button>
         </div>
 
-        <button type="button" className="sp-card" style={{ textAlign: "left", border: 0, cursor: "pointer", width: "100%" }} onClick={() => setSheet("capture")} data-testid="school-open-capture">
-          <p className="sp-section-kicker" style={{ color: "var(--sp-pink)" }}>Quick capture</p>
-          <p style={{ margin: "6px 0 0", color: "var(--sp-muted)", fontSize: 14 }}>Type anything, a task, deadline, note...</p>
-        </button>
+        <div className="school-card" style={{ cursor: "pointer" }} onClick={() => setSheet("capture")} data-testid="school-open-capture" role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSheet("capture"); }}>
+          <p className="school-card-title" style={{ color: "var(--sp-accent)", marginBottom: 6 }}>Quick capture</p>
+          <p style={{ margin: 0, color: "var(--sp-muted)", fontSize: 14 }}>Type anything — a task, deadline, or note…</p>
+        </div>
 
-        {dueThisWeek.length > 0 && (
-          <div className="sp-stack">
-            <p className="sp-section-kicker">Coming up</p>
-            <div className="sp-task-list">
-              {dueThisWeek.slice(0, 4).map((task) => (
-                <button key={task.id} type="button" className="sp-task" onClick={() => onOpenTask(task.id)}>
-                  <span className="sp-task-dot" style={{ background: courseFor(task.classId)?.color ?? "var(--sp-pink)" }} />
-                  <span>
-                    <strong>{task.title}</strong>
-                    <small>{courseFor(task.classId)?.code ?? "School"} · {friendlyDue(task.due, today)}</small>
-                  </span>
-                </button>
-              ))}
+        <div className="school-section-head">
+          <h2 className="school-section-title">Today</h2>
+          <button type="button" className="school-link-btn" onClick={() => setSchoolView("timetable")}>Timetable</button>
+        </div>
+        {todayClasses.length ? (
+          <div className="school-card" style={{ paddingTop: 8, paddingBottom: 8 }}>
+            {todayClasses.map((course) => (
+              <button key={course.id} type="button" className="school-row" onClick={() => onOpenClass(course.id)} data-testid={`school-today-class-${course.id}`}>
+                <span className="school-dot" style={{ background: course.color }} />
+                <span className="school-row-body">
+                  <p className="school-row-title">
+                    {course.code}
+                    {course.meetingStart ? ` · ${course.meetingStart}${course.meetingEnd ? `–${course.meetingEnd}` : ""}` : ""}
+                  </p>
+                  <p className="school-row-meta">{course.name}{course.location ? ` · ${course.location}` : ""}</p>
+                </span>
+                <ChevronRight size={16} className="school-more-chevron" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="school-empty-inline">
+            <p>
+              {termCourses.length
+                ? "No class meetings today — good day to catch up."
+                : "Add a class from Timetable to see today’s schedule here."}
+            </p>
+            <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={() => (termCourses[0] ? onOpenClass(termCourses[0].id) : onNewCourse())}>
+              {termCourses[0] ? "Open a class" : "Add a class"}
+            </button>
+          </div>
+        )}
+
+        <div className="school-section-head">
+          <h2 className="school-section-title">Coming up</h2>
+          <button type="button" className="school-link-btn" onClick={() => setSchoolView("assignments")}>Assignments</button>
+        </div>
+        {dueThisWeek.length ? (
+          <div className="school-card" style={{ paddingTop: 8, paddingBottom: 8 }}>
+            {dueThisWeek.slice(0, 5).map((task) => (
+              <button key={task.id} type="button" className="school-row" onClick={() => onOpenTask(task.id)}>
+                <span className="school-dot" style={{ background: courseFor(task.classId)?.color ?? "var(--sp-accent)" }} />
+                <span className="school-row-body">
+                  <p className="school-row-title">{task.title}</p>
+                  <p className="school-row-meta">{courseFor(task.classId)?.code ?? "School"} · {friendlyDue(task.due, today)}</p>
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="school-empty-inline">
+            <p>Nothing due this week. Import a syllabus or capture your next deadline.</p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="school-btn school-btn-primary school-btn-sm" onClick={openSyllabus} data-testid="school-home-import-syllabus">Import syllabus</button>
+              <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={onNewAcademic}>Add assignment</button>
             </div>
           </div>
         )}
-
-        {notes.filter((note) => note.classId).slice(0, 1).length > 0 && null}
       </div>
     );
   })();
 
   return (
     <div className="school-planner" data-testid="school-planner">
-      <div className="sp-shell">{body}</div>
+      <div className="school-hub-chrome" data-testid="school-top-nav">
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <p className="school-hub-eyebrow">School OS</p>
+            <h1 className="school-hub-title">School</h1>
+            <p style={{ margin: "-8px 0 14px", fontSize: 14, color: "var(--sp-muted)", lineHeight: 1.45 }}>
+              Classes, assignments, and your week — same shell as the rest of LifeOS.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button type="button" className="school-btn school-btn-ghost school-btn-sm" aria-label="Add to calendar" onClick={() => setSheet("calendar")}>
+              <CalendarDays size={16} />
+            </button>
+            <button type="button" className="school-btn school-btn-ghost school-btn-sm" aria-label="Quick capture" onClick={() => setSheet("capture")}>
+              <Plus size={16} />
+            </button>
+          </div>
+        </div>
+        <div className="school-hub-segments" role="tablist" aria-label="SchoolOS">
+          {SEGMENTS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              role="tab"
+              aria-selected={segmentTab === item.key}
+              className={`school-hub-seg ${segmentTab === item.key ? "is-active" : ""}`}
+              onClick={() => setSchoolView(item.key)}
+              data-testid={`school-nav-${item.key}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      <nav className="sp-bottom-nav" aria-label="SchoolOS">
-        <button type="button" className={schoolView === "home" || schoolView === "due" ? "selected" : ""} onClick={() => setSchoolView("home")} data-testid="school-nav-home">
-          <Home size={20} strokeWidth={1.7} />
-          Home
-        </button>
-        <button type="button" className={schoolView === "timetable" ? "selected" : ""} onClick={() => setSchoolView("timetable")} data-testid="school-nav-timetable">
-          <Grid2X2 size={20} strokeWidth={1.7} />
-          Timetable
-        </button>
-        <button type="button" onClick={openFab} data-testid="school-nav-calendar" aria-label="Add to calendar">
-          <span className="sp-fab"><Plus size={26} strokeWidth={2.2} /></span>
-          <span className="sp-fab-label">Calendar</span>
-        </button>
-        <button type="button" className={schoolView === "assignments" ? "selected" : ""} onClick={() => setSchoolView("assignments")} data-testid="school-nav-assignments">
-          <CalendarDays size={20} strokeWidth={1.7} />
-          Assignments
-        </button>
-        <button type="button" className={schoolView === "more" ? "selected" : ""} onClick={() => setSchoolView("more")} data-testid="school-nav-more">
-          <MoreHorizontal size={20} strokeWidth={1.7} />
-          More
-        </button>
-      </nav>
+      <div className="school-planner-scroll">{body}</div>
+
+      <button type="button" className="school-fab" onClick={() => setSheet("calendar")} data-testid="school-fab-calendar" aria-label="Add to calendar">
+        <Plus size={22} strokeWidth={2.2} />
+      </button>
 
       {sheet === "capture" && (
         <QuickCaptureSheet
@@ -693,6 +949,13 @@ export function SchoolDashboard({
         <AddCalendarSheet
           onClose={() => setSheet(null)}
           onSave={(payload) => onAddCalendarEvent?.(payload)}
+        />
+      )}
+      {sheet === "syllabus" && (
+        <ImportSyllabusSheet
+          courses={courses}
+          onClose={() => setSheet(null)}
+          onImport={(payload) => onImportSyllabus?.(payload)}
         />
       )}
     </div>
