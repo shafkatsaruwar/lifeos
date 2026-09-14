@@ -211,15 +211,15 @@ export function parseSyllabusText(raw: string, options: ParseSyllabusOptions = {
 
     const moduleMatch = line.match(MODULE_ITEM);
     if (moduleMatch) {
-      const module = Number(moduleMatch[1]);
+      const moduleNumber = Number(moduleMatch[1]);
       const title = cleanTitle(moduleMatch[3]);
       if (!title || title.length > 160 || !isGradedModuleItem(title)) continue;
-      const due = termStart ? dueForModule(termStart, module) : undefined;
+      const due = termStart ? dueForModule(termStart, moduleNumber) : undefined;
       push(moduleItems, {
         title: `${moduleMatch[1]}-${moduleMatch[2]} ${title}`.replace(/\s{2,}/g, " ").trim(),
         due,
         academicType: inferAcademicType(title),
-        module,
+        module: moduleNumber,
       });
       continue;
     }
