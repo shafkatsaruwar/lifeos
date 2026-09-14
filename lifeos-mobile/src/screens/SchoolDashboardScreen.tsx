@@ -398,6 +398,10 @@ export function SchoolDashboardScreen() {
     Alert.alert("Logged", "Your check-in is saved under Goals → Wellness.");
   };
 
+  const todayClasses = termCourses
+    .filter((course) => meetsOn(course, now))
+    .sort((a, b) => (a.meetingStart ?? "99").localeCompare(b.meetingStart ?? "99"));
+
   const renderHome = () => (
     <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
       <View style={styles.homeHeader}>
@@ -431,25 +435,70 @@ export function SchoolDashboardScreen() {
       ) : null}
 
       <View style={styles.statRow}>
-        <Pressable style={styles.statCard} onPress={() => setTab("due")}>
+        <Pressable style={styles.statCard} onPress={() => setTab("due")} testID="school-stat-due">
           <Text style={styles.statLabel}>Due this week</Text>
           <Text style={styles.statValue}>{dueThisWeek.length}</Text>
         </Pressable>
-        <Pressable style={styles.statCard} onPress={() => setTab("timetable")}>
-          <Text style={styles.statLabel}>Class this week</Text>
+        <Pressable style={styles.statCard} onPress={() => setTab("timetable")} testID="school-stat-classes">
+          <Text style={styles.statLabel}>Classes</Text>
           <Text style={styles.statValue}>{termCourses.length}</Text>
         </Pressable>
       </View>
 
       <Pressable style={styles.captureCard} onPress={openCapture} testID="school-open-capture">
         <Text style={styles.captureKicker}>Quick capture</Text>
-        <Text style={styles.captureHint}>Type anything, a task, deadline, note...</Text>
+        <Text style={styles.captureHint}>Type anything — a task, deadline, or note…</Text>
       </Pressable>
 
-      {dueThisWeek.length > 0 ? (
-        <View style={styles.section}>
+      <View style={styles.section}>
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionKicker}>Today</Text>
+          <Pressable onPress={() => setTab("timetable")}>
+            <Text style={styles.sectionLink}>Timetable</Text>
+          </Pressable>
+        </View>
+        {todayClasses.length ? (
+          todayClasses.map((course) => (
+            <Pressable
+              key={course.id}
+              style={styles.classRow}
+              onPress={() => navigation.navigate("ClassDetail", { classId: course.id })}
+              testID={`school-today-class-${course.id}`}
+            >
+              <View style={[styles.classDot, { backgroundColor: course.color ?? theme.accent }]} />
+              <View style={styles.grow}>
+                <Text style={styles.classCode}>
+                  {course.code}
+                  {course.meetingStart ? ` · ${course.meetingStart}${course.meetingEnd ? `–${course.meetingEnd}` : ""}` : ""}
+                </Text>
+                <Text style={styles.className}>{course.name}{course.location ? ` · ${course.location}` : ""}</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={theme.muted} />
+            </Pressable>
+          ))
+        ) : (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>
+              {termCourses.length
+                ? "No class meetings today — good day to catch up."
+                : "Add a class with meeting days to see today’s timetable here."}
+            </Text>
+            <Pressable style={styles.outlineBtnWide} onPress={() => (termCourses[0] ? openSchedule(termCourses[0].id) : openCreate("course"))}>
+              <Text style={styles.outlineText}>{termCourses[0] ? "Set meeting time" : "Add a class"}</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHead}>
           <Text style={styles.sectionKicker}>Coming up</Text>
-          {dueThisWeek.slice(0, 5).map((task) => (
+          <Pressable onPress={() => setTab("assignments")}>
+            <Text style={styles.sectionLink}>Assignments</Text>
+          </Pressable>
+        </View>
+        {dueThisWeek.length ? (
+          dueThisWeek.slice(0, 5).map((task) => (
             <Pressable
               key={task.id}
               style={styles.taskRow}
@@ -463,9 +512,21 @@ export function SchoolDashboardScreen() {
                 </Text>
               </View>
             </Pressable>
-          ))}
-        </View>
-      ) : null}
+          ))
+        ) : (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>Nothing due this week. Import a syllabus or capture your next deadline.</Text>
+            <View style={styles.emptyActions}>
+              <Pressable style={styles.primaryBtn} onPress={openSyllabus} testID="school-home-import-syllabus">
+                <Text style={styles.primaryBtnText}>Import syllabus</Text>
+              </Pressable>
+              <Pressable style={styles.outlineBtnWide} onPress={() => openCreate("assignment")}>
+                <Text style={styles.outlineText}>Add assignment</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+      </View>
     </ScrollView>
   );
 
@@ -1298,18 +1359,25 @@ function createStyles(theme: Theme) {
   statRow: { flexDirection: "row", gap: 12 },
   statCard: {
     flex: 1, backgroundColor: theme.surface, borderRadius: 22, paddingVertical: 18, paddingHorizontal: 16,
-    shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2,
+    borderWidth: 1, borderColor: theme.border,
   },
   statLabel: { color: theme.muted, fontSize: 10, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
   statValue: { fontSize: 36, fontWeight: "700", color: theme.text, marginTop: 8, letterSpacing: -1 },
   captureCard: {
     backgroundColor: theme.surface, borderRadius: 22, padding: 18,
-    shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 1,
+    borderWidth: 1, borderColor: theme.border,
   },
   captureKicker: { color: theme.accent, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, textTransform: "uppercase" },
   captureHint: { color: theme.muted, fontSize: 14, marginTop: 6 },
   section: { gap: 10 },
+  sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   sectionKicker: { color: theme.muted, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, textTransform: "uppercase" },
+  sectionLink: { color: theme.accent, fontSize: 13, fontWeight: "600" },
+  emptyCard: {
+    backgroundColor: theme.surface, borderRadius: 18, padding: 18, gap: 14,
+    borderWidth: 1, borderColor: theme.border,
+  },
+  emptyActions: { gap: 10 },
   pageHead: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingTop: 4 },
   pageTitle: { fontSize: 30, fontWeight: "700", color: theme.text, letterSpacing: -1.1 },
   pageSub: { color: theme.muted, fontSize: 13, marginTop: 4 },
@@ -1345,7 +1413,7 @@ function createStyles(theme: Theme) {
   emptyPanel: {
     backgroundColor: theme.surface, borderRadius: 24, paddingVertical: 36, paddingHorizontal: 22,
     alignItems: "center", gap: 14,
-    shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 1,
+    borderWidth: 1, borderColor: theme.border,
   },
   dashedEmpty: {
     minHeight: 160, borderWidth: 1.5, borderStyle: "dashed", borderColor: theme.border,
@@ -1364,6 +1432,7 @@ function createStyles(theme: Theme) {
   classRow: {
     flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: theme.surface,
     borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16,
+    borderWidth: 1, borderColor: theme.border,
   },
   classDot: { width: 12, height: 12, borderRadius: 6 },
   classCode: { fontSize: 14, fontWeight: "700", color: theme.text },
@@ -1371,12 +1440,14 @@ function createStyles(theme: Theme) {
   linkRow: {
     flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: theme.surface,
     borderRadius: 18, paddingVertical: 16, paddingHorizontal: 16,
+    borderWidth: 1, borderColor: theme.border,
   },
   linkRowText: { fontSize: 14, fontWeight: "500", color: theme.text },
   linkRowAction: { color: theme.accent, fontWeight: "600", fontSize: 13 },
   taskRow: {
     flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: theme.surface,
     borderRadius: 18, paddingVertical: 14, paddingHorizontal: 14,
+    borderWidth: 1, borderColor: theme.border,
   },
   taskDot: { width: 10, height: 10, borderRadius: 5 },
   taskTitle: { fontSize: 14, fontWeight: "600", color: theme.text },
@@ -1425,7 +1496,7 @@ function createStyles(theme: Theme) {
   },
   sheetBackdrop: { flex: 1, backgroundColor: "rgba(26, 43, 51, 0.35)", justifyContent: "flex-end" },
   sheet: {
-    backgroundColor: theme.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    backgroundColor: theme.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 18, paddingTop: 10, paddingBottom: 28, maxHeight: "92%",
   },
   grabber: { width: 42, height: 4, borderRadius: 999, backgroundColor: "#B7C7D0", alignSelf: "center", marginBottom: 14 },
@@ -1434,11 +1505,13 @@ function createStyles(theme: Theme) {
     letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 14,
   },
   textarea: {
-    minHeight: 92, borderRadius: 18, backgroundColor: theme.surface, padding: 16,
+    minHeight: 92, borderRadius: 18, backgroundColor: theme.bg, padding: 16,
+    borderWidth: 1, borderColor: theme.border,
     fontSize: 15, color: theme.text, textAlignVertical: "top",
   },
   input: {
-    height: 48, borderRadius: 18, backgroundColor: theme.surface, paddingHorizontal: 16,
+    height: 48, borderRadius: 18, backgroundColor: theme.bg, paddingHorizontal: 16,
+    borderWidth: 1, borderColor: theme.border,
     fontSize: 15, color: theme.text,
   },
   fieldLabel: {
