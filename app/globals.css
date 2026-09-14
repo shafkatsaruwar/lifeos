@@ -15,8 +15,20 @@ button,input,textarea { font:inherit; color:inherit; } button { cursor:pointer; 
 .search-trigger { height:36px; margin:25px 2px 22px; padding:0 9px; border:1px solid var(--line); border-radius:9px; display:flex; align-items:center; gap:8px; color:var(--muted); background:var(--panel); font-size:12px; box-shadow:0 1px 2px rgba(0,0,0,.02); }
 .search-trigger span { flex:1; text-align:left; }.search-trigger kbd,.capture-button kbd,.break-button kbd { font-size:10px; background:var(--canvas); border:1px solid var(--line); padding:2px 5px; border-radius:5px; }
 .nav-label { font-size:9px; color:var(--muted); letter-spacing:.11em; text-transform:uppercase; margin:0 10px 8px; font-weight:700; }
-.nav-item { border:0; background:transparent; width:100%; height:38px; border-radius:8px; padding:0 10px; display:flex; align-items:center; gap:10px; color:var(--muted); font-size:13px; margin:1px 0; }
+.nav-item { border:0; background:transparent; width:100%; height:38px; border-radius:8px; padding:0 10px; display:flex; align-items:center; gap:10px; color:var(--muted); font-size:13px; margin:1px 0; position:relative; }
 .nav-item:hover { background:color-mix(in srgb,var(--ink) 4%, transparent); color:var(--ink); }.nav-item.active { background:var(--panel); color:var(--ink); box-shadow:0 1px 4px rgba(0,0,0,.05); font-weight:600; }
+.nav-item[data-env="life"] svg { color:var(--env-life, #d99b38); }
+.nav-item[data-env="school"] svg { color:var(--env-school, #8b5cf6); }
+.nav-item[data-env="work"] svg { color:var(--env-work, #4338ca); }
+.nav-item[data-env="study-abroad"] svg { color:var(--env-study-abroad, #0d9488); }
+.nav-item.active[data-env="life"] { box-shadow:inset 3px 0 0 var(--env-life, #d99b38), 0 1px 4px rgba(0,0,0,.05); }
+.nav-item.active[data-env="school"] { box-shadow:inset 3px 0 0 var(--env-school, #8b5cf6), 0 1px 4px rgba(0,0,0,.05); }
+.nav-item.active[data-env="work"] { box-shadow:inset 3px 0 0 var(--env-work, #4338ca), 0 1px 4px rgba(0,0,0,.05); }
+.nav-item.active[data-env="study-abroad"] { box-shadow:inset 3px 0 0 var(--env-study-abroad, #0d9488), 0 1px 4px rgba(0,0,0,.05); }
+.workspace-color-block { margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+.workspace-color-row { margin-bottom:12px; }
+.workspace-color-row strong { display:block; font-size:12px; margin-bottom:8px; }
+.settings-field-label { display:block; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
 .nav-item em { margin-left:auto; background:color-mix(in srgb,var(--ink) 7%, transparent); border-radius:10px; padding:1px 6px; font-style:normal; font-size:10px; }
 a.nav-item { text-decoration:none; cursor:pointer; }
 .nav-item .nav-external-icon { margin-left:auto; opacity:.45; flex-shrink:0; }

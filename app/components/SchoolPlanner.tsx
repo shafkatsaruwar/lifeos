@@ -70,6 +70,7 @@ export type SyllabusImportPayload = {
   classId: string;
   items: SyllabusItem[];
   fileName?: string;
+  termStart?: string;
 };
 
 const dateKey = (date: Date) =>
@@ -367,12 +368,22 @@ function ImportSyllabusSheet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<SyllabusItem[]>([]);
+  const [termStart, setTermStart] = useState(() => {
+    const now = new Date();
+    const day = (now.getDay() + 6) % 7; // Monday-based
+    now.setDate(now.getDate() - day);
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  });
+
+  const refreshPreview = (nextText: string, nextTermStart: string) => {
+    setPreview(parseSyllabusText(nextText, { termStart: nextTermStart || undefined }));
+  };
 
   const applyText = (next: string, name?: string) => {
     setText(next);
     setFileName(name);
     setError(null);
-    setPreview(parseSyllabusText(next));
+    refreshPreview(next, termStart);
   };
 
   const onFile = async (file: File | undefined) => {
@@ -395,19 +406,19 @@ function ImportSyllabusSheet({
       setError("Pick a class for these assignments.");
       return;
     }
-    const items = preview.length ? preview : parseSyllabusText(text);
+    const items = preview.length ? preview : parseSyllabusText(text, { termStart: termStart || undefined });
     if (!items.length) {
-      setError("No dated or assignment-like lines found. Paste a syllabus with due dates.");
+      setError("No assignments found. Paste a syllabus, or add a term start for module schedules.");
       return;
     }
-    onImport({ classId, items, fileName });
+    onImport({ classId, items, fileName, termStart: termStart || undefined });
     onClose();
   };
 
   return (
     <Sheet title="Import syllabus" onClose={onClose} testId="school-syllabus-sheet">
       <p className="school-sheet-lede">
-        Import a PDF, Word (.docx), or Markdown file — or paste text. We detect due dates and add them to Assignments and Calendar.
+        Import a PDF, Word (.docx), or Markdown file — or paste text. Dated lines become calendar events; module schedules (like 1-1 Discussion) use your term start.
       </p>
 
       <label className="school-btn school-btn-ghost school-btn-block school-file-btn" data-testid="school-syllabus-import-file">
@@ -424,6 +435,22 @@ function ImportSyllabusSheet({
         />
       </label>
       {fileName ? <p className="school-sheet-lede" style={{ marginTop: 8 }}>Loaded: {fileName}</p> : null}
+
+      <p className="school-card-title" style={{ marginTop: 14 }}>Term start (Module 1)</p>
+      <input
+        data-testid="school-syllabus-term-start"
+        type="date"
+        value={termStart}
+        onChange={(event) => {
+          const next = event.target.value;
+          setTermStart(next);
+          refreshPreview(text, next);
+        }}
+        style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid var(--sp-line)", background: "var(--sp-bg)", color: "var(--sp-ink)", font: "inherit" }}
+      />
+      <p className="school-sheet-lede" style={{ marginTop: 6 }}>
+        Module N is due at the end of that week (term start + (N−1) weeks + 6 days).
+      </p>
 
       <p className="school-card-title" style={{ marginTop: 14 }}>Class</p>
       <div className="school-filters">
@@ -445,7 +472,7 @@ function ImportSyllabusSheet({
         data-testid="school-syllabus-text"
         value={text}
         onChange={(event) => applyText(event.target.value, fileName)}
-        placeholder={"Assignment 1 — due Sep 20\nMidterm exam October 15\nFinal project due 12/5/2026"}
+        placeholder={"1-1 Discussion: Audience analysis\n1-3 Short Paper: Team Building\nAssignment 1 — due Sep 20"}
       />
 
       {error ? <p className="school-sheet-error">{error}</p> : null}

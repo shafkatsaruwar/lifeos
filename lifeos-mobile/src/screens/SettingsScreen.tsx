@@ -18,7 +18,7 @@ import {
 } from "../lib/focusEnforcer";
 import { resolveNotificationPrefs } from "../lib/notifications";
 import { mergeSynapseCalendarEvents, parseSynapseDayPlan } from "../lib/synapseImport";
-import { SPACE_COLORS } from "../lib/theme";
+import { SPACE_COLORS, DEFAULT_WORKSPACE_COLORS, workspaceColorFor } from "../lib/theme";
 import type { CalendarDefaultView, EnergyLevel, ThemeMode } from "../types";
 
 export function SettingsScreen() {
@@ -165,6 +165,56 @@ export function SettingsScreen() {
               );
             })}
           </View>
+          <Text style={{ color: theme.muted, fontSize: 12, marginTop: 6 }}>
+            Default for Now, Tasks, and the rest of LifeOS.
+          </Text>
+
+          <Text style={[styles.swatchLabel, { color: theme.muted, marginTop: 16 }]}>Workspace colors</Text>
+          <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>
+            Life, School, and Work each get their own tint in the tab bar.
+          </Text>
+          {(
+            [
+              ["life", "Life"],
+              ["school", "School"],
+              ["work", "Work"],
+              ["studyAbroad", "Study Abroad"],
+            ] as const
+          ).map(([key, label]) => {
+            const current = workspaceColorFor(workspace.settings, key);
+            return (
+              <View key={key} style={{ marginBottom: 12 }}>
+                <Text style={{ color: theme.text, fontWeight: "700", fontSize: 13, marginBottom: 8 }}>{label}</Text>
+                <View style={styles.swatchGrid}>
+                  {SPACE_COLORS.map((color) => {
+                    const selected = color.toLowerCase() === current.toLowerCase();
+                    return (
+                      <Pressable
+                        key={`${key}-${color}`}
+                        accessibilityLabel={`Set ${label} color ${color}`}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        onPress={() =>
+                          patchSettings({
+                            workspaceColors: {
+                              ...DEFAULT_WORKSPACE_COLORS,
+                              ...workspace.settings.workspaceColors,
+                              [key]: color,
+                            },
+                          })
+                        }
+                        style={[
+                          styles.swatch,
+                          { backgroundColor: color },
+                          selected && { borderColor: theme.text, borderWidth: 3 },
+                        ]}
+                      />
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })}
 
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
 

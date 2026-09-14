@@ -55,6 +55,12 @@ export const CalendarEventSchema = z.object({
 
 export const SettingsSchema = z.object({
   accent: z.string().optional(),
+  workspaceColors: z.object({
+    life: z.string().optional(),
+    school: z.string().optional(),
+    work: z.string().optional(),
+    studyAbroad: z.string().optional(),
+  }).optional(),
   compactMode: z.boolean().optional(),
   reduceMotion: z.boolean().optional(),
   dailyDigest: z.boolean().optional(),

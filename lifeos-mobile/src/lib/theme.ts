@@ -28,6 +28,21 @@ export const SPACE_COLORS = [
   "#64748b",
 ] as const;
 
+/** Defaults aligned with tab tints / web Settings → Workspace colors. */
+export const DEFAULT_WORKSPACE_COLORS = {
+  life: "#d99b38",
+  school: "#8b5cf6",
+  work: "#4338ca",
+  studyAbroad: "#0d9488",
+} as const;
+
+export function workspaceColorFor(
+  settings: { workspaceColors?: Partial<Record<keyof typeof DEFAULT_WORKSPACE_COLORS, string>>; accent?: string },
+  key: keyof typeof DEFAULT_WORKSPACE_COLORS,
+): string {
+  return settings.workspaceColors?.[key]?.trim() || DEFAULT_WORKSPACE_COLORS[key];
+}
+
 export const LIGHT = {
   bg: "#F6F7F9",
   surface: "#FFFFFF",

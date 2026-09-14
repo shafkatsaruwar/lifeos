@@ -86,6 +86,12 @@ export function SchoolDashboardScreen() {
   const [syllabusFileName, setSyllabusFileName] = useState<string | undefined>();
   const [syllabusBusy, setSyllabusBusy] = useState(false);
   const [syllabusPreview, setSyllabusPreview] = useState<SyllabusItem[]>([]);
+  const [syllabusTermStart, setSyllabusTermStart] = useState(() => {
+    const now = new Date();
+    const day = (now.getDay() + 6) % 7;
+    now.setDate(now.getDate() - day);
+    return toDateKey(now);
+  });
   const [wellnessNote, setWellnessNote] = useState("");
 
   const [timetableMode, setTimetableMode] = useState<"day" | "week">("day");
@@ -259,22 +265,22 @@ export function SchoolDashboardScreen() {
     setSheet("syllabus");
   };
 
-  const refreshSyllabusPreview = (text: string) => {
+  const refreshSyllabusPreview = (text: string, termStart = syllabusTermStart) => {
     setSyllabusText(text);
-    setSyllabusPreview(parseSyllabusText(text));
+    setSyllabusPreview(parseSyllabusText(text, { termStart: termStart || undefined }));
   };
 
   const importSyllabusFile = async () => {
     setSyllabusBusy(true);
     try {
-      const picked = await pickSyllabusFile();
+      const picked = await pickSyllabusFile({ termStart: syllabusTermStart || undefined });
       if (!picked) return;
       setSyllabusFileName(picked.name);
       refreshSyllabusPreview(picked.text);
       if (!picked.items.length) {
         Alert.alert(
-          "No dates found yet",
-          "We loaded the file. Edit the text if needed, or make sure assignments include due dates.",
+          "No coursework found yet",
+          "We loaded the file. Set a term start for module schedules, or edit the text if needed.",
         );
       }
     } catch (error) {
@@ -318,9 +324,9 @@ export function SchoolDashboardScreen() {
       ]);
       return;
     }
-    const items = syllabusPreview.length ? syllabusPreview : parseSyllabusText(syllabusText);
+    const items = syllabusPreview.length ? syllabusPreview : parseSyllabusText(syllabusText, { termStart: syllabusTermStart || undefined });
     if (!items.length) {
-      Alert.alert("Nothing to add", "Add lines with assignment names (and due dates when you have them).");
+      Alert.alert("Nothing to add", "Add a term start for module schedules, or lines with assignment names and due dates.");
       return;
     }
     const course = courseFor(syllabusClassId);
@@ -1140,7 +1146,7 @@ export function SchoolDashboardScreen() {
             <Text style={styles.sheetTitle}>Import syllabus</Text>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={styles.helper}>
-                Import a PDF, Word (.docx), or Markdown file — or paste text. We detect due dates and add them to Assignments and Calendar.
+                Import a PDF, Word (.docx), or Markdown file — or paste text. Dated lines become calendar events; module schedules (like 1-1 Discussion) use your term start.
               </Text>
 
               <Pressable
@@ -1161,6 +1167,23 @@ export function SchoolDashboardScreen() {
               {syllabusFileName ? (
                 <Text style={[styles.helper, { marginTop: 8 }]}>Loaded: {syllabusFileName}</Text>
               ) : null}
+
+              <Text style={styles.fieldLabel}>Term start (Module 1)</Text>
+              <TextInput
+                style={[styles.textarea, { minHeight: 44, paddingTop: 10 }]}
+                value={syllabusTermStart}
+                onChangeText={(value) => {
+                  setSyllabusTermStart(value);
+                  refreshSyllabusPreview(syllabusText, value);
+                }}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={theme.muted}
+                autoCapitalize="none"
+                testID="school-syllabus-term-start"
+              />
+              <Text style={[styles.helper, { marginTop: 6 }]}>
+                Module N is due at the end of that week (term start + (N−1) weeks + 6 days).
+              </Text>
 
               <Text style={styles.fieldLabel}>Course</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>

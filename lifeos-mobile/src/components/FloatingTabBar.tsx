@@ -12,13 +12,15 @@ import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { useLayout } from "../lib/layout";
+import { workspaceColorFor } from "../lib/theme";
+import type { SettingsState } from "../types";
 
 const PILL_H = 64;
 const LIGHT_INSET = 5;
 const INACTIVE = "#8E8E93";
 
-/** Each tab gets its own pop — Now follows the user’s accent. */
-function tabTint(routeName: string, accent: string): string {
+/** Each tab gets its own pop — Life/School/Work use workspace colors. */
+function tabTint(routeName: string, accent: string, settings: SettingsState): string {
   switch (routeName) {
     case "NowTab":
       return accent;
@@ -27,11 +29,11 @@ function tabTint(routeName: string, accent: string): string {
     case "CalendarTab":
       return "#3F7ED7";
     case "LifeTab":
-      return "#D99B38";
+      return workspaceColorFor(settings, "life");
     case "SchoolTab":
-      return "#8B5CF6";
+      return workspaceColorFor(settings, "school");
     case "WorkTab":
-      return "#4338CA";
+      return workspaceColorFor(settings, "work");
     case "LibraryTab":
       return "#DB2777";
     default:
@@ -131,7 +133,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const dark = theme.bg === "#111214" || theme.surface === "#191A1D";
   const pillBg = dark ? theme.surface : "#FFFFFF";
   const activeRoute = visible[activeIndex]?.name ?? "NowTab";
-  const activeTint = tabTint(activeRoute, theme.accent);
+  const activeTint = tabTint(activeRoute, theme.accent, workspace.settings);
 
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
@@ -166,7 +168,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
                   ? options.tabBarLabel
                   : options.title ?? route.name;
               const focused = index === activeIndex;
-              const color = focused ? tabTint(route.name, theme.accent) : INACTIVE;
+              const color = focused ? tabTint(route.name, theme.accent, workspace.settings) : INACTIVE;
               const iconName = (options.tabBarIcon
                 ? undefined
                 : "circle") as keyof typeof Feather.glyphMap;
