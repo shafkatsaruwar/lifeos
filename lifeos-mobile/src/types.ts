@@ -342,6 +342,18 @@ export type SettingsState = {
   /** Week plan buckets by day-of-week (0=Sun) — used by Plan the week on Now. */
   weeklyPlan?: { [dayOfWeek: number]: { id: string; text: string }[] };
   spaceContext?: Record<string, { lastTaskId?: number; lastFilter?: string; updatedAt?: string }>;
+  /** Saved webcal / .ics subscription feeds (multi-calendar subscribe). Synced with web. */
+  icalSubscriptions?: IcalSubscription[];
+};
+
+/** Persistent iCal / webcal feed subscription — mirrors web SettingsState. */
+export type IcalSubscription = {
+  id: string;
+  url: string;
+  name: string;
+  color: string;
+  lastSyncedAt?: string;
+  lastError?: string;
 };
 
 /** Destinations after onboarding “first move”. */

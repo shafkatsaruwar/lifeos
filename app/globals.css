@@ -504,3 +504,21 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .calendar-weekdays-only{display:flex;align-items:center;gap:10px;margin:4px 0 0;font-size:12px;font-weight:650;color:var(--ink)}
 .calendar-weekdays-only input{width:16px;height:16px;accent-color:var(--accent)}
 .calendar-weekdays-hint{margin:-4px 0 10px;color:var(--muted);font-size:10px;line-height:1.45}
+
+
+/* Multi-calendar iCal subscriptions */
+.ical-feeds-panel{display:grid;gap:14px;padding:16px 18px 18px}
+.ical-feeds-panel.is-compact{padding:8px 0 14px}
+.ical-feed-list{display:grid;gap:10px}
+.ical-feed-row{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:12px;align-items:start;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--canvas)}
+.ical-feed-row>i{width:10px;height:10px;margin-top:5px;border-radius:50%}
+.ical-feed-row strong{display:block;font-size:13px;color:var(--ink)}
+.ical-feed-row p{margin:4px 0 0;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.ical-feed-row small{display:block;margin-top:6px;font-size:10px;color:var(--muted)}
+.ical-feed-actions{display:flex;gap:6px}
+.ical-feed-actions button{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:650;color:var(--ink)}
+.ical-feed-form{display:grid;gap:10px}
+.ical-feed-form label{display:grid;gap:6px;font-size:12px;font-weight:650;color:var(--ink)}
+.ical-feed-form input{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel);color:var(--ink);font:inherit}
+.ical-feed-form-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ical-feed-form-actions .primary{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:700}
