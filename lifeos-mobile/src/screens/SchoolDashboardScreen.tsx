@@ -12,9 +12,9 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FocusModal } from "../components/FocusModal";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
+import { ActionButton, Eyebrow, IconButton, Page, SegmentedControl, Subtitle, Title } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { SPACE_COLORS, type Theme } from "../lib/theme";
 import { formatDueDate, taskIsOpen, toDateKey, uid } from "../lib/helpers";
@@ -78,7 +78,6 @@ export function SchoolDashboardScreen() {
   const appearanceLabel =
     workspace.settings.themeMode === "system" ? "System" : dark ? "Dark" : "Light";
   const tabBarPad = useFloatingTabBarContentPadding(12);
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
 
   const [tab, setTab] = useState<SchoolTab>("home");
@@ -406,22 +405,13 @@ export function SchoolDashboardScreen() {
     <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
       <View style={styles.homeHeader}>
         <View style={styles.grow}>
-          <Text style={styles.dateKicker}>
-            {now.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }).toUpperCase()}
+          <Text style={styles.homeLede}>{greetingFor(now)}, {firstName(displayName)}.</Text>
+          <Text style={styles.homeMeta}>
+            {now.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+            {dueThisWeek.length ? ` · ${dueThisWeek.length} due this week` : " · nothing due this week"}
           </Text>
-          <Text style={styles.greeting}>{greetingFor(now)}, {firstName(displayName)}</Text>
         </View>
-        <View style={styles.homeActions}>
-          <Pressable style={styles.ghostBtn} onPress={() => navigation.navigate("SchoolProfile")}>
-            <Text style={styles.ghostBtnText}>Customize</Text>
-          </Pressable>
-          <Pressable style={styles.iconBtn} onPress={openCapture} accessibilityLabel="Search / capture">
-            <Feather name="search" size={16} color={theme.text} />
-          </Pressable>
-          <Pressable style={styles.avatar} onPress={() => setTab("more")} accessibilityLabel="More">
-            <Text style={styles.avatarText}>{initials.slice(0, 1)}</Text>
-          </Pressable>
-        </View>
+        <ActionButton label="Profile" icon="user" quiet onPress={() => navigation.navigate("SchoolProfile")} />
       </View>
 
       {courses.length === 0 ? (
@@ -1014,24 +1004,35 @@ export function SchoolDashboardScreen() {
           : tab === "more" ? renderMore()
             : renderHome();
 
+  const segmentTab: Exclude<SchoolTab, "due"> = tab === "due" ? "home" : tab;
+
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]} testID="school-planner">
-      <View style={styles.topChrome} testID="school-top-nav">
-        <View style={styles.segmentRow}>
-          <SegmentItem styles={styles} label="Home" selected={tab === "home" || tab === "due"} onPress={() => setTab("home")} testID="school-nav-home" />
-          <SegmentItem styles={styles} label="Timetable" selected={tab === "timetable"} onPress={() => setTab("timetable")} testID="school-nav-timetable" />
-          <SegmentItem styles={styles} label="Assignments" selected={tab === "assignments"} onPress={() => setTab("assignments")} testID="school-nav-assignments" />
-          <SegmentItem styles={styles} label="More" selected={tab === "more"} onPress={() => setTab("more")} testID="school-nav-more" />
+    <Page>
+      <View style={styles.screen} testID="school-planner">
+        <View style={styles.header} testID="school-top-nav">
+          <View style={styles.grow}>
+            <Eyebrow>SCHOOL OS</Eyebrow>
+            <Title>School</Title>
+            <Subtitle>Classes, assignments, and your week — same shell as the rest of LifeOS.</Subtitle>
+          </View>
+          <View style={styles.headerActions}>
+            <IconButton icon="calendar" label="Add to calendar" onPress={openCalendarSheet} />
+            <IconButton icon="plus" label="Quick capture" onPress={openCapture} />
+          </View>
         </View>
-        <Pressable
-          style={styles.calendarChip}
-          onPress={openCalendarSheet}
-          accessibilityLabel="Add to calendar"
-          testID="school-nav-calendar"
-        >
-          <Feather name="plus" size={18} color="#FFF" />
-        </Pressable>
-      </View>
+
+        <View style={styles.segmentWrap}>
+          <SegmentedControl
+            value={segmentTab}
+            onChange={(next) => setTab(next)}
+            options={[
+              { key: "home", label: "Home" },
+              { key: "timetable", label: "Timetable" },
+              { key: "assignments", label: "Assignments" },
+              { key: "more", label: "More" },
+            ]}
+          />
+        </View>
 
       {body}
 
@@ -1297,38 +1298,21 @@ export function SchoolDashboardScreen() {
       {focusTask ? (
         <FocusModal visible={Boolean(focusTaskId)} task={focusTask} onClose={() => setFocusTaskId(null)} />
       ) : null}
-    </View>
+      </View>
+    </Page>
   );
 }
 
-function SegmentItem({
-  styles,
-  label,
-  selected,
-  onPress,
-  testID,
-}: {
-  styles: ReturnType<typeof createStyles>;
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-  testID?: string;
-}) {
-  return (
-    <Pressable
-      style={[styles.segmentItem, selected && styles.segmentItemSelected]}
-      onPress={onPress}
-      testID={testID}
-    >
-      <Text style={[styles.segmentLabel, selected && styles.segmentLabelSelected]}>{label}</Text>
-    </Pressable>
-  );
-}
 
 function createStyles(theme: Theme) {
   return StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.bg },
+  screen: { flex: 1 },
+  header: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: 18, paddingTop: 4, paddingBottom: 8 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 4 },
+  segmentWrap: { paddingHorizontal: 18, paddingBottom: 8 },
   scroll: { paddingHorizontal: 18, paddingTop: 8, gap: 14 },
+  homeLede: { fontSize: 18, fontWeight: "700", color: theme.text, letterSpacing: -0.3 },
+  homeMeta: { color: theme.muted, fontSize: 13, marginTop: 4 },
   grow: { flex: 1, minWidth: 0 },
   homeHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingTop: 4 },
   dateKicker: { color: theme.muted, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, marginBottom: 6 },
@@ -1367,7 +1351,7 @@ function createStyles(theme: Theme) {
     backgroundColor: theme.surface, borderRadius: 22, padding: 18,
     borderWidth: 1, borderColor: theme.border,
   },
-  captureKicker: { color: theme.accent, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, textTransform: "uppercase" },
+  captureKicker: { color: theme.muted, fontSize: 11, fontWeight: "800", letterSpacing: 1.2, textTransform: "uppercase" },
   captureHint: { color: theme.muted, fontSize: 14, marginTop: 6 },
   section: { gap: 10 },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
@@ -1383,14 +1367,14 @@ function createStyles(theme: Theme) {
   pageSub: { color: theme.muted, fontSize: 13, marginTop: 4 },
   pageActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" },
   outlineBtn: {
-    height: 38, borderRadius: 999, borderWidth: 1.5, borderColor: theme.accent,
-    paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 6,
+    height: 38, borderRadius: 12, borderWidth: 1, borderColor: theme.border,
+    backgroundColor: theme.surface, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 6,
   },
   outlineBtnWide: {
-    height: 42, borderRadius: 999, borderWidth: 1.5, borderColor: theme.accent,
-    paddingHorizontal: 18, alignItems: "center", justifyContent: "center", alignSelf: "center",
+    height: 42, borderRadius: 12, borderWidth: 1, borderColor: theme.border,
+    backgroundColor: theme.surface, paddingHorizontal: 18, alignItems: "center", justifyContent: "center", alignSelf: "stretch",
   },
-  outlineText: { color: theme.accent, fontSize: 12, fontWeight: "600" },
+  outlineText: { color: theme.text, fontSize: 12, fontWeight: "700" },
   toolbarRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
   toggle: { flexDirection: "row", backgroundColor: theme.soft, borderRadius: 999, padding: 3, gap: 2 },
   toggleBtn: { height: 32, borderRadius: 999, paddingHorizontal: 14, justifyContent: "center" },
@@ -1422,12 +1406,11 @@ function createStyles(theme: Theme) {
   emptyText: { color: theme.muted, fontSize: 15, textAlign: "center" },
   hint: { color: theme.muted, fontSize: 12, lineHeight: 18, textAlign: "center" },
   primaryBtn: {
-    minHeight: 48, borderRadius: 999, backgroundColor: theme.accent, paddingHorizontal: 22,
+    minHeight: 48, borderRadius: 12, backgroundColor: theme.text, paddingHorizontal: 22,
     alignItems: "center", justifyContent: "center",
-    shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3,
   },
   primaryDisabled: { opacity: 0.45 },
-  primaryBtnText: { color: "#FFF", fontSize: 15, fontWeight: "600" },
+  primaryBtnText: { color: theme.surface, fontSize: 15, fontWeight: "800" },
   listGap: { gap: 10 },
   classRow: {
     flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: theme.surface,
@@ -1494,15 +1477,15 @@ function createStyles(theme: Theme) {
     alignItems: "center", justifyContent: "center",
     shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3,
   },
-  sheetBackdrop: { flex: 1, backgroundColor: "rgba(26, 43, 51, 0.35)", justifyContent: "flex-end" },
+  sheetBackdrop: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.4)", justifyContent: "flex-end" },
   sheet: {
     backgroundColor: theme.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 18, paddingTop: 10, paddingBottom: 28, maxHeight: "92%",
   },
-  grabber: { width: 42, height: 4, borderRadius: 999, backgroundColor: "#B7C7D0", alignSelf: "center", marginBottom: 14 },
+  grabber: { width: 42, height: 4, borderRadius: 999, backgroundColor: theme.border, alignSelf: "center", marginBottom: 14 },
   sheetTitle: {
-    textAlign: "center", color: theme.accent, fontSize: 11, fontWeight: "700",
-    letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 14,
+    textAlign: "center", color: theme.text, fontSize: 18, fontWeight: "800",
+    marginBottom: 14,
   },
   textarea: {
     minHeight: 92, borderRadius: 18, backgroundColor: theme.bg, padding: 16,
@@ -1515,8 +1498,7 @@ function createStyles(theme: Theme) {
     fontSize: 15, color: theme.text,
   },
   fieldLabel: {
-    marginTop: 14, marginBottom: 8, color: theme.accent, fontSize: 11, fontWeight: "700",
-    letterSpacing: 1.2, textTransform: "uppercase",
+    marginTop: 14, marginBottom: 8, color: theme.muted, fontSize: 12, fontWeight: "800",
   },
   helper: { color: theme.muted, fontSize: 12, marginTop: 8 },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
