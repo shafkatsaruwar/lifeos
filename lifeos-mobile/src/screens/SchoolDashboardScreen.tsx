@@ -28,7 +28,14 @@ type WhenOpt = "today" | "tomorrow" | "custom";
 const EVENT_TYPES = ["Club", "Appointment", "Study", "To-do", "Personal", "Deadline", "Shift", "Exam"] as const;
 const EVENT_COLORS = SPACE_COLORS.slice(0, 7);
 
-
+/** Always show code and class name together when both exist. */
+function formatCourseLabel(course?: { code?: string; name?: string } | null) {
+  if (!course) return "School";
+  const code = (course.code || "").trim();
+  const name = (course.name || "").trim();
+  if (code && name && code.toLowerCase() !== name.toLowerCase()) return `${code} · ${name}`;
+  return code || name || "School";
+}
 
 const startOfWeek = (date: Date) => {
   const d = new Date(date);
@@ -354,7 +361,7 @@ export function SchoolDashboardScreen() {
       .filter((item) => item.due)
       .map((item, index) => ({
         id: `syllabus-${stamp}-${index}`,
-        title: `${course?.code ?? "School"} · ${item.title}`,
+        title: `${formatCourseLabel(course)} · ${item.title}`,
         start: `${item.due}T23:59:00`,
         source: "LifeOS" as const,
         color: course?.color ?? theme.accent,
@@ -444,10 +451,10 @@ export function SchoolDashboardScreen() {
               <View style={[styles.classDot, { backgroundColor: course.color ?? theme.accent }]} />
               <View style={styles.grow}>
                 <Text style={styles.classCode}>
-                  {course.code}
+                  {formatCourseLabel(course)}
                   {course.meetingStart ? ` · ${course.meetingStart}${course.meetingEnd ? `–${course.meetingEnd}` : ""}` : ""}
                 </Text>
-                <Text style={styles.className}>{course.name}{course.location ? ` · ${course.location}` : ""}</Text>
+                <Text style={styles.className}>{[course.instructor, course.location].filter(Boolean).join(" · ") || "Class meeting"}</Text>
               </View>
               <Feather name="chevron-right" size={16} color={theme.muted} />
             </Pressable>
@@ -484,7 +491,7 @@ export function SchoolDashboardScreen() {
               <View style={styles.grow}>
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 <Text style={styles.taskMeta}>
-                  {courseFor(task.classId)?.code ?? "School"} · {formatDueDate(task.due)}
+                  {formatCourseLabel(courseFor(task.classId))} · {formatDueDate(task.due)}
                 </Text>
               </View>
             </Pressable>
@@ -599,8 +606,8 @@ export function SchoolDashboardScreen() {
                     <Pressable key={course.id} style={styles.classRow} onPress={() => navigation.navigate("ClassDetail", { classId: course.id })}>
                       <View style={[styles.classDot, { backgroundColor: course.color ?? theme.accent }]} />
                       <View style={styles.grow}>
-                        <Text style={styles.classCode}>{course.code}{course.meetingStart ? ` · ${course.meetingStart}` : ""}</Text>
-                        <Text style={styles.className}>{course.name}{course.instructor ? ` · ${course.instructor}` : ""}</Text>
+                        <Text style={styles.classCode}>{formatCourseLabel(course)}{course.meetingStart ? ` · ${course.meetingStart}` : ""}</Text>
+                        <Text style={styles.className}>{course.instructor || "Tap for class details"}</Text>
                       </View>
                       <Feather name="chevron-right" size={16} color={theme.muted} />
                     </Pressable>
@@ -617,8 +624,8 @@ export function SchoolDashboardScreen() {
               <Pressable key={course.id} style={styles.classRow} onPress={() => navigation.navigate("ClassDetail", { classId: course.id })}>
                 <View style={[styles.classDot, { backgroundColor: course.color ?? theme.accent }]} />
                 <View style={styles.grow}>
-                  <Text style={styles.classCode}>{course.code}</Text>
-                  <Text style={styles.className}>{course.name}{course.instructor ? ` · ${course.instructor}` : ""}</Text>
+                  <Text style={styles.classCode}>{formatCourseLabel(course)}</Text>
+                  <Text style={styles.className}>{course.instructor || "Tap for class details"}</Text>
                   <Text style={styles.classMeta}>{formatMeeting(course)}</Text>
                 </View>
                 <Feather name="chevron-right" size={16} color={theme.muted} />
@@ -638,8 +645,8 @@ export function SchoolDashboardScreen() {
                   <Pressable key={course.id} style={styles.classRow} onPress={() => openSchedule(course.id)}>
                     <View style={[styles.classDot, { backgroundColor: course.color ?? theme.accent }]} />
                     <View style={styles.grow}>
-                      <Text style={styles.classCode}>{course.code}</Text>
-                      <Text style={styles.className}>{course.name}</Text>
+                      <Text style={styles.classCode}>{formatCourseLabel(course)}</Text>
+                      <Text style={styles.className}>{course.instructor || "Tap for class details"}</Text>
                       <Text style={styles.classMeta}>Tap to set days and time</Text>
                     </View>
                     <Feather name="clock" size={16} color={theme.accent} />
@@ -703,7 +710,7 @@ export function SchoolDashboardScreen() {
               <View style={styles.grow}>
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 <Text style={styles.taskMeta}>
-                  {courseFor(task.classId)?.code ?? "School"} · {task.academicType ?? "Assignment"} · {formatDueDate(task.due)}
+                  {formatCourseLabel(courseFor(task.classId))} · {task.academicType ?? "Assignment"} · {formatDueDate(task.due)}
                   {task.gradeWeight ? ` · ${task.gradeWeight}%` : ""}
                 </Text>
               </View>
@@ -738,7 +745,7 @@ export function SchoolDashboardScreen() {
               <View style={styles.grow}>
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 <Text style={styles.taskMeta}>
-                  {courseFor(task.classId)?.code ?? "School"} · {formatDueDate(task.due)}
+                  {formatCourseLabel(courseFor(task.classId))} · {formatDueDate(task.due)}
                 </Text>
               </View>
               <Pressable onPress={() => completeTask(task.id)} hitSlop={10} accessibilityLabel={`Complete ${task.title}`}>
@@ -786,7 +793,7 @@ export function SchoolDashboardScreen() {
                       <View style={styles.grow}>
                         <Text style={styles.taskTitle}>{task.title}</Text>
                         <Text style={styles.taskMeta}>
-                          {courseFor(task.classId)?.code ?? "School"} · {task.gradeWeight}% · {score}
+                          {formatCourseLabel(courseFor(task.classId))} · {task.gradeWeight}% · {score}
                         </Text>
                       </View>
                     </Pressable>
@@ -823,7 +830,7 @@ export function SchoolDashboardScreen() {
                   <Pressable key={task.id} style={styles.taskRow} onPress={() => navigation.navigate("TasksTab", { screen: "TaskDetail", params: { taskId: task.id } })}>
                     <View style={styles.grow}>
                       <Text style={styles.taskTitle}>{task.title}</Text>
-                      <Text style={styles.taskMeta}>{courseFor(task.classId)?.code ?? "School"} · {task.academicType} · {formatDueDate(task.due)}</Text>
+                      <Text style={styles.taskMeta}>{formatCourseLabel(courseFor(task.classId))} · {task.academicType} · {formatDueDate(task.due)}</Text>
                     </View>
                     <Pressable onPress={() => setFocusTaskId(task.id)} hitSlop={8}>
                       <Feather name="play-circle" size={20} color={theme.accent} />
@@ -855,7 +862,7 @@ export function SchoolDashboardScreen() {
                     <Feather name="book-open" size={16} color={theme.accent} />
                     <View style={styles.grow}>
                       <Text style={styles.taskTitle}>{task.title}</Text>
-                      <Text style={styles.taskMeta}>{courseFor(task.classId)?.code ?? "School"} · {formatDueDate(task.due)}</Text>
+                      <Text style={styles.taskMeta}>{formatCourseLabel(courseFor(task.classId))} · {formatDueDate(task.due)}</Text>
                     </View>
                     <Text style={styles.linkRowAction}>Done</Text>
                   </Pressable>
@@ -1045,7 +1052,7 @@ export function SchoolDashboardScreen() {
                       >
                         <View style={[styles.miniDot, { backgroundColor: course.color ?? theme.accent }]} />
                         <Text style={[styles.subjectPillText, captureClassId === course.id && { color: "#FFF" }]} numberOfLines={1}>
-                          {course.name || course.code}
+                          {formatCourseLabel(course)}
                         </Text>
                       </Pressable>
                     )) : (
@@ -1195,8 +1202,8 @@ export function SchoolDashboardScreen() {
                   >
                     <View style={[styles.miniDot, { backgroundColor: course.color ?? theme.accent }]} />
                     <Text style={[styles.subjectPillText, syllabusClassId === course.id && { color: "#FFF" }]} numberOfLines={1}>
-                      {course.code}
-                    </Text>
+                          {formatCourseLabel(course)}
+                        </Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -1259,7 +1266,7 @@ export function SchoolDashboardScreen() {
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <View style={styles.grabber} />
             <Text style={styles.sheetTitle}>Class meeting time</Text>
-            <Text style={styles.helper}>{courseFor(scheduleClassId)?.code ?? "Class"} · set days and hours for the timetable</Text>
+            <Text style={styles.helper}>{formatCourseLabel(courseFor(scheduleClassId))} · set days and hours for the timetable</Text>
             <Text style={styles.fieldLabel}>Days</Text>
             <View style={styles.pillRow}>
               {[

@@ -76,6 +76,15 @@ export type SyllabusImportPayload = {
 const dateKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
+/** Always show code and class name together when both exist. */
+const formatCourseLabel = (course?: { code?: string; name?: string } | null) => {
+  if (!course) return "School";
+  const code = (course.code || "").trim();
+  const name = (course.name || "").trim();
+  if (code && name && code.toLowerCase() !== name.toLowerCase()) return `${code} · ${name}`;
+  return code || name || "School";
+};
+
 const openTask = (task: DashboardTask) => !task.done && !task.canceled;
 const weekWindow = () => {
   const now = new Date();
@@ -235,7 +244,7 @@ function QuickCaptureSheet({
         <>
           <p className="school-card-title" style={{ marginTop: 12 }}>Subject</p>
           <button type="button" className="school-btn school-btn-ghost school-btn-block" onClick={() => setPickingSubject((value) => !value)} data-testid="school-capture-subject">
-            {selected ? selected.name : "Pick a subject"}
+            {selected ? formatCourseLabel(selected) : "Pick a subject"}
           </button>
           {pickingSubject && (
             <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -247,7 +256,7 @@ function QuickCaptureSheet({
                   onClick={() => { setClassId(course.id); setPickingSubject(false); }}
                 >
                   <span className="school-dot" style={{ background: course.color, marginTop: 0 }} />
-                  {course.name}
+                  {formatCourseLabel(course)}
                 </button>
               )) : <p className="school-sheet-lede">Add a class from Timetable first.</p>}
             </div>
@@ -461,7 +470,7 @@ function ImportSyllabusSheet({
             className={`school-filter ${classId === course.id ? "is-active" : ""}`}
             onClick={() => setClassId(course.id)}
           >
-            {course.code || course.name}
+            {formatCourseLabel(course)}
           </button>
         ))}
       </div>
@@ -714,11 +723,16 @@ export function SchoolDashboard({
                 <button key={course.id} type="button" className="school-block" onClick={() => onOpenClass(course.id)}>
                   <span className="school-block-bar" style={{ background: course.color }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p className="school-block-title">
-                      {course.code}
-                      {course.meetingStart ? ` · ${course.meetingStart}${course.meetingEnd ? `–${course.meetingEnd}` : ""}` : ""}
+                    <p className="school-block-title">{formatCourseLabel(course)}</p>
+                    <p className="school-block-meta">
+                      {[
+                        course.meetingStart
+                          ? `${course.meetingStart}${course.meetingEnd ? `–${course.meetingEnd}` : ""}`
+                          : null,
+                        course.instructor || null,
+                        course.location || null,
+                      ].filter(Boolean).join(" · ") || "Tap for class details"}
                     </p>
-                    <p className="school-block-meta">{course.name}{course.instructor ? ` · ${course.instructor}` : ""}</p>
                   </div>
                 </button>
               ))}
@@ -760,7 +774,7 @@ export function SchoolDashboard({
                     <span className="school-dot" style={{ background: courseFor(task.classId)?.color ?? "var(--sp-accent)" }} />
                     <span className="school-row-body">
                       <p className="school-row-title">{task.title}</p>
-                      <p className="school-row-meta">{courseFor(task.classId)?.code ?? "School"} · {task.academicType ?? "Assignment"} · {friendlyDue(task.due, today)}</p>
+                      <p className="school-row-meta">{formatCourseLabel(courseFor(task.classId))} · {task.academicType ?? "Assignment"} · {friendlyDue(task.due, today)}</p>
                     </span>
                   </button>
                 ))}
@@ -792,7 +806,7 @@ export function SchoolDashboard({
                   <span className="school-dot" style={{ background: courseFor(task.classId)?.color ?? "var(--sp-accent)" }} />
                   <span className="school-row-body">
                     <p className="school-row-title">{task.title}</p>
-                    <p className="school-row-meta">{courseFor(task.classId)?.code ?? "School"} · {friendlyDue(task.due, today)}</p>
+                    <p className="school-row-meta">{formatCourseLabel(courseFor(task.classId))} · {friendlyDue(task.due, today)}</p>
                   </span>
                   <button
                     type="button"
@@ -907,7 +921,7 @@ export function SchoolDashboard({
                   <div className="work-task-copy">
                     <button type="button" onClick={() => onOpenTask(task.id)}>
                       <strong>{task.title}</strong>
-                      <small>{courseFor(task.classId)?.code ?? "School"} · {friendlyDue(task.due, today)}</small>
+                      <small>{formatCourseLabel(courseFor(task.classId))} · {friendlyDue(task.due, today)}</small>
                     </button>
                   </div>
                   <span className="work-priority-tag" style={{ background: `${courseFor(task.classId)?.color ?? "var(--accent)"}18`, color: courseFor(task.classId)?.color ?? "var(--accent)" }}>
@@ -936,8 +950,8 @@ export function SchoolDashboard({
                           <GraduationCap size={14} />
                         </span>
                         <div>
-                          <strong>{course.code || course.name}</strong>
-                          <p>{course.name}{course.instructor ? ` · ${course.instructor}` : ""}</p>
+                          <strong>{formatCourseLabel(course)}</strong>
+                          <p>{course.instructor || "No instructor yet"}</p>
                         </div>
                       </div>
                       {total > 0 && (
@@ -965,7 +979,7 @@ export function SchoolDashboard({
                   <span className="work-deliverable-icon"><FileText size={15} /></span>
                   <div>
                     <strong>{task.title}</strong>
-                    <small>{courseFor(task.classId)?.code ?? "School"} · {friendlyDue(task.due, today)}</small>
+                    <small>{formatCourseLabel(courseFor(task.classId))} · {friendlyDue(task.due, today)}</small>
                   </div>
                 </button>
               )) : <Empty>Nothing due this week. Import a syllabus or capture your next deadline.</Empty>}
@@ -996,7 +1010,7 @@ export function SchoolDashboard({
                 <button type="button" onClick={() => onOpenTask(focusTask.id)}>Edit</button>
               </div>
               <strong>{focusTask.title}</strong>
-              <small>{courseFor(focusTask.classId)?.code ?? "School"}</small>
+              <small>{formatCourseLabel(courseFor(focusTask.classId))}</small>
               <p>{completedSchool} of {allSchoolTasks.length || completedSchool} school tasks completed</p>
               <button type="button" className="work-focus-start" onClick={() => onFocus(focusTask.id)}>Start focus</button>
             </div>
@@ -1030,8 +1044,8 @@ export function SchoolDashboard({
           <Section icon={Clock3} title="Calendar & classes" action="Timetable" onAction={() => setSchoolView("timetable")}>
             {todayClasses.length ? todayClasses.map((course) => (
               <button key={course.id} type="button" className="work-meeting-row" onClick={() => onOpenClass(course.id)} data-testid={`school-today-class-${course.id}`}>
-                <strong>{course.code}{course.meetingStart ? ` · ${course.meetingStart}` : ""}</strong>
-                <small>{course.name}{course.location ? ` · ${course.location}` : ""}</small>
+                <strong>{formatCourseLabel(course)}{course.meetingStart ? ` · ${course.meetingStart}` : ""}</strong>
+                <small>{[course.instructor, course.location].filter(Boolean).join(" · ") || "Class meeting"}</small>
               </button>
             )) : (
               <Empty>
