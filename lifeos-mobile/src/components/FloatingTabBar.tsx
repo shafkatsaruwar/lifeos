@@ -29,7 +29,7 @@ function tabTint(routeName: string, accent: string): string {
     case "LifeTab":
       return "#D99B38";
     case "SchoolTab":
-      return "#0F8A7A";
+      return "#8B5CF6";
     case "WorkTab":
       return "#4338CA";
     case "LibraryTab":

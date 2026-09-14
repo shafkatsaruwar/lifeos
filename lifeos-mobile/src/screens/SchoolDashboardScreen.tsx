@@ -5,7 +5,6 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,30 +16,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FocusModal } from "../components/FocusModal";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { SPACE_COLORS, type Theme } from "../lib/theme";
 import { formatDueDate, taskIsOpen, toDateKey, uid } from "../lib/helpers";
 import { parseSyllabusText, pickSyllabusFile, type SyllabusItem } from "../lib/syllabusImport";
 import type { CalendarEvent, ClassRecord, Task } from "../types";
-
-/** SchoolOS-only palette — mist canvas + teal accent (not the web cream/pink refs). */
-const SP = {
-  mist: "#EEF3F6",
-  mistDeep: "#E2EAEF",
-  panel: "#FFFFFF",
-  ink: "#1A2B33",
-  muted: "#6B7C86",
-  line: "#D5E0E7",
-  teal: "#0F8A7A",
-  tealSoft: "#D4EFE9",
-  tealDeep: "#0B6B5E",
-  alert: "#DFF3EE",
-};
 
 type SchoolTab = "home" | "timetable" | "assignments" | "due" | "more";
 type CaptureKind = "Task" | "Deadline" | "Note";
 type WhenOpt = "today" | "tomorrow" | "custom";
 
 const EVENT_TYPES = ["Club", "Appointment", "Study", "To-do", "Personal", "Deadline", "Shift", "Exam"] as const;
-const EVENT_COLORS = ["#3AA8C5", "#2BB8A4", "#5B9AD8", "#6DB58A", "#4F8F9E", "#7EC4B8", "#4A7EA8"] as const;
+const EVENT_COLORS = SPACE_COLORS.slice(0, 7);
 
 const greetingFor = (date = new Date()) => {
   const hour = date.getHours();
@@ -87,7 +73,10 @@ const formatMeeting = (course: ClassRecord) => {
 
 
 export function SchoolDashboardScreen() {
-  const { workspace, updateTasks, updateNotes, updateCalendar, updateClasses, updateSchool } = useLifeOS();
+  const { workspace, theme, dark, updateTasks, updateNotes, updateCalendar, updateClasses, updateSchool } = useLifeOS();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const appearanceLabel =
+    workspace.settings.themeMode === "system" ? "System" : dark ? "Dark" : "Light";
   const tabBarPad = useFloatingTabBarContentPadding(12);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
@@ -212,7 +201,7 @@ export function SchoolDashboardScreen() {
       id,
       title,
       classId: captureClassId,
-      color: course?.color ?? SP.teal,
+      color: course?.color ?? theme.accent,
       project: "Inbox",
       due,
       priority: "Medium",
@@ -352,7 +341,7 @@ export function SchoolDashboardScreen() {
         id: stamp,
         title: item.title,
         classId: syllabusClassId,
-        color: course?.color ?? SP.teal,
+        color: course?.color ?? theme.accent,
         project: "Inbox",
         due: item.due,
         priority: "Medium" as const,
@@ -372,7 +361,7 @@ export function SchoolDashboardScreen() {
         title: `${course?.code ?? "School"} · ${item.title}`,
         start: `${item.due}T23:59:00`,
         source: "LifeOS" as const,
-        color: course?.color ?? SP.teal,
+        color: course?.color ?? theme.accent,
         notes: `Due date from syllabus${syllabusFileName ? ` (${syllabusFileName})` : ""}`,
       }));
     await updateTasks([...workspace.tasks, ...created]);
@@ -423,7 +412,7 @@ export function SchoolDashboardScreen() {
             <Text style={styles.ghostBtnText}>Customize</Text>
           </Pressable>
           <Pressable style={styles.iconBtn} onPress={openCapture} accessibilityLabel="Search / capture">
-            <Feather name="search" size={16} color={SP.ink} />
+            <Feather name="search" size={16} color={theme.text} />
           </Pressable>
           <Pressable style={styles.avatar} onPress={() => setTab("more")} accessibilityLabel="More">
             <Text style={styles.avatarText}>{initials.slice(0, 1)}</Text>
@@ -466,7 +455,7 @@ export function SchoolDashboardScreen() {
               style={styles.taskRow}
               onPress={() => navigation.navigate("TasksTab", { screen: "TaskDetail", params: { taskId: task.id } })}
             >
-              <View style={[styles.taskDot, { backgroundColor: courseFor(task.classId)?.color ?? SP.teal }]} />
+              <View style={[styles.taskDot, { backgroundColor: courseFor(task.classId)?.color ?? theme.accent }]} />
               <View style={styles.grow}>
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 <Text style={styles.taskMeta}>
@@ -497,7 +486,7 @@ export function SchoolDashboardScreen() {
           </View>
           <View style={styles.pageActions}>
             <Pressable style={styles.outlineBtn} onPress={() => openCreate("course")}>
-              <Feather name="plus" size={14} color={SP.teal} />
+              <Feather name="plus" size={14} color={theme.accent} />
               <Text style={styles.outlineText}>Class</Text>
             </Pressable>
             <Pressable style={styles.outlineBtn} onPress={() => navigation.navigate("CalendarTab")}>
@@ -526,11 +515,11 @@ export function SchoolDashboardScreen() {
 
         <View style={styles.weekNav}>
           <Pressable onPress={() => shiftWeek(-1)} style={styles.weekNavBtn} accessibilityLabel="Previous week">
-            <Feather name="chevron-left" size={16} color={SP.ink} />
+            <Feather name="chevron-left" size={16} color={theme.text} />
           </Pressable>
           <Text style={styles.weekNavLabel}>This week {formatWeekRange(weekAnchor)}</Text>
           <Pressable onPress={() => shiftWeek(1)} style={styles.weekNavBtn} accessibilityLabel="Next week">
-            <Feather name="chevron-right" size={16} color={SP.ink} />
+            <Feather name="chevron-right" size={16} color={theme.text} />
           </Pressable>
         </View>
 
@@ -571,12 +560,12 @@ export function SchoolDashboardScreen() {
                   <Text style={styles.weekDayLabel}>{DAY_SHORT[day.getDay()]} {day.getDate()}</Text>
                   {rows.length ? rows.map((course) => (
                     <Pressable key={course.id} style={styles.classRow} onPress={() => navigation.navigate("ClassDetail", { classId: course.id })}>
-                      <View style={[styles.classDot, { backgroundColor: course.color ?? SP.teal }]} />
+                      <View style={[styles.classDot, { backgroundColor: course.color ?? theme.accent }]} />
                       <View style={styles.grow}>
                         <Text style={styles.classCode}>{course.code}{course.meetingStart ? ` · ${course.meetingStart}` : ""}</Text>
                         <Text style={styles.className}>{course.name}{course.instructor ? ` · ${course.instructor}` : ""}</Text>
                       </View>
-                      <Feather name="chevron-right" size={16} color={SP.muted} />
+                      <Feather name="chevron-right" size={16} color={theme.muted} />
                     </Pressable>
                   )) : (
                     <Text style={styles.weekEmpty}>No classes</Text>
@@ -589,13 +578,13 @@ export function SchoolDashboardScreen() {
           <View style={styles.listGap}>
             {visible.length ? visible.map((course) => (
               <Pressable key={course.id} style={styles.classRow} onPress={() => navigation.navigate("ClassDetail", { classId: course.id })}>
-                <View style={[styles.classDot, { backgroundColor: course.color ?? SP.teal }]} />
+                <View style={[styles.classDot, { backgroundColor: course.color ?? theme.accent }]} />
                 <View style={styles.grow}>
                   <Text style={styles.classCode}>{course.code}</Text>
                   <Text style={styles.className}>{course.name}{course.instructor ? ` · ${course.instructor}` : ""}</Text>
                   <Text style={styles.classMeta}>{formatMeeting(course)}</Text>
                 </View>
-                <Feather name="chevron-right" size={16} color={SP.muted} />
+                <Feather name="chevron-right" size={16} color={theme.muted} />
               </Pressable>
             )) : (
               <View style={styles.dashedEmpty}>
@@ -610,13 +599,13 @@ export function SchoolDashboardScreen() {
                 <Text style={styles.sectionKicker}>Needs a meeting time</Text>
                 {unscheduled.map((course) => (
                   <Pressable key={course.id} style={styles.classRow} onPress={() => openSchedule(course.id)}>
-                    <View style={[styles.classDot, { backgroundColor: course.color ?? SP.teal }]} />
+                    <View style={[styles.classDot, { backgroundColor: course.color ?? theme.accent }]} />
                     <View style={styles.grow}>
                       <Text style={styles.classCode}>{course.code}</Text>
                       <Text style={styles.className}>{course.name}</Text>
                       <Text style={styles.classMeta}>Tap to set days and time</Text>
                     </View>
-                    <Feather name="clock" size={16} color={SP.teal} />
+                    <Feather name="clock" size={16} color={theme.accent} />
                   </Pressable>
                 ))}
               </View>
@@ -626,11 +615,11 @@ export function SchoolDashboardScreen() {
 
         <Pressable style={styles.linkRow} onPress={openCapture}>
           <View style={styles.alertDot} />
-          <Text style={[styles.linkRowText, { color: SP.tealDeep, flex: 1 }]}>Free blocks this week, drop a study session?</Text>
+          <Text style={[styles.linkRowText, { color: theme.accent, flex: 1 }]}>Free blocks this week, drop a study session?</Text>
         </Pressable>
         <Pressable style={styles.linkRow} onPress={() => navigation.navigate("CoursesDirectory")}>
           <Text style={[styles.linkRowText, { flex: 1 }]}>Semester overview</Text>
-          <Feather name="chevron-right" size={16} color={SP.muted} />
+          <Feather name="chevron-right" size={16} color={theme.muted} />
         </Pressable>
         <Pressable style={styles.linkRow} onPress={openCalendarSheet}>
           <Text style={[styles.linkRowText, { flex: 1 }]}>Clubs, appointments and everything else</Text>
@@ -652,7 +641,7 @@ export function SchoolDashboardScreen() {
             <Text style={styles.outlineText}>Import syllabus</Text>
           </Pressable>
           <Pressable style={styles.outlineBtn} onPress={() => openCreate("assignment")} testID="school-new-assignment">
-            <Feather name="plus" size={14} color={SP.teal} />
+            <Feather name="plus" size={14} color={theme.accent} />
             <Text style={styles.outlineText}>New</Text>
           </Pressable>
         </View>
@@ -671,9 +660,9 @@ export function SchoolDashboardScreen() {
                 accessibilityLabel={`Complete ${task.title}`}
                 style={styles.checkHit}
               >
-                <Feather name="circle" size={20} color={SP.teal} />
+                <Feather name="circle" size={20} color={theme.accent} />
               </Pressable>
-              <View style={[styles.taskDot, { backgroundColor: courseFor(task.classId)?.color ?? SP.teal }]} />
+              <View style={[styles.taskDot, { backgroundColor: courseFor(task.classId)?.color ?? theme.accent }]} />
               <View style={styles.grow}>
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 <Text style={styles.taskMeta}>
@@ -695,7 +684,7 @@ export function SchoolDashboardScreen() {
   const renderDue = () => (
     <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
       <Pressable style={styles.backLink} onPress={() => setTab("home")}>
-        <Feather name="chevron-left" size={14} color={SP.muted} />
+        <Feather name="chevron-left" size={14} color={theme.muted} />
         <Text style={styles.backLinkText}>Home</Text>
       </Pressable>
       <Text style={styles.pageTitle}>What&apos;s due</Text>
@@ -708,7 +697,7 @@ export function SchoolDashboardScreen() {
               style={styles.taskRow}
               onPress={() => navigation.navigate("TasksTab", { screen: "TaskDetail", params: { taskId: task.id } })}
             >
-              <View style={[styles.taskDot, { backgroundColor: courseFor(task.classId)?.color ?? SP.teal }]} />
+              <View style={[styles.taskDot, { backgroundColor: courseFor(task.classId)?.color ?? theme.accent }]} />
               <View style={styles.grow}>
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 <Text style={styles.taskMeta}>
@@ -716,7 +705,7 @@ export function SchoolDashboardScreen() {
                 </Text>
               </View>
               <Pressable onPress={() => completeTask(task.id)} hitSlop={10} accessibilityLabel={`Complete ${task.title}`}>
-                <Feather name="check-square" size={18} color={SP.muted} />
+                <Feather name="check-square" size={18} color={theme.muted} />
               </Pressable>
             </Pressable>
           ))}
@@ -741,7 +730,7 @@ export function SchoolDashboardScreen() {
     return (
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarPad }]} showsVerticalScrollIndicator={false}>
         <Pressable style={styles.backLink} onPress={() => setPanel(null)}>
-          <Feather name="chevron-left" size={14} color={SP.muted} />
+          <Feather name="chevron-left" size={14} color={theme.muted} />
           <Text style={styles.backLinkText}>More</Text>
         </Pressable>
         <Text style={styles.pageTitle}>{title}</Text>
@@ -787,7 +776,7 @@ export function SchoolDashboardScreen() {
             <Text style={styles.pageSub}>{exams.length} exams & quizzes ahead</Text>
             <View style={[styles.pageActions, { marginTop: 12 }]}>
               <Pressable style={styles.outlineBtn} onPress={() => openCreate("assignment")}>
-                <Feather name="plus" size={14} color={SP.teal} />
+                <Feather name="plus" size={14} color={theme.accent} />
                 <Text style={styles.outlineText}>Add exam</Text>
               </Pressable>
             </View>
@@ -800,7 +789,7 @@ export function SchoolDashboardScreen() {
                       <Text style={styles.taskMeta}>{courseFor(task.classId)?.code ?? "School"} · {task.academicType} · {formatDueDate(task.due)}</Text>
                     </View>
                     <Pressable onPress={() => setFocusTaskId(task.id)} hitSlop={8}>
-                      <Feather name="play-circle" size={20} color={SP.teal} />
+                      <Feather name="play-circle" size={20} color={theme.accent} />
                     </Pressable>
                   </Pressable>
                 ))}
@@ -818,7 +807,7 @@ export function SchoolDashboardScreen() {
             <Text style={styles.pageSub}>{readingTasks.length} readings on your list</Text>
             <View style={[styles.pageActions, { marginTop: 12 }]}>
               <Pressable style={styles.outlineBtn} onPress={() => openCreate("task")}>
-                <Feather name="plus" size={14} color={SP.teal} />
+                <Feather name="plus" size={14} color={theme.accent} />
                 <Text style={styles.outlineText}>Add reading</Text>
               </Pressable>
             </View>
@@ -826,7 +815,7 @@ export function SchoolDashboardScreen() {
               <View style={[styles.listGap, { marginTop: 12 }]}>
                 {readingTasks.map((task) => (
                   <Pressable key={task.id} style={styles.taskRow} onPress={() => completeTask(task.id)}>
-                    <Feather name="book-open" size={16} color={SP.teal} />
+                    <Feather name="book-open" size={16} color={theme.accent} />
                     <View style={styles.grow}>
                       <Text style={styles.taskTitle}>{task.title}</Text>
                       <Text style={styles.taskMeta}>{courseFor(task.classId)?.code ?? "School"} · {formatDueDate(task.due)}</Text>
@@ -885,7 +874,7 @@ export function SchoolDashboardScreen() {
             <TextInput
               style={[styles.textarea, { marginTop: 14 }]}
               placeholder="Optional note..."
-              placeholderTextColor={SP.muted}
+              placeholderTextColor={theme.muted}
               value={wellnessNote}
               onChangeText={setWellnessNote}
               multiline
@@ -928,28 +917,28 @@ export function SchoolDashboardScreen() {
         <View style={styles.menuCard}>
           {moreLinks.map((item) => (
             <Pressable key={item.key} style={styles.menuRow} onPress={item.onPress}>
-              <View style={styles.menuIcon}><Feather name={item.icon} size={16} color={SP.teal} /></View>
+              <View style={styles.menuIcon}><Feather name={item.icon} size={16} color={theme.accent} /></View>
               <Text style={styles.menuLabel}>{item.label}</Text>
-              <Feather name="chevron-right" size={16} color={SP.muted} />
+              <Feather name="chevron-right" size={16} color={theme.muted} />
             </Pressable>
           ))}
         </View>
 
         <View style={styles.menuCard}>
           <Pressable style={styles.menuRow} onPress={() => navigation.navigate("NowTab", { screen: "Settings" })}>
-            <View style={styles.menuIcon}><Feather name="sun" size={16} color={SP.teal} /></View>
+            <View style={styles.menuIcon}><Feather name="sun" size={16} color={theme.accent} /></View>
             <Text style={styles.menuLabel}>Appearance</Text>
-            <Text style={styles.menuMeta}>Mist</Text>
+            <Text style={styles.menuMeta}>{appearanceLabel}</Text>
           </Pressable>
           <Pressable style={styles.menuRow} onPress={() => navigation.navigate("SchoolProfile")}>
-            <View style={styles.menuIcon}><Feather name="user" size={16} color={SP.teal} /></View>
+            <View style={styles.menuIcon}><Feather name="user" size={16} color={theme.accent} /></View>
             <Text style={styles.menuLabel}>Academic profile</Text>
-            <Feather name="chevron-right" size={16} color={SP.muted} />
+            <Feather name="chevron-right" size={16} color={theme.muted} />
           </Pressable>
           <Pressable style={styles.menuRow} onPress={() => openCreate("lecture")}>
-            <View style={styles.menuIcon}><Feather name="book-open" size={16} color={SP.teal} /></View>
+            <View style={styles.menuIcon}><Feather name="book-open" size={16} color={theme.accent} /></View>
             <Text style={styles.menuLabel}>Lecture notes</Text>
-            <Feather name="chevron-right" size={16} color={SP.muted} />
+            <Feather name="chevron-right" size={16} color={theme.muted} />
           </Pressable>
         </View>
       </ScrollView>
@@ -968,10 +957,10 @@ export function SchoolDashboardScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]} testID="school-planner">
       <View style={styles.topChrome} testID="school-top-nav">
         <View style={styles.segmentRow}>
-          <SegmentItem label="Home" selected={tab === "home" || tab === "due"} onPress={() => setTab("home")} testID="school-nav-home" />
-          <SegmentItem label="Timetable" selected={tab === "timetable"} onPress={() => setTab("timetable")} testID="school-nav-timetable" />
-          <SegmentItem label="Assignments" selected={tab === "assignments"} onPress={() => setTab("assignments")} testID="school-nav-assignments" />
-          <SegmentItem label="More" selected={tab === "more"} onPress={() => setTab("more")} testID="school-nav-more" />
+          <SegmentItem styles={styles} label="Home" selected={tab === "home" || tab === "due"} onPress={() => setTab("home")} testID="school-nav-home" />
+          <SegmentItem styles={styles} label="Timetable" selected={tab === "timetable"} onPress={() => setTab("timetable")} testID="school-nav-timetable" />
+          <SegmentItem styles={styles} label="Assignments" selected={tab === "assignments"} onPress={() => setTab("assignments")} testID="school-nav-assignments" />
+          <SegmentItem styles={styles} label="More" selected={tab === "more"} onPress={() => setTab("more")} testID="school-nav-more" />
         </View>
         <Pressable
           style={styles.calendarChip}
@@ -995,7 +984,7 @@ export function SchoolDashboardScreen() {
                 testID="school-capture-input"
                 style={styles.textarea}
                 placeholder="Type anything, a task, deadline, note..."
-                placeholderTextColor={SP.muted}
+                placeholderTextColor={theme.muted}
                 value={captureTitle}
                 onChangeText={setCaptureTitle}
                 multiline
@@ -1018,7 +1007,7 @@ export function SchoolDashboardScreen() {
                         style={[styles.subjectPill, captureClassId === course.id && styles.subjectPillSelected]}
                         onPress={() => setCaptureClassId(course.id)}
                       >
-                        <View style={[styles.miniDot, { backgroundColor: course.color ?? SP.teal }]} />
+                        <View style={[styles.miniDot, { backgroundColor: course.color ?? theme.accent }]} />
                         <Text style={[styles.subjectPillText, captureClassId === course.id && { color: "#FFF" }]} numberOfLines={1}>
                           {course.name || course.code}
                         </Text>
@@ -1064,7 +1053,7 @@ export function SchoolDashboardScreen() {
                 testID="school-event-title"
                 style={styles.input}
                 placeholder="Event title"
-                placeholderTextColor={SP.muted}
+                placeholderTextColor={theme.muted}
                 value={eventTitle}
                 onChangeText={setEventTitle}
                 autoFocus
@@ -1072,12 +1061,12 @@ export function SchoolDashboardScreen() {
               <TextInput
                 style={[styles.input, { marginTop: 10 }]}
                 placeholder="e.g. Club, Appointment, Gym"
-                placeholderTextColor={SP.muted}
+                placeholderTextColor={theme.muted}
                 value={eventLabel}
                 onChangeText={setEventLabel}
               />
               <Text style={styles.helper}>Your own category name, shown instead of the type.</Text>
-              <Text style={[styles.fieldLabel, { color: SP.muted }]}>Type</Text>
+              <Text style={[styles.fieldLabel, { color: theme.muted }]}>Type</Text>
               <View style={styles.typeGrid}>
                 {EVENT_TYPES.map((type) => (
                   <Pressable key={type} style={[styles.typeChip, eventType === type && styles.typeChipSelected]} onPress={() => setEventType(type)}>
@@ -1085,7 +1074,7 @@ export function SchoolDashboardScreen() {
                   </Pressable>
                 ))}
               </View>
-              <Text style={[styles.fieldLabel, { color: SP.muted }]}>Colour</Text>
+              <Text style={[styles.fieldLabel, { color: theme.muted }]}>Colour</Text>
               <View style={styles.colorRow}>
                 <Pressable style={[styles.swatchAuto, eventColor === "auto" && styles.swatchSelected]} onPress={() => setEventColor("auto")}>
                   <Text style={styles.swatchAutoText}>Auto</Text>
@@ -1098,8 +1087,8 @@ export function SchoolDashboardScreen() {
                   />
                 ))}
               </View>
-              <Text style={[styles.fieldLabel, { color: SP.muted }]}>Date</Text>
-              <TextInput style={styles.input} value={eventDate} onChangeText={setEventDate} placeholder="YYYY-MM-DD" placeholderTextColor={SP.muted} />
+              <Text style={[styles.fieldLabel, { color: theme.muted }]}>Date</Text>
+              <TextInput style={styles.input} value={eventDate} onChangeText={setEventDate} placeholder="YYYY-MM-DD" placeholderTextColor={theme.muted} />
               <Pressable
                 style={[styles.primaryBtn, { marginTop: 18 }, !eventTitle.trim() && styles.primaryDisabled]}
                 disabled={!eventTitle.trim()}
@@ -1131,10 +1120,10 @@ export function SchoolDashboardScreen() {
                 testID="school-syllabus-import-file"
               >
                 {syllabusBusy ? (
-                  <ActivityIndicator color={SP.teal} />
+                  <ActivityIndicator color={theme.accent} />
                 ) : (
                   <>
-                    <Feather name="upload" size={16} color={SP.teal} />
+                    <Feather name="upload" size={16} color={theme.accent} />
                     <Text style={styles.outlineText}>{syllabusFileName ? "Choose another file" : "Import PDF / Word / Markdown"}</Text>
                   </>
                 )}
@@ -1151,7 +1140,7 @@ export function SchoolDashboardScreen() {
                     style={[styles.subjectPill, syllabusClassId === course.id && styles.subjectPillSelected]}
                     onPress={() => setSyllabusClassId(course.id)}
                   >
-                    <View style={[styles.miniDot, { backgroundColor: course.color ?? SP.teal }]} />
+                    <View style={[styles.miniDot, { backgroundColor: course.color ?? theme.accent }]} />
                     <Text style={[styles.subjectPillText, syllabusClassId === course.id && { color: "#FFF" }]} numberOfLines={1}>
                       {course.code}
                     </Text>
@@ -1163,7 +1152,7 @@ export function SchoolDashboardScreen() {
               <TextInput
                 style={[styles.textarea, { minHeight: 140 }]}
                 placeholder={"Essay 1 — Oct 1, 2026\nMidterm due 10/15\nLab report 2026-11-03"}
-                placeholderTextColor={SP.muted}
+                placeholderTextColor={theme.muted}
                 value={syllabusText}
                 onChangeText={refreshSyllabusPreview}
                 multiline
@@ -1233,9 +1222,9 @@ export function SchoolDashboardScreen() {
               })}
             </View>
             <Text style={styles.fieldLabel}>Starts</Text>
-            <TextInput style={styles.input} value={scheduleStart} onChangeText={setScheduleStart} placeholder="09:00" placeholderTextColor={SP.muted} />
+            <TextInput style={styles.input} value={scheduleStart} onChangeText={setScheduleStart} placeholder="09:00" placeholderTextColor={theme.muted} />
             <Text style={styles.fieldLabel}>Ends</Text>
-            <TextInput style={styles.input} value={scheduleEnd} onChangeText={setScheduleEnd} placeholder="10:00" placeholderTextColor={SP.muted} />
+            <TextInput style={styles.input} value={scheduleEnd} onChangeText={setScheduleEnd} placeholder="10:00" placeholderTextColor={theme.muted} />
             <Pressable style={[styles.primaryBtn, { marginTop: 18 }]} onPress={saveSchedule}>
               <Text style={styles.primaryBtnText}>Save schedule</Text>
             </Pressable>
@@ -1252,11 +1241,13 @@ export function SchoolDashboardScreen() {
 }
 
 function SegmentItem({
+  styles,
   label,
   selected,
   onPress,
   testID,
 }: {
+  styles: ReturnType<typeof createStyles>;
   label: string;
   selected: boolean;
   onPress: () => void;
@@ -1273,243 +1264,243 @@ function SegmentItem({
   );
 }
 
-const serif = Platform.OS === "ios" ? "Georgia" : "serif";
-
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: SP.mist },
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+  root: { flex: 1, backgroundColor: theme.bg },
   scroll: { paddingHorizontal: 18, paddingTop: 8, gap: 14 },
   grow: { flex: 1, minWidth: 0 },
   homeHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingTop: 4 },
-  dateKicker: { color: SP.muted, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, marginBottom: 6 },
-  greeting: { fontFamily: serif, fontSize: 30, fontWeight: "500", color: SP.ink, letterSpacing: -0.5, lineHeight: 34 },
+  dateKicker: { color: theme.muted, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, marginBottom: 6 },
+  greeting: { fontSize: 30, fontWeight: "700", color: theme.text, letterSpacing: -1.1, lineHeight: 34 },
   homeActions: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 4 },
   ghostBtn: {
-    height: 36, borderRadius: 999, borderWidth: 1, borderColor: SP.line,
-    backgroundColor: "rgba(255,255,255,0.8)", paddingHorizontal: 14, justifyContent: "center",
+    height: 36, borderRadius: 999, borderWidth: 1, borderColor: theme.border,
+    backgroundColor: theme.surface, paddingHorizontal: 14, justifyContent: "center",
   },
-  ghostBtnText: { fontSize: 12, fontWeight: "600", color: SP.ink },
+  ghostBtnText: { fontSize: 12, fontWeight: "600", color: theme.text },
   iconBtn: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: SP.panel,
+    width: 36, height: 36, borderRadius: 18, backgroundColor: theme.surface,
     alignItems: "center", justifyContent: "center",
   },
   avatar: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: SP.teal,
+    width: 36, height: 36, borderRadius: 18, backgroundColor: theme.accent,
     alignItems: "center", justifyContent: "center",
   },
   avatarText: { color: "#FFF", fontSize: 13, fontWeight: "700" },
   alert: {
     flexDirection: "row", alignItems: "flex-start", gap: 10,
-    borderWidth: 1, borderColor: "rgba(15,138,122,0.35)", backgroundColor: SP.alert,
+    borderWidth: 1, borderColor: theme.border, backgroundColor: theme.soft,
     borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16,
   },
-  alertDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: SP.teal, marginTop: 5 },
-  alertText: { flex: 1, color: SP.tealDeep, fontSize: 13, lineHeight: 18 },
+  alertDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: theme.accent, marginTop: 5 },
+  alertText: { flex: 1, color: theme.accent, fontSize: 13, lineHeight: 18 },
   alertStrong: { fontWeight: "700", textDecorationLine: "underline" },
   statRow: { flexDirection: "row", gap: 12 },
   statCard: {
-    flex: 1, backgroundColor: SP.panel, borderRadius: 22, paddingVertical: 18, paddingHorizontal: 16,
-    shadowColor: "#0F5A64", shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2,
+    flex: 1, backgroundColor: theme.surface, borderRadius: 22, paddingVertical: 18, paddingHorizontal: 16,
+    shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2,
   },
-  statLabel: { color: SP.muted, fontSize: 10, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
-  statValue: { fontFamily: serif, fontSize: 40, fontWeight: "500", color: SP.ink, marginTop: 8, letterSpacing: -1 },
+  statLabel: { color: theme.muted, fontSize: 10, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
+  statValue: { fontSize: 36, fontWeight: "700", color: theme.text, marginTop: 8, letterSpacing: -1 },
   captureCard: {
-    backgroundColor: SP.panel, borderRadius: 22, padding: 18,
-    shadowColor: "#0F5A64", shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 1,
+    backgroundColor: theme.surface, borderRadius: 22, padding: 18,
+    shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 1,
   },
-  captureKicker: { color: SP.teal, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, textTransform: "uppercase" },
-  captureHint: { color: SP.muted, fontSize: 14, marginTop: 6 },
+  captureKicker: { color: theme.accent, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, textTransform: "uppercase" },
+  captureHint: { color: theme.muted, fontSize: 14, marginTop: 6 },
   section: { gap: 10 },
-  sectionKicker: { color: SP.muted, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, textTransform: "uppercase" },
+  sectionKicker: { color: theme.muted, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, textTransform: "uppercase" },
   pageHead: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingTop: 4 },
-  pageTitle: { fontFamily: serif, fontSize: 30, fontWeight: "500", color: SP.ink, letterSpacing: -0.5 },
-  pageSub: { color: SP.muted, fontSize: 13, marginTop: 4 },
+  pageTitle: { fontSize: 30, fontWeight: "700", color: theme.text, letterSpacing: -1.1 },
+  pageSub: { color: theme.muted, fontSize: 13, marginTop: 4 },
   pageActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" },
   outlineBtn: {
-    height: 38, borderRadius: 999, borderWidth: 1.5, borderColor: "rgba(15,138,122,0.55)",
+    height: 38, borderRadius: 999, borderWidth: 1.5, borderColor: theme.accent,
     paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 6,
   },
   outlineBtnWide: {
-    height: 42, borderRadius: 999, borderWidth: 1.5, borderColor: "rgba(15,138,122,0.55)",
+    height: 42, borderRadius: 999, borderWidth: 1.5, borderColor: theme.accent,
     paddingHorizontal: 18, alignItems: "center", justifyContent: "center", alignSelf: "center",
   },
-  outlineText: { color: SP.teal, fontSize: 12, fontWeight: "600" },
+  outlineText: { color: theme.accent, fontSize: 12, fontWeight: "600" },
   toolbarRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
-  toggle: { flexDirection: "row", backgroundColor: SP.mistDeep, borderRadius: 999, padding: 3, gap: 2 },
+  toggle: { flexDirection: "row", backgroundColor: theme.soft, borderRadius: 999, padding: 3, gap: 2 },
   toggleBtn: { height: 32, borderRadius: 999, paddingHorizontal: 14, justifyContent: "center" },
-  toggleSelected: { backgroundColor: SP.teal },
-  toggleText: { fontSize: 12, fontWeight: "600", color: SP.muted },
+  toggleSelected: { backgroundColor: theme.accent },
+  toggleText: { fontSize: 12, fontWeight: "600", color: theme.muted },
   toggleTextSelected: { color: "#FFF" },
   termChip: {
-    height: 36, borderRadius: 999, borderWidth: 1, borderColor: SP.line,
-    backgroundColor: SP.panel, paddingHorizontal: 12, justifyContent: "center",
+    height: 36, borderRadius: 999, borderWidth: 1, borderColor: theme.border,
+    backgroundColor: theme.surface, paddingHorizontal: 12, justifyContent: "center",
   },
-  termChipSelected: { backgroundColor: SP.teal, borderColor: SP.teal },
-  termChipText: { fontSize: 12, fontWeight: "600", color: SP.ink },
+  termChipSelected: { backgroundColor: theme.accent, borderColor: theme.accent },
+  termChipText: { fontSize: 12, fontWeight: "600", color: theme.text },
   termChipTextSelected: { color: "#FFF" },
   weekNav: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   weekNavBtn: {
-    width: 34, height: 34, borderRadius: 17, backgroundColor: SP.panel,
+    width: 34, height: 34, borderRadius: 17, backgroundColor: theme.surface,
     alignItems: "center", justifyContent: "center",
   },
-  weekNavLabel: { color: SP.muted, fontSize: 13, fontWeight: "500" },
+  weekNavLabel: { color: theme.muted, fontSize: 13, fontWeight: "500" },
   emptyPanel: {
-    backgroundColor: SP.panel, borderRadius: 24, paddingVertical: 36, paddingHorizontal: 22,
+    backgroundColor: theme.surface, borderRadius: 24, paddingVertical: 36, paddingHorizontal: 22,
     alignItems: "center", gap: 14,
-    shadowColor: "#0F5A64", shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 1,
+    shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 1,
   },
   dashedEmpty: {
-    minHeight: 160, borderWidth: 1.5, borderStyle: "dashed", borderColor: SP.line,
+    minHeight: 160, borderWidth: 1.5, borderStyle: "dashed", borderColor: theme.border,
     borderRadius: 28, alignItems: "center", justifyContent: "center", padding: 28,
   },
-  emptyText: { color: SP.muted, fontSize: 15, textAlign: "center" },
-  hint: { color: SP.muted, fontSize: 12, lineHeight: 18, textAlign: "center" },
+  emptyText: { color: theme.muted, fontSize: 15, textAlign: "center" },
+  hint: { color: theme.muted, fontSize: 12, lineHeight: 18, textAlign: "center" },
   primaryBtn: {
-    minHeight: 48, borderRadius: 999, backgroundColor: SP.teal, paddingHorizontal: 22,
+    minHeight: 48, borderRadius: 999, backgroundColor: theme.accent, paddingHorizontal: 22,
     alignItems: "center", justifyContent: "center",
-    shadowColor: SP.teal, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3,
+    shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3,
   },
   primaryDisabled: { opacity: 0.45 },
   primaryBtnText: { color: "#FFF", fontSize: 15, fontWeight: "600" },
   listGap: { gap: 10 },
   classRow: {
-    flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: SP.panel,
+    flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: theme.surface,
     borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16,
   },
   classDot: { width: 12, height: 12, borderRadius: 6 },
-  classCode: { fontSize: 14, fontWeight: "700", color: SP.ink },
-  className: { fontSize: 12, color: SP.muted, marginTop: 2 },
+  classCode: { fontSize: 14, fontWeight: "700", color: theme.text },
+  className: { fontSize: 12, color: theme.muted, marginTop: 2 },
   linkRow: {
-    flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: SP.panel,
+    flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: theme.surface,
     borderRadius: 18, paddingVertical: 16, paddingHorizontal: 16,
   },
-  linkRowText: { fontSize: 14, fontWeight: "500", color: SP.ink },
-  linkRowAction: { color: SP.teal, fontWeight: "600", fontSize: 13 },
+  linkRowText: { fontSize: 14, fontWeight: "500", color: theme.text },
+  linkRowAction: { color: theme.accent, fontWeight: "600", fontSize: 13 },
   taskRow: {
-    flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: SP.panel,
+    flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: theme.surface,
     borderRadius: 18, paddingVertical: 14, paddingHorizontal: 14,
   },
   taskDot: { width: 10, height: 10, borderRadius: 5 },
-  taskTitle: { fontSize: 14, fontWeight: "600", color: SP.ink },
-  taskMeta: { fontSize: 12, color: SP.muted, marginTop: 3 },
+  taskTitle: { fontSize: 14, fontWeight: "600", color: theme.text },
+  taskMeta: { fontSize: 12, color: theme.muted, marginTop: 3 },
   backLink: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 8 },
-  backLinkText: { color: SP.muted, fontSize: 13, fontWeight: "600" },
+  backLinkText: { color: theme.muted, fontSize: 13, fontWeight: "600" },
   moreProfile: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 },
-  moreName: { fontSize: 15, fontWeight: "700", color: SP.ink },
-  moreEmail: { fontSize: 12, color: SP.muted, marginTop: 3 },
+  moreName: { fontSize: 15, fontWeight: "700", color: theme.text },
+  moreEmail: { fontSize: 12, color: theme.muted, marginTop: 3 },
   menuCard: {
-    backgroundColor: SP.panel, borderRadius: 24, overflow: "hidden",
-    shadowColor: "#0F5A64", shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 1,
+    backgroundColor: theme.surface, borderRadius: 24, overflow: "hidden",
+    shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 1,
   },
   menuRow: {
     flexDirection: "row", alignItems: "center", gap: 12,
-    paddingVertical: 15, paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: SP.line,
+    paddingVertical: 15, paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border,
   },
   menuIcon: {
-    width: 34, height: 34, borderRadius: 12, backgroundColor: SP.mistDeep,
+    width: 34, height: 34, borderRadius: 12, backgroundColor: theme.soft,
     alignItems: "center", justifyContent: "center",
   },
-  menuLabel: { flex: 1, fontSize: 14, fontWeight: "500", color: SP.ink },
-  menuMeta: { color: SP.teal, fontSize: 13, fontWeight: "600" },
+  menuLabel: { flex: 1, fontSize: 14, fontWeight: "500", color: theme.text },
+  menuMeta: { color: theme.accent, fontSize: 13, fontWeight: "600" },
   topChrome: {
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: SP.line,
-    backgroundColor: SP.mist,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border,
+    backgroundColor: theme.bg,
   },
   segmentRow: {
-    flex: 1, flexDirection: "row", backgroundColor: SP.mistDeep, borderRadius: 999, padding: 3, gap: 2,
+    flex: 1, flexDirection: "row", backgroundColor: theme.soft, borderRadius: 999, padding: 3, gap: 2,
   },
   segmentItem: {
     flex: 1, height: 34, borderRadius: 999, alignItems: "center", justifyContent: "center", paddingHorizontal: 6,
   },
   segmentItemSelected: {
-    backgroundColor: SP.panel,
-    shadowColor: "#0F5A64", shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
+    backgroundColor: theme.surface,
+    shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
   },
-  segmentLabel: { fontSize: 12, fontWeight: "600", color: SP.muted },
-  segmentLabelSelected: { color: SP.teal },
+  segmentLabel: { fontSize: 12, fontWeight: "600", color: theme.muted },
+  segmentLabelSelected: { color: theme.accent },
   calendarChip: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: SP.teal,
+    width: 40, height: 40, borderRadius: 20, backgroundColor: theme.accent,
     alignItems: "center", justifyContent: "center",
-    shadowColor: SP.teal, shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3,
+    shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3,
   },
   sheetBackdrop: { flex: 1, backgroundColor: "rgba(26, 43, 51, 0.35)", justifyContent: "flex-end" },
   sheet: {
-    backgroundColor: SP.mist, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    backgroundColor: theme.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 18, paddingTop: 10, paddingBottom: 28, maxHeight: "92%",
   },
   grabber: { width: 42, height: 4, borderRadius: 999, backgroundColor: "#B7C7D0", alignSelf: "center", marginBottom: 14 },
   sheetTitle: {
-    textAlign: "center", color: SP.teal, fontSize: 11, fontWeight: "700",
+    textAlign: "center", color: theme.accent, fontSize: 11, fontWeight: "700",
     letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 14,
   },
   textarea: {
-    minHeight: 92, borderRadius: 18, backgroundColor: SP.panel, padding: 16,
-    fontSize: 15, color: SP.ink, textAlignVertical: "top",
+    minHeight: 92, borderRadius: 18, backgroundColor: theme.surface, padding: 16,
+    fontSize: 15, color: theme.text, textAlignVertical: "top",
   },
   input: {
-    height: 48, borderRadius: 18, backgroundColor: SP.panel, paddingHorizontal: 16,
-    fontSize: 15, color: SP.ink,
+    height: 48, borderRadius: 18, backgroundColor: theme.surface, paddingHorizontal: 16,
+    fontSize: 15, color: theme.text,
   },
   fieldLabel: {
-    marginTop: 14, marginBottom: 8, color: SP.teal, fontSize: 11, fontWeight: "700",
+    marginTop: 14, marginBottom: 8, color: theme.accent, fontSize: 11, fontWeight: "700",
     letterSpacing: 1.2, textTransform: "uppercase",
   },
-  helper: { color: SP.muted, fontSize: 12, marginTop: 8 },
+  helper: { color: theme.muted, fontSize: 12, marginTop: 8 },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   pill: {
-    height: 38, borderRadius: 999, backgroundColor: SP.mistDeep, paddingHorizontal: 16, justifyContent: "center",
+    height: 38, borderRadius: 999, backgroundColor: theme.soft, paddingHorizontal: 16, justifyContent: "center",
   },
-  pillSelected: { backgroundColor: SP.teal },
-  pillText: { fontSize: 13, fontWeight: "600", color: SP.ink },
+  pillSelected: { backgroundColor: theme.accent },
+  pillText: { fontSize: 13, fontWeight: "600", color: theme.text },
   pillTextSelected: { color: "#FFF" },
   subjectPill: {
-    height: 46, borderRadius: 999, backgroundColor: SP.panel, borderWidth: 1, borderColor: SP.line,
+    height: 46, borderRadius: 999, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
     paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 10, maxWidth: 260,
   },
-  subjectPillSelected: { backgroundColor: SP.teal, borderColor: SP.teal },
-  subjectPillText: { fontSize: 14, fontWeight: "600", color: SP.ink, maxWidth: 200 },
+  subjectPillSelected: { backgroundColor: theme.accent, borderColor: theme.accent },
+  subjectPillText: { fontSize: 14, fontWeight: "600", color: theme.text, maxWidth: 200 },
   miniDot: { width: 8, height: 8, borderRadius: 4 },
   typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   typeChip: {
-    height: 40, borderRadius: 999, borderWidth: 1, borderColor: SP.line, backgroundColor: SP.panel,
+    height: 40, borderRadius: 999, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.surface,
     paddingHorizontal: 14, justifyContent: "center",
   },
-  typeChipSelected: { backgroundColor: "#1A7F72", borderColor: "#1A7F72" },
-  typeChipText: { fontSize: 13, fontWeight: "600", color: SP.teal },
+  typeChipSelected: { backgroundColor: theme.accent, borderColor: theme.accent },
+  typeChipText: { fontSize: 13, fontWeight: "600", color: theme.accent },
   colorRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   swatch: { width: 40, height: 40, borderRadius: 12, borderWidth: 2, borderColor: "transparent" },
-  swatchSelected: { borderColor: SP.ink },
+  swatchSelected: { borderColor: theme.text },
   swatchAuto: {
-    width: 40, height: 40, borderRadius: 12, borderWidth: 2, borderColor: SP.ink,
-    backgroundColor: SP.panel, alignItems: "center", justifyContent: "center",
+    width: 40, height: 40, borderRadius: 12, borderWidth: 2, borderColor: theme.text,
+    backgroundColor: theme.surface, alignItems: "center", justifyContent: "center",
   },
-  swatchAutoText: { fontSize: 9, fontWeight: "700", color: SP.ink },
+  swatchAutoText: { fontSize: 9, fontWeight: "700", color: theme.text },
   dayStrip: { gap: 8, paddingVertical: 4 },
   dayChip: {
-    width: 48, height: 64, borderRadius: 16, backgroundColor: SP.panel, borderWidth: 1, borderColor: SP.line,
+    width: 48, height: 64, borderRadius: 16, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
     alignItems: "center", justifyContent: "center", gap: 2,
   },
-  dayChipSelected: { backgroundColor: SP.teal, borderColor: SP.teal },
-  dayChipDow: { fontSize: 10, fontWeight: "700", color: SP.muted, letterSpacing: 0.4 },
-  dayChipNum: { fontSize: 16, fontWeight: "700", color: SP.ink },
+  dayChipSelected: { backgroundColor: theme.accent, borderColor: theme.accent },
+  dayChipDow: { fontSize: 10, fontWeight: "700", color: theme.muted, letterSpacing: 0.4 },
+  dayChipNum: { fontSize: 16, fontWeight: "700", color: theme.text },
   dayChipSelectedText: { color: "#FFF" },
-  dayDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: SP.teal, marginTop: 2 },
+  dayDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: theme.accent, marginTop: 2 },
   dayDotSpacer: { width: 5, height: 5, marginTop: 2 },
   weekDayBlock: { gap: 8, marginBottom: 8 },
-  weekDayLabel: { color: SP.muted, fontSize: 12, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" },
-  weekEmpty: { color: SP.muted, fontSize: 13, paddingVertical: 8, paddingHorizontal: 4 },
-  classMeta: { color: SP.muted, fontSize: 12, marginTop: 3 },
+  weekDayLabel: { color: theme.muted, fontSize: 12, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" },
+  weekEmpty: { color: theme.muted, fontSize: 13, paddingVertical: 8, paddingHorizontal: 4 },
+  classMeta: { color: theme.muted, fontSize: 12, marginTop: 3 },
   checkHit: { paddingRight: 4, justifyContent: "center" },
   previewRow: {
-    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: SP.panel,
+    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: theme.surface,
     borderRadius: 16, paddingVertical: 12, paddingHorizontal: 14,
   },
   moodRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   moodChip: {
-    height: 40, borderRadius: 999, backgroundColor: SP.panel, borderWidth: 1, borderColor: SP.line,
+    height: 40, borderRadius: 999, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
     paddingHorizontal: 14, justifyContent: "center",
   },
-  moodChipText: { color: SP.ink, fontWeight: "600", fontSize: 13 },
-  sectionLabel: { color: SP.muted, fontSize: 11, fontWeight: "700", letterSpacing: 1.1, textTransform: "uppercase", marginTop: 8 },
+  moodChipText: { color: theme.text, fontWeight: "600", fontSize: 13 },
+  sectionLabel: { color: theme.muted, fontSize: 11, fontWeight: "700", letterSpacing: 1.1, textTransform: "uppercase", marginTop: 8 },
 });
+}
