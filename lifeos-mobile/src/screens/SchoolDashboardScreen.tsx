@@ -2,6 +2,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
 import { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   Platform,
@@ -17,6 +18,7 @@ import { FocusModal } from "../components/FocusModal";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { formatDueDate, taskIsOpen, toDateKey, uid } from "../lib/helpers";
+import { parseSyllabusText, pickSyllabusFile, type SyllabusItem } from "../lib/syllabusImport";
 import type { CalendarEvent, ClassRecord, Task } from "../types";
 
 /** SchoolOS-only palette — mist canvas + teal accent (not the web cream/pink refs). */
@@ -83,28 +85,6 @@ const formatMeeting = (course: ClassRecord) => {
   return days;
 };
 
-const parseSyllabusLines = (raw: string) => {
-  const lines = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-  return lines.map((line) => {
-    const dateMatch = line.match(/(\d{4}-\d{2}-\d{2})|(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/);
-    let due: string | undefined;
-    let title = line;
-    if (dateMatch) {
-      title = line.replace(dateMatch[0], "").replace(/[–—:-]+$/, "").trim() || line;
-      const token = dateMatch[0];
-      if (/^\d{4}-\d{2}-\d{2}$/.test(token)) due = token;
-      else {
-        const parts = token.split("/").map(Number);
-        if (parts.length >= 2) {
-          const year = parts[2] ? (parts[2] < 100 ? 2000 + parts[2] : parts[2]) : new Date().getFullYear();
-          due = `${year}-${String(parts[0]).padStart(2, "0")}-${String(parts[1]).padStart(2, "0")}`;
-        }
-      }
-    }
-    return { title, due };
-  });
-};
-
 
 export function SchoolDashboardScreen() {
   const { workspace, updateTasks, updateNotes, updateCalendar, updateClasses, updateSchool } = useLifeOS();
@@ -122,6 +102,9 @@ export function SchoolDashboardScreen() {
   const [scheduleEnd, setScheduleEnd] = useState("10:00");
   const [syllabusText, setSyllabusText] = useState("");
   const [syllabusClassId, setSyllabusClassId] = useState<string | undefined>();
+  const [syllabusFileName, setSyllabusFileName] = useState<string | undefined>();
+  const [syllabusBusy, setSyllabusBusy] = useState(false);
+  const [syllabusPreview, setSyllabusPreview] = useState<SyllabusItem[]>([]);
   const [wellnessNote, setWellnessNote] = useState("");
 
   const [timetableMode, setTimetableMode] = useState<"day" | "week">("day");
@@ -291,8 +274,35 @@ export function SchoolDashboardScreen() {
 
   const openSyllabus = () => {
     setSyllabusText("");
+    setSyllabusFileName(undefined);
+    setSyllabusPreview([]);
     setSyllabusClassId(courses[0]?.id);
     setSheet("syllabus");
+  };
+
+  const refreshSyllabusPreview = (text: string) => {
+    setSyllabusText(text);
+    setSyllabusPreview(parseSyllabusText(text));
+  };
+
+  const importSyllabusFile = async () => {
+    setSyllabusBusy(true);
+    try {
+      const picked = await pickSyllabusFile();
+      if (!picked) return;
+      setSyllabusFileName(picked.name);
+      refreshSyllabusPreview(picked.text);
+      if (!picked.items.length) {
+        Alert.alert(
+          "No dates found yet",
+          "We loaded the file. Edit the text if needed, or make sure assignments include due dates.",
+        );
+      }
+    } catch (error) {
+      Alert.alert("Couldn't read file", error instanceof Error ? error.message : "Try another PDF, Word, or Markdown file.");
+    } finally {
+      setSyllabusBusy(false);
+    }
   };
 
   const openSchedule = (classId: string) => {
@@ -329,8 +339,11 @@ export function SchoolDashboardScreen() {
       ]);
       return;
     }
-    const items = parseSyllabusLines(syllabusText);
-    if (!items.length) return;
+    const items = syllabusPreview.length ? syllabusPreview : parseSyllabusText(syllabusText);
+    if (!items.length) {
+      Alert.alert("Nothing to add", "Add lines with assignment names (and due dates when you have them).");
+      return;
+    }
     const course = courseFor(syllabusClassId);
     let stamp = Date.now();
     const created: Task[] = items.map((item) => {
@@ -343,17 +356,37 @@ export function SchoolDashboardScreen() {
         project: "Inbox",
         due: item.due,
         priority: "Medium" as const,
-        academicType: "Assignment" as const,
+        academicType: item.academicType,
         focusMinutes: workspace.settings.defaultFocusMinutes ?? 45,
         energy: workspace.settings.defaultEnergy ?? "Medium",
         status: "Not started" as const,
         checklist: [],
         checklistProgress: [],
+        notes: syllabusFileName ? `Imported from ${syllabusFileName}` : "Imported from syllabus",
       };
     });
+    const calendarEvents: CalendarEvent[] = items
+      .filter((item) => item.due)
+      .map((item, index) => ({
+        id: `syllabus-${stamp}-${index}`,
+        title: `${course?.code ?? "School"} · ${item.title}`,
+        start: `${item.due}T23:59:00`,
+        source: "LifeOS" as const,
+        color: course?.color ?? SP.teal,
+        notes: `Due date from syllabus${syllabusFileName ? ` (${syllabusFileName})` : ""}`,
+      }));
     await updateTasks([...workspace.tasks, ...created]);
+    if (calendarEvents.length) {
+      await updateCalendar([...calendarEvents, ...workspace.calendar]);
+    }
     setSheet(null);
     setTab("assignments");
+    Alert.alert(
+      "Syllabus imported",
+      `${created.length} task${created.length === 1 ? "" : "s"} added` +
+        (calendarEvents.length ? ` · ${calendarEvents.length} due date${calendarEvents.length === 1 ? "" : "s"} on your calendar` : "") +
+        ".",
+    );
   };
 
   const saveWellness = async (mood: string) => {
@@ -616,7 +649,7 @@ export function SchoolDashboardScreen() {
         </View>
         <View style={styles.pageActions}>
           <Pressable style={styles.outlineBtn} onPress={openSyllabus}>
-            <Text style={styles.outlineText}>Paste syllabus</Text>
+            <Text style={styles.outlineText}>Import syllabus</Text>
           </Pressable>
           <Pressable style={styles.outlineBtn} onPress={() => openCreate("assignment")} testID="school-new-assignment">
             <Feather name="plus" size={14} color={SP.teal} />
@@ -653,7 +686,7 @@ export function SchoolDashboardScreen() {
         </View>
       ) : (
         <View style={styles.dashedEmpty}>
-          <Text style={styles.emptyText}>No assignments yet. Tap + New or paste a syllabus to add your first.</Text>
+          <Text style={styles.emptyText}>No assignments yet. Tap + New or import a syllabus to add your first.</Text>
         </View>
       )}
     </ScrollView>
@@ -1085,9 +1118,31 @@ export function SchoolDashboardScreen() {
         <Pressable style={styles.sheetBackdrop} onPress={() => setSheet(null)}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <View style={styles.grabber} />
-            <Text style={styles.sheetTitle}>Paste syllabus</Text>
+            <Text style={styles.sheetTitle}>Import syllabus</Text>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <Text style={styles.helper}>One assignment per line. Add a date like 2026-10-15 or 10/15 if you know it.</Text>
+              <Text style={styles.helper}>
+                Import a PDF, Word (.docx), or Markdown file — or paste text. We detect due dates and add them to Assignments and Calendar.
+              </Text>
+
+              <Pressable
+                style={[styles.outlineBtnWide, { marginTop: 8 }]}
+                onPress={importSyllabusFile}
+                disabled={syllabusBusy}
+                testID="school-syllabus-import-file"
+              >
+                {syllabusBusy ? (
+                  <ActivityIndicator color={SP.teal} />
+                ) : (
+                  <>
+                    <Feather name="upload" size={16} color={SP.teal} />
+                    <Text style={styles.outlineText}>{syllabusFileName ? "Choose another file" : "Import PDF / Word / Markdown"}</Text>
+                  </>
+                )}
+              </Pressable>
+              {syllabusFileName ? (
+                <Text style={[styles.helper, { marginTop: 8 }]}>Loaded: {syllabusFileName}</Text>
+              ) : null}
+
               <Text style={styles.fieldLabel}>Course</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
                 {courses.map((course) => (
@@ -1103,21 +1158,54 @@ export function SchoolDashboardScreen() {
                   </Pressable>
                 ))}
               </ScrollView>
+
+              <Text style={styles.fieldLabel}>Text</Text>
               <TextInput
-                style={[styles.textarea, { minHeight: 160, marginTop: 12 }]}
-                placeholder={"Essay 1 2026-10-01\nMidterm 10/15\nLab report"}
+                style={[styles.textarea, { minHeight: 140 }]}
+                placeholder={"Essay 1 — Oct 1, 2026\nMidterm due 10/15\nLab report 2026-11-03"}
                 placeholderTextColor={SP.muted}
                 value={syllabusText}
-                onChangeText={setSyllabusText}
+                onChangeText={refreshSyllabusPreview}
                 multiline
-                autoFocus
               />
+
+              {syllabusPreview.length ? (
+                <View style={{ marginTop: 14, gap: 8 }}>
+                  <Text style={styles.fieldLabel}>
+                    Preview · {syllabusPreview.length} item{syllabusPreview.length === 1 ? "" : "s"} · {syllabusPreview.filter((item) => item.due).length} with dates
+                  </Text>
+                  {syllabusPreview.slice(0, 12).map((item, index) => (
+                    <View key={`${item.title}-${index}`} style={styles.previewRow}>
+                      <View style={styles.grow}>
+                        <Text style={styles.taskTitle}>{item.title}</Text>
+                        <Text style={styles.taskMeta}>
+                          {item.academicType}
+                          {item.due ? ` · due ${item.due}` : " · no date"}
+                          {item.due ? " · calendar" : ""}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                  {syllabusPreview.length > 12 ? (
+                    <Text style={styles.helper}>+{syllabusPreview.length - 12} more…</Text>
+                  ) : null}
+                </View>
+              ) : null}
+
               <Pressable
-                style={[styles.primaryBtn, { marginTop: 18 }, !syllabusText.trim() && styles.primaryDisabled]}
-                disabled={!syllabusText.trim()}
+                style={[styles.primaryBtn, { marginTop: 18 }, !syllabusPreview.length && styles.primaryDisabled]}
+                disabled={!syllabusPreview.length || syllabusBusy}
                 onPress={submitSyllabus}
+                testID="school-syllabus-submit"
               >
-                <Text style={styles.primaryBtnText}>Add {parseSyllabusLines(syllabusText).length || ""} items</Text>
+                <Text style={styles.primaryBtnText}>
+                  {syllabusPreview.length
+                    ? `Add ${syllabusPreview.length} task${syllabusPreview.length === 1 ? "" : "s"}` +
+                      (syllabusPreview.some((item) => item.due)
+                        ? ` · ${syllabusPreview.filter((item) => item.due).length} to calendar`
+                        : "")
+                    : "Add items"}
+                </Text>
               </Pressable>
             </ScrollView>
           </Pressable>
@@ -1413,6 +1501,10 @@ const styles = StyleSheet.create({
   weekEmpty: { color: SP.muted, fontSize: 13, paddingVertical: 8, paddingHorizontal: 4 },
   classMeta: { color: SP.muted, fontSize: 12, marginTop: 3 },
   checkHit: { paddingRight: 4, justifyContent: "center" },
+  previewRow: {
+    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: SP.panel,
+    borderRadius: 16, paddingVertical: 12, paddingHorizontal: 14,
+  },
   moodRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   moodChip: {
     height: 40, borderRadius: 999, backgroundColor: SP.panel, borderWidth: 1, borderColor: SP.line,
