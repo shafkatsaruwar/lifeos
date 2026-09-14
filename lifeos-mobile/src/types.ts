@@ -71,6 +71,11 @@ export type ClassRecord = {
   color?: string;
   semesterEnd?: string;
   archived?: boolean;
+  /** 0=Sun … 6=Sat, matching Date.getDay(). */
+  meetingDays?: number[];
+  /** Local time "HH:MM" (24h). */
+  meetingStart?: string;
+  meetingEnd?: string;
 };
 
 /** Named calendar list (iOS-style) — events point at these via `calendarId`. */

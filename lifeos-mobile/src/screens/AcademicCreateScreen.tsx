@@ -33,6 +33,9 @@ export function AcademicCreateScreen() {
   const [priority, setPriority] = useState<Priority>("Medium");
   const [academicType, setAcademicType] = useState<AcademicItemType>(kind === "task" ? "Reading" : "Assignment");
   const [gradeWeight, setGradeWeight] = useState("");
+  const [meetingDays, setMeetingDays] = useState<number[]>([]);
+  const [meetingStart, setMeetingStart] = useState("09:00");
+  const [meetingEnd, setMeetingEnd] = useState("10:00");
 
   const needsClass = kind !== "course";
 
@@ -54,6 +57,9 @@ export function AcademicCreateScreen() {
           name: detail.trim() || code,
           term: "Current term",
           color: theme.accent,
+          meetingDays: meetingDays.length ? meetingDays : undefined,
+          meetingStart: meetingDays.length ? meetingStart : undefined,
+          meetingEnd: meetingDays.length ? meetingEnd : undefined,
         },
       ]);
       navigation.goBack();
@@ -225,6 +231,56 @@ export function AcademicCreateScreen() {
               keyboardType="decimal-pad"
             />
           </>
+        ) : null}
+
+        {kind === "course" ? (
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: theme.text }]}>Meets on</Text>
+            <View style={styles.courseRow}>
+              {[
+                { d: 1, label: "Mon" },
+                { d: 2, label: "Tue" },
+                { d: 3, label: "Wed" },
+                { d: 4, label: "Thu" },
+                { d: 5, label: "Fri" },
+                { d: 6, label: "Sat" },
+                { d: 0, label: "Sun" },
+              ].map((day) => {
+                const active = meetingDays.includes(day.d);
+                return (
+                  <Pressable
+                    key={day.d}
+                    onPress={() =>
+                      setMeetingDays((current) =>
+                        current.includes(day.d) ? current.filter((v) => v !== day.d) : [...current, day.d].sort(),
+                      )
+                    }
+                    style={[
+                      styles.typeChip,
+                      {
+                        borderColor: active ? theme.accent : theme.border,
+                        backgroundColor: active ? theme.soft : theme.surface,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: active ? theme.accent : theme.text, fontWeight: "700", fontSize: 12 }}>{day.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {meetingDays.length ? (
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Field label="Starts" value={meetingStart} onChangeText={setMeetingStart} placeholder="09:00" theme={theme} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Field label="Ends" value={meetingEnd} onChangeText={setMeetingEnd} placeholder="10:00" theme={theme} />
+                </View>
+              </View>
+            ) : (
+              <Text style={{ color: theme.muted, fontSize: 12, marginTop: 8 }}>Optional — add days so Timetable can place this class.</Text>
+            )}
+          </View>
         ) : null}
 
         <Pressable
