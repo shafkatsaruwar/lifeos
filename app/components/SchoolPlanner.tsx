@@ -672,31 +672,33 @@ export function SchoolDashboard({
     if (schoolView === "assignments") {
       return (
         <div className="school-tab-panel" data-testid="school-assignments">
-          <div className="school-section-head">
+          <div className="school-desktop-toolbar">
             <div>
-              <h2 className="school-section-title">Assignments</h2>
-              <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--sp-muted)" }}>Soonest due first · {assignments.length} to do</p>
+              <h2>Assignments</h2>
+              <p>Soonest due first · {assignments.length} to do</p>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={openSyllabus} data-testid="school-import-syllabus">Import syllabus</button>
-              <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={onNewAcademic} data-testid="school-new-assignment"><Plus size={14} /> New</button>
+              <button type="button" className="school-btn school-btn-primary school-btn-sm" onClick={onNewAcademic} data-testid="school-new-assignment"><Plus size={14} /> New</button>
             </div>
           </div>
           {assignments.length ? (
-            <div className="school-card" style={{ paddingTop: 8, paddingBottom: 8 }}>
-              {assignments.map((task) => (
-                <button key={task.id} type="button" className="school-row" onClick={() => onOpenTask(task.id)}>
-                  <span className="school-dot" style={{ background: courseFor(task.classId)?.color ?? "var(--sp-accent)" }} />
-                  <span className="school-row-body">
-                    <p className="school-row-title">{task.title}</p>
-                    <p className="school-row-meta">{courseFor(task.classId)?.code ?? "School"} · {task.academicType ?? "Assignment"} · {friendlyDue(task.due, today)}</p>
-                  </span>
-                </button>
-              ))}
-            </div>
+            <section className="school-module">
+              <div className="school-module-body">
+                {assignments.map((task) => (
+                  <button key={task.id} type="button" className="school-row" style={{ padding: "12px 15px" }} onClick={() => onOpenTask(task.id)}>
+                    <span className="school-dot" style={{ background: courseFor(task.classId)?.color ?? "var(--sp-accent)" }} />
+                    <span className="school-row-body">
+                      <p className="school-row-title">{task.title}</p>
+                      <p className="school-row-meta">{courseFor(task.classId)?.code ?? "School"} · {task.academicType ?? "Assignment"} · {friendlyDue(task.due, today)}</p>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
           ) : (
             <div className="school-empty-inline">
-              <p>No assignments yet. Tap + New or import a syllabus to add your first.</p>
+              <p>No assignments yet. Import a syllabus or add your first.</p>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button type="button" className="school-btn school-btn-primary school-btn-sm" onClick={openSyllabus}>Import syllabus</button>
                 <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={onNewAcademic}>Add assignment</button>
@@ -804,7 +806,7 @@ export function SchoolDashboard({
     return (
       <div className="school-tab-panel" data-testid="school-home">
         {courses.length === 0 && (
-          <button type="button" className="school-more-item" onClick={() => setSchoolView("timetable")} data-testid="school-empty-timetable-alert" style={{ marginBottom: 12 }}>
+          <button type="button" className="school-more-item" onClick={() => setSchoolView("timetable")} data-testid="school-empty-timetable-alert" style={{ marginBottom: 0 }}>
             <span className="school-dot" style={{ background: "var(--sp-accent)", marginTop: 4 }} />
             <span className="school-more-text">
               <strong>No classes on your timetable yet.</strong>
@@ -813,118 +815,159 @@ export function SchoolDashboard({
           </button>
         )}
 
-        <div className="school-stats">
-          <button type="button" className="school-stat" style={{ cursor: "pointer", border: "1px solid var(--sp-line)", background: "var(--sp-surface)", width: "100%" }} onClick={() => setSchoolView("due")} data-testid="school-due-stat">
-            <div className="school-stat-value">{dueThisWeek.length}</div>
-            <div className="school-stat-label">Due this week</div>
+        <div className="school-metric-row">
+          <button type="button" className="school-metric" onClick={() => setSchoolView("due")} data-testid="school-due-stat">
+            <div className="school-metric-value">{dueThisWeek.length}</div>
+            <div className="school-metric-label">Due this week</div>
           </button>
-          <button type="button" className="school-stat" style={{ cursor: "pointer", border: "1px solid var(--sp-line)", background: "var(--sp-surface)", width: "100%" }} onClick={() => setSchoolView("timetable")} data-testid="school-stat-classes">
-            <div className="school-stat-value">{termCourses.length}</div>
-            <div className="school-stat-label">Classes</div>
+          <button type="button" className="school-metric" onClick={() => setSchoolView("timetable")} data-testid="school-stat-classes">
+            <div className="school-metric-value">{termCourses.length}</div>
+            <div className="school-metric-label">Classes</div>
           </button>
-          <button type="button" className="school-stat" style={{ cursor: "pointer", border: "1px solid var(--sp-line)", background: "var(--sp-surface)", width: "100%" }} onClick={() => setSchoolView("assignments")}>
-            <div className="school-stat-value">{assignments.length}</div>
-            <div className="school-stat-label">Open work</div>
+          <button type="button" className="school-metric" onClick={() => setSchoolView("assignments")}>
+            <div className="school-metric-value">{assignments.length}</div>
+            <div className="school-metric-label">Open work</div>
           </button>
         </div>
 
-        <div className="school-card" style={{ cursor: "pointer" }} onClick={() => setSheet("capture")} data-testid="school-open-capture" role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSheet("capture"); }}>
-          <p className="school-card-title" style={{ color: "var(--sp-accent)", marginBottom: 6 }}>Quick capture</p>
-          <p style={{ margin: 0, color: "var(--sp-muted)", fontSize: 14 }}>Type anything — a task, deadline, or note…</p>
+        <div className="os-quick-row school-dashboard" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+          <button type="button" className="os-quick-action" onClick={() => setSheet("capture")} data-testid="school-open-capture">
+            <Plus size={16} /> Quick capture
+          </button>
+          <button type="button" className="os-quick-action" onClick={openSyllabus} data-testid="school-home-import-syllabus">
+            <Upload size={16} /> Import syllabus
+          </button>
+          <button type="button" className="os-quick-action" onClick={onNewAcademic}>
+            <BookOpen size={16} /> Add assignment
+          </button>
+          <button type="button" className="os-quick-action" onClick={() => setSheet("calendar")}>
+            <CalendarDays size={16} /> Add to calendar
+          </button>
         </div>
 
-        <div className="school-section-head">
-          <h2 className="school-section-title">Today</h2>
-          <button type="button" className="school-link-btn" onClick={() => setSchoolView("timetable")}>Timetable</button>
-        </div>
-        {todayClasses.length ? (
-          <div className="school-card" style={{ paddingTop: 8, paddingBottom: 8 }}>
-            {todayClasses.map((course) => (
-              <button key={course.id} type="button" className="school-row" onClick={() => onOpenClass(course.id)} data-testid={`school-today-class-${course.id}`}>
-                <span className="school-dot" style={{ background: course.color }} />
-                <span className="school-row-body">
-                  <p className="school-row-title">
-                    {course.code}
-                    {course.meetingStart ? ` · ${course.meetingStart}${course.meetingEnd ? `–${course.meetingEnd}` : ""}` : ""}
-                  </p>
-                  <p className="school-row-meta">{course.name}{course.location ? ` · ${course.location}` : ""}</p>
-                </span>
-                <ChevronRight size={16} className="school-more-chevron" />
-              </button>
-            ))}
+        <div className="school-home-layout">
+          <div className="school-home-main">
+            <section className="school-module">
+              <div className="school-module-head">
+                <h2>Coming up</h2>
+                <button type="button" className="school-link-btn" onClick={() => setSchoolView("assignments")}>Assignments</button>
+              </div>
+              <div className={`school-module-body ${dueThisWeek.length ? "" : "is-padded"}`}>
+                {dueThisWeek.length ? (
+                  dueThisWeek.slice(0, 8).map((task) => (
+                    <button key={task.id} type="button" className="school-row" style={{ padding: "12px 15px" }} onClick={() => onOpenTask(task.id)}>
+                      <span className="school-dot" style={{ background: courseFor(task.classId)?.color ?? "var(--sp-accent)" }} />
+                      <span className="school-row-body">
+                        <p className="school-row-title">{task.title}</p>
+                        <p className="school-row-meta">{courseFor(task.classId)?.code ?? "School"} · {friendlyDue(task.due, today)}</p>
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="school-empty-inline" style={{ border: "none", background: "transparent", padding: 0 }}>
+                    <p>Nothing due this week. Import a syllabus or capture your next deadline.</p>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button type="button" className="school-btn school-btn-primary school-btn-sm" onClick={openSyllabus}>Import syllabus</button>
+                      <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={onNewAcademic}>Add assignment</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
-        ) : (
-          <div className="school-empty-inline">
-            <p>
-              {termCourses.length
-                ? "No class meetings today — good day to catch up."
-                : "Add a class from Timetable to see today’s schedule here."}
-            </p>
-            <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={() => (termCourses[0] ? onOpenClass(termCourses[0].id) : onNewCourse())}>
-              {termCourses[0] ? "Open a class" : "Add a class"}
-            </button>
-          </div>
-        )}
 
-        <div className="school-section-head">
-          <h2 className="school-section-title">Coming up</h2>
-          <button type="button" className="school-link-btn" onClick={() => setSchoolView("assignments")}>Assignments</button>
+          <aside className="school-home-side">
+            <section className="school-module">
+              <div className="school-module-head">
+                <h2>Today</h2>
+                <button type="button" className="school-link-btn" onClick={() => setSchoolView("timetable")}>Timetable</button>
+              </div>
+              <div className={`school-module-body ${todayClasses.length ? "" : "is-padded"}`}>
+                {todayClasses.length ? (
+                  todayClasses.map((course) => (
+                    <button key={course.id} type="button" className="school-row" style={{ padding: "12px 15px" }} onClick={() => onOpenClass(course.id)} data-testid={`school-today-class-${course.id}`}>
+                      <span className="school-dot" style={{ background: course.color }} />
+                      <span className="school-row-body">
+                        <p className="school-row-title">
+                          {course.code}
+                          {course.meetingStart ? ` · ${course.meetingStart}${course.meetingEnd ? `–${course.meetingEnd}` : ""}` : ""}
+                        </p>
+                        <p className="school-row-meta">{course.name}{course.location ? ` · ${course.location}` : ""}</p>
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="school-empty-inline" style={{ border: "none", background: "transparent", padding: 0 }}>
+                    <p>
+                      {termCourses.length
+                        ? "No class meetings today — good day to catch up."
+                        : "Add a class from Timetable to see today’s schedule here."}
+                    </p>
+                    <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={() => (termCourses[0] ? onOpenClass(termCourses[0].id) : onNewCourse())}>
+                      {termCourses[0] ? "Open a class" : "Add a class"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </section>
+          </aside>
         </div>
-        {dueThisWeek.length ? (
-          <div className="school-card" style={{ paddingTop: 8, paddingBottom: 8 }}>
-            {dueThisWeek.slice(0, 5).map((task) => (
-              <button key={task.id} type="button" className="school-row" onClick={() => onOpenTask(task.id)}>
-                <span className="school-dot" style={{ background: courseFor(task.classId)?.color ?? "var(--sp-accent)" }} />
-                <span className="school-row-body">
-                  <p className="school-row-title">{task.title}</p>
-                  <p className="school-row-meta">{courseFor(task.classId)?.code ?? "School"} · {friendlyDue(task.due, today)}</p>
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="school-empty-inline">
-            <p>Nothing due this week. Import a syllabus or capture your next deadline.</p>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button type="button" className="school-btn school-btn-primary school-btn-sm" onClick={openSyllabus} data-testid="school-home-import-syllabus">Import syllabus</button>
-              <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={onNewAcademic}>Add assignment</button>
-            </div>
-          </div>
-        )}
       </div>
     );
   })();
 
   return (
-    <div className="school-planner" data-testid="school-planner">
+    <div className="os-dashboard school-dashboard school-planner" data-testid="school-planner">
       <div className="school-hub-chrome" data-testid="school-top-nav">
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <div className="school-hub-hero">
           <div style={{ minWidth: 0 }}>
             <p className="school-hub-eyebrow">School OS</p>
             <h1 className="school-hub-title">School</h1>
-            <p style={{ margin: "-8px 0 14px", fontSize: 14, color: "var(--sp-muted)", lineHeight: 1.45 }}>
+            <p className="school-hub-lede">
               Classes, assignments, and your week — same shell as the rest of LifeOS.
             </p>
           </div>
-          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-            <button type="button" className="school-btn school-btn-ghost school-btn-sm" aria-label="Add to calendar" onClick={() => setSheet("calendar")}>
-              <CalendarDays size={16} />
+          <div className="school-hub-actions">
+            <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={() => setSheet("calendar")}>
+              <CalendarDays size={15} />
+              <span className="school-btn-label">Calendar</span>
             </button>
-            <button type="button" className="school-btn school-btn-ghost school-btn-sm" aria-label="Quick capture" onClick={() => setSheet("capture")}>
-              <Plus size={16} />
+            <button type="button" className="school-btn school-btn-ghost school-btn-sm" onClick={openSyllabus}>
+              <Upload size={15} />
+              <span className="school-btn-label">Import syllabus</span>
+            </button>
+            <button type="button" className="school-btn school-btn-primary school-btn-sm" onClick={() => setSheet("capture")}>
+              <Plus size={15} />
+              <span className="school-btn-label">Capture</span>
             </button>
           </div>
         </div>
-        <div className="school-hub-segments" role="tablist" aria-label="SchoolOS">
+
+        <div className="school-hub-tabs" role="tablist" aria-label="SchoolOS">
           {SEGMENTS.map((item) => (
             <button
               key={item.key}
               type="button"
               role="tab"
               aria-selected={segmentTab === item.key}
-              className={`school-hub-seg ${segmentTab === item.key ? "is-active" : ""}`}
+              className={`school-hub-tab ${segmentTab === item.key ? "is-active" : ""}`}
               onClick={() => setSchoolView(item.key)}
               data-testid={`school-nav-${item.key}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="school-hub-segments" role="tablist" aria-label="SchoolOS mobile">
+          {SEGMENTS.map((item) => (
+            <button
+              key={`m-${item.key}`}
+              type="button"
+              role="tab"
+              aria-selected={segmentTab === item.key}
+              className={`school-hub-seg ${segmentTab === item.key ? "is-active" : ""}`}
+              onClick={() => setSchoolView(item.key)}
             >
               {item.label}
             </button>
