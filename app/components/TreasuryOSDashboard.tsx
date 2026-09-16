@@ -15,7 +15,7 @@ import {
 type Mode = "employed" | "between-contracts";
 type CategoryKind = "expense" | "savings";
 
-type BudgetCategory = {
+type TreasuryCategory = {
   id: string;
   name: string;
   emoji: string;
@@ -24,18 +24,18 @@ type BudgetCategory = {
   betweenTarget: number;
 };
 
-type BudgetSettings = {
-  copy: BudgetCopy;
+type TreasurySettings = {
+  copy: TreasuryCopy;
   hourlyRate: number;
   weeklyHours: number;
   withholdingRate: number;
   monthlyBaseline: number;
   babaEveningShiftValue: number;
   contractEnd: string;
-  categories: BudgetCategory[];
+  categories: TreasuryCategory[];
 };
 
-type BudgetCopy = {
+type TreasuryCopy = {
   eyebrow: string;
   title: string;
   subtitle: string;
@@ -80,7 +80,7 @@ type MonthlyState = {
   note: string;
 };
 
-const defaultCategories: BudgetCategory[] = [
+const defaultCategories: TreasuryCategory[] = [
   { id: "parents", name: "Parents / Project Retire Baba", emoji: "❤️", kind: "expense", target: 1100, betweenTarget: 0 },
   { id: "masters", name: "Master's", emoji: "🎓", kind: "savings", target: 350, betweenTarget: 0 },
   { id: "debt", name: "Debt", emoji: "💳", kind: "expense", target: 400, betweenTarget: 400 },
@@ -89,10 +89,10 @@ const defaultCategories: BudgetCategory[] = [
   { id: "fun", name: "Fun / misc", emoji: "🎉", kind: "expense", target: 300, betweenTarget: 100 },
 ];
 
-const defaultSettings: BudgetSettings = {
+const defaultSettings: TreasurySettings = {
   copy: {
-    eyebrow: "SHAFKAT BUDGET",
-    title: "Money with a purpose.",
+    eyebrow: "TREASURYOS",
+    title: "TreasuryOS",
     subtitle: "Your categories, your targets, your actual numbers. Nothing important is locked in.",
     safeCardLabel: "SAFE TO SPEND / SAVE",
     safeCardHelp: "after your current mode targets",
@@ -160,7 +160,7 @@ const budgetFirebaseConfig = {
   appId: "1:715394261587:web:6f0494524c692729851ca6",
 };
 
-function getBudgetFirebase() {
+function getTreasuryFirebase() {
   if (typeof window === "undefined") return { firebaseAuth: null, firebaseDb: null, googleProvider: new GoogleAuthProvider() };
   const app = getApps().find(candidate => candidate.name === "shafkat-budget") ?? initializeApp(budgetFirebaseConfig, "shafkat-budget");
   const firebaseAuth = getAuth(app);
@@ -170,7 +170,7 @@ function getBudgetFirebase() {
 
 const { firebaseAuth, firebaseDb, googleProvider } = typeof window === "undefined"
   ? { firebaseAuth: null, firebaseDb: null, googleProvider: new GoogleAuthProvider() }
-  : getBudgetFirebase();
+  : getTreasuryFirebase();
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const exactMoney = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
@@ -180,7 +180,7 @@ const LOCAL_SETTINGS_KEY = "shafkat-budget-settings";
 const LEGACY_MONTH_KEY = "shafkat-budget-month";
 const monthKey = (month: string) => `shafkat-budget-month-${month}`;
 
-function migrateSettings(raw: any): BudgetSettings {
+function migrateSettings(raw: any): TreasurySettings {
   if (!raw) return defaultSettings;
   if (Array.isArray(raw.categories)) return { ...defaultSettings, ...raw, copy: { ...defaultSettings.copy, ...raw.copy }, categories: raw.categories };
   const categories = defaultCategories.map(c => ({
@@ -213,8 +213,8 @@ function migrateMonth(raw: any): MonthlyState {
   };
 }
 
-export function BudgetDashboard() {
-  const [settings, setSettings] = useState<BudgetSettings>(defaultSettings);
+export function TreasuryOSDashboard() {
+  const [settings, setSettings] = useState<TreasurySettings>(defaultSettings);
   const [month, setMonth] = useState<MonthlyState>(defaultMonthState());
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -338,12 +338,12 @@ export function BudgetDashboard() {
     return { grossWeekly, netWeekly, modeledMonthly, earnedIncome, oneOffs, available, planned, safeToSpend, actualRemaining, parentsPaid, savingsAllocated, babaShifts, contractDays };
   }, [settings, month]);
 
-  const setS = (k: keyof Omit<BudgetSettings, "categories" | "copy">, v: string) => setSettings(s => ({ ...s, [k]: k === "contractEnd" ? v : clamp(Number(v)) }));
+  const setS = (k: keyof Omit<TreasurySettings, "categories" | "copy">, v: string) => setSettings(s => ({ ...s, [k]: k === "contractEnd" ? v : clamp(Number(v)) }));
   const setM = (k: keyof MonthlyState, v: string) => setMonth(m => ({ ...m, [k]: v }));
   const setCategoryValue = (id: string, value: number) => setMonth(m => ({ ...m, categoryValues: { ...m.categoryValues, [id]: clamp(value) } }));
-  const setCopy = (k: keyof BudgetSettings["copy"], v: string) => setSettings(s => ({ ...s, copy: { ...s.copy, [k]: v } }));
+  const setCopy = (k: keyof TreasurySettings["copy"], v: string) => setSettings(s => ({ ...s, copy: { ...s.copy, [k]: v } }));
 
-  function updateCategory(id: string, patch: Partial<BudgetCategory>) {
+  function updateCategory(id: string, patch: Partial<TreasuryCategory>) {
     setSettings(s => ({ ...s, categories: s.categories.map(c => c.id === id ? { ...c, ...patch } : c) }));
   }
 
@@ -495,7 +495,7 @@ export function BudgetDashboard() {
         </button>
         {copyEditorOpen && <div className="copyEditor">
           {Object.entries(settings.copy).map(([key, value]) => (
-            <label key={key} className="field"><span>{labelize(key)}</span><input value={value} onChange={e => setCopy(key as keyof BudgetSettings["copy"], e.target.value)} /></label>
+            <label key={key} className="field"><span>{labelize(key)}</span><input value={value} onChange={e => setCopy(key as keyof TreasurySettings["copy"], e.target.value)} /></label>
           ))}
         </div>}
       </section>

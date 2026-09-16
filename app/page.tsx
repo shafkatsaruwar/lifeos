@@ -64,7 +64,7 @@ import {
   type StudyAbroadHub,
   type StudyAbroadView,
 } from "@/app/components/StudyAbroadDashboard";
-import { BudgetDashboard } from "@/app/components/BudgetDashboard";
+import { TreasuryOSDashboard } from "@/app/components/TreasuryOSDashboard";
 import {
   appendHistory,
   buildStudyAbroadCopilotContext,
@@ -85,7 +85,7 @@ import {
   BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, WalletCards,
 } from "lucide-react";
 
-type View = "Life" | "School" | "Work" | "Study Abroad" | "Budget" | "Now" | "Flow" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
+type View = "Life" | "School" | "Work" | "Study Abroad" | "TreasuryOS" | "Now" | "Flow" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
 type EnergyLevel = "Low" | "Medium" | "High";
 type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
 type AcademicItemType = "Assignment" | "Project" | "Exam" | "Quiz" | "Lab" | "Reading" | "Discussion";
@@ -111,7 +111,7 @@ const routedViews: Record<string, View> = {
   life: "Life", school: "School", work: "Work", "study-abroad": "Study Abroad", studyabroad: "Study Abroad",
   now: "Now", flow: "Flow", dashboard: "Life", today: "Calendar", calendar: "Calendar", spaces: "Spaces",
   library: "Library", notes: "Library", resources: "Library", brain: "Library", knowledge: "Library",
-  settings: "Settings", tasks: "Tasks", budget: "Budget",
+  settings: "Settings", tasks: "Tasks", budget: "TreasuryOS", treasuryos: "TreasuryOS", "treasury-os": "TreasuryOS", treasury: "TreasuryOS",
 };
 const viewFromLocation = (): View => {
   if (typeof window === "undefined") return "Now";
@@ -185,7 +185,7 @@ const nav: NavItem[] = [
   { category: "ENVIRONMENTS", name: "Work", icon: BriefcaseBusiness },
   { category: "ENVIRONMENTS", name: "School", icon: GraduationCap },
   { category: "ENVIRONMENTS", name: "Study Abroad", icon: Globe2 },
-  { category: "ENVIRONMENTS", name: "Budget", icon: WalletCards },
+  { category: "ENVIRONMENTS", name: "TreasuryOS", icon: WalletCards },
   { category: "ENVIRONMENTS", name: "MasterOS", icon: NotebookPen, href: "/masteros" },
   { category: "NAVIGATION", name: "Tasks", icon: CheckCircle2 },
   { category: "NAVIGATION", name: "Calendar", icon: CalendarDays },
@@ -2169,7 +2169,7 @@ export default function LifeOS() {
             {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} school={schoolHub} schoolView={schoolView} onChangeView={setSchoolView} schoolFocusTaskId={schoolFocusTaskId} onSelectFocusTask={setSchoolFocusTaskId} onComplete={complete} onOpenTask={openTaskPage} onOpenClass={openClassSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={(id) => { setSchoolFocusTaskId(id); openFocus(id); }} onOpenCalendar={() => go("Calendar")} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} enableMasterOS={settingsState.enableMasterOS !== false} />}
             {view === "Work" && <WorkDashboard workHub={workHub} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => openSpacesList("Projects")} />}
             {view === "Study Abroad" && <StudyAbroadDashboard hub={studyAbroadHub} studyView={studyAbroadView} onChangeView={setStudyAbroadView} onChange={setStudyAbroadHub} workspaceName={workspaceName} onOpenCalendar={() => go("Calendar")} onFocusStudyTask={focusStudyAbroadTask} focusEntity={studyAbroadFocusEntity} onFocusEntityConsumed={() => setStudyAbroadFocusEntity(null)} />}
-            {view === "Budget" && <BudgetDashboard />}
+            {view === "TreasuryOS" && <TreasuryOSDashboard />}
             {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableMasterOS={settingsState.enableMasterOS !== false} flash={flash} />}
             {view === "Flow" && <FocusFlowView screen={flowScreen} onScreenChange={setFlowScreen} tasks={tasks} projects={[...projectItems.map(project => project.name), ...classes.map(item => item.code)]} events={calendarFeed} weeklyPlan={weeklyPlan} momentumLog={settingsState.momentumLog ?? []} nowTaskId={settingsState.nowTaskId ?? null} today={toDateKey(new Date())} onFocus={openFocus} onChoose={chooseNowTask} onComplete={complete} onAddTask={(title, options, projectName) => addTask(title, undefined, projectName && projectName !== "Inbox" ? projectName : "", options)} onAddProject={(name) => addProject(name)} onUpdateTask={updateTaskDetails} onAddCalendarEvent={addCalendarEvent} onSetWeeklyPlan={setWeeklyPlan} onOpenCalendar={() => go("Calendar")} flash={flash} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
@@ -2182,7 +2182,7 @@ export default function LifeOS() {
             {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} />}
             {view === "Settings" && <CalendarConnections user={user} flash={flash} />}
             {view === "Settings" && <SynapseDayPlanImport flash={flash} />}
-            {!["Life", "School", "Work", "Study Abroad", "Budget", "Now", "Flow", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
+            {!["Life", "School", "Work", "Study Abroad", "TreasuryOS", "Now", "Flow", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
         </AnimatePresence>
         </>}
