@@ -27,6 +27,20 @@ let shellSignInWaiter: {
   timer: ReturnType<typeof setTimeout>;
 } | null = null;
 
+const env = (value?: string) => value?.trim() || undefined;
+
+/**
+ * Public Firebase web client config (same project as lifeos-mu-three.vercel.app /
+ * lifeos-mobile). Env vars override when non-empty; blank entries fall back so
+ * empty Vercel/local placeholders do not break Google sign-in.
+ */
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyAbMSSRscUp7CMbeCYuOp5SC6utZ3QPNNM',
+  authDomain: 'lifeos-45586.firebaseapp.com',
+  databaseURL: 'https://lifeos-45586-default-rtdb.firebaseio.com/',
+  projectId: 'lifeos-45586',
+};
+
 /**
  * Prefer the current LifeOS host as authDomain so Google OAuth stays on
  * lifeos-mu-three.vercel.app via the /__/auth rewrite. Using firebaseapp.com
@@ -34,9 +48,9 @@ let shellSignInWaiter: {
  */
 function resolveAuthDomain() {
   const configured =
-    process.env.NEXT_PUBLIC_LIFEOS_AUTH_DOMAIN ||
-    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ||
-    '';
+    env(process.env.NEXT_PUBLIC_LIFEOS_AUTH_DOMAIN) ||
+    env(process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN) ||
+    DEFAULT_FIREBASE_CONFIG.authDomain;
   if (typeof window === 'undefined') return configured;
   const host = window.location.hostname;
   if (
@@ -54,16 +68,19 @@ function resolveAuthDomain() {
 function initializeFirebase() {
   if (initialized || typeof window === 'undefined') return;
   try {
-    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-    const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+    const storageBucket = env(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
     const firebaseConfig = {
-      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+      apiKey: env(process.env.NEXT_PUBLIC_FIREBASE_API_KEY) || DEFAULT_FIREBASE_CONFIG.apiKey,
       // Keep Firebase's OAuth helper under the LifeOS domain via next.config rewrites.
       authDomain: resolveAuthDomain(),
-      databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DB_URL,
-      projectId,
+      databaseURL: env(process.env.NEXT_PUBLIC_FIREBASE_DB_URL) || DEFAULT_FIREBASE_CONFIG.databaseURL,
+      projectId: env(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) || DEFAULT_FIREBASE_CONFIG.projectId,
       ...(storageBucket ? { storageBucket } : {}),
     };
+    if (!firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.databaseURL) {
+      console.error('Firebase authentication is not configured.');
+      return;
+    }
     app = initializeApp(firebaseConfig);
     database = getDatabase(app);
     auth = getAuth(app);

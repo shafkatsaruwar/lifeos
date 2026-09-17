@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  CalendarClock, ChevronDown, Cloud, CloudOff, HeartHandshake, LogOut, PiggyBank,
+  CalendarClock, Check, Cloud, CloudOff, HeartHandshake, LogOut, Pencil, PiggyBank,
   Plus, RotateCcw, Settings2, Sparkles, Trash2, WalletCards
 } from "lucide-react";
 import { initializeApp, getApps } from "firebase/app";
@@ -222,8 +222,9 @@ export function TreasuryOSDashboard() {
   const [authMsg, setAuthMsg] = useState("");
   const [syncMsg, setSyncMsg] = useState("");
   const [localReady, setLocalReady] = useState(false);
-  const [copyEditorOpen, setCopyEditorOpen] = useState(false);
+  const [copyEditing, setCopyEditing] = useState(false);
   const isOwner = Boolean(sessionEmail && sessionEmail.toLowerCase() === ownerEmail.toLowerCase());
+  const copy = settings.copy;
 
   useEffect(() => {
     try {
@@ -341,7 +342,7 @@ export function TreasuryOSDashboard() {
   const setS = (k: keyof Omit<TreasurySettings, "categories" | "copy">, v: string) => setSettings(s => ({ ...s, [k]: k === "contractEnd" ? v : clamp(Number(v)) }));
   const setM = (k: keyof MonthlyState, v: string) => setMonth(m => ({ ...m, [k]: v }));
   const setCategoryValue = (id: string, value: number) => setMonth(m => ({ ...m, categoryValues: { ...m.categoryValues, [id]: clamp(value) } }));
-  const setCopy = (k: keyof TreasurySettings["copy"], v: string) => setSettings(s => ({ ...s, copy: { ...s.copy, [k]: v } }));
+  const setCopy = (k: keyof TreasuryCopy, v: string) => setSettings(s => ({ ...s, copy: { ...s.copy, [k]: v } }));
 
   function updateCategory(id: string, patch: Partial<TreasuryCategory>) {
     setSettings(s => ({ ...s, categories: s.categories.map(c => c.id === id ? { ...c, ...patch } : c) }));
@@ -363,164 +364,312 @@ export function TreasuryOSDashboard() {
     setMonth({ ...defaultMonthState(), month: month.month, mode: month.mode });
   }
 
+  const parentsTarget = settings.categories.find(c => c.id === "parents")?.target ?? 0;
+
   return (
-    <main className="shell">
-      <section className="hero">
+    <div className={`os-dashboard treasury-dashboard${copyEditing ? " copy-editing" : ""}`}>
+      <div className="os-hero">
         <div>
-          <div className="eyebrow"><Sparkles size={15}/><EditableText value={settings.copy.eyebrow} onChange={v => setCopy("eyebrow", v)} ariaLabel="App eyebrow" /></div>
-          <h1><EditableText value={settings.copy.title} onChange={v => setCopy("title", v)} ariaLabel="Dashboard title" /></h1>
-          <p><EditableText value={settings.copy.subtitle} onChange={v => setCopy("subtitle", v)} ariaLabel="Dashboard subtitle" /></p>
+          <p className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Sparkles size={12} />
+            <EditableText editing={copyEditing} value={copy.eyebrow} onChange={v => setCopy("eyebrow", v)} ariaLabel="App eyebrow" />
+          </p>
+          <h1><EditableText editing={copyEditing} value={copy.title} onChange={v => setCopy("title", v)} ariaLabel="Dashboard title" /></h1>
+          <p><EditableText editing={copyEditing} value={copy.subtitle} onChange={v => setCopy("subtitle", v)} ariaLabel="Dashboard subtitle" /></p>
         </div>
-        <div className="cloudPill">{sessionEmail ? <><Cloud size={16}/> Synced as {sessionEmail}</> : <><CloudOff size={16}/> {firebaseEnabled ? "Private Google login" : "Local mode"}</>}</div>
-      </section>
-
-      {firebaseEnabled && authReady && !isOwner && <section className="panel authGate">
-        <div>
-          <div className="panelTitle"><Cloud/> Private budget</div>
-          <p className="muted">Sign in with {ownerEmail} to open and sync this budget across your devices.</p>
-        </div>
-        <form onSubmit={authSubmit}>
-          <button className="primary">Sign in with Google</button>
-          <span>{authMsg}</span>
-        </form>
-      </section>}
-
-      {firebaseEnabled && !authReady && <section className="panel authGate">
-        <div className="panelTitle"><Cloud/> Checking sign-in...</div>
-      </section>}
-
-      {(!firebaseEnabled || isOwner) && <>
-
-      <section className="topGrid">
-        <article className="bigCard safe"><span><EditableText value={settings.copy.safeCardLabel} onChange={v => setCopy("safeCardLabel", v)} ariaLabel="Safe card label" /></span><strong>{money.format(computed.safeToSpend)}</strong><small><EditableText value={settings.copy.safeCardHelp} onChange={v => setCopy("safeCardHelp", v)} ariaLabel="Safe card helper text" /></small></article>
-        <article className="bigCard"><span><EditableText value={settings.copy.availableCardLabel} onChange={v => setCopy("availableCardLabel", v)} ariaLabel="Available card label" /></span><strong>{money.format(computed.available)}</strong><small><EditableText value={settings.copy.availableCardHelp} onChange={v => setCopy("availableCardHelp", v)} ariaLabel="Available card helper text" /></small></article>
-        <article className="bigCard"><span><EditableText value={settings.copy.remainingCardLabel} onChange={v => setCopy("remainingCardLabel", v)} ariaLabel="Remaining card label" /></span><strong className={computed.actualRemaining < 0 ? "bad" : ""}>{money.format(computed.actualRemaining)}</strong><small><EditableText value={settings.copy.remainingCardHelp} onChange={v => setCopy("remainingCardHelp", v)} ariaLabel="Remaining card helper text" /></small></article>
-        <article className="bigCard countdown"><span><EditableText value={settings.copy.contractCardLabel} onChange={v => setCopy("contractCardLabel", v)} ariaLabel="Contract card label" /></span><strong>{computed.contractDays >= 0 ? `${computed.contractDays} days` : "Ended"}</strong><small>{settings.contractEnd}</small></article>
-      </section>
-
-      <section className="modeBar">
-        <div><strong><EditableText value={settings.copy.budgetModeTitle} onChange={v => setCopy("budgetModeTitle", v)} ariaLabel="Budget mode title" /></strong><p><EditableText value={month.mode === "employed" ? settings.copy.employedHelp : settings.copy.betweenContractsHelp} onChange={v => setCopy(month.mode === "employed" ? "employedHelp" : "betweenContractsHelp", v)} ariaLabel="Budget mode helper text" /></p></div>
-        <div className="segmented">
-          <button className={month.mode === "employed" ? "active" : ""} onClick={() => setMonth(m => ({ ...m, mode: "employed" }))}>Employed</button>
-          <button className={month.mode === "between-contracts" ? "active" : ""} onClick={() => setMonth(m => ({ ...m, mode: "between-contracts" }))}>Between contracts</button>
-        </div>
-      </section>
-
-      <section className="grid2">
-        <article className="panel">
-          <div className="panelTitle"><HeartHandshake/> <EditableText value={settings.copy.retireBabaTitle} onChange={v => setCopy("retireBabaTitle", v)} ariaLabel="Retire Baba panel title" /></div>
-          {settings.categories.some(c => c.id === "parents") ? <>
-            <div className="progressRow"><span><EditableText value={settings.copy.retireBabaMetricLabel} onChange={v => setCopy("retireBabaMetricLabel", v)} ariaLabel="Retire Baba metric label" /></span><b>{money.format(computed.parentsPaid)} / {money.format(settings.categories.find(c => c.id === "parents")?.target ?? 0)}</b></div>
-            <Progress value={computed.parentsPaid} max={settings.categories.find(c => c.id === "parents")?.target ?? 0}/>
-            <div className="impact"><EditableText value={settings.copy.retireBabaImpactPrefix} onChange={v => setCopy("retireBabaImpactPrefix", v)} ariaLabel="Retire Baba impact prefix" /> <strong>{computed.babaShifts.toFixed(1)}</strong> <EditableText value={settings.copy.retireBabaImpactMiddle} onChange={v => setCopy("retireBabaImpactMiddle", v)} ariaLabel="Retire Baba impact middle" /> {exactMoney.format(settings.babaEveningShiftValue)}<EditableText value={settings.copy.retireBabaImpactSuffix} onChange={v => setCopy("retireBabaImpactSuffix", v)} ariaLabel="Retire Baba impact suffix" /></div>
-          </> : <p className="muted"><EditableText value={settings.copy.retireBabaMissing} onChange={v => setCopy("retireBabaMissing", v)} ariaLabel="Missing parents category message" /></p>}
-        </article>
-        <article className="panel">
-          <div className="panelTitle"><PiggyBank/> <EditableText value={settings.copy.savingsTitle} onChange={v => setCopy("savingsTitle", v)} ariaLabel="Savings panel title" /></div>
-          <div className="runwayNumber">{money.format(computed.savingsAllocated)}</div>
-          <p className="muted"><EditableText value={settings.copy.savingsHelp} onChange={v => setCopy("savingsHelp", v)} ariaLabel="Savings helper text" /></p>
-          <div className="miniCallout"><EditableText value={settings.copy.savingsCallout} onChange={v => setCopy("savingsCallout", v)} ariaLabel="Savings callout" multiline /></div>
-        </article>
-      </section>
-
-      <section className="panel">
-        <div className="panelHead">
-          <div className="panelTitle"><WalletCards/> {month.month} <EditableText value={settings.copy.moneyMapTitle} onChange={v => setCopy("moneyMapTitle", v)} ariaLabel="Money map title" /></div>
-          <input className="monthPicker" type="month" value={month.month} onChange={e => changeMonth(e.target.value)} />
-        </div>
-        <div className="incomeStrip">
-          <MoneyInput label={settings.copy.incomeInputLabel} value={month.actualIncome} onChange={v => setMonth(m => ({ ...m, actualIncome: v }))} positive />
-          <div className="incomeHint"><EditableText value={settings.copy.incomeHintPrefix} onChange={v => setCopy("incomeHintPrefix", v)} ariaLabel="Income hint" /> <strong>{money.format(settings.monthlyBaseline)}</strong>.</div>
-        </div>
-
-        <div className="categoryEntryList">
-          {settings.categories.map(c => {
-            const target = month.mode === "employed" ? c.target : c.betweenTarget;
-            return <MoneyInput key={c.id} label={`${c.emoji} ${c.name}`} value={month.categoryValues[c.id] ?? 0} target={target} onChange={v => setCategoryValue(c.id, v)} savings={c.kind === "savings"} />;
-          })}
-        </div>
-
-        <div className="moneyGrid">
-          <MoneyInput label="Refunds received" value={month.refundIncome} onChange={v => setMonth(m => ({ ...m, refundIncome: v }))} positive />
-          <MoneyInput label="Gifts / birthday money" value={month.giftIncome} onChange={v => setMonth(m => ({ ...m, giftIncome: v }))} positive />
-          <MoneyInput label="Other income" value={month.otherIncome} onChange={v => setMonth(m => ({ ...m, otherIncome: v }))} positive />
-        </div>
-        <textarea value={month.note} onChange={e => setM("note", e.target.value)} placeholder={settings.copy.monthNotePlaceholder} />
-        <div className="actions">{firebaseEnabled && <button className="primary" onClick={saveCloud}>Save + sync</button>}<button onClick={resetMonth}><RotateCcw size={16}/> Reset month</button><span>{syncMsg}</span></div>
-      </section>
-
-      <section className="panel">
-        <div className="panelHead categoryHead">
-          <div><div className="panelTitle"><Settings2/> <EditableText value={settings.copy.categoriesTitle} onChange={v => setCopy("categoriesTitle", v)} ariaLabel="Categories section title" /></div><p className="muted"><EditableText value={settings.copy.categoriesHelp} onChange={v => setCopy("categoriesHelp", v)} ariaLabel="Categories helper text" multiline /></p></div>
-          <button className="addButton" onClick={addCategory}><Plus size={16}/> Add category</button>
-        </div>
-        <div className="categoryEditor">
-          {settings.categories.map(c => <div className="categoryEditRow" key={c.id}>
-            <input className="emojiInput" aria-label={`${c.name} emoji`} value={c.emoji} maxLength={4} onChange={e => updateCategory(c.id, { emoji: e.target.value })}/>
-            <input className="categoryName" aria-label="Category name" value={c.name} onChange={e => updateCategory(c.id, { name: e.target.value })}/>
-            <select value={c.kind} onChange={e => updateCategory(c.id, { kind: e.target.value as "expense" | "savings" })}><option value="expense">Expense</option><option value="savings">Savings</option></select>
-            <label><span>Normal target</span><div className="miniCurrency">$<input type="number" min="0" value={c.target} onChange={e => updateCategory(c.id, { target: clamp(Number(e.target.value)) })}/></div></label>
-            <label><span>Between contracts</span><div className="miniCurrency">$<input type="number" min="0" value={c.betweenTarget} onChange={e => updateCategory(c.id, { betweenTarget: clamp(Number(e.target.value)) })}/></div></label>
-            <button className="deleteButton" aria-label={`Delete ${c.name}`} onClick={() => deleteCategory(c.id)}><Trash2 size={16}/></button>
-          </div>)}
-        </div>
-      </section>
-
-      <section className="grid2">
-        <article className="panel">
-          <div className="panelTitle"><CalendarClock/> <EditableText value={settings.copy.incomeSetupTitle} onChange={v => setCopy("incomeSetupTitle", v)} ariaLabel="Income setup title" /></div>
-          <p className="muted"><EditableText value={settings.copy.incomeSetupHelp} onChange={v => setCopy("incomeSetupHelp", v)} ariaLabel="Income setup helper text" multiline /></p>
-          <div className="stats"><div><span>Gross / week</span><b>{exactMoney.format(computed.grossWeekly)}</b></div><div><span>Net / week</span><b>{exactMoney.format(computed.netWeekly)}</b></div><div><span>Modeled avg / month</span><b>{exactMoney.format(computed.modeledMonthly)}</b></div></div>
-          <div className="settingsGrid">
-            <Num label="Hourly rate" value={settings.hourlyRate} onChange={v=>setS("hourlyRate",v)} step="0.5"/>
-            <Num label="Hours / week" value={settings.weeklyHours} onChange={v=>setS("weeklyHours",v)} step="0.5"/>
-            <Num label="Withholding %" value={settings.withholdingRate} onChange={v=>setS("withholdingRate",v)} step="0.1"/>
-            <Num label="Budget baseline" value={settings.monthlyBaseline} onChange={v=>setS("monthlyBaseline",v)} />
-            <Num label="Baba evening shift $" value={settings.babaEveningShiftValue} onChange={v=>setS("babaEveningShiftValue",v)} />
-            <label className="field"><span>Contract end</span><input type="date" value={settings.contractEnd} onChange={e=>setS("contractEnd",e.target.value)}/></label>
+        <div className="treasury-hero-actions">
+          <button
+            type="button"
+            className={`treasury-edit-toggle${copyEditing ? " active" : ""}`}
+            onClick={() => setCopyEditing(open => !open)}
+            aria-pressed={copyEditing}
+            title={copyEditing ? "Done editing labels" : "Edit labels"}
+          >
+            {copyEditing ? <Check size={14} /> : <Pencil size={14} />}
+            <span>{copyEditing ? "Done" : "Edit labels"}</span>
+          </button>
+          <div className={`treasury-sync-pill${sessionEmail ? " synced" : ""}`}>
+            {sessionEmail ? <><Cloud size={14} /> Synced as {sessionEmail}</> : <><CloudOff size={14} /> {firebaseEnabled ? "Private Google login" : "Local mode"}</>}
           </div>
-        </article>
-        <article className="panel authPanel compactAuth">
-          {firebaseEnabled ? <>
-          <div><div className="panelTitle"><Cloud/> Cloud sync</div><p className="muted">Use the same login on iPhone, Mac, or iPad. Categories and monthly entries sync too.</p></div>
-          {sessionEmail ? <button onClick={signOut}><LogOut size={16}/> Sign out</button> : <form onSubmit={authSubmit}><button className="primary">Sign in with Google</button><span>{authMsg}</span></form>}
-          </> : <div><div className="panelTitle"><CloudOff/> Saved on this device</div><p className="muted">Changes save automatically in this browser. No account is needed. Budgets do not sync between devices, and clearing this site’s browser data removes saved entries.</p></div>}
-        </article>
-      </section>
+        </div>
+      </div>
 
-      <section className={`panel copyPanel ${copyEditorOpen ? "open" : ""}`}>
-        <button className="collapseHeader" onClick={() => setCopyEditorOpen(open => !open)} aria-expanded={copyEditorOpen}>
-          <span className="panelTitle"><Settings2/> Edit dashboard wording</span>
-          <ChevronDown size={18}/>
-        </button>
-        {copyEditorOpen && <div className="copyEditor">
-          {Object.entries(settings.copy).map(([key, value]) => (
-            <label key={key} className="field"><span>{labelize(key)}</span><input value={value} onChange={e => setCopy(key as keyof TreasurySettings["copy"], e.target.value)} /></label>
-          ))}
-        </div>}
-      </section>
+      {firebaseEnabled && !authReady && (
+        <section className="os-module">
+          <header><div><Cloud size={17} /><h2>Checking sign-in…</h2></div></header>
+        </section>
+      )}
 
-      <footer><EditableText value={settings.copy.footer} onChange={v => setCopy("footer", v)} ariaLabel="Footer text" /></footer>
-      </>}
-    </main>
+      {firebaseEnabled && authReady && !isOwner && (
+        <section className="os-module">
+          <header><div><Cloud size={17} /><h2>Cloud sync (optional)</h2></div></header>
+          <div className="os-module-body treasury-pad">
+            <p className="treasury-muted">Working locally in this browser. Sign in with {ownerEmail} if you want cloud sync across devices.</p>
+            <form className="treasury-auth-form" onSubmit={authSubmit}>
+              <button type="submit" className="os-now-button">Sign in with Google</button>
+              {authMsg ? <span className="treasury-muted">{authMsg}</span> : null}
+            </form>
+          </div>
+        </section>
+      )}
+
+      <>
+        <section className="os-module">
+          <div className="work-stat-grid treasury-stat-grid">
+            <article className="work-stat-card treasury-stat safe">
+              <strong>{money.format(computed.safeToSpend)}</strong>
+              <span><EditableText editing={copyEditing} value={copy.safeCardLabel} onChange={v => setCopy("safeCardLabel", v)} ariaLabel="Safe card label" /></span>
+              <small><EditableText editing={copyEditing} value={copy.safeCardHelp} onChange={v => setCopy("safeCardHelp", v)} ariaLabel="Safe card helper text" /></small>
+            </article>
+            <article className="work-stat-card treasury-stat">
+              <strong>{money.format(computed.available)}</strong>
+              <span><EditableText editing={copyEditing} value={copy.availableCardLabel} onChange={v => setCopy("availableCardLabel", v)} ariaLabel="Available card label" /></span>
+              <small><EditableText editing={copyEditing} value={copy.availableCardHelp} onChange={v => setCopy("availableCardHelp", v)} ariaLabel="Available card helper text" /></small>
+            </article>
+            <article className="work-stat-card treasury-stat">
+              <strong className={computed.actualRemaining < 0 ? "bad" : ""}>{money.format(computed.actualRemaining)}</strong>
+              <span><EditableText editing={copyEditing} value={copy.remainingCardLabel} onChange={v => setCopy("remainingCardLabel", v)} ariaLabel="Remaining card label" /></span>
+              <small><EditableText editing={copyEditing} value={copy.remainingCardHelp} onChange={v => setCopy("remainingCardHelp", v)} ariaLabel="Remaining card helper text" /></small>
+            </article>
+            <article className="work-stat-card treasury-stat">
+              <strong>{computed.contractDays >= 0 ? `${computed.contractDays} days` : "Ended"}</strong>
+              <span><EditableText editing={copyEditing} value={copy.contractCardLabel} onChange={v => setCopy("contractCardLabel", v)} ariaLabel="Contract card label" /></span>
+              <small>{settings.contractEnd}</small>
+            </article>
+          </div>
+        </section>
+
+        <section className="os-module treasury-mode-bar">
+          <div className="os-module-body treasury-mode-inner">
+            <div>
+              <strong><EditableText editing={copyEditing} value={copy.budgetModeTitle} onChange={v => setCopy("budgetModeTitle", v)} ariaLabel="Budget mode title" /></strong>
+              <p>
+                <EditableText
+                  editing={copyEditing}
+                  value={month.mode === "employed" ? copy.employedHelp : copy.betweenContractsHelp}
+                  onChange={v => setCopy(month.mode === "employed" ? "employedHelp" : "betweenContractsHelp", v)}
+                  ariaLabel="Budget mode helper text"
+                />
+              </p>
+            </div>
+            <div className="work-view-tabs">
+              <button type="button" className={month.mode === "employed" ? "selected" : ""} onClick={() => setMonth(m => ({ ...m, mode: "employed" }))}>Employed</button>
+              <button type="button" className={month.mode === "between-contracts" ? "selected" : ""} onClick={() => setMonth(m => ({ ...m, mode: "between-contracts" }))}>Between contracts</button>
+            </div>
+          </div>
+        </section>
+
+        <div className="os-two-up">
+          <section className="os-module">
+            <header><div><HeartHandshake size={17} /><h2><EditableText editing={copyEditing} value={copy.retireBabaTitle} onChange={v => setCopy("retireBabaTitle", v)} ariaLabel="Retire Baba panel title" /></h2></div></header>
+            <div className="os-module-body treasury-pad">
+              {settings.categories.some(c => c.id === "parents") ? <>
+                <div className="treasury-progress-row">
+                  <span><EditableText editing={copyEditing} value={copy.retireBabaMetricLabel} onChange={v => setCopy("retireBabaMetricLabel", v)} ariaLabel="Retire Baba metric label" /></span>
+                  <b>{money.format(computed.parentsPaid)} / {money.format(parentsTarget)}</b>
+                </div>
+                <Progress value={computed.parentsPaid} max={parentsTarget} />
+                <p className="treasury-impact">
+                  <EditableText editing={copyEditing} value={copy.retireBabaImpactPrefix} onChange={v => setCopy("retireBabaImpactPrefix", v)} ariaLabel="Retire Baba impact prefix" />{" "}
+                  <strong>{computed.babaShifts.toFixed(1)}</strong>{" "}
+                  <EditableText editing={copyEditing} value={copy.retireBabaImpactMiddle} onChange={v => setCopy("retireBabaImpactMiddle", v)} ariaLabel="Retire Baba impact middle" />{" "}
+                  {exactMoney.format(settings.babaEveningShiftValue)}
+                  <EditableText editing={copyEditing} value={copy.retireBabaImpactSuffix} onChange={v => setCopy("retireBabaImpactSuffix", v)} ariaLabel="Retire Baba impact suffix" />
+                </p>
+              </> : <p className="treasury-muted"><EditableText editing={copyEditing} value={copy.retireBabaMissing} onChange={v => setCopy("retireBabaMissing", v)} ariaLabel="Missing parents category message" /></p>}
+            </div>
+          </section>
+
+          <section className="os-module">
+            <header><div><PiggyBank size={17} /><h2><EditableText editing={copyEditing} value={copy.savingsTitle} onChange={v => setCopy("savingsTitle", v)} ariaLabel="Savings panel title" /></h2></div></header>
+            <div className="os-module-body treasury-pad">
+              <div className="treasury-runway">{money.format(computed.savingsAllocated)}</div>
+              <p className="treasury-muted"><EditableText editing={copyEditing} value={copy.savingsHelp} onChange={v => setCopy("savingsHelp", v)} ariaLabel="Savings helper text" /></p>
+              <div className="treasury-callout"><EditableText editing={copyEditing} value={copy.savingsCallout} onChange={v => setCopy("savingsCallout", v)} ariaLabel="Savings callout" multiline /></div>
+            </div>
+          </section>
+        </div>
+
+        <section className="os-module">
+          <header>
+            <div>
+              <WalletCards size={17} />
+              <h2>
+                {month.month}{" "}
+                <EditableText editing={copyEditing} value={copy.moneyMapTitle} onChange={v => setCopy("moneyMapTitle", v)} ariaLabel="Money map title" />
+              </h2>
+            </div>
+            <input className="treasury-month-picker" type="month" value={month.month} onChange={e => changeMonth(e.target.value)} />
+          </header>
+          <div className="os-module-body treasury-pad">
+            <div className="treasury-income-strip">
+              <MoneyInput
+                label={<EditableText editing={copyEditing} value={copy.incomeInputLabel} onChange={v => setCopy("incomeInputLabel", v)} ariaLabel="Income input label" />}
+                value={month.actualIncome}
+                onChange={v => setMonth(m => ({ ...m, actualIncome: v }))}
+                positive
+              />
+              <div className="treasury-income-hint">
+                <EditableText editing={copyEditing} value={copy.incomeHintPrefix} onChange={v => setCopy("incomeHintPrefix", v)} ariaLabel="Income hint" />{" "}
+                <strong>{money.format(settings.monthlyBaseline)}</strong>.
+              </div>
+            </div>
+
+            <div className="treasury-category-list">
+              {settings.categories.map(c => {
+                const target = month.mode === "employed" ? c.target : c.betweenTarget;
+                return <MoneyInput key={c.id} label={`${c.emoji} ${c.name}`} value={month.categoryValues[c.id] ?? 0} target={target} onChange={v => setCategoryValue(c.id, v)} savings={c.kind === "savings"} />;
+              })}
+            </div>
+
+            <div className="treasury-money-grid">
+              <MoneyInput label="Refunds received" value={month.refundIncome} onChange={v => setMonth(m => ({ ...m, refundIncome: v }))} positive />
+              <MoneyInput label="Gifts / birthday money" value={month.giftIncome} onChange={v => setMonth(m => ({ ...m, giftIncome: v }))} positive />
+              <MoneyInput label="Other income" value={month.otherIncome} onChange={v => setMonth(m => ({ ...m, otherIncome: v }))} positive />
+            </div>
+
+            <textarea
+              className="treasury-note"
+              value={month.note}
+              onChange={e => setM("note", e.target.value)}
+              placeholder={copy.monthNotePlaceholder}
+            />
+            {copyEditing && (
+              <label className="treasury-field" style={{ marginTop: 10 }}>
+                <span>Month note placeholder</span>
+                <input value={copy.monthNotePlaceholder} onChange={e => setCopy("monthNotePlaceholder", e.target.value)} />
+              </label>
+            )}
+
+            <div className="treasury-actions">
+              {firebaseEnabled && <button type="button" className="os-now-button" onClick={saveCloud}>Save + sync</button>}
+              <button type="button" className="os-profile-button" onClick={resetMonth}><RotateCcw size={14} /> Reset month</button>
+              {syncMsg ? <span className="treasury-muted">{syncMsg}</span> : null}
+            </div>
+          </div>
+        </section>
+
+        <section className="os-module">
+          <header>
+            <div>
+              <Settings2 size={17} />
+              <h2><EditableText editing={copyEditing} value={copy.categoriesTitle} onChange={v => setCopy("categoriesTitle", v)} ariaLabel="Categories section title" /></h2>
+            </div>
+            <button type="button" onClick={addCategory}><Plus size={14} /> Add category</button>
+          </header>
+          <div className="os-module-body treasury-pad">
+            <p className="treasury-muted" style={{ marginBottom: 14 }}>
+              <EditableText editing={copyEditing} value={copy.categoriesHelp} onChange={v => setCopy("categoriesHelp", v)} ariaLabel="Categories helper text" multiline />
+            </p>
+            <div className="treasury-category-editor">
+              {settings.categories.map(c => (
+                <div className="treasury-category-row" key={c.id}>
+                  <input className="emoji" aria-label={`${c.name} emoji`} value={c.emoji} maxLength={4} onChange={e => updateCategory(c.id, { emoji: e.target.value })} />
+                  <input className="name" aria-label="Category name" value={c.name} onChange={e => updateCategory(c.id, { name: e.target.value })} />
+                  <select value={c.kind} onChange={e => updateCategory(c.id, { kind: e.target.value as CategoryKind })}>
+                    <option value="expense">Expense</option>
+                    <option value="savings">Savings</option>
+                  </select>
+                  <label><span>Normal target</span><div className="mini-currency">$<input type="number" min="0" value={c.target} onChange={e => updateCategory(c.id, { target: clamp(Number(e.target.value)) })} /></div></label>
+                  <label><span>Between contracts</span><div className="mini-currency">$<input type="number" min="0" value={c.betweenTarget} onChange={e => updateCategory(c.id, { betweenTarget: clamp(Number(e.target.value)) })} /></div></label>
+                  <button type="button" className="treasury-delete" aria-label={`Delete ${c.name}`} onClick={() => deleteCategory(c.id)}><Trash2 size={15} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <div className="os-two-up">
+          <section className="os-module">
+            <header><div><CalendarClock size={17} /><h2><EditableText editing={copyEditing} value={copy.incomeSetupTitle} onChange={v => setCopy("incomeSetupTitle", v)} ariaLabel="Income setup title" /></h2></div></header>
+            <div className="os-module-body treasury-pad">
+              <p className="treasury-muted"><EditableText editing={copyEditing} value={copy.incomeSetupHelp} onChange={v => setCopy("incomeSetupHelp", v)} ariaLabel="Income setup helper text" multiline /></p>
+              <div className="treasury-mini-stats">
+                <div><span>Gross / week</span><b>{exactMoney.format(computed.grossWeekly)}</b></div>
+                <div><span>Net / week</span><b>{exactMoney.format(computed.netWeekly)}</b></div>
+                <div><span>Modeled avg / month</span><b>{exactMoney.format(computed.modeledMonthly)}</b></div>
+              </div>
+              <div className="treasury-settings-grid">
+                <Num label="Hourly rate" value={settings.hourlyRate} onChange={v => setS("hourlyRate", v)} step="0.5" />
+                <Num label="Hours / week" value={settings.weeklyHours} onChange={v => setS("weeklyHours", v)} step="0.5" />
+                <Num label="Withholding %" value={settings.withholdingRate} onChange={v => setS("withholdingRate", v)} step="0.1" />
+                <Num label="Budget baseline" value={settings.monthlyBaseline} onChange={v => setS("monthlyBaseline", v)} />
+                <Num label="Baba evening shift $" value={settings.babaEveningShiftValue} onChange={v => setS("babaEveningShiftValue", v)} />
+                <label className="treasury-field"><span>Contract end</span><input type="date" value={settings.contractEnd} onChange={e => setS("contractEnd", e.target.value)} /></label>
+              </div>
+            </div>
+          </section>
+
+          <section className="os-module">
+            <header>
+              <div>
+                {firebaseEnabled ? <Cloud size={17} /> : <CloudOff size={17} />}
+                <h2>{firebaseEnabled ? "Cloud sync" : "Saved on this device"}</h2>
+              </div>
+            </header>
+            <div className="os-module-body treasury-pad">
+              {firebaseEnabled ? <>
+                <p className="treasury-muted">Use the same login on iPhone, Mac, or iPad. Categories and monthly entries sync too.</p>
+                {sessionEmail
+                  ? <button type="button" className="os-profile-button" onClick={signOut}><LogOut size={14} /> Sign out</button>
+                  : (
+                    <form className="treasury-auth-form" onSubmit={authSubmit}>
+                      <button type="submit" className="os-now-button">Sign in with Google</button>
+                      {authMsg ? <span className="treasury-muted">{authMsg}</span> : null}
+                    </form>
+                  )}
+              </> : (
+                <p className="treasury-muted">Changes save automatically in this browser. No account is needed. Budgets do not sync between devices, and clearing this site’s browser data removes saved entries.</p>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <footer className="treasury-footer">
+          <EditableText editing={copyEditing} value={copy.footer} onChange={v => setCopy("footer", v)} ariaLabel="Footer text" />
+        </footer>
+      </>
+    </div>
   );
 }
 
-function labelize(value: string) {
-  return value.replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase());
-}
-
-function EditableText({ value, onChange, ariaLabel, multiline = false }: { value: string; onChange: (value: string) => void; ariaLabel: string; multiline?: boolean }) {
-  if (multiline) return <textarea className="inlineEdit multiline" aria-label={ariaLabel} value={value} onChange={e => onChange(e.target.value)} />;
-  return <input className="inlineEdit" aria-label={ariaLabel} value={value} onChange={e => onChange(e.target.value)} />;
+function EditableText({
+  editing,
+  value,
+  onChange,
+  ariaLabel,
+  multiline = false,
+}: {
+  editing: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+  multiline?: boolean;
+}) {
+  if (!editing) {
+    if (multiline) return <span className="treasury-static multiline">{value}</span>;
+    return <span className="treasury-static">{value}</span>;
+  }
+  if (multiline) {
+    return <textarea className="treasury-inline multiline" aria-label={ariaLabel} value={value} onChange={e => onChange(e.target.value)} />;
+  }
+  return <input className="treasury-inline" aria-label={ariaLabel} value={value} onChange={e => onChange(e.target.value)} />;
 }
 
 function Progress({ value, max }: { value: number; max: number }) {
   const pct = max ? Math.min(100, value / max * 100) : 0;
-  return <div className="progress"><div style={{ width: `${pct}%` }} /></div>;
+  return <div className="treasury-progress"><i style={{ width: `${pct}%` }} /></div>;
 }
 
-function MoneyInput({ label, value, onChange, target, positive=false, savings=false }: { label:string; value:number; onChange:(v:number)=>void; target?:number; positive?:boolean; savings?:boolean }) {
-  return <label className={`moneyInput ${positive ? "positive" : ""} ${savings ? "savings" : ""}`}><div><span>{label}{target != null && <small>Target {money.format(target)}</small>}</span></div><div className="currency"><span>$</span><input inputMode="decimal" type="number" min="0" step="1" value={value || ""} placeholder="0" onChange={e=>onChange(clamp(Number(e.target.value)))}/></div></label>;
+function MoneyInput({ label, value, onChange, target, positive = false, savings = false }: { label: ReactNode; value: number; onChange: (v: number) => void; target?: number; positive?: boolean; savings?: boolean }) {
+  return (
+    <label className={`treasury-money-input${positive ? " positive" : ""}${savings ? " savings" : ""}`}>
+      <span>{label}{target != null && <small>Target {money.format(target)}</small>}</span>
+      <div className="currency"><span>$</span><input inputMode="decimal" type="number" min="0" step="1" value={value || ""} placeholder="0" onChange={e => onChange(clamp(Number(e.target.value)))} /></div>
+    </label>
+  );
 }
-function Num({label,value,onChange,step="1"}:{label:string;value:number;onChange:(v:string)=>void;step?:string}){return <label className="field"><span>{label}</span><input type="number" min="0" step={step} value={value} onChange={e=>onChange(e.target.value)}/></label>}
+
+function Num({ label, value, onChange, step = "1" }: { label: string; value: number; onChange: (v: string) => void; step?: string }) {
+  return <label className="treasury-field"><span>{label}</span><input type="number" min="0" step={step} value={value} onChange={e => onChange(e.target.value)} /></label>;
+}
