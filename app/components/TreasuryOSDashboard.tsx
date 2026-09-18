@@ -500,7 +500,9 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
           <section className="os-module">
             <header>
               <div><PiggyBank size={17} /><h2><EditableText editing={copyEditing} value={copy.savingsTitle} onChange={v => setCopy("savingsTitle", v)} ariaLabel="Savings panel title" /></h2></div>
-              <button type="button" onClick={() => setAddingBucket(true)}><Plus size={14} /> Add bucket</button>
+              {!addingBucket ? (
+                <button type="button" onClick={() => setAddingBucket(true)}><Plus size={14} /> Add bucket</button>
+              ) : null}
             </header>
             <div className="os-module-body treasury-pad">
               <div className="treasury-runway">{money.format(computed.savingsAllocated)}</div>
@@ -523,9 +525,22 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
                     );
                   })}
                 </div>
-              ) : (
-                <div className="treasury-callout"><EditableText editing={copyEditing} value={copy.savingsCallout} onChange={v => setCopy("savingsCallout", v)} ariaLabel="Savings callout" multiline /></div>
-              )}
+              ) : !addingBucket ? (
+                copyEditing ? (
+                  <div className="treasury-callout">
+                    <EditableText editing={copyEditing} value={copy.savingsCallout} onChange={v => setCopy("savingsCallout", v)} ariaLabel="Savings callout" multiline />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="treasury-callout treasury-callout-action"
+                    onClick={() => setAddingBucket(true)}
+                  >
+                    <span>{copy.savingsCallout}</span>
+                    <strong><Plus size={14} /> Create a savings bucket</strong>
+                  </button>
+                )
+              ) : null}
 
               {addingBucket ? (
                 <form
@@ -538,6 +553,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
                     setNewBucketName("");
                     setNewBucketTarget("");
                     setAddingBucket(false);
+                    setSyncMsg(`Created savings bucket “${name}”`);
                   }}
                 >
                   <label className="treasury-field">

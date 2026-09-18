@@ -34,6 +34,7 @@ export const DEFAULT_WORKSPACE_COLORS = {
   school: "#8b5cf6",
   work: "#4338ca",
   studyAbroad: "#0d9488",
+  treasuryOS: "#47a47b",
 } as const;
 
 export function workspaceColorFor(

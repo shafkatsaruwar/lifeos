@@ -293,12 +293,13 @@ export type CalendarDefaultView = "upcoming" | "month" | "day";
 
 export type SettingsState = {
   accent?: string;
-  /** Per-workspace accents (Life / School / Work / Study Abroad). Synced with web. */
+  /** Per-workspace accents (Life / School / Work / Study Abroad / TreasuryOS). Synced with web. */
   workspaceColors?: {
     life?: string;
     school?: string;
     work?: string;
     studyAbroad?: string;
+    treasuryOS?: string;
   };
   preferredName?: string;
   nowTaskId?: number | null;

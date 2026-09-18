@@ -60,6 +60,7 @@ export const SettingsSchema = z.object({
     school: z.string().optional(),
     work: z.string().optional(),
     studyAbroad: z.string().optional(),
+    treasuryOS: z.string().optional(),
   }).optional(),
   compactMode: z.boolean().optional(),
   reduceMotion: z.boolean().optional(),

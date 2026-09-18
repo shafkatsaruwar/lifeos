@@ -21,13 +21,20 @@ button,input,textarea { font:inherit; color:inherit; } button { cursor:pointer; 
 .nav-item[data-env="school"] svg { color:var(--env-school, #8b5cf6); }
 .nav-item[data-env="work"] svg { color:var(--env-work, #4338ca); }
 .nav-item[data-env="study-abroad"] svg { color:var(--env-study-abroad, #0d9488); }
+.nav-item[data-env="treasury"] svg { color:var(--env-treasury, #47a47b); }
 .nav-item.active[data-env="life"] { box-shadow:inset 3px 0 0 var(--env-life, #d99b38), 0 1px 4px rgba(0,0,0,.05); }
 .nav-item.active[data-env="school"] { box-shadow:inset 3px 0 0 var(--env-school, #8b5cf6), 0 1px 4px rgba(0,0,0,.05); }
 .nav-item.active[data-env="work"] { box-shadow:inset 3px 0 0 var(--env-work, #4338ca), 0 1px 4px rgba(0,0,0,.05); }
 .nav-item.active[data-env="study-abroad"] { box-shadow:inset 3px 0 0 var(--env-study-abroad, #0d9488), 0 1px 4px rgba(0,0,0,.05); }
+.nav-item.active[data-env="treasury"] { box-shadow:inset 3px 0 0 var(--env-treasury, #47a47b), 0 1px 4px rgba(0,0,0,.05); }
 .workspace-color-block { margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
-.workspace-color-row { margin-bottom:12px; }
-.workspace-color-row strong { display:block; font-size:12px; margin-bottom:8px; }
+.workspace-color-row { margin-bottom:14px; }
+.workspace-color-summary { display:flex; align-items:center; gap:10px; }
+.workspace-color-summary strong { flex:1; font-size:12px; }
+.workspace-color-swatch { width:22px; height:22px; border-radius:999px; border:2px solid color-mix(in srgb,var(--ink) 16%, transparent); flex-shrink:0; box-shadow:inset 0 0 0 1px rgba(255,255,255,.35); }
+.workspace-color-change { border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:8px; height:28px; padding:0 10px; font-size:11px; font-weight:600; }
+.workspace-color-change:hover { background:color-mix(in srgb,var(--ink) 4%, var(--panel)); }
+.workspace-color-row .accent-picker { margin-top:8px; }
 .settings-field-label { display:block; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
 .nav-item em { margin-left:auto; background:color-mix(in srgb,var(--ink) 7%, transparent); border-radius:10px; padding:1px 6px; font-style:normal; font-size:10px; }
 a.nav-item { text-decoration:none; cursor:pointer; }
@@ -543,6 +550,9 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .treasury-impact strong{color:var(--ink)}
 .treasury-runway{font-size:36px;font-weight:750;letter-spacing:-.04em;line-height:1;margin:4px 0 10px}
 .treasury-callout{margin-top:14px;padding:12px;border:1px dashed var(--line);border-radius:8px;background:var(--canvas);color:var(--muted);font-size:11px;line-height:1.5}
+.treasury-callout-action{width:100%;display:grid;gap:10px;text-align:left;cursor:pointer;font:inherit}
+.treasury-callout-action:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:color-mix(in srgb,var(--accent) 5%,var(--canvas))}
+.treasury-callout-action strong{display:inline-flex;align-items:center;gap:6px;color:var(--ink);font-size:12px;font-weight:750}
 .treasury-bucket-list{display:grid;gap:10px;margin-top:14px}
 .treasury-bucket-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--canvas)}
 .treasury-bucket-meta{min-width:0;flex:1;display:grid;gap:6px}

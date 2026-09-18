@@ -31,6 +31,7 @@ export function SettingsScreen() {
   const [synapsePaste, setSynapsePaste] = useState("");
   const [synapseBusy, setSynapseBusy] = useState(false);
   const [fePrefs, setFePrefs] = useState<FocusEnforcerPrefs>(DEFAULT_FOCUS_ENFORCER_PREFS);
+  const [editingWorkspaceColor, setEditingWorkspaceColor] = useState<keyof typeof DEFAULT_WORKSPACE_COLORS | null>(null);
   const themeMode = workspace.settings.themeMode ?? "system";
   const accent = workspace.settings.accent?.trim() || theme.accent;
   const synapseEventCount = workspace.calendar.filter((event) => event.id.startsWith("synapse-")).length;
@@ -171,7 +172,7 @@ export function SettingsScreen() {
 
           <Text style={[styles.swatchLabel, { color: theme.muted, marginTop: 16 }]}>Workspace colors</Text>
           <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>
-            Life, School, and Work each get their own tint in the tab bar.
+            Each environment gets its own tint. Tap Change to pick a new color.
           </Text>
           {(
             [
@@ -179,39 +180,62 @@ export function SettingsScreen() {
               ["school", "School"],
               ["work", "Work"],
               ["studyAbroad", "Study Abroad"],
+              ["treasuryOS", "TreasuryOS"],
             ] as const
           ).map(([key, label]) => {
             const current = workspaceColorFor(workspace.settings, key);
+            const editing = editingWorkspaceColor === key;
             return (
               <View key={key} style={{ marginBottom: 12 }}>
-                <Text style={{ color: theme.text, fontWeight: "700", fontSize: 13, marginBottom: 8 }}>{label}</Text>
-                <View style={styles.swatchGrid}>
-                  {SPACE_COLORS.map((color) => {
-                    const selected = color.toLowerCase() === current.toLowerCase();
-                    return (
-                      <Pressable
-                        key={`${key}-${color}`}
-                        accessibilityLabel={`Set ${label} color ${color}`}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
-                        onPress={() =>
-                          patchSettings({
-                            workspaceColors: {
-                              ...DEFAULT_WORKSPACE_COLORS,
-                              ...workspace.settings.workspaceColors,
-                              [key]: color,
-                            },
-                          })
-                        }
-                        style={[
-                          styles.swatch,
-                          { backgroundColor: color },
-                          selected && { borderColor: theme.text, borderWidth: 3 },
-                        ]}
-                      />
-                    );
-                  })}
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: editing ? 8 : 0 }}>
+                  <View style={[styles.swatch, { backgroundColor: current, width: 22, height: 22, borderRadius: 11 }]} />
+                  <Text style={{ color: theme.text, fontWeight: "700", fontSize: 13, flex: 1 }}>{label}</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={editing ? `Done editing ${label} color` : `Change ${label} color`}
+                    onPress={() => setEditingWorkspaceColor(open => (open === key ? null : key))}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: theme.border,
+                      borderRadius: 8,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      backgroundColor: theme.surface,
+                    }}
+                  >
+                    <Text style={{ color: theme.text, fontSize: 12, fontWeight: "600" }}>{editing ? "Done" : "Change"}</Text>
+                  </Pressable>
                 </View>
+                {editing ? (
+                  <View style={styles.swatchGrid}>
+                    {SPACE_COLORS.map((color) => {
+                      const selected = color.toLowerCase() === current.toLowerCase();
+                      return (
+                        <Pressable
+                          key={`${key}-${color}`}
+                          accessibilityLabel={`Set ${label} color ${color}`}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected }}
+                          onPress={() => {
+                            patchSettings({
+                              workspaceColors: {
+                                ...DEFAULT_WORKSPACE_COLORS,
+                                ...workspace.settings.workspaceColors,
+                                [key]: color,
+                              },
+                            });
+                            setEditingWorkspaceColor(null);
+                          }}
+                          style={[
+                            styles.swatch,
+                            { backgroundColor: color },
+                            selected && { borderColor: theme.text, borderWidth: 3 },
+                          ]}
+                        />
+                      );
+                    })}
+                  </View>
+                ) : null}
               </View>
             );
           })}
