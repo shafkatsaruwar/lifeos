@@ -2976,17 +2976,6 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       workTitle={current?.title}
       onFlash={flash}
     />
-    {enableMasterOS ? (
-      <section className="card" style={{ marginBottom: 16 }}>
-        <div className="card-head">
-          <div><span className="section-icon blue"><GraduationCap size={14} /></span><h2>MasterOS</h2></div>
-          <button type="button" className="text-button" onClick={() => onGo("MasterOS")}>Open <ArrowRight size={14} /></button>
-        </div>
-        <p className="mos-muted" style={{ padding: "0 18px 16px", margin: 0, color: "var(--muted)", fontSize: 13, lineHeight: 1.5 }}>
-          Your teaching app — classes, lessons, whiteboard, gradebook. Web and iPad; type <code>/mos</code> anytime. Not on iPhone.
-        </p>
-      </section>
-    ) : null}
     <div className="now-layout">
       <section className="card now-current-card" title="Your focused task. Click any task to focus on it here.">
         <div className="card-head"><div><span className="section-icon violet"><Focus size={14} /></span><h2>Current task</h2></div><div className="now-current-head-actions"><button type="button" className="text-button" onClick={() => setQueueOpen(value => !value)}>{queueOpen ? "Hide queue" : "Open Queue"}</button>{current && <button className="text-button" onClick={() => onChoose(null)}>Clear</button>}</div></div>
