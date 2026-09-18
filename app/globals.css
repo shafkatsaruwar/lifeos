@@ -543,6 +543,15 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .treasury-impact strong{color:var(--ink)}
 .treasury-runway{font-size:36px;font-weight:750;letter-spacing:-.04em;line-height:1;margin:4px 0 10px}
 .treasury-callout{margin-top:14px;padding:12px;border:1px dashed var(--line);border-radius:8px;background:var(--canvas);color:var(--muted);font-size:11px;line-height:1.5}
+.treasury-bucket-list{display:grid;gap:10px;margin-top:14px}
+.treasury-bucket-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--canvas)}
+.treasury-bucket-meta{min-width:0;flex:1;display:grid;gap:6px}
+.treasury-bucket-meta strong{font-size:12px}
+.treasury-bucket-meta small{color:var(--muted);font-size:10px}
+.treasury-bucket-row .currency{display:flex;align-items:center;border:1px solid var(--line);border-radius:7px;background:var(--panel);padding-left:8px;color:var(--muted);flex:0 0 auto}
+.treasury-bucket-row .currency input{width:88px;border:0;background:transparent;color:var(--ink);font-weight:750;font-size:13px;padding:8px 8px 8px 2px;text-align:right;outline:0}
+.treasury-bucket-form{display:grid;gap:10px;margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--canvas)}
+.treasury-bucket-form-actions{display:flex;flex-wrap:wrap;gap:8px}
 .treasury-month-picker{height:32px;border:1px solid var(--line);border-radius:7px;background:var(--canvas);color:var(--ink);padding:0 8px;font-size:11px;outline:0}
 .treasury-income-strip{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(180px,.8fr);gap:10px;margin-bottom:14px}
 .treasury-income-hint{display:flex;align-items:center;padding:12px 14px;border:1px dashed var(--line);border-radius:8px;background:var(--canvas);color:var(--muted);font-size:11px;line-height:1.45}

@@ -1,19 +1,21 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  CalendarClock, Check, Cloud, CloudOff, HeartHandshake, LogOut, Pencil, PiggyBank,
+  CalendarClock, Check, Cloud, CloudOff, HeartHandshake, Pencil, PiggyBank,
   Plus, RotateCcw, Settings2, Sparkles, Trash2, WalletCards
 } from "lucide-react";
-import { initializeApp, getApps } from "firebase/app";
-import { doc, getDoc, getFirestore, setDoc } from "firebase/firestore";
-import {
-  browserLocalPersistence, getAuth, GoogleAuthProvider, onAuthStateChanged,
-  setPersistence, signInWithPopup, signOut as firebaseSignOut, type User
-} from "firebase/auth";
+import { get, ref, set } from "firebase/database";
+import { getClientDatabase } from "@/lib/firebase";
 
 type Mode = "employed" | "between-contracts";
 type CategoryKind = "expense" | "savings";
+
+type LifeOSUser = {
+  uid: string;
+  email: string | null;
+  displayName?: string | null;
+};
 
 type TreasuryCategory = {
   id: string;
@@ -149,36 +151,14 @@ function defaultMonthState(): MonthlyState {
   };
 }
 
-const ownerEmail = "mohammedshafkatsaruwar@gmail.com";
-const firebaseEnabled = true;
-const budgetFirebaseConfig = {
-  apiKey: "AIzaSyBZwVWwlLd7hBFBls27kvCzExsKq69xOqk",
-  authDomain: "shafkat-budget-private.firebaseapp.com",
-  projectId: "shafkat-budget-private",
-  storageBucket: "shafkat-budget-private.firebasestorage.app",
-  messagingSenderId: "715394261587",
-  appId: "1:715394261587:web:6f0494524c692729851ca6",
-};
-
-function getTreasuryFirebase() {
-  if (typeof window === "undefined") return { firebaseAuth: null, firebaseDb: null, googleProvider: new GoogleAuthProvider() };
-  const app = getApps().find(candidate => candidate.name === "shafkat-budget") ?? initializeApp(budgetFirebaseConfig, "shafkat-budget");
-  const firebaseAuth = getAuth(app);
-  void setPersistence(firebaseAuth, browserLocalPersistence).catch(() => undefined);
-  return { firebaseAuth, firebaseDb: getFirestore(app), googleProvider: new GoogleAuthProvider() };
-}
-
-const { firebaseAuth, firebaseDb, googleProvider } = typeof window === "undefined"
-  ? { firebaseAuth: null, firebaseDb: null, googleProvider: new GoogleAuthProvider() }
-  : getTreasuryFirebase();
-
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const exactMoney = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 const clamp = (n: number, min = 0) => Math.max(min, Number.isFinite(n) ? n : 0);
 const makeId = () => `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 const LOCAL_SETTINGS_KEY = "shafkat-budget-settings";
 const LEGACY_MONTH_KEY = "shafkat-budget-month";
-const monthKey = (month: string) => `shafkat-budget-month-${month}`;
+const monthStorageKey = (month: string) => `shafkat-budget-month-${month}`;
+const lifeosTreasuryPath = (uid: string, suffix: string) => `users/${uid}/treasuryOS/${suffix}`;
 
 function migrateSettings(raw: any): TreasurySettings {
   if (!raw) return defaultSettings;
@@ -213,112 +193,149 @@ function migrateMonth(raw: any): MonthlyState {
   };
 }
 
-export function TreasuryOSDashboard() {
+export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOSUser | null }) {
   const [settings, setSettings] = useState<TreasurySettings>(defaultSettings);
   const [month, setMonth] = useState<MonthlyState>(defaultMonthState());
-  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [authReady, setAuthReady] = useState(!firebaseEnabled);
-  const [authMsg, setAuthMsg] = useState("");
   const [syncMsg, setSyncMsg] = useState("");
   const [localReady, setLocalReady] = useState(false);
+  const [cloudReady, setCloudReady] = useState(!lifeosUser);
   const [copyEditing, setCopyEditing] = useState(false);
-  const isOwner = Boolean(sessionEmail && sessionEmail.toLowerCase() === ownerEmail.toLowerCase());
+  const [newBucketName, setNewBucketName] = useState("");
+  const [newBucketTarget, setNewBucketTarget] = useState("");
+  const [addingBucket, setAddingBucket] = useState(false);
+  const skipNextCloudSave = useRef(false);
+  const sessionEmail = lifeosUser?.email ?? null;
   const copy = settings.copy;
+  const savingsBuckets = settings.categories.filter(c => c.kind === "savings");
+  const cloudEnabled = Boolean(lifeosUser?.uid);
 
   useEffect(() => {
-    try {
-      const localSettings = localStorage.getItem(LOCAL_SETTINGS_KEY);
-      const localMonth = localStorage.getItem(monthKey(defaultMonthState().month)) ?? localStorage.getItem(LEGACY_MONTH_KEY);
-      if (localSettings) setSettings(migrateSettings(JSON.parse(localSettings)));
-      if (localMonth) setMonth(migrateMonth(JSON.parse(localMonth)));
-      setLocalReady(true);
-    } catch {
-      setSyncMsg("Couldn’t load browser storage. Allow site storage and reload to save your budget.");
-    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const localSettings = localStorage.getItem(LOCAL_SETTINGS_KEY);
+        const localMonth = localStorage.getItem(monthStorageKey(defaultMonthState().month)) ?? localStorage.getItem(LEGACY_MONTH_KEY);
+        if (localSettings) setSettings(migrateSettings(JSON.parse(localSettings)));
+        if (localMonth) setMonth(migrateMonth(JSON.parse(localMonth)));
+      } catch {
+        if (!cancelled) setSyncMsg("Couldn’t load browser storage. Allow site storage and reload to save your budget.");
+      }
+      if (!cancelled) setLocalReady(true);
 
-    const activeAuth = firebaseAuth;
-    if (!activeAuth) return;
-    return onAuthStateChanged(activeAuth, async user => {
-      setCurrentUser(user);
-      setSessionEmail(user?.email ?? null);
-      setAuthReady(true);
-
-      if (!user) return;
-      if (user.email?.toLowerCase() !== ownerEmail.toLowerCase()) {
-        setAuthMsg(`This app is private to ${ownerEmail}.`);
-        await firebaseSignOut(activeAuth);
+      if (!lifeosUser?.uid) {
+        if (!cancelled) {
+          setCloudReady(true);
+          setSyncMsg("Saved in this browser ✓");
+        }
         return;
       }
 
-      setAuthMsg("Signed in with Google.");
-      await loadCloud(user.uid, defaultMonthState().month);
-    });
-  }, []);
+      if (!cancelled) {
+        setCloudReady(false);
+        setSyncMsg("Loading cloud budget…");
+      }
+      const database = getClientDatabase();
+      if (!database) {
+        if (!cancelled) {
+          setCloudReady(true);
+          setSyncMsg("Saved in this browser ✓");
+        }
+        return;
+      }
+
+      try {
+        const [settingsSnap, monthSnap] = await Promise.all([
+          get(ref(database, lifeosTreasuryPath(lifeosUser.uid, "settings"))),
+          get(ref(database, lifeosTreasuryPath(lifeosUser.uid, `months/${defaultMonthState().month}`))),
+        ]);
+        if (cancelled) return;
+        skipNextCloudSave.current = true;
+        if (settingsSnap.exists()) setSettings(migrateSettings(settingsSnap.val()?.data ?? settingsSnap.val()));
+        if (monthSnap.exists()) setMonth(migrateMonth(monthSnap.val()?.data ?? monthSnap.val()));
+        setSyncMsg(settingsSnap.exists() || monthSnap.exists() ? "Synced with LifeOS ✓" : "No cloud budget yet — changes will sync with your LifeOS account.");
+      } catch {
+        if (!cancelled) setSyncMsg("Cloud sync unavailable. Saving in this browser.");
+      } finally {
+        if (!cancelled) setCloudReady(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [lifeosUser?.uid]);
 
   useEffect(() => {
     if (!localReady) return;
     try {
       localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(settings));
-      localStorage.setItem(monthKey(month.month), JSON.stringify(month));
+      localStorage.setItem(monthStorageKey(month.month), JSON.stringify(month));
       localStorage.setItem(LEGACY_MONTH_KEY, JSON.stringify(month));
-      if (!firebaseEnabled || !isOwner) setSyncMsg("Saved in this browser ✓");
     } catch {
       setSyncMsg("Couldn’t save in this browser. Check available storage and site permissions.");
+      return;
     }
-  }, [settings, month, localReady, isOwner]);
 
-  async function loadCloud(userId: string, monthKey: string) {
-    if (!firebaseDb) return;
-    setSyncMsg("Loading cloud budget...");
-    const [settingsSnap, monthSnap] = await Promise.all([
-      getDoc(doc(firebaseDb, "users", userId, "budget", "settings")),
-      getDoc(doc(firebaseDb, "users", userId, "months", monthKey)),
-    ]);
-    if (settingsSnap.exists()) setSettings(migrateSettings(settingsSnap.data().data));
-    if (monthSnap.exists()) setMonth(migrateMonth(monthSnap.data().data));
-    setSyncMsg(monthSnap.exists() || settingsSnap.exists() ? "Loaded from cloud ✓" : "No cloud budget yet. Save once to sync this browser.");
-  }
+    if (!cloudEnabled || !cloudReady) {
+      if (!cloudEnabled) setSyncMsg("Saved in this browser ✓");
+      return;
+    }
+    if (skipNextCloudSave.current) {
+      skipNextCloudSave.current = false;
+      return;
+    }
 
-  async function changeMonth(monthKey: string) {
-    const fallback = (currentMode: MonthlyState["mode"]) => ({ ...defaultMonthState(), month: monthKey, mode: currentMode });
-    const localMonth = localStorage.getItem(`shafkat-budget-month-${monthKey}`);
-    setMonth(m => localMonth ? migrateMonth(JSON.parse(localMonth)) : fallback(m.mode));
-    if (currentUser && isOwner) await loadCloud(currentUser.uid, monthKey);
+    const timer = window.setTimeout(async () => {
+      const database = getClientDatabase();
+      if (!database || !lifeosUser?.uid) return;
+      try {
+        await Promise.all([
+          set(ref(database, lifeosTreasuryPath(lifeosUser.uid, "settings")), { data: settings, updatedAt: new Date().toISOString() }),
+          set(ref(database, lifeosTreasuryPath(lifeosUser.uid, `months/${month.month}`)), { data: month, month: month.month, updatedAt: new Date().toISOString() }),
+        ]);
+        setSyncMsg("Synced with LifeOS ✓");
+      } catch {
+        setSyncMsg("Saved in this browser. Cloud sync failed — try again later.");
+      }
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [settings, month, localReady, cloudReady, cloudEnabled, lifeosUser?.uid]);
+
+  async function changeMonth(nextMonth: string) {
+    const fallback = (currentMode: MonthlyState["mode"]) => ({ ...defaultMonthState(), month: nextMonth, mode: currentMode });
+    const localMonth = localStorage.getItem(monthStorageKey(nextMonth));
+    if (localMonth) {
+      setMonth(migrateMonth(JSON.parse(localMonth)));
+    } else {
+      setMonth(m => fallback(m.mode));
+    }
+
+    if (!lifeosUser?.uid) return;
+    const database = getClientDatabase();
+    if (!database) return;
+    try {
+      const monthSnap = await get(ref(database, lifeosTreasuryPath(lifeosUser.uid, `months/${nextMonth}`)));
+      if (monthSnap.exists()) {
+        skipNextCloudSave.current = true;
+        setMonth(migrateMonth(monthSnap.val()?.data ?? monthSnap.val()));
+        setSyncMsg("Loaded month from LifeOS ✓");
+      }
+    } catch {
+      setSyncMsg("Couldn’t load that month from cloud.");
+    }
   }
 
   async function saveCloud() {
-    if (!firebaseDb) return setSyncMsg("Firebase is not configured yet.");
-    const user = currentUser;
-    if (!user) return setSyncMsg("Sign in first to sync across devices.");
-    if (!isOwner) return setSyncMsg(`This app is private to ${ownerEmail}.`);
+    if (!lifeosUser?.uid) return setSyncMsg("Sign in to LifeOS to sync across devices.");
+    const database = getClientDatabase();
+    if (!database) return setSyncMsg("Firebase is not configured yet.");
     setSyncMsg("Saving…");
-    await Promise.all([
-      setDoc(doc(firebaseDb, "users", user.uid, "budget", "settings"), { data: settings, updatedAt: new Date().toISOString(), ownerEmail }),
-      setDoc(doc(firebaseDb, "users", user.uid, "months", month.month), { data: month, month: month.month, updatedAt: new Date().toISOString(), ownerEmail }),
-    ]);
-    setSyncMsg("Synced to cloud ✓");
-  }
-
-  async function authSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!firebaseAuth) return setAuthMsg("Add Firebase environment variables first.");
-    setAuthMsg("Opening Google sign-in...");
     try {
-      const result = await signInWithPopup(firebaseAuth, googleProvider);
-      if (result.user.email?.toLowerCase() !== ownerEmail.toLowerCase()) {
-        setAuthMsg(`This app is private to ${ownerEmail}.`);
-        await firebaseSignOut(firebaseAuth);
-      }
-    } catch (err) {
-      setAuthMsg(err instanceof Error ? err.message : "Google sign-in failed.");
+      await Promise.all([
+        set(ref(database, lifeosTreasuryPath(lifeosUser.uid, "settings")), { data: settings, updatedAt: new Date().toISOString() }),
+        set(ref(database, lifeosTreasuryPath(lifeosUser.uid, `months/${month.month}`)), { data: month, month: month.month, updatedAt: new Date().toISOString() }),
+      ]);
+      setSyncMsg("Synced with LifeOS ✓");
+    } catch {
+      setSyncMsg("Cloud save failed. Your budget is still saved in this browser.");
     }
-  }
-
-  async function signOut() {
-    if (firebaseAuth) await firebaseSignOut(firebaseAuth);
-    setCurrentUser(null);
-    setSessionEmail(null);
   }
 
   const computed = useMemo(() => {
@@ -351,6 +368,15 @@ export function TreasuryOSDashboard() {
   function addCategory() {
     const id = makeId();
     setSettings(s => ({ ...s, categories: [...s.categories, { id, name: "New category", emoji: "💰", kind: "expense", target: 0, betweenTarget: 0 }] }));
+  }
+
+  function addSavingsBucket(name = "New savings bucket", emoji = "🏦", target = 0) {
+    const id = makeId();
+    setSettings(s => ({
+      ...s,
+      categories: [...s.categories, { id, name, emoji, kind: "savings", target, betweenTarget: 0 }],
+    }));
+    return id;
   }
 
   function deleteCategory(id: string) {
@@ -388,28 +414,19 @@ export function TreasuryOSDashboard() {
             {copyEditing ? <Check size={14} /> : <Pencil size={14} />}
             <span>{copyEditing ? "Done" : "Edit labels"}</span>
           </button>
-          <div className={`treasury-sync-pill${sessionEmail ? " synced" : ""}`}>
-            {sessionEmail ? <><Cloud size={14} /> Synced as {sessionEmail}</> : <><CloudOff size={14} /> {firebaseEnabled ? "Private Google login" : "Local mode"}</>}
+          <div className={`treasury-sync-pill${sessionEmail || cloudEnabled ? " synced" : ""}`}>
+            {sessionEmail
+              ? <><Cloud size={14} /> Synced as {sessionEmail}</>
+              : cloudEnabled
+                ? <><Cloud size={14} /> Synced with LifeOS</>
+                : <><CloudOff size={14} /> Local mode</>}
           </div>
         </div>
       </div>
 
-      {firebaseEnabled && !authReady && (
+      {!cloudReady && (
         <section className="os-module">
-          <header><div><Cloud size={17} /><h2>Checking sign-in…</h2></div></header>
-        </section>
-      )}
-
-      {firebaseEnabled && authReady && !isOwner && (
-        <section className="os-module">
-          <header><div><Cloud size={17} /><h2>Cloud sync (optional)</h2></div></header>
-          <div className="os-module-body treasury-pad">
-            <p className="treasury-muted">Working locally in this browser. Sign in with {ownerEmail} if you want cloud sync across devices.</p>
-            <form className="treasury-auth-form" onSubmit={authSubmit}>
-              <button type="submit" className="os-now-button">Sign in with Google</button>
-              {authMsg ? <span className="treasury-muted">{authMsg}</span> : null}
-            </form>
-          </div>
+          <header><div><Cloud size={17} /><h2>Loading budget…</h2></div></header>
         </section>
       )}
 
@@ -481,11 +498,62 @@ export function TreasuryOSDashboard() {
           </section>
 
           <section className="os-module">
-            <header><div><PiggyBank size={17} /><h2><EditableText editing={copyEditing} value={copy.savingsTitle} onChange={v => setCopy("savingsTitle", v)} ariaLabel="Savings panel title" /></h2></div></header>
+            <header>
+              <div><PiggyBank size={17} /><h2><EditableText editing={copyEditing} value={copy.savingsTitle} onChange={v => setCopy("savingsTitle", v)} ariaLabel="Savings panel title" /></h2></div>
+              <button type="button" onClick={() => setAddingBucket(true)}><Plus size={14} /> Add bucket</button>
+            </header>
             <div className="os-module-body treasury-pad">
               <div className="treasury-runway">{money.format(computed.savingsAllocated)}</div>
               <p className="treasury-muted"><EditableText editing={copyEditing} value={copy.savingsHelp} onChange={v => setCopy("savingsHelp", v)} ariaLabel="Savings helper text" /></p>
-              <div className="treasury-callout"><EditableText editing={copyEditing} value={copy.savingsCallout} onChange={v => setCopy("savingsCallout", v)} ariaLabel="Savings callout" multiline /></div>
+
+              {savingsBuckets.length > 0 ? (
+                <div className="treasury-bucket-list">
+                  {savingsBuckets.map(bucket => {
+                    const paid = month.categoryValues[bucket.id] ?? 0;
+                    const target = month.mode === "employed" ? bucket.target : bucket.betweenTarget;
+                    return (
+                      <div className="treasury-bucket-row" key={bucket.id}>
+                        <div className="treasury-bucket-meta">
+                          <strong>{bucket.emoji} {bucket.name}</strong>
+                          <small>{money.format(paid)} / {money.format(target)}</small>
+                          <Progress value={paid} max={target} />
+                        </div>
+                        <div className="currency"><span>$</span><input inputMode="decimal" type="number" min="0" step="1" value={paid || ""} placeholder="0" aria-label={`${bucket.name} this month`} onChange={e => setCategoryValue(bucket.id, clamp(Number(e.target.value)))} /></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="treasury-callout"><EditableText editing={copyEditing} value={copy.savingsCallout} onChange={v => setCopy("savingsCallout", v)} ariaLabel="Savings callout" multiline /></div>
+              )}
+
+              {addingBucket ? (
+                <form
+                  className="treasury-bucket-form"
+                  onSubmit={e => {
+                    e.preventDefault();
+                    const name = newBucketName.trim() || "New savings bucket";
+                    const target = clamp(Number(newBucketTarget));
+                    addSavingsBucket(name, "🏦", target);
+                    setNewBucketName("");
+                    setNewBucketTarget("");
+                    setAddingBucket(false);
+                  }}
+                >
+                  <label className="treasury-field">
+                    <span>Bucket name</span>
+                    <input autoFocus value={newBucketName} placeholder="Emergency Fund" onChange={e => setNewBucketName(e.target.value)} />
+                  </label>
+                  <label className="treasury-field">
+                    <span>Monthly target</span>
+                    <input type="number" min="0" step="1" value={newBucketTarget} placeholder="500" onChange={e => setNewBucketTarget(e.target.value)} />
+                  </label>
+                  <div className="treasury-bucket-form-actions">
+                    <button type="submit" className="os-now-button">Create bucket</button>
+                    <button type="button" className="os-profile-button" onClick={() => { setAddingBucket(false); setNewBucketName(""); setNewBucketTarget(""); }}>Cancel</button>
+                  </div>
+                </form>
+              ) : null}
             </div>
           </section>
         </div>
@@ -542,7 +610,7 @@ export function TreasuryOSDashboard() {
             )}
 
             <div className="treasury-actions">
-              {firebaseEnabled && <button type="button" className="os-now-button" onClick={saveCloud}>Save + sync</button>}
+              {cloudEnabled && <button type="button" className="os-now-button" onClick={saveCloud}>Save + sync</button>}
               <button type="button" className="os-profile-button" onClick={resetMonth}><RotateCcw size={14} /> Reset month</button>
               {syncMsg ? <span className="treasury-muted">{syncMsg}</span> : null}
             </div>
@@ -603,24 +671,20 @@ export function TreasuryOSDashboard() {
           <section className="os-module">
             <header>
               <div>
-                {firebaseEnabled ? <Cloud size={17} /> : <CloudOff size={17} />}
-                <h2>{firebaseEnabled ? "Cloud sync" : "Saved on this device"}</h2>
+                {cloudEnabled ? <Cloud size={17} /> : <CloudOff size={17} />}
+                <h2>{cloudEnabled ? "Cloud sync" : "Saved on this device"}</h2>
               </div>
             </header>
             <div className="os-module-body treasury-pad">
-              {firebaseEnabled ? <>
-                <p className="treasury-muted">Use the same login on iPhone, Mac, or iPad. Categories and monthly entries sync too.</p>
-                {sessionEmail
-                  ? <button type="button" className="os-profile-button" onClick={signOut}><LogOut size={14} /> Sign out</button>
-                  : (
-                    <form className="treasury-auth-form" onSubmit={authSubmit}>
-                      <button type="submit" className="os-now-button">Sign in with Google</button>
-                      {authMsg ? <span className="treasury-muted">{authMsg}</span> : null}
-                    </form>
-                  )}
-              </> : (
-                <p className="treasury-muted">Changes save automatically in this browser. No account is needed. Budgets do not sync between devices, and clearing this site’s browser data removes saved entries.</p>
+              {cloudEnabled ? (
+                <p className="treasury-muted">
+                  TreasuryOS uses your LifeOS Google login. Categories and monthly entries sync automatically with the rest of LifeOS
+                  {sessionEmail ? ` as ${sessionEmail}` : ""}.
+                </p>
+              ) : (
+                <p className="treasury-muted">Changes save automatically in this browser. Sign in to LifeOS to sync across devices.</p>
               )}
+              {syncMsg ? <p className="treasury-muted" style={{ marginTop: 10 }}>{syncMsg}</p> : null}
             </div>
           </section>
         </div>
