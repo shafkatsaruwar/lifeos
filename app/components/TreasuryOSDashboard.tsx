@@ -85,6 +85,8 @@ type MonthlyState = {
 const defaultCategories: TreasuryCategory[] = [
   { id: "parents", name: "Parents / Project Retire Baba", emoji: "❤️", kind: "expense", target: 1100, betweenTarget: 0 },
   { id: "masters", name: "Master's", emoji: "🎓", kind: "savings", target: 350, betweenTarget: 0 },
+  { id: "emergency", name: "Emergency Fund", emoji: "🛡️", kind: "savings", target: 200, betweenTarget: 50 },
+  { id: "travel", name: "Travel", emoji: "✈️", kind: "savings", target: 150, betweenTarget: 0 },
   { id: "debt", name: "Debt", emoji: "💳", kind: "expense", target: 400, betweenTarget: 400 },
   { id: "transportation", name: "Transportation", emoji: "🚆", kind: "expense", target: 165, betweenTarget: 0 },
   { id: "subscriptions", name: "Subscriptions", emoji: "📱", kind: "expense", target: 100, betweenTarget: 100 },
@@ -151,6 +153,50 @@ function defaultMonthState(): MonthlyState {
   };
 }
 
+/** Sample month so a fresh TreasuryOS tour shows real numbers, not zeros. */
+function createDemoMonthState(monthKey = currentMonthKey()): MonthlyState {
+  return {
+    month: monthKey,
+    mode: "employed",
+    categoryValues: {
+      parents: 1100,
+      masters: 350,
+      emergency: 200,
+      travel: 75,
+      debt: 400,
+      transportation: 148,
+      subscriptions: 94,
+      fun: 210,
+    },
+    refundIncome: 45,
+    giftIncome: 100,
+    actualIncome: 3280,
+    otherIncome: 0,
+    note: "Demo month — transit was a little under target; birthday money covered a fun night out.",
+  };
+}
+
+function mergeDemoCategories(categories: TreasuryCategory[]): TreasuryCategory[] {
+  const byId = new Map(categories.map(c => [c.id, c]));
+  for (const demo of defaultCategories) {
+    if (!byId.has(demo.id)) byId.set(demo.id, demo);
+  }
+  // Keep existing order, then append any newly added demo buckets.
+  const existingIds = new Set(categories.map(c => c.id));
+  const extras = defaultCategories.filter(c => !existingIds.has(c.id));
+  return [...categories, ...extras];
+}
+
+function isBlankMonth(state: MonthlyState): boolean {
+  const allocated = Object.values(state.categoryValues).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  return allocated === 0
+    && !state.actualIncome
+    && !state.refundIncome
+    && !state.giftIncome
+    && !state.otherIncome
+    && !state.note.trim();
+}
+
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const exactMoney = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 const clamp = (n: number, min = 0) => Math.max(min, Number.isFinite(n) ? n : 0);
@@ -213,21 +259,34 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      let hadLocalSettings = false;
+      let hadLocalMonth = false;
+      let nextSettings = defaultSettings;
+      let nextMonth = defaultMonthState();
       try {
         const localSettings = localStorage.getItem(LOCAL_SETTINGS_KEY);
         const localMonth = localStorage.getItem(monthStorageKey(defaultMonthState().month)) ?? localStorage.getItem(LEGACY_MONTH_KEY);
-        if (localSettings) setSettings(migrateSettings(JSON.parse(localSettings)));
-        if (localMonth) setMonth(migrateMonth(JSON.parse(localMonth)));
+        hadLocalSettings = Boolean(localSettings);
+        hadLocalMonth = Boolean(localMonth);
+        if (localSettings) nextSettings = migrateSettings(JSON.parse(localSettings));
+        if (localMonth) nextMonth = migrateMonth(JSON.parse(localMonth));
       } catch {
         if (!cancelled) setSyncMsg("Couldn’t load browser storage. Allow site storage and reload to save your budget.");
       }
-      if (!cancelled) setLocalReady(true);
+
+      const finishWith = (settingsValue: TreasurySettings, monthValue: MonthlyState, message: string, seedDemo: boolean) => {
+        if (cancelled) return;
+        const demo = seedDemo && isBlankMonth(monthValue);
+        skipNextCloudSave.current = true;
+        setSettings(demo ? { ...defaultSettings, ...settingsValue, categories: mergeDemoCategories(settingsValue.categories) } : settingsValue);
+        setMonth(demo ? createDemoMonthState(monthValue.month) : monthValue);
+        setSyncMsg(demo ? "Demo budget loaded — edit anything; Reset month clears the sample numbers." : message);
+        setLocalReady(true);
+        setCloudReady(true);
+      };
 
       if (!lifeosUser?.uid) {
-        if (!cancelled) {
-          setCloudReady(true);
-          setSyncMsg("Saved in this browser ✓");
-        }
+        finishWith(nextSettings, nextMonth, "Saved in this browser ✓", !hadLocalSettings && !hadLocalMonth);
         return;
       }
 
@@ -237,10 +296,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
       }
       const database = getClientDatabase();
       if (!database) {
-        if (!cancelled) {
-          setCloudReady(true);
-          setSyncMsg("Saved in this browser ✓");
-        }
+        finishWith(nextSettings, nextMonth, "Saved in this browser ✓", !hadLocalSettings && !hadLocalMonth);
         return;
       }
 
@@ -250,14 +306,19 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
           get(ref(database, lifeosTreasuryPath(lifeosUser.uid, `months/${defaultMonthState().month}`))),
         ]);
         if (cancelled) return;
-        skipNextCloudSave.current = true;
-        if (settingsSnap.exists()) setSettings(migrateSettings(settingsSnap.val()?.data ?? settingsSnap.val()));
-        if (monthSnap.exists()) setMonth(migrateMonth(monthSnap.val()?.data ?? monthSnap.val()));
-        setSyncMsg(settingsSnap.exists() || monthSnap.exists() ? "Synced with LifeOS ✓" : "No cloud budget yet — changes will sync with your LifeOS account.");
+        if (settingsSnap.exists()) nextSettings = migrateSettings(settingsSnap.val()?.data ?? settingsSnap.val());
+        if (monthSnap.exists()) nextMonth = migrateMonth(monthSnap.val()?.data ?? monthSnap.val());
+        const fresh = !settingsSnap.exists() && !monthSnap.exists() && !hadLocalSettings && !hadLocalMonth;
+        finishWith(
+          nextSettings,
+          nextMonth,
+          settingsSnap.exists() || monthSnap.exists() ? "Synced with LifeOS ✓" : "No cloud budget yet — changes will sync with your LifeOS account.",
+          fresh,
+        );
       } catch {
-        if (!cancelled) setSyncMsg("Cloud sync unavailable. Saving in this browser.");
-      } finally {
-        if (!cancelled) setCloudReady(true);
+        if (!cancelled) {
+          finishWith(nextSettings, nextMonth, "Cloud sync unavailable. Saving in this browser.", !hadLocalSettings && !hadLocalMonth);
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -424,6 +485,14 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
   function resetMonth() {
     if (!confirm("Reset this month’s entries? Your categories and targets stay the same.")) return;
     setMonth({ ...defaultMonthState(), month: month.month, mode: month.mode });
+  }
+
+  function loadDemoData() {
+    const blank = isBlankMonth(month);
+    if (!blank && !confirm("Replace this month’s numbers with demo data? Categories you already have stay; missing sample buckets are added.")) return;
+    setSettings(s => ({ ...s, categories: mergeDemoCategories(s.categories) }));
+    setMonth(createDemoMonthState(month.month));
+    setSyncMsg("Demo budget loaded — edit freely or Reset month to clear it.");
   }
 
   const parentsTarget = settings.categories.find(c => c.id === "parents")?.target ?? 0;
@@ -694,6 +763,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
 
             <div className="treasury-actions">
               {cloudEnabled && <button type="button" className="os-now-button" onClick={saveCloud}>Save + sync</button>}
+              <button type="button" className="os-profile-button" onClick={loadDemoData}><Sparkles size={14} /> Load demo data</button>
               <button type="button" className="os-profile-button" onClick={resetMonth}><RotateCcw size={14} /> Reset month</button>
               {syncMsg ? <span className="treasury-muted">{syncMsg}</span> : null}
             </div>
