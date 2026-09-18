@@ -861,7 +861,7 @@ export function SchoolDashboard({
             {enableMasterOS && (
               <button type="button" className="school-more-item" onClick={() => onOpenMasterOS?.()}>
                 <span className="school-more-icon"><GraduationCap size={16} /></span>
-                <span className="school-more-text"><strong>MasterOS</strong></span>
+                <span className="school-more-text"><strong>Mastery</strong></span>
                 <ChevronRight size={16} className="school-more-chevron" />
               </button>
             )}

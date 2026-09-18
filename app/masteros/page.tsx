@@ -29,7 +29,7 @@ export default function MasterOSHome() {
       <div className="os-hero" style={{ marginBottom: 22 }}>
         <div>
           <p className="eyebrow">{new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
-          <h1>MasterOS</h1>
+          <h1>Mastery</h1>
           <p>Create the lesson, teach it, assign practice, then let skill mastery tell you what comes next.</p>
         </div>
       </div>

@@ -518,6 +518,16 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .treasury-dashboard{width:100%;max-width:100%}
 .treasury-dashboard .os-hero h1 .treasury-inline{font:inherit;letter-spacing:inherit;font-weight:inherit}
 .treasury-hero-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}
+.treasury-demo-banner{border-color:color-mix(in srgb,var(--accent) 35%,var(--line));background:color-mix(in srgb,var(--accent) 7%,var(--panel))}
+.treasury-demo-banner-inner{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;padding:16px 18px}
+.treasury-demo-banner-inner strong{font-size:14px}
+.treasury-demo-banner-inner .os-now-button{flex-shrink:0}
+.treasury-spotlight-editor{display:grid;gap:10px}
+.treasury-spotlight-impact-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.treasury-spotlight-empty{display:grid;gap:12px;justify-items:start}
+@media(max-width:720px){.treasury-spotlight-impact-grid{grid-template-columns:1fr}}
+
+
 .treasury-edit-toggle{display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--muted);font-size:10px;font-weight:700;cursor:pointer}
 .treasury-edit-toggle:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--line));color:var(--ink)}
 .treasury-edit-toggle.active{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:color-mix(in srgb,var(--accent) 8%,var(--panel));color:var(--ink)}

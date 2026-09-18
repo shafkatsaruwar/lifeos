@@ -74,7 +74,7 @@ function renderMosRoute(path: string) {
   if (/^\/masteros\/assignments\/[^/]+$/.test(path)) return <MasterOSAssignment />;
   return (
     <div className="mos-page">
-      <p className="mos-muted">That MasterOS page isn’t available here.</p>
+      <p className="mos-muted">That Mastery page isn’t available here.</p>
       <p className="mos-muted">Path: {path}</p>
     </div>
   );
@@ -157,7 +157,7 @@ export function MasterOSDashboard() {
       <MosEmbedProvider path={path} search={search} navigate={navigate} back={back}>
         <div className={`masteros-embedded${fullscreen ? " fullscreen" : ""}`} onClickCapture={onCaptureClick}>
           {!fullscreen && (
-            <nav className="masteros-subnav" aria-label="MasterOS classroom">
+            <nav className="masteros-subnav" aria-label="Mastery classroom">
               {SUBNAV.map(item => {
                 const active = item.href === "/masteros"
                   ? path === "/masteros"

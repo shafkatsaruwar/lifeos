@@ -11,7 +11,7 @@ export default function SettingsPage() {
         <div>
           <p className="eyebrow">Workspace</p>
           <h1>Settings</h1>
-          <p>MasterOS stores teaching data locally until Supabase is connected.</p>
+          <p>Mastery stores teaching data locally until Supabase is connected.</p>
         </div>
       </div>
 
@@ -30,7 +30,7 @@ export default function SettingsPage() {
             className="mos-ghost"
             type="button"
             onClick={() => {
-              if (confirm("Reset MasterOS to the Wafia / SAT Prep demo?")) resetDemo();
+              if (confirm("Reset Mastery to the Wafia / SAT Prep demo?")) resetDemo();
             }}
           >
             Reset demo data

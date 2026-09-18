@@ -83,7 +83,7 @@ export function buildCaptureCommands(options: {
     );
   }
   if (options.enableMasterOS !== false) {
-    commands.push({ shortcut: "/mos", label: "MasterOS", desc: "Open teaching workspace (iPad)" });
+    commands.push({ shortcut: "/mos", label: "Mastery", desc: "Open teaching workspace (iPad)" });
   }
   return commands;
 }

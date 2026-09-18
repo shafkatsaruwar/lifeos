@@ -299,7 +299,7 @@ export function LifeDashboardScreen() {
           {isTablet && workspace.settings.enableMasterOS !== false ? (
             <QuickAction
               icon="book-open"
-              label="MasterOS"
+              label="Mastery"
               onPress={() => navigation.navigate("MasterOS")}
               color={theme.blue}
             />

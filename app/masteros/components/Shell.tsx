@@ -51,7 +51,7 @@ export function MasterOSShell({ children }: { children: React.ReactNode }) {
               <span className="mos-brand-mark">
                 <span /><span /><span />
               </span>
-              <span>MasterOS<small>Personal teaching OS</small></span>
+              <span>Mastery<small>Personal teaching OS</small></span>
             </Link>
             <p className="nav-label">Classroom</p>
             <nav className="mos-nav">

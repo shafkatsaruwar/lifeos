@@ -107,7 +107,7 @@ export default function StudentReportCardPage() {
       ))}
 
       <footer className="mos-report-footer">
-        <p className="mos-muted">Prepared in MasterOS · Parent-friendly progress summary</p>
+        <p className="mos-muted">Prepared in Mastery · Parent-friendly progress summary</p>
       </footer>
     </div>
   );

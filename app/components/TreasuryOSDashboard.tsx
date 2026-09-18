@@ -11,6 +11,16 @@ import { getClientDatabase } from "@/lib/firebase";
 type Mode = "employed" | "between-contracts";
 type CategoryKind = "expense" | "savings";
 
+type SpotlightConfig = {
+  categoryId: string;
+  title: string;
+  metricLabel: string;
+  impactPrefix: string;
+  unitNoun: string;
+  unitValue: number;
+  unitSuffix: string;
+};
+
 type LifeOSUser = {
   uid: string;
   email: string | null;
@@ -32,9 +42,11 @@ type TreasurySettings = {
   weeklyHours: number;
   withholdingRate: number;
   monthlyBaseline: number;
+  /** @deprecated Prefer spotlight.unitValue — kept for older synced payloads. */
   babaEveningShiftValue: number;
   contractEnd: string;
   categories: TreasuryCategory[];
+  spotlight: SpotlightConfig;
 };
 
 type TreasuryCopy = {
@@ -95,8 +107,8 @@ const defaultCategories: TreasuryCategory[] = [
 
 const defaultSettings: TreasurySettings = {
   copy: {
-    eyebrow: "TREASURYOS",
-    title: "TreasuryOS",
+    eyebrow: "TREASURY",
+    title: "Treasury",
     subtitle: "Your categories, your targets, your actual numbers. Nothing important is locked in.",
     safeCardLabel: "SAFE TO SPEND / SAVE",
     safeCardHelp: "after your current mode targets",
@@ -134,6 +146,15 @@ const defaultSettings: TreasurySettings = {
   babaEveningShiftValue: 75,
   contractEnd: "2026-10-31",
   categories: defaultCategories,
+  spotlight: {
+    categoryId: "parents",
+    title: "Project Retire Baba",
+    metricLabel: "This month",
+    impactPrefix: "That replaces about",
+    unitNoun: "evening DoorDash shifts at",
+    unitValue: 75,
+    unitSuffix: "/shift.",
+  },
 };
 
 function currentMonthKey() {
@@ -197,6 +218,10 @@ function isBlankMonth(state: MonthlyState): boolean {
     && !state.note.trim();
 }
 
+function hasNoCategoryEntries(state: MonthlyState): boolean {
+  return Object.values(state.categoryValues).reduce((sum, value) => sum + (Number(value) || 0), 0) === 0;
+}
+
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const exactMoney = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 const clamp = (n: number, min = 0) => Math.max(min, Number.isFinite(n) ? n : 0);
@@ -206,9 +231,43 @@ const LEGACY_MONTH_KEY = "shafkat-budget-month";
 const monthStorageKey = (month: string) => `shafkat-budget-month-${month}`;
 const lifeosTreasuryPath = (uid: string, suffix: string) => `users/${uid}/treasuryOS/${suffix}`;
 
+function resolveSpotlight(raw: any, categories: TreasuryCategory[]): SpotlightConfig {
+  const fallbackCategoryId = categories.some(c => c.id === "parents")
+    ? "parents"
+    : (categories[0]?.id ?? "parents");
+  const copy = raw?.copy ?? {};
+  const spotlight = raw?.spotlight ?? {};
+  return {
+    categoryId: typeof spotlight.categoryId === "string" && spotlight.categoryId
+      ? spotlight.categoryId
+      : fallbackCategoryId,
+    title: String(spotlight.title || copy.retireBabaTitle || defaultSettings.spotlight.title),
+    metricLabel: String(spotlight.metricLabel || copy.retireBabaMetricLabel || defaultSettings.spotlight.metricLabel),
+    impactPrefix: String(spotlight.impactPrefix || copy.retireBabaImpactPrefix || defaultSettings.spotlight.impactPrefix),
+    unitNoun: String(spotlight.unitNoun || copy.retireBabaImpactMiddle || defaultSettings.spotlight.unitNoun),
+    unitValue: clamp(Number(
+      spotlight.unitValue ?? raw?.babaEveningShiftValue ?? defaultSettings.spotlight.unitValue,
+    )),
+    unitSuffix: String(spotlight.unitSuffix || copy.retireBabaImpactSuffix || defaultSettings.spotlight.unitSuffix),
+  };
+}
+
 function migrateSettings(raw: any): TreasurySettings {
   if (!raw) return defaultSettings;
-  if (Array.isArray(raw.categories)) return { ...defaultSettings, ...raw, copy: { ...defaultSettings.copy, ...raw.copy }, categories: raw.categories };
+  const renameLegacyCopy = (copy: TreasurySettings["copy"]) => ({
+    ...copy,
+    eyebrow: copy.eyebrow === "TREASURYOS" ? "TREASURY" : copy.eyebrow,
+    title: copy.title === "TreasuryOS" ? "Treasury" : copy.title,
+  });
+  if (Array.isArray(raw.categories)) {
+    const categories = raw.categories as TreasuryCategory[];
+    const merged = { ...defaultSettings, ...raw, copy: renameLegacyCopy({ ...defaultSettings.copy, ...raw.copy }), categories };
+    return {
+      ...merged,
+      spotlight: resolveSpotlight(raw, categories),
+      babaEveningShiftValue: resolveSpotlight(raw, categories).unitValue,
+    };
+  }
   const categories = defaultCategories.map(c => ({
     ...c,
     target:
@@ -219,7 +278,15 @@ function migrateSettings(raw: any): TreasurySettings {
       c.id === "subscriptions" ? raw.subscriptionsTarget ?? c.target :
       c.id === "fun" ? raw.funTarget ?? c.target : c.target,
   }));
-  return { ...defaultSettings, ...raw, copy: { ...defaultSettings.copy, ...raw.copy }, categories };
+  const spotlight = resolveSpotlight(raw, categories);
+  return {
+    ...defaultSettings,
+    ...raw,
+    copy: renameLegacyCopy({ ...defaultSettings.copy, ...raw.copy }),
+    categories,
+    spotlight,
+    babaEveningShiftValue: spotlight.unitValue,
+  };
 }
 
 function migrateMonth(raw: any): MonthlyState {
@@ -250,6 +317,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
   const [newBucketTarget, setNewBucketTarget] = useState("");
   const [addingBucket, setAddingBucket] = useState(false);
   const [editingBucketId, setEditingBucketId] = useState<string | null>(null);
+  const [spotlightEditing, setSpotlightEditing] = useState(false);
   const skipNextCloudSave = useRef(false);
   const sessionEmail = lifeosUser?.email ?? null;
   const copy = settings.copy;
@@ -411,14 +479,41 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
     const safeToSpend = Math.max(0, available - planned);
     const actualAllocated = Object.values(month.categoryValues).reduce((a, b) => a + clamp(b), 0);
     const actualRemaining = available - actualAllocated;
-    const parentsPaid = month.categoryValues.parents ?? 0;
+    const spotlightCategory = settings.categories.find(c => c.id === settings.spotlight.categoryId);
+    const spotlightPaid = spotlightCategory ? (month.categoryValues[spotlightCategory.id] ?? 0) : 0;
+    const spotlightTarget = spotlightCategory
+      ? (month.mode === "employed" ? spotlightCategory.target : spotlightCategory.betweenTarget)
+      : 0;
+    const unitValue = settings.spotlight.unitValue || settings.babaEveningShiftValue || 0;
+    const spotlightUnits = unitValue > 0 ? spotlightPaid / unitValue : 0;
     const savingsAllocated = settings.categories.filter(c => c.kind === "savings").reduce((sum, c) => sum + (month.categoryValues[c.id] ?? 0), 0);
-    const babaShifts = settings.babaEveningShiftValue > 0 ? parentsPaid / settings.babaEveningShiftValue : 0;
     const contractDays = Math.ceil((new Date(settings.contractEnd + "T23:59:59").getTime() - Date.now()) / 86400000);
-    return { grossWeekly, netWeekly, modeledMonthly, earnedIncome, oneOffs, available, planned, safeToSpend, actualAllocated, actualRemaining, parentsPaid, savingsAllocated, babaShifts, contractDays };
+    return {
+      grossWeekly, netWeekly, modeledMonthly, earnedIncome, oneOffs, available, planned, safeToSpend,
+      actualAllocated, actualRemaining, spotlightCategory, spotlightPaid, spotlightTarget, spotlightUnits,
+      unitValue, savingsAllocated, contractDays,
+    };
   }, [settings, month]);
 
-  const setS = (k: keyof Omit<TreasurySettings, "categories" | "copy">, v: string) => setSettings(s => ({ ...s, [k]: k === "contractEnd" ? v : clamp(Number(v)) }));
+  const setS = (k: keyof Omit<TreasurySettings, "categories" | "copy" | "spotlight">, v: string) => {
+    setSettings(s => {
+      const next = { ...s, [k]: k === "contractEnd" ? v : clamp(Number(v)) };
+      if (k === "babaEveningShiftValue") {
+        next.spotlight = { ...s.spotlight, unitValue: clamp(Number(v)) };
+      }
+      return next;
+    });
+  };
+  const setSpotlight = (patch: Partial<SpotlightConfig>) => {
+    setSettings(s => {
+      const spotlight = { ...s.spotlight, ...patch };
+      return {
+        ...s,
+        spotlight,
+        babaEveningShiftValue: patch.unitValue != null ? clamp(patch.unitValue) : s.babaEveningShiftValue,
+      };
+    });
+  };
   const setM = (k: keyof MonthlyState, v: string) => setMonth(m => ({ ...m, [k]: v }));
   const setCategoryValue = (id: string, value: number) => setMonth(m => ({ ...m, categoryValues: { ...m.categoryValues, [id]: clamp(value) } }));
   const setCopy = (k: keyof TreasuryCopy, v: string) => setSettings(s => ({ ...s, copy: { ...s.copy, [k]: v } }));
@@ -488,14 +583,22 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
   }
 
   function loadDemoData() {
+    const noEntries = hasNoCategoryEntries(month);
     const blank = isBlankMonth(month);
-    if (!blank && !confirm("Replace this month’s numbers with demo data? Categories you already have stay; missing sample buckets are added.")) return;
+    // Skip confirm when nothing is entered yet (common for existing cloud budgets).
+    if (!blank && !noEntries && !confirm("Replace this month’s numbers with demo data? Categories you already have stay; missing sample buckets are added.")) return;
     setSettings(s => ({ ...s, categories: mergeDemoCategories(s.categories) }));
-    setMonth(createDemoMonthState(month.month));
+    const demo = createDemoMonthState(month.month);
+    setMonth({
+      ...demo,
+      mode: month.mode,
+      // Keep income they already typed; fill the rest with sample spends/saves.
+      actualIncome: month.actualIncome > 0 ? month.actualIncome : demo.actualIncome,
+    });
     setSyncMsg("Demo budget loaded — edit freely or Reset month to clear it.");
   }
 
-  const parentsTarget = settings.categories.find(c => c.id === "parents")?.target ?? 0;
+  const showDemoPrompt = cloudReady && hasNoCategoryEntries(month);
 
   return (
     <div className={`os-dashboard treasury-dashboard${copyEditing ? " copy-editing" : ""}`}>
@@ -509,6 +612,14 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
           <p><EditableText editing={copyEditing} value={copy.subtitle} onChange={v => setCopy("subtitle", v)} ariaLabel="Dashboard subtitle" /></p>
         </div>
         <div className="treasury-hero-actions">
+          <button
+            type="button"
+            className="os-now-button"
+            onClick={loadDemoData}
+            data-testid="treasury-load-demo"
+          >
+            <Sparkles size={14} /> Load demo data
+          </button>
           <button
             type="button"
             className={`treasury-edit-toggle${copyEditing ? " active" : ""}`}
@@ -536,6 +647,22 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
       )}
 
       <>
+        {showDemoPrompt && (
+          <section className="os-module treasury-demo-banner" data-testid="treasury-demo-banner">
+            <div className="os-module-body treasury-demo-banner-inner">
+              <div>
+                <strong>No amounts entered this month</strong>
+                <p className="treasury-muted" style={{ margin: "4px 0 0" }}>
+                  Load sample spends and savings so you can see how the money map and buckets look with real numbers.
+                </p>
+              </div>
+              <button type="button" className="os-now-button" onClick={loadDemoData}>
+                <Sparkles size={14} /> Load demo data
+              </button>
+            </div>
+          </section>
+        )}
+
         <section className="os-module treasury-summary-sticky">
           <div className="work-stat-grid treasury-stat-grid">
             <article className="work-stat-card treasury-stat safe" data-testid="treasury-safe">
@@ -582,23 +709,126 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
         </section>
 
         <div className="os-two-up">
-          <section className="os-module">
-            <header><div><HeartHandshake size={17} /><h2><EditableText editing={copyEditing} value={copy.retireBabaTitle} onChange={v => setCopy("retireBabaTitle", v)} ariaLabel="Retire Baba panel title" /></h2></div></header>
+          <section className="os-module" data-testid="treasury-spotlight">
+            <header>
+              <div><HeartHandshake size={17} /><h2>{settings.spotlight.title || "Big project"}</h2></div>
+              <button
+                type="button"
+                className={`treasury-edit-toggle${spotlightEditing ? " active" : ""}`}
+                onClick={() => setSpotlightEditing(open => !open)}
+                aria-pressed={spotlightEditing}
+              >
+                {spotlightEditing ? <Check size={14} /> : <Pencil size={14} />}
+                <span>{spotlightEditing ? "Done" : "Customize"}</span>
+              </button>
+            </header>
             <div className="os-module-body treasury-pad">
-              {settings.categories.some(c => c.id === "parents") ? <>
-                <div className="treasury-progress-row">
-                  <span><EditableText editing={copyEditing} value={copy.retireBabaMetricLabel} onChange={v => setCopy("retireBabaMetricLabel", v)} ariaLabel="Retire Baba metric label" /></span>
-                  <b>{money.format(computed.parentsPaid)} / {money.format(parentsTarget)}</b>
+              {spotlightEditing ? (
+                <div className="treasury-spotlight-editor">
+                  <label className="treasury-field">
+                    <span>Project name</span>
+                    <input
+                      value={settings.spotlight.title}
+                      onChange={e => setSpotlight({ title: e.target.value })}
+                      placeholder="e.g. Emergency runway, Retire Baba, House deposit"
+                      aria-label="Big project name"
+                    />
+                  </label>
+                  <label className="treasury-field">
+                    <span>Track with category</span>
+                    <select
+                      value={settings.spotlight.categoryId}
+                      onChange={e => setSpotlight({ categoryId: e.target.value })}
+                      aria-label="Big project category"
+                    >
+                      {settings.categories.length === 0 ? (
+                        <option value="">Add a category first</option>
+                      ) : settings.categories.map(c => (
+                        <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="treasury-field">
+                    <span>Progress label</span>
+                    <input
+                      value={settings.spotlight.metricLabel}
+                      onChange={e => setSpotlight({ metricLabel: e.target.value })}
+                      placeholder="This month"
+                      aria-label="Big project progress label"
+                    />
+                  </label>
+                  <div className="treasury-spotlight-impact-grid">
+                    <label className="treasury-field">
+                      <span>Impact prefix</span>
+                      <input
+                        value={settings.spotlight.impactPrefix}
+                        onChange={e => setSpotlight({ impactPrefix: e.target.value })}
+                        placeholder="That replaces about"
+                        aria-label="Big project impact prefix"
+                      />
+                    </label>
+                    <label className="treasury-field">
+                      <span>Unit name</span>
+                      <input
+                        value={settings.spotlight.unitNoun}
+                        onChange={e => setSpotlight({ unitNoun: e.target.value })}
+                        placeholder="evening DoorDash shifts at"
+                        aria-label="Big project unit name"
+                      />
+                    </label>
+                    <label className="treasury-field">
+                      <span>Unit value ($)</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={settings.spotlight.unitValue}
+                        onChange={e => setSpotlight({ unitValue: clamp(Number(e.target.value)) })}
+                        aria-label="Big project unit value"
+                      />
+                    </label>
+                    <label className="treasury-field">
+                      <span>Unit suffix</span>
+                      <input
+                        value={settings.spotlight.unitSuffix}
+                        onChange={e => setSpotlight({ unitSuffix: e.target.value })}
+                        placeholder="/shift."
+                        aria-label="Big project unit suffix"
+                      />
+                    </label>
+                  </div>
+                  <p className="treasury-muted" style={{ marginTop: 4 }}>
+                    Tip: create a category for this project under Custom categories, then pick it here.
+                  </p>
                 </div>
-                <Progress value={computed.parentsPaid} max={parentsTarget} />
-                <p className="treasury-impact">
-                  <EditableText editing={copyEditing} value={copy.retireBabaImpactPrefix} onChange={v => setCopy("retireBabaImpactPrefix", v)} ariaLabel="Retire Baba impact prefix" />{" "}
-                  <strong>{computed.babaShifts.toFixed(1)}</strong>{" "}
-                  <EditableText editing={copyEditing} value={copy.retireBabaImpactMiddle} onChange={v => setCopy("retireBabaImpactMiddle", v)} ariaLabel="Retire Baba impact middle" />{" "}
-                  {exactMoney.format(settings.babaEveningShiftValue)}
-                  <EditableText editing={copyEditing} value={copy.retireBabaImpactSuffix} onChange={v => setCopy("retireBabaImpactSuffix", v)} ariaLabel="Retire Baba impact suffix" />
-                </p>
-              </> : <p className="treasury-muted"><EditableText editing={copyEditing} value={copy.retireBabaMissing} onChange={v => setCopy("retireBabaMissing", v)} ariaLabel="Missing parents category message" /></p>}
+              ) : computed.spotlightCategory ? (
+                <>
+                  <div className="treasury-progress-row">
+                    <span>{settings.spotlight.metricLabel}</span>
+                    <b>{money.format(computed.spotlightPaid)} / {money.format(computed.spotlightTarget)}</b>
+                  </div>
+                  <Progress value={computed.spotlightPaid} max={computed.spotlightTarget} />
+                  <p className="treasury-impact">
+                    {settings.spotlight.impactPrefix}{" "}
+                    <strong>{computed.spotlightUnits.toFixed(1)}</strong>{" "}
+                    {settings.spotlight.unitNoun}{" "}
+                    {exactMoney.format(computed.unitValue)}
+                    {settings.spotlight.unitSuffix}
+                  </p>
+                  <p className="treasury-muted" style={{ marginTop: 10 }}>
+                    Tracking {computed.spotlightCategory.emoji} {computed.spotlightCategory.name}
+                  </p>
+                </>
+              ) : (
+                <div className="treasury-spotlight-empty">
+                  <p className="treasury-muted">
+                    Pick a category to track your big project — or create one, then hit Customize.
+                  </p>
+                  <button type="button" className="os-profile-button" onClick={() => setSpotlightEditing(true)}>
+                    <Pencil size={14} /> Set up big project
+                  </button>
+                </div>
+              )}
             </div>
           </section>
 
@@ -815,7 +1045,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
                 <Num label="Hours / week" value={settings.weeklyHours} onChange={v => setS("weeklyHours", v)} step="0.5" />
                 <Num label="Withholding %" value={settings.withholdingRate} onChange={v => setS("withholdingRate", v)} step="0.1" />
                 <Num label="Budget baseline" value={settings.monthlyBaseline} onChange={v => setS("monthlyBaseline", v)} />
-                <Num label="Baba evening shift $" value={settings.babaEveningShiftValue} onChange={v => setS("babaEveningShiftValue", v)} />
+                <Num label="Impact unit $" value={settings.spotlight.unitValue} onChange={v => setSpotlight({ unitValue: clamp(Number(v)) })} />
                 <label className="treasury-field"><span>Contract end</span><input type="date" value={settings.contractEnd} onChange={e => setS("contractEnd", e.target.value)} /></label>
               </div>
             </div>
@@ -831,7 +1061,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
             <div className="os-module-body treasury-pad">
               {cloudEnabled ? (
                 <p className="treasury-muted">
-                  TreasuryOS uses your LifeOS Google login. Categories and monthly entries sync automatically with the rest of LifeOS
+                  Treasury uses your LifeOS Google login. Categories and monthly entries sync automatically with the rest of LifeOS
                   {sessionEmail ? ` as ${sessionEmail}` : ""}.
                 </p>
               ) : (
