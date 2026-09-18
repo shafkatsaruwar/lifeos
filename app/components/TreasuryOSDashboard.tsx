@@ -203,6 +203,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
   const [newBucketName, setNewBucketName] = useState("");
   const [newBucketTarget, setNewBucketTarget] = useState("");
   const [addingBucket, setAddingBucket] = useState(false);
+  const [editingBucketId, setEditingBucketId] = useState<string | null>(null);
   const skipNextCloudSave = useRef(false);
   const sessionEmail = lifeosUser?.email ?? null;
   const copy = settings.copy;
@@ -353,7 +354,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
     const savingsAllocated = settings.categories.filter(c => c.kind === "savings").reduce((sum, c) => sum + (month.categoryValues[c.id] ?? 0), 0);
     const babaShifts = settings.babaEveningShiftValue > 0 ? parentsPaid / settings.babaEveningShiftValue : 0;
     const contractDays = Math.ceil((new Date(settings.contractEnd + "T23:59:59").getTime() - Date.now()) / 86400000);
-    return { grossWeekly, netWeekly, modeledMonthly, earnedIncome, oneOffs, available, planned, safeToSpend, actualRemaining, parentsPaid, savingsAllocated, babaShifts, contractDays };
+    return { grossWeekly, netWeekly, modeledMonthly, earnedIncome, oneOffs, available, planned, safeToSpend, actualAllocated, actualRemaining, parentsPaid, savingsAllocated, babaShifts, contractDays };
   }, [settings, month]);
 
   const setS = (k: keyof Omit<TreasurySettings, "categories" | "copy">, v: string) => setSettings(s => ({ ...s, [k]: k === "contractEnd" ? v : clamp(Number(v)) }));
@@ -377,6 +378,41 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
       categories: [...s.categories, { id, name, emoji, kind: "savings", target, betweenTarget: 0 }],
     }));
     return id;
+  }
+
+  function beginEditBucket(bucket: TreasuryCategory) {
+    setAddingBucket(false);
+    setEditingBucketId(bucket.id);
+    setNewBucketName(bucket.name);
+    setNewBucketTarget(String(bucket.target || ""));
+  }
+
+  function cancelBucketForm() {
+    setAddingBucket(false);
+    setEditingBucketId(null);
+    setNewBucketName("");
+    setNewBucketTarget("");
+  }
+
+  function saveBucketForm() {
+    const name = newBucketName.trim() || "New savings bucket";
+    const target = clamp(Number(newBucketTarget));
+    if (editingBucketId) {
+      updateCategory(editingBucketId, { name, target });
+      setSyncMsg(`Updated savings bucket “${name}”`);
+    } else {
+      addSavingsBucket(name, "🏦", target);
+      setSyncMsg(`Created savings bucket “${name}”`);
+    }
+    cancelBucketForm();
+  }
+
+  function deleteBucket(id: string) {
+    const cat = settings.categories.find(c => c.id === id);
+    if (!cat || !confirm(`Delete “${cat.name}”? Existing monthly amounts for it will no longer be counted.`)) return;
+    setSettings(s => ({ ...s, categories: s.categories.filter(c => c.id !== id) }));
+    if (editingBucketId === id) cancelBucketForm();
+    setSyncMsg(`Deleted savings bucket “${cat.name}”`);
   }
 
   function deleteCategory(id: string) {
@@ -431,19 +467,19 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
       )}
 
       <>
-        <section className="os-module">
+        <section className="os-module treasury-summary-sticky">
           <div className="work-stat-grid treasury-stat-grid">
-            <article className="work-stat-card treasury-stat safe">
+            <article className="work-stat-card treasury-stat safe" data-testid="treasury-safe">
               <strong>{money.format(computed.safeToSpend)}</strong>
               <span><EditableText editing={copyEditing} value={copy.safeCardLabel} onChange={v => setCopy("safeCardLabel", v)} ariaLabel="Safe card label" /></span>
               <small><EditableText editing={copyEditing} value={copy.safeCardHelp} onChange={v => setCopy("safeCardHelp", v)} ariaLabel="Safe card helper text" /></small>
             </article>
-            <article className="work-stat-card treasury-stat">
+            <article className="work-stat-card treasury-stat" data-testid="treasury-available">
               <strong>{money.format(computed.available)}</strong>
               <span><EditableText editing={copyEditing} value={copy.availableCardLabel} onChange={v => setCopy("availableCardLabel", v)} ariaLabel="Available card label" /></span>
               <small><EditableText editing={copyEditing} value={copy.availableCardHelp} onChange={v => setCopy("availableCardHelp", v)} ariaLabel="Available card helper text" /></small>
             </article>
-            <article className="work-stat-card treasury-stat">
+            <article className="work-stat-card treasury-stat" data-testid="treasury-remaining">
               <strong className={computed.actualRemaining < 0 ? "bad" : ""}>{money.format(computed.actualRemaining)}</strong>
               <span><EditableText editing={copyEditing} value={copy.remainingCardLabel} onChange={v => setCopy("remainingCardLabel", v)} ariaLabel="Remaining card label" /></span>
               <small><EditableText editing={copyEditing} value={copy.remainingCardHelp} onChange={v => setCopy("remainingCardHelp", v)} ariaLabel="Remaining card helper text" /></small>
@@ -500,8 +536,8 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
           <section className="os-module">
             <header>
               <div><PiggyBank size={17} /><h2><EditableText editing={copyEditing} value={copy.savingsTitle} onChange={v => setCopy("savingsTitle", v)} ariaLabel="Savings panel title" /></h2></div>
-              {!addingBucket ? (
-                <button type="button" onClick={() => setAddingBucket(true)}><Plus size={14} /> Add bucket</button>
+              {!addingBucket && !editingBucketId ? (
+                <button type="button" onClick={() => { setEditingBucketId(null); setAddingBucket(true); setNewBucketName(""); setNewBucketTarget(""); }}><Plus size={14} /> Add bucket</button>
               ) : null}
             </header>
             <div className="os-module-body treasury-pad">
@@ -513,6 +549,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
                   {savingsBuckets.map(bucket => {
                     const paid = month.categoryValues[bucket.id] ?? 0;
                     const target = month.mode === "employed" ? bucket.target : bucket.betweenTarget;
+                    const isEditing = editingBucketId === bucket.id;
                     return (
                       <div className="treasury-bucket-row" key={bucket.id}>
                         <div className="treasury-bucket-meta">
@@ -520,12 +557,16 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
                           <small>{money.format(paid)} / {money.format(target)}</small>
                           <Progress value={paid} max={target} />
                         </div>
-                        <div className="currency"><span>$</span><input inputMode="decimal" type="number" min="0" step="1" value={paid || ""} placeholder="0" aria-label={`${bucket.name} this month`} onChange={e => setCategoryValue(bucket.id, clamp(Number(e.target.value)))} /></div>
+                        <div className="treasury-bucket-controls">
+                          <div className="currency"><span>$</span><input inputMode="decimal" type="number" min="0" step="1" value={paid || ""} placeholder="0" aria-label={`${bucket.name} this month`} onChange={e => setCategoryValue(bucket.id, clamp(Number(e.target.value)))} /></div>
+                          <button type="button" className="treasury-icon-button" aria-label={`Edit ${bucket.name}`} aria-pressed={isEditing} onClick={() => beginEditBucket(bucket)}><Pencil size={14} /></button>
+                          <button type="button" className="treasury-icon-button danger" aria-label={`Delete ${bucket.name}`} onClick={() => deleteBucket(bucket.id)}><Trash2 size={14} /></button>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
-              ) : !addingBucket ? (
+              ) : !addingBucket && !editingBucketId ? (
                 copyEditing ? (
                   <div className="treasury-callout">
                     <EditableText editing={copyEditing} value={copy.savingsCallout} onChange={v => setCopy("savingsCallout", v)} ariaLabel="Savings callout" multiline />
@@ -534,7 +575,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
                   <button
                     type="button"
                     className="treasury-callout treasury-callout-action"
-                    onClick={() => setAddingBucket(true)}
+                    onClick={() => { setEditingBucketId(null); setAddingBucket(true); }}
                   >
                     <span>{copy.savingsCallout}</span>
                     <strong><Plus size={14} /> Create a savings bucket</strong>
@@ -542,22 +583,16 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
                 )
               ) : null}
 
-              {addingBucket ? (
+              {(addingBucket || editingBucketId) ? (
                 <form
                   className="treasury-bucket-form"
                   onSubmit={e => {
                     e.preventDefault();
-                    const name = newBucketName.trim() || "New savings bucket";
-                    const target = clamp(Number(newBucketTarget));
-                    addSavingsBucket(name, "🏦", target);
-                    setNewBucketName("");
-                    setNewBucketTarget("");
-                    setAddingBucket(false);
-                    setSyncMsg(`Created savings bucket “${name}”`);
+                    saveBucketForm();
                   }}
                 >
                   <label className="treasury-field">
-                    <span>Bucket name</span>
+                    <span>{editingBucketId ? "Edit bucket name" : "Bucket name"}</span>
                     <input autoFocus value={newBucketName} placeholder="Emergency Fund" onChange={e => setNewBucketName(e.target.value)} />
                   </label>
                   <label className="treasury-field">
@@ -565,8 +600,8 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
                     <input type="number" min="0" step="1" value={newBucketTarget} placeholder="500" onChange={e => setNewBucketTarget(e.target.value)} />
                   </label>
                   <div className="treasury-bucket-form-actions">
-                    <button type="submit" className="os-now-button">Create bucket</button>
-                    <button type="button" className="os-profile-button" onClick={() => { setAddingBucket(false); setNewBucketName(""); setNewBucketTarget(""); }}>Cancel</button>
+                    <button type="submit" className="os-now-button">{editingBucketId ? "Save bucket" : "Create bucket"}</button>
+                    <button type="button" className="os-profile-button" onClick={cancelBucketForm}>Cancel</button>
                   </div>
                 </form>
               ) : null}
@@ -586,30 +621,62 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
             <input className="treasury-month-picker" type="month" value={month.month} onChange={e => changeMonth(e.target.value)} />
           </header>
           <div className="os-module-body treasury-pad">
+            <div className="treasury-live-totals" aria-live="polite">
+              <div><span>Available</span><b data-testid="live-available">{money.format(computed.available)}</b></div>
+              <div><span>Entered this month</span><b data-testid="live-entered">{money.format(computed.actualAllocated)}</b></div>
+              <div><span>Actual remaining</span><b data-testid="live-remaining" className={computed.actualRemaining < 0 ? "bad" : ""}>{money.format(computed.actualRemaining)}</b></div>
+              <div><span>Safe after targets</span><b data-testid="live-safe">{money.format(computed.safeToSpend)}</b></div>
+            </div>
+
             <div className="treasury-income-strip">
               <MoneyInput
                 label={<EditableText editing={copyEditing} value={copy.incomeInputLabel} onChange={v => setCopy("incomeInputLabel", v)} ariaLabel="Income input label" />}
                 value={month.actualIncome}
                 onChange={v => setMonth(m => ({ ...m, actualIncome: v }))}
                 positive
+                amountLabel="Actual take-home income this month"
               />
               <div className="treasury-income-hint">
                 <EditableText editing={copyEditing} value={copy.incomeHintPrefix} onChange={v => setCopy("incomeHintPrefix", v)} ariaLabel="Income hint" />{" "}
-                <strong>{money.format(settings.monthlyBaseline)}</strong>.
+                <label className="treasury-baseline-edit">
+                  <span className="sr-only">Budget baseline</span>
+                  <span>$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={settings.monthlyBaseline || ""}
+                    aria-label="Budget baseline"
+                    onChange={e => setS("monthlyBaseline", e.target.value)}
+                  />
+                </label>
+                .
               </div>
             </div>
 
             <div className="treasury-category-list">
               {settings.categories.map(c => {
                 const target = month.mode === "employed" ? c.target : c.betweenTarget;
-                return <MoneyInput key={c.id} label={`${c.emoji} ${c.name}`} value={month.categoryValues[c.id] ?? 0} target={target} onChange={v => setCategoryValue(c.id, v)} savings={c.kind === "savings"} />;
+                return (
+                  <MoneyInput
+                    key={c.id}
+                    label={`${c.emoji} ${c.name}`}
+                    value={month.categoryValues[c.id] ?? 0}
+                    target={target}
+                    onChange={v => setCategoryValue(c.id, v)}
+                    onTargetChange={v => updateCategory(c.id, month.mode === "employed" ? { target: v } : { betweenTarget: v })}
+                    savings={c.kind === "savings"}
+                    amountLabel={`${c.name} this month`}
+                    targetLabel={`${c.name} target`}
+                  />
+                );
               })}
             </div>
 
             <div className="treasury-money-grid">
-              <MoneyInput label="Refunds received" value={month.refundIncome} onChange={v => setMonth(m => ({ ...m, refundIncome: v }))} positive />
-              <MoneyInput label="Gifts / birthday money" value={month.giftIncome} onChange={v => setMonth(m => ({ ...m, giftIncome: v }))} positive />
-              <MoneyInput label="Other income" value={month.otherIncome} onChange={v => setMonth(m => ({ ...m, otherIncome: v }))} positive />
+              <MoneyInput label="Refunds received" value={month.refundIncome} onChange={v => setMonth(m => ({ ...m, refundIncome: v }))} positive amountLabel="Refunds received" />
+              <MoneyInput label="Gifts / birthday money" value={month.giftIncome} onChange={v => setMonth(m => ({ ...m, giftIncome: v }))} positive amountLabel="Gifts / birthday money" />
+              <MoneyInput label="Other income" value={month.otherIncome} onChange={v => setMonth(m => ({ ...m, otherIncome: v }))} positive amountLabel="Other income" />
             </div>
 
             <textarea
@@ -741,12 +808,65 @@ function Progress({ value, max }: { value: number; max: number }) {
   return <div className="treasury-progress"><i style={{ width: `${pct}%` }} /></div>;
 }
 
-function MoneyInput({ label, value, onChange, target, positive = false, savings = false }: { label: ReactNode; value: number; onChange: (v: number) => void; target?: number; positive?: boolean; savings?: boolean }) {
+function MoneyInput({
+  label,
+  value,
+  onChange,
+  target,
+  onTargetChange,
+  positive = false,
+  savings = false,
+  amountLabel,
+  targetLabel,
+}: {
+  label: ReactNode;
+  value: number;
+  onChange: (v: number) => void;
+  target?: number;
+  onTargetChange?: (v: number) => void;
+  positive?: boolean;
+  savings?: boolean;
+  amountLabel?: string;
+  targetLabel?: string;
+}) {
   return (
-    <label className={`treasury-money-input${positive ? " positive" : ""}${savings ? " savings" : ""}`}>
-      <span>{label}{target != null && <small>Target {money.format(target)}</small>}</span>
-      <div className="currency"><span>$</span><input inputMode="decimal" type="number" min="0" step="1" value={value || ""} placeholder="0" onChange={e => onChange(clamp(Number(e.target.value)))} /></div>
-    </label>
+    <div className={`treasury-money-input${positive ? " positive" : ""}${savings ? " savings" : ""}`}>
+      <div className="treasury-money-meta">
+        <span className="treasury-money-label">{label}</span>
+        {target != null && onTargetChange ? (
+          <label className="treasury-target-field">
+            <span>Target</span>
+            <div className="mini-currency">
+              <span>$</span>
+              <input
+                inputMode="decimal"
+                type="number"
+                min="0"
+                step="1"
+                value={Number.isFinite(target) ? target : 0}
+                aria-label={targetLabel || "Target"}
+                onChange={e => onTargetChange(clamp(Number(e.target.value)))}
+              />
+            </div>
+          </label>
+        ) : target != null ? (
+          <small>Target {money.format(target)}</small>
+        ) : null}
+      </div>
+      <label className="currency">
+        <span>$</span>
+        <input
+          inputMode="decimal"
+          type="number"
+          min="0"
+          step="1"
+          value={value || ""}
+          placeholder="0"
+          aria-label={amountLabel || (typeof label === "string" ? label : "Amount")}
+          onChange={e => onChange(clamp(Number(e.target.value)))}
+        />
+      </label>
+    </div>
   );
 }
 

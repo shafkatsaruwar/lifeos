@@ -1,13 +1,13 @@
 "use client";
+import { useMosParams } from "@/lib/masteros/embed-routing";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { formatLongDate, todayKey } from "@/lib/masteros/helpers";
 import { buildStudentReportCard } from "@/lib/masteros/reportCard";
 import { useMasterOS } from "@/lib/masteros/store";
 
 export default function StudentReportCardPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useMosParams<{ id: string }>();
   const { state } = useMasterOS();
   const student = state.students.find((item) => item.id === id);
   if (!student) {

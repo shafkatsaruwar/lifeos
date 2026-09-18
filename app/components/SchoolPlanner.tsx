@@ -548,6 +548,7 @@ export function SchoolDashboard({
   onAddCalendarEvent,
   onImportSyllabus,
   enableMasterOS = true,
+  onOpenMasterOS,
 }: {
   tasks: DashboardTask[];
   classes: DashboardClass[];
@@ -579,6 +580,7 @@ export function SchoolDashboard({
   onImportSyllabus?: (payload: SyllabusImportPayload) => void;
   onUpdateTaskStatus?: (id: number, status: "Not started" | "In progress" | "Blocked" | "Done") => void;
   enableMasterOS?: boolean;
+  onOpenMasterOS?: () => void;
 }) {
   const normalizeView = (value?: string): SchoolView => {
     if (value === "timetable" || value === "assignments" || value === "due" || value === "more" || value === "home") return value;
@@ -857,11 +859,11 @@ export function SchoolDashboard({
               );
             })}
             {enableMasterOS && (
-              <a href="/masteros" className="school-more-item" style={{ textDecoration: "none" }}>
+              <button type="button" className="school-more-item" onClick={() => onOpenMasterOS?.()}>
                 <span className="school-more-icon"><GraduationCap size={16} /></span>
                 <span className="school-more-text"><strong>MasterOS</strong></span>
                 <ChevronRight size={16} className="school-more-chevron" />
-              </a>
+              </button>
             )}
           </div>
 

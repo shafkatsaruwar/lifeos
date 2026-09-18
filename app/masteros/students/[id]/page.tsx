@@ -1,7 +1,7 @@
 "use client";
+import { useMosParams, useMosRouter } from "@/lib/masteros/embed-routing";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { masteryLabel, masteryTone } from "@/lib/masteros/mastery";
 import { ASSIGNMENT_LABEL, formatDate, percent } from "@/lib/masteros/helpers";
@@ -10,8 +10,8 @@ import { attentionSkills, courseProgress, coursesForStudent, useMasterOS } from 
 const TABS = ["Overview", "Courses", "Assignments", "Assessments", "Skills", "Notes"] as const;
 
 export default function StudentProfilePage() {
-  const { id } = useParams<{ id: string }>();
-  const router = useRouter();
+  const { id } = useMosParams<{ id: string }>();
+  const router = useMosRouter();
   const { state, addNote, deleteStudent } = useMasterOS();
   const student = state.students.find((item) => item.id === id);
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");

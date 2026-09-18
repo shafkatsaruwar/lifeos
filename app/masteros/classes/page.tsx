@@ -1,13 +1,13 @@
 "use client";
+import { useMosSearchParams } from "@/lib/masteros/embed-routing";
 
-import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useMemo, useState } from "react";
 import { useMasterOS } from "@/lib/masteros/store";
 import { studentsForClass } from "@/lib/masteros/selectors";
 
 function ClassesInner() {
   const { state, addClass, deleteClass } = useMasterOS();
-  const params = useSearchParams();
+  const params = useMosSearchParams();
   const [open, setOpen] = useState(params.get("new") === "1");
   const [name, setName] = useState("");
   const [schedule, setSchedule] = useState("");

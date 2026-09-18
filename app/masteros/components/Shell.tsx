@@ -1,7 +1,8 @@
 "use client";
+import { useMosPathname } from "@/lib/masteros/embed-routing";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 import {
   BookOpen, ClipboardList, GraduationCap, Home, Layers, Library, Settings, Sparkles, Users, UsersRound,
 } from "lucide-react";
@@ -19,10 +20,25 @@ const NAV = [
   { href: "/masteros/questions", label: "Question Bank", icon: Library },
 ];
 
+const DEFAULT_MASTER_COLOR = "#625af6";
+
 export function MasterOSShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const pathname = useMosPathname();
   const teaching = pathname?.includes("/teach");
   const report = pathname?.includes("/report");
+
+  useEffect(() => {
+    let color = DEFAULT_MASTER_COLOR;
+    try {
+      const raw = window.localStorage.getItem("lifeos-workspace-colors");
+      const parsed = raw ? JSON.parse(raw) as { masterOS?: string } : null;
+      if (parsed?.masterOS?.trim()) color = parsed.masterOS.trim();
+    } catch {
+      /* keep default */
+    }
+    document.documentElement.style.setProperty("--accent", color);
+    document.documentElement.style.setProperty("--env-master", color);
+  }, []);
 
   return (
     <MasterOSProvider>

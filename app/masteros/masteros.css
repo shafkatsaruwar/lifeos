@@ -155,6 +155,32 @@ code { font-size: 11px; background: var(--canvas); padding: 1px 5px; border-radi
 .mos-report-skill span { display: block; font-size: 12px; font-weight: 700; }
 .mos-report-skill small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
 .mos-report-footer { margin-top: 28px; text-align: center; }
+.masteros-embedded { display: grid; gap: 14px; min-width: 0; }
+.masteros-embedded.fullscreen { margin: -8px -4px 0; }
+.masteros-subnav {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--panel);
+}
+.masteros-subnav button {
+  border: 0; background: transparent; color: var(--muted); border-radius: 8px;
+  min-height: 34px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.masteros-subnav button:hover { background: var(--canvas); color: var(--ink); }
+.masteros-subnav button.active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, var(--line));
+}
+.masteros-embedded-body { min-width: 0; }
+.masteros-embedded .mos-page { padding: 8px 2px 40px; max-width: none; }
+.masteros-embedded.fullscreen .mos-page,
+.masteros-embedded.fullscreen .mos-report { padding-top: 12px; }
+@media (max-width: 760px) {
+  .masteros-subnav { flex-wrap: nowrap; overflow-x: auto; }
+  .masteros-subnav button span { display: none; }
+  .masteros-subnav button { min-width: 36px; justify-content: center; padding: 0; }
+}
 @media print {
   .no-print { display: none !important; }
   .mos-report { padding: 0; max-width: none; }

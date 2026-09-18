@@ -181,6 +181,7 @@ export function SettingsScreen() {
               ["work", "Work"],
               ["studyAbroad", "Study Abroad"],
               ["treasuryOS", "TreasuryOS"],
+              ["masterOS", "MasterOS"],
             ] as const
           ).map(([key, label]) => {
             const current = workspaceColorFor(workspace.settings, key);
