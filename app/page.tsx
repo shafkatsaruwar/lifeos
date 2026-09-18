@@ -38,7 +38,7 @@ import { shouldPersistOnboardingComplete } from "@/lib/onboardingGate";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
-import { buildMonthEventSegments, eventOccursOnDate, getEventDateRange, type MonthEventSegment } from "@/lib/calendarEvents";
+import { buildMonthEventSegments, eventOccursOnDate, getEventDateRange, getEventDayBlockMinutes, usesDailyTimeWindow, type MonthEventSegment } from "@/lib/calendarEvents";
 import { formatFocusMinutesShort, formatFocusSessionLabel, formatFocusTime } from "@/lib/focusTime";
 import { buildTasksFromNote } from "@/lib/noteToTask";
 import { emptyTimeTracking, normalizeTimeTracking, clockIn, clockOut, getActiveEntry } from "@/lib/timeTracking";
@@ -166,6 +166,7 @@ type SettingsState = {
   enableSchoolOS?: boolean;
   enableWorkOS?: boolean;
   enableStudyAbroad?: boolean;
+  enableTreasuryOS?: boolean;
   enableMasterOS?: boolean;
   /** When true (default), focusing the Now capture bar shows the /command cheatsheet. */
   showCaptureCommands?: boolean;
@@ -294,6 +295,7 @@ const initialSettings: SettingsState = {
   enableSchoolOS: true,
   enableWorkOS: true,
   enableStudyAbroad: true,
+  enableTreasuryOS: true,
   enableMasterOS: true,
   showCaptureCommands: true,
   nowQueueIds: [],
@@ -377,7 +379,8 @@ const mergeTasksFocus = (local: Task[], remote: Task[]) => {
 const formatEventRange = (event: CalendarEvent) => {
   const { startKey, endKey } = getEventDateRange(event);
   const weekdayNote = event.weekdaysOnly ? " · weekdays" : "";
-  if (startKey === endKey) return `${formatEventTime(event.start)}${event.end ? ` – ${formatEventTime(event.end)}` : ""}${weekdayNote}`;
+  const timeRange = `${formatEventTime(event.start)}${event.end ? ` – ${formatEventTime(event.end)}` : ""}`;
+  if (startKey === endKey || usesDailyTimeWindow(event)) return `${timeRange}${weekdayNote}`;
   const start = new Date(event.start);
   const end = new Date(event.end ?? `${endKey}T23:59`);
   const startLabel = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -845,8 +848,10 @@ export default function LifeOS() {
     if (name === "Work") return settingsState.enableWorkOS !== false;
     if (name === "School") return settingsState.enableSchoolOS !== false;
     if (name === "Study Abroad") return settingsState.enableStudyAbroad !== false;
+    if (name === "TreasuryOS") return settingsState.enableTreasuryOS !== false;
+    if (name === "MasterOS") return settingsState.enableMasterOS !== false;
     return true;
-  }, [settingsState.enableLifeOS, settingsState.enableSchoolOS, settingsState.enableWorkOS, settingsState.enableStudyAbroad]);
+  }, [settingsState.enableLifeOS, settingsState.enableSchoolOS, settingsState.enableWorkOS, settingsState.enableStudyAbroad, settingsState.enableTreasuryOS, settingsState.enableMasterOS]);
 
   const go = useCallback((next: View) => {
     let destination: View = next === "Dashboard" ? "Life" : ["Notes", "Resources", "Brain", "Knowledge"].includes(next) ? "Library" : next;
@@ -1915,39 +1920,33 @@ export default function LifeOS() {
     setEditingCalendarEventId(null);
     flash("Calendar event deleted");
   };
-  const useCalendarEventAsTask = (event: CalendarEvent) => {
-    const linkedTask = tasks.find(task => task.calendarEventId === event.id);
-    if (linkedTask) {
-      setEditingCalendarEventId(null);
-      setTaskPageId(linkedTask.id);
-      return;
-    }
-    const startAt = new Date(event.start);
-    const endAt = event.end ? new Date(event.end) : null;
-    const durationMinutes = endAt && !Number.isNaN(endAt.getTime()) && !Number.isNaN(startAt.getTime())
-      ? Math.round((endAt.getTime() - startAt.getTime()) / 60000)
-      : settingsState.defaultFocusMinutes;
-    const taskId = Date.now();
-    setTasks(items => [...items, normalizeTask({
-      id: taskId,
-      title: event.title,
-      project: "Inbox",
-      color: event.color,
-      due: /^\d{4}-\d{2}-\d{2}/.test(event.start) ? event.start.slice(0, 10) : toDateKey(new Date()),
-      startTime: /^\d{2}:\d{2}/.test(event.start.slice(11, 16)) ? event.start.slice(11, 16) : undefined,
-      priority: "Medium",
-      focusMinutes: Math.max(5, Math.min(240, durationMinutes > 0 ? durationMinutes : settingsState.defaultFocusMinutes)),
-      energy: settingsState.defaultEnergy,
-      status: "Not started",
-      notes: event.notes ?? "",
-      calendarEventId: event.id,
-      customProperties: [],
-      checklist: [],
-      checklistProgress: [],
-    })]);
+  const routeCalendarEventToTask = (event: CalendarEvent, taskId: number) => {
+    const target = tasks.find(task => task.id === taskId);
+    if (!target) return;
+    const due = /^\d{4}-\d{2}-\d{2}/.test(event.start) ? event.start.slice(0, 10) : target.due;
+    const startTime = /^\d{2}:\d{2}/.test(event.start.slice(11, 16)) ? event.start.slice(11, 16) : target.startTime;
+    setTasks(items => items.map(task => {
+      if (task.id === taskId) {
+        return {
+          ...task,
+          calendarEventId: event.id,
+          due,
+          startTime,
+        };
+      }
+      if (task.calendarEventId === event.id) {
+        return { ...task, calendarEventId: undefined };
+      }
+      return task;
+    }));
     setEditingCalendarEventId(null);
-    setTaskPageId(taskId);
-    flash("Task created from calendar event");
+    flash(`Routed under ${target.title}`);
+  };
+  const openLinkedCalendarTask = (event: CalendarEvent) => {
+    const linkedTask = tasks.find(task => task.calendarEventId === event.id);
+    if (!linkedTask) return;
+    setEditingCalendarEventId(null);
+    setTaskPageId(linkedTask.id);
   };
   const importCalendarEvents = (events: CalendarEvent[]) => {
     setCalendarEvents(items => {
@@ -2211,11 +2210,8 @@ export default function LifeOS() {
   const activeTasks = useMemo(() => tasks.filter(task => !task.done && !task.canceled), [tasks]);
   const floatingFocusTask = useMemo(() => activeTasks.find(task => Boolean(task.focusSessionStarted) && getTaskFocusSeconds(task) > 0), [activeTasks]);
   const visibleNav = useMemo(
-    () => nav.filter(item => {
-      if (item.name === "MasterOS") return settingsState.enableMasterOS !== false;
-      return isEnvironmentEnabled(item.name as View);
-    }),
-    [isEnvironmentEnabled, settingsState.enableMasterOS],
+    () => nav.filter(item => isEnvironmentEnabled(item.name as View)),
+    [isEnvironmentEnabled],
   );
   useEffect(() => {
     if (!isEnvironmentEnabled(view)) go("Now");
@@ -2514,7 +2510,7 @@ export default function LifeOS() {
         {spaceComposer && <SpaceModal key={`space-modal-${spaceComposer}`} initialKind={spaceComposer} close={() => setSpaceComposer(null)} addProject={(name, kind, description, color, icon) => addProject(name, kind, undefined, icon, description, color)} addClass={addClass} />}
         {academicComposerClassId && classes.find(item => item.id === academicComposerClassId) && <AcademicItemModal key={`academic-${academicComposerClassId}`} classRecord={classes.find(item => item.id === academicComposerClassId)!} close={() => setAcademicComposerClassId(null)} add={(task) => addAcademicTask(academicComposerClassId, task)} defaults={{ focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy }} />}
         {calendarComposer && <CalendarEventModal key="calendar-event-modal" close={() => { setCalendarComposer(false); setDefaultEventDate(null); }} add={addCalendarEvent} defaultDate={defaultEventDate} />}
-        {editingCalendarEventId && calendarEvents.find(event => event.id === editingCalendarEventId) && <CalendarEventModal key={`calendar-edit-${editingCalendarEventId}`} event={calendarEvents.find(event => event.id === editingCalendarEventId)!} close={() => setEditingCalendarEventId(null)} add={updateCalendarEvent} remove={deleteCalendarEvent} onTaskAction={useCalendarEventAsTask} taskActionLabel={tasks.some(task => task.calendarEventId === editingCalendarEventId) ? "Open task" : "Create task"} />}
+        {editingCalendarEventId && calendarEvents.find(event => event.id === editingCalendarEventId) && <CalendarEventModal key={`calendar-edit-${editingCalendarEventId}`} event={calendarEvents.find(event => event.id === editingCalendarEventId)!} close={() => setEditingCalendarEventId(null)} add={updateCalendarEvent} remove={deleteCalendarEvent} tasks={activeTasks} linkedTaskId={tasks.find(task => task.calendarEventId === editingCalendarEventId)?.id} onOpenLinkedTask={openLinkedCalendarTask} onRouteToTask={routeCalendarEventToTask} />}
         {calendarImporter && <CalendarImportModal key="calendar-import-modal" close={() => setCalendarImporter(false)} add={importCalendarEvents} />}
         {breakOpen && <BreakModal key="break-modal" close={() => setBreakOpen(false)} done={() => { setBreakOpen(false); flash("Break complete — ease back in"); }} />}
         {actionTaskId !== null && tasks.find(task => task.id === actionTaskId) && <TaskActionsModal key={`task-actions-${actionTaskId}`} task={tasks.find(task => task.id === actionTaskId)!} close={() => setActionTaskId(null)} open={() => { openTaskPage(actionTaskId); setActionTaskId(null); }} edit={() => { setEditingTaskId(actionTaskId); setActionTaskId(null); }} toggleCanceled={() => toggleCanceled(actionTaskId)} remove={() => deleteTask(actionTaskId)} />}
@@ -3614,15 +3610,27 @@ function AcademicItemModal({ classRecord, close, add, defaults }: { classRecord:
 
 const tasksToCalendarEvents = (tasks: Task[]): CalendarEvent[] => {
   return tasks
-    .filter(task => !task.done && !task.canceled && task.due)
-    .map(task => ({
-      id: `task-${task.id}`,
-      title: task.title,
-      start: `${task.due}T09:00`,
-      color: task.color,
-      source: "LifeOS" as const,
-      notes: `${task.project} · ${task.focusMinutes}m · ${task.energy}`,
-    }));
+    .filter(task => !task.done && !task.canceled && task.due && !task.calendarEventId && Boolean(task.startTime?.trim()))
+    .map(task => {
+      const dueKey = /^\d{4}-\d{2}-\d{2}/.test(task.due) ? task.due.slice(0, 10) : task.due;
+      const match = task.startTime!.trim().match(/^(\d{1,2}):(\d{2})$/);
+      const hours = match ? Math.min(23, Math.max(0, Number(match[1]))) : 9;
+      const minutes = match ? Math.min(59, Math.max(0, Number(match[2]))) : 0;
+      const time = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+      const endMinutes = hours * 60 + minutes + Math.max(15, task.focusMinutes || 30);
+      const endHours = Math.min(23, Math.floor(endMinutes / 60));
+      const endMins = endMinutes >= 24 * 60 ? 59 : endMinutes % 60;
+      const end = `${dueKey}T${String(endHours).padStart(2, "0")}:${String(endMins).padStart(2, "0")}`;
+      return {
+        id: `task-${task.id}`,
+        title: task.title,
+        start: `${dueKey}T${time}`,
+        end,
+        color: task.color,
+        source: "LifeOS" as const,
+        notes: `${task.project} · ${task.focusMinutes}m · ${task.energy}`,
+      };
+    });
 };
 
 const workMeetingsToCalendarEvents = (meetings: WorkMeeting[], projects: WorkProject[]): CalendarEvent[] => {
@@ -3681,11 +3689,7 @@ function LegacyCalendarView({ events, weekStartsMonday, onNew, onImport, onEdit 
   const selectedIsToday = selected === toDateKey(now);
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 1440) * 100;
   const eventBlockStyle = (event: CalendarEvent) => {
-    const start = new Date(event.start);
-    const end = event.end ? new Date(event.end) : new Date(start.getTime() + 45 * 60_000);
-    const { startKey, endKey } = getEventDateRange(event);
-    const startMinutes = selected === startKey ? start.getHours() * 60 + start.getMinutes() : 0;
-    const endMinutes = selected === endKey ? end.getHours() * 60 + end.getMinutes() : 1440;
+    const { startMinutes, endMinutes } = getEventDayBlockMinutes(event, selected);
     const durationMinutes = Math.max(20, endMinutes - startMinutes);
     return {
       top: `${(startMinutes / 1440) * 100}%`,
@@ -3746,11 +3750,7 @@ function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming
   const selectedIsToday = selected === todayKey;
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 1440) * 100;
   const eventBlockStyle = (event: CalendarEvent) => {
-    const start = new Date(event.start);
-    const end = event.end ? new Date(event.end) : new Date(start.getTime() + 45 * 60_000);
-    const { startKey, endKey } = getEventDateRange(event);
-    const startMinutes = selected === startKey ? start.getHours() * 60 + start.getMinutes() : 0;
-    const endMinutes = selected === endKey ? end.getHours() * 60 + end.getMinutes() : 1440;
+    const { startMinutes, endMinutes } = getEventDayBlockMinutes(event, selected);
     const durationMinutes = Math.max(20, endMinutes - startMinutes);
     return {
       top: `${(startMinutes / 1440) * 100}%`,
@@ -4220,7 +4220,7 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
     const permission = await Notification.requestPermission();
     flash(permission === "granted" ? "Browser notifications enabled" : "Notifications not enabled");
   };
-  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Appearance</h2></div></div><div className="settings-body"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{SPACE_COLORS.map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><p className="settings-note" style={{ marginTop: 4 }}>Default accent for Now, Tasks, and the rest of LifeOS.</p><WorkspaceColorPicker settings={settings} update={update} /><ToggleRow title="Compact mode" desc="Tighten spacing when you want more on screen." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions for lower sensory load." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><div className="settings-calendar-default"><span className="settings-field-label">Default view</span><p className="settings-note" style={{ margin: "4px 0 10px" }}>Opens Calendar on this tab first.</p><div className="calendar-mode-tabs" role="group" aria-label="Default calendar view">{(["upcoming", "month", "day"] as CalendarDefaultView[]).map(option => <button key={option} type="button" className={normalizeCalendarDefaultView(settings.defaultCalendarView) === option ? "selected" : ""} onClick={() => update({ defaultCalendarView: option })}>{option === "upcoming" ? "Upcoming" : option === "month" ? "Month" : "Day"}</button>)}</div></div><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Settings size={14} /></span><h2>Environments</h2></div></div><div className="settings-body"><ToggleRow title="LifeOS" desc="Personal task management and life organization." checked={settings.enableLifeOS !== false} onChange={(enableLifeOS) => update({ enableLifeOS })} /><ToggleRow title="SchoolOS" desc="Academic coursework, assignments, and learning." checked={settings.enableSchoolOS !== false} onChange={(enableSchoolOS) => update({ enableSchoolOS })} /><ToggleRow title="WorkOS" desc="Professional projects, tasks, and deliverables." checked={settings.enableWorkOS !== false} onChange={(enableWorkOS) => update({ enableWorkOS })} /><ToggleRow title="Study Abroad" desc="Multi-country research and applications for studying abroad." checked={settings.enableStudyAbroad !== false} onChange={(enableStudyAbroad) => update({ enableStudyAbroad })} /><ToggleRow title="MasterOS" desc="Teaching app — classes, lessons, whiteboard, gradebook. Web + iPad only; not on iPhone." checked={settings.enableMasterOS !== false} onChange={(enableMasterOS) => update({ enableMasterOS })} />{settings.enableMasterOS !== false && <p className="settings-note">MasterOS lives in the sidebar Environments list · type <code>/mos</code> on Now.</p>}</div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><Archive size={14} /></span><h2>Archives</h2></div><span className="count">{archivedTasks.length}</span></div><div className="settings-body"><p className="settings-note">Done and canceled tasks live here so your active lists stay clear. Restore any of them to put it back on your active list.</p><div className="agenda-list">{archivedTasks.length ? archivedTasks.slice(0, 40).map((task) => <div key={task.id} className="agenda-item compact archived-task-row"><i style={{ background: task.color || "var(--accent)" }} /><button type="button" className="archived-task-open" onClick={() => onOpenTask?.(task.id)}><strong>{task.title}</strong><p>{task.canceled || task.status === "Canceled" ? "Canceled" : "Done"}{task.project ? ` · ${task.project}` : ""}{task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</p></button><button type="button" className="archived-task-restore" onClick={() => onRestoreTask?.(task.id)}>Restore</button></div>) : <div className="priority-empty"><strong>No archived tasks yet.</strong><p>When you mark something done or canceled, it shows up here.</p></div>}</div></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body"><ToggleRow title="Show capture commands" desc="When you click the Now capture bar, show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} /><div className="shortcut-list" style={{ marginTop: 12 }}><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>/t</kbd><span>Add task (Now capture bar)</span></div><div><kbd>/break</kbd><span>Take a break</span></div><div><kbd>/focus</kbd><span>Start focus</span></div><div><kbd>/w</kbd><span>Start ambient activity</span></div><div><kbd>/a</kbd><span>AI task</span></div><div><kbd>/spaces</kbd><span>Open Spaces</span></div><div><kbd>/mos</kbd><span>Open MasterOS (web / iPad)</span></div></div><p className="settings-note">Capture commands live in the Now capture bar. Type / to filter after you hide the cheatsheet.</p></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
+  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Appearance</h2></div></div><div className="settings-body"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{SPACE_COLORS.map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><p className="settings-note" style={{ marginTop: 4 }}>Default accent for Now, Tasks, and the rest of LifeOS.</p><WorkspaceColorPicker settings={settings} update={update} /><ToggleRow title="Compact mode" desc="Tighten spacing when you want more on screen." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions for lower sensory load." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><div className="settings-calendar-default"><span className="settings-field-label">Default view</span><p className="settings-note" style={{ margin: "4px 0 10px" }}>Opens Calendar on this tab first.</p><div className="calendar-mode-tabs" role="group" aria-label="Default calendar view">{(["upcoming", "month", "day"] as CalendarDefaultView[]).map(option => <button key={option} type="button" className={normalizeCalendarDefaultView(settings.defaultCalendarView) === option ? "selected" : ""} onClick={() => update({ defaultCalendarView: option })}>{option === "upcoming" ? "Upcoming" : option === "month" ? "Month" : "Day"}</button>)}</div></div><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Settings size={14} /></span><h2>Environments</h2></div></div><div className="settings-body"><ToggleRow title="LifeOS" desc="Personal task management and life organization." checked={settings.enableLifeOS !== false} onChange={(enableLifeOS) => update({ enableLifeOS })} /><ToggleRow title="SchoolOS" desc="Academic coursework, assignments, and learning." checked={settings.enableSchoolOS !== false} onChange={(enableSchoolOS) => update({ enableSchoolOS })} /><ToggleRow title="WorkOS" desc="Professional projects, tasks, and deliverables." checked={settings.enableWorkOS !== false} onChange={(enableWorkOS) => update({ enableWorkOS })} /><ToggleRow title="Study Abroad" desc="Multi-country research and applications for studying abroad." checked={settings.enableStudyAbroad !== false} onChange={(enableStudyAbroad) => update({ enableStudyAbroad })} /><ToggleRow title="TreasuryOS" desc="Budget, savings buckets, and money map for personal finance." checked={settings.enableTreasuryOS !== false} onChange={(enableTreasuryOS) => update({ enableTreasuryOS })} /><ToggleRow title="MasterOS" desc="Teaching app — classes, lessons, whiteboard, gradebook. Web + iPad only; not on iPhone." checked={settings.enableMasterOS !== false} onChange={(enableMasterOS) => update({ enableMasterOS })} />{settings.enableMasterOS !== false && <p className="settings-note">MasterOS lives in the sidebar Environments list · type <code>/mos</code> on Now.</p>}</div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><Archive size={14} /></span><h2>Archives</h2></div><span className="count">{archivedTasks.length}</span></div><div className="settings-body"><p className="settings-note">Done and canceled tasks live here so your active lists stay clear. Restore any of them to put it back on your active list.</p><div className="agenda-list">{archivedTasks.length ? archivedTasks.slice(0, 40).map((task) => <div key={task.id} className="agenda-item compact archived-task-row"><i style={{ background: task.color || "var(--accent)" }} /><button type="button" className="archived-task-open" onClick={() => onOpenTask?.(task.id)}><strong>{task.title}</strong><p>{task.canceled || task.status === "Canceled" ? "Canceled" : "Done"}{task.project ? ` · ${task.project}` : ""}{task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</p></button><button type="button" className="archived-task-restore" onClick={() => onRestoreTask?.(task.id)}>Restore</button></div>) : <div className="priority-empty"><strong>No archived tasks yet.</strong><p>When you mark something done or canceled, it shows up here.</p></div>}</div></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body"><ToggleRow title="Show capture commands" desc="When you click the Now capture bar, show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} /><div className="shortcut-list" style={{ marginTop: 12 }}><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>/t</kbd><span>Add task (Now capture bar)</span></div><div><kbd>/break</kbd><span>Take a break</span></div><div><kbd>/focus</kbd><span>Start focus</span></div><div><kbd>/w</kbd><span>Start ambient activity</span></div><div><kbd>/a</kbd><span>AI task</span></div><div><kbd>/spaces</kbd><span>Open Spaces</span></div><div><kbd>/mos</kbd><span>Open MasterOS (web / iPad)</span></div></div><p className="settings-note">Capture commands live in the Now capture bar. Type / to filter after you hide the cheatsheet.</p></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
 }
 
 function BrainView({ items, onCapture, onArchive, onConvertToTask }: { items: string[]; onCapture: () => void; onArchive: (index: number) => void; onConvertToTask: (index: number, text: string) => void }) {
@@ -5068,7 +5068,7 @@ function LegacyCalendarEventModal({ close, add, event, remove, defaultDate }: { 
   return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.form className="create-modal calendar-modal" onMouseDown={modalEvent => modalEvent.stopPropagation()} onSubmit={submitEvent => { submitEvent.preventDefault(); if (!title.trim()) return; add({ id: event?.id ?? `lifeos-${Date.now()}`, title: title.trim(), start: `${day}T${start}`, end: end ? `${day}T${end}` : undefined, source: event?.source ?? "LifeOS", color, notes: notes.trim() || undefined }); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot" style={{ color, background: `${color}16` }}><CalendarDays size={16} /></div><div><strong>{isEditing ? "Edit calendar event" : "Add calendar event"}</strong><span>{isEditing ? "Change time, notes, color, or delete it." : "Put time on the board so your day stops being abstract."}</span></div><button type="button" onClick={close} aria-label="Close"><X size={18} /></button></div><label htmlFor="event-title">Event title</label><input id="event-title" autoFocus placeholder="What’s happening?" value={title} onChange={event => setTitle(event.target.value)} /><div className="calendar-form-grid"><label>Date<input type="date" value={day} onChange={event => setDay(event.target.value)} /></label><label>Start<input type="time" value={start} onChange={event => setStart(event.target.value)} /></label><label>End<input type="time" value={end} onChange={event => setEnd(event.target.value)} /></label></div><label htmlFor="event-notes">Notes / location</label><textarea id="event-notes" className="event-notes" placeholder="Location, link, reminder, whatever helps…" value={notes} onChange={event => setNotes(event.target.value)} /><label>Color</label><div className="calendar-color-picker">{["#665df6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b", "#cf625a"].map(option => <button type="button" aria-label={`Use color ${option}`} className={color === option ? "selected" : ""} key={option} style={{ background: option }} onClick={() => setColor(option)} />)}</div><div className="create-actions split-actions">{isEditing && remove && <button type="button" className="danger-text" onClick={() => remove(event!.id)}><Trash2 size={14} /> Delete</button>}<button type="button" onClick={close}>Cancel</button><button className="primary" disabled={!title.trim()} type="submit">{isEditing ? "Save event" : "Add event"}</button></div></motion.form></motion.div>;
 }
 
-function CalendarEventModal({ close, add, event, remove, defaultDate, onTaskAction, taskActionLabel }: { close: () => void; add: (event: CalendarEvent) => void; event?: CalendarEvent; remove?: (id: string) => void; defaultDate?: string | null; onTaskAction?: (event: CalendarEvent) => void; taskActionLabel?: string }) {
+function CalendarEventModal({ close, add, event, remove, defaultDate, tasks = [], linkedTaskId, onOpenLinkedTask, onRouteToTask }: { close: () => void; add: (event: CalendarEvent) => void; event?: CalendarEvent; remove?: (id: string) => void; defaultDate?: string | null; tasks?: Task[]; linkedTaskId?: number; onOpenLinkedTask?: (event: CalendarEvent) => void; onRouteToTask?: (event: CalendarEvent, taskId: number) => void }) {
   const now = new Date();
   const eventDay = event?.start.slice(0, 10) ?? defaultDate ?? toDateKey(now);
   const initialEndDay = event?.end?.slice(0, 10) ?? eventDay;
@@ -5080,10 +5080,20 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, onTaskActi
   const [notes, setNotes] = useState(event?.notes ?? "");
   const [color, setColor] = useState(event?.color ?? "#665df6");
   const [weekdaysOnly, setWeekdaysOnly] = useState(Boolean(event?.weekdaysOnly));
+  const [pickingTask, setPickingTask] = useState(false);
+  const [taskQuery, setTaskQuery] = useState("");
   const isEditing = Boolean(event);
   const datesValid = endDay >= day;
   const timesValid = endDay > day || !end || end > start;
   const rangeValid = datesValid && timesValid;
+  const routeCandidates = tasks
+    .filter(task => !task.done && !task.canceled)
+    .filter(task => {
+      if (!taskQuery.trim()) return true;
+      const q = taskQuery.trim().toLowerCase();
+      return task.title.toLowerCase().includes(q) || task.project.toLowerCase().includes(q);
+    })
+    .slice(0, 12);
   const changeStartDay = (value: string) => {
     setDay(value);
     if (endDay < value) setEndDay(value);
@@ -5124,12 +5134,47 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, onTaskActi
       <label htmlFor="event-notes">Notes / location</label>
       <textarea id="event-notes" className="event-notes" placeholder="Location, link, reminder, whatever helps…" value={notes} onChange={inputEvent => setNotes(inputEvent.target.value)} />
       <ColorSwatches value={color} onChange={setColor} />
+      {isEditing && event && pickingTask && onRouteToTask && (
+        <div className="event-task-picker" role="listbox" aria-label="Route to an existing task">
+          <div className="event-task-picker-head">
+            <strong>Route under an existing task</strong>
+            <button type="button" className="text-button" onClick={() => setPickingTask(false)}>Close</button>
+          </div>
+          <input
+            aria-label="Search tasks"
+            placeholder="Search tasks…"
+            value={taskQuery}
+            onChange={inputEvent => setTaskQuery(inputEvent.target.value)}
+          />
+          <div className="event-task-picker-list">
+            {routeCandidates.length ? routeCandidates.map(task => (
+              <button
+                type="button"
+                key={task.id}
+                role="option"
+                onClick={() => onRouteToTask(event, task.id)}
+              >
+                <i style={{ background: task.color }} />
+                <span>
+                  <strong>{task.title}</strong>
+                  <small>{task.project} · {formatDueDate(task.due)}</small>
+                </span>
+              </button>
+            )) : <p className="event-task-picker-empty">No open tasks match.</p>}
+          </div>
+        </div>
+      )}
       <div className="event-form-actions">
         <div className="event-danger-action">
           {isEditing && remove && <button type="button" className="danger-text" onClick={() => remove(event!.id)}><Trash2 size={14} /> Delete event</button>}
         </div>
         <div className="event-main-actions">
-          {isEditing && event && onTaskAction && <button type="button" className="event-task-action" onClick={() => onTaskAction(event)}><ListTodo size={14} /> {taskActionLabel ?? "Create task"}</button>}
+          {isEditing && event && linkedTaskId != null && onOpenLinkedTask && (
+            <button type="button" className="event-task-action" onClick={() => onOpenLinkedTask(event)}><ListTodo size={14} /> Open task</button>
+          )}
+          {isEditing && event && linkedTaskId == null && onRouteToTask && (
+            <button type="button" className="event-task-action" onClick={() => setPickingTask(value => !value)}><ListTodo size={14} /> Route to Task</button>
+          )}
           <span className="event-action-divider" aria-hidden="true" />
           <button type="button" className="event-cancel-action" onClick={close}>Cancel</button>
           <button className="primary" disabled={!title.trim() || !rangeValid} type="submit">{isEditing ? "Save event" : "Add event"}</button>

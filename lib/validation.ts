@@ -100,6 +100,7 @@ export const SettingsSchema = z.object({
   enableSchoolOS: z.boolean().optional(),
   enableWorkOS: z.boolean().optional(),
   enableStudyAbroad: z.boolean().optional(),
+  enableTreasuryOS: z.boolean().optional(),
   enableMasterOS: z.boolean().optional(),
   preferredName: z.string().optional(),
   defaultCalendarView: z.enum(['upcoming', 'month', 'day']).optional(),
