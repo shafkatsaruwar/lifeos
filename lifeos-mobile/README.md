@@ -17,7 +17,8 @@ Always start from **`lifeos-mobile/`** (not the repo root — that Next.js `app/
 ```bash
 cd lifeos-mobile
 cp .env.example .env
-# Required: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+# Optional: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID (direct OAuth). Without it, Google
+# still works via the production /shell-auth bridge.
 # Firebase defaults are baked in (same project as web). Override only if needed.
 rm -rf node_modules .expo
 npm install
