@@ -171,7 +171,9 @@ function AppleSignInButton() {
 export function SignIn() {
   const dark = useColorScheme() === "dark";
   const theme = dark ? DARK : LIGHT;
-  const googleConfigured = Boolean(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim());
+  // Optional: speeds up OAuth when set. Without it, /shell-auth still signs in via
+  // the production LifeOS bridge (Firebase redirect or web NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID).
+  const googleClientIdInBuild = Boolean(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim());
 
   return (
     <SafeAreaView style={[styles.signIn, { backgroundColor: "#111115" }]}>
@@ -182,7 +184,7 @@ export function SignIn() {
         <Text style={styles.signInCopy}>
           Your life, in focus. Native iPhone & iPad app — same private cloud data as the web.
         </Text>
-        {firebaseConfigured && googleConfigured ? (
+        {firebaseConfigured ? (
           <GoogleSignInButton />
         ) : (
           <View style={[styles.signInButton, { opacity: 0.45 }]}>
@@ -196,10 +198,10 @@ export function SignIn() {
             Add the Firebase values to your local .env file first.
           </Text>
         ) : null}
-        {firebaseConfigured && !googleConfigured ? (
+        {__DEV__ && firebaseConfigured && !googleClientIdInBuild ? (
           <Text style={[styles.setupText, { color: theme.muted }]}>
-            Firebase is connected. Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to enable Google sign-in. Apple Sign In still
-            works when enabled in Firebase Console.
+            Dev tip: set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for direct Google OAuth. Without it, sign-in still uses the
+            LifeOS /shell-auth bridge.
           </Text>
         ) : null}
       </View>
