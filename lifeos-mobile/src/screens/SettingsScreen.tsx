@@ -35,6 +35,21 @@ export function SettingsScreen() {
   const themeMode = workspace.settings.themeMode ?? "system";
   const accent = workspace.settings.accent?.trim() || theme.accent;
   const synapseEventCount = workspace.calendar.filter((event) => event.id.startsWith("synapse-")).length;
+  const signedInWithApple = Boolean(user?.providerData?.some((p) => p.providerId === "apple.com"));
+  const signedInWithGoogle = Boolean(user?.providerData?.some((p) => p.providerId === "google.com"));
+  const accountLabel = signedInWithApple
+    ? "Signed in with Apple"
+    : signedInWithGoogle
+      ? "Signed in with Google"
+      : user?.email
+        ? `Signed in as ${user.email}`
+        : "Signed in";
+  const looksLikeEmptyAppleAccount =
+    signedInWithApple &&
+    !signedInWithGoogle &&
+    workspace.tasks.length === 0 &&
+    workspace.projects.length === 0 &&
+    workspace.calendar.length === 0;
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -541,9 +556,15 @@ export function SettingsScreen() {
         <Card>
           <Text style={[styles.cardLabel, { color: theme.text }]}>Data</Text>
           <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 18 }}>
-            Your mobile app reads and updates the exact same private Firebase data as LifeOS on the web (
+            {accountLabel}. Your mobile app reads and updates the exact same private Firebase data as LifeOS on the web (
             <Text style={{ color: theme.accent }}>lifeos-mu-three.vercel.app</Text>).
           </Text>
+          {looksLikeEmptyAppleAccount ? (
+            <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 18, marginTop: 10 }}>
+              This Apple account looks empty. If you already use LifeOS with Google on the web, sign out and tap Continue
+              with Google to open that workspace — Apple and Google are separate accounts.
+            </Text>
+          ) : null}
           <View style={[styles.row, { marginTop: 14 }]}>
             <ActionButton label="Sync now" icon="refresh-cw" quiet onPress={sync} />
             <ActionButton label="Sign out" icon="log-out" quiet danger onPress={() => signOut(auth)} />
