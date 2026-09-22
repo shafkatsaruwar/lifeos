@@ -7,9 +7,11 @@ import {
   MoreHorizontal, PieChart, Plus, Snowflake, Sparkles, Sun, Target, Upload, UserRound, X, Zap,
 } from "lucide-react";
 import { extractTextFromFile, parseSyllabusText, type SyllabusItem } from "../../lib/syllabusImport";
+import { SchoolGradesPanel } from "./SchoolGrades";
+import type { GradeBand, GradeCategory } from "../../lib/grades";
 import "./SchoolPlanner.css";
 
-export type SchoolView = "home" | "timetable" | "assignments" | "due" | "more";
+export type SchoolView = "home" | "timetable" | "assignments" | "due" | "more" | "grades";
 export type SchoolHubKey = "topics" | "professors" | "goals";
 export type SchoolHubState = {
   profile: { major?: string; minor?: string; classOf?: string };
@@ -27,7 +29,10 @@ type DashboardTask = {
   priority: string;
   classId?: string;
   academicType?: string;
+  gradeCategoryId?: string;
   gradeWeight?: number;
+  pointsEarned?: number;
+  pointsPossible?: number;
   done?: boolean;
   canceled?: boolean;
   status?: string;
@@ -44,6 +49,10 @@ type DashboardClass = {
   meetingStart?: string;
   meetingEnd?: string;
   location?: string;
+  credits?: number;
+  gradingScale?: GradeBand[];
+  gradeCategories?: GradeCategory[];
+  gradingMode?: "categories" | "items";
 };
 type DashboardNote = { id: string; title: string; body: string; classId?: string; updatedAt: string };
 type DashboardEvent = { id: string; title: string; start: string; end?: string; color: string; notes?: string };
@@ -549,6 +558,8 @@ export function SchoolDashboard({
   onImportSyllabus,
   enableMasterOS = true,
   onOpenMasterOS,
+  onUpdateClass,
+  onUpdateTask,
 }: {
   tasks: DashboardTask[];
   classes: DashboardClass[];
@@ -579,11 +590,13 @@ export function SchoolDashboard({
   onAddCalendarEvent?: (payload: SchoolCalendarPayload) => void;
   onImportSyllabus?: (payload: SyllabusImportPayload) => void;
   onUpdateTaskStatus?: (id: number, status: "Not started" | "In progress" | "Blocked" | "Done") => void;
+  onUpdateClass?: (id: string, updates: Partial<Pick<DashboardClass, "gradingScale" | "gradeCategories" | "gradingMode">>) => void;
+  onUpdateTask?: (id: number, updates: Partial<Pick<DashboardTask, "pointsEarned" | "pointsPossible" | "gradeWeight" | "gradeCategoryId">>) => void;
   enableMasterOS?: boolean;
   onOpenMasterOS?: () => void;
 }) {
   const normalizeView = (value?: string): SchoolView => {
-    if (value === "timetable" || value === "assignments" || value === "due" || value === "more" || value === "home") return value;
+    if (value === "timetable" || value === "assignments" || value === "due" || value === "more" || value === "home" || value === "grades") return value;
     if (value === "courses" || value === "board" || value === "activity" || value === "notes" || value === "tasks" || value === "dashboard") return "home";
     return "home";
   };
@@ -654,7 +667,7 @@ export function SchoolDashboard({
     setSheet("syllabus");
   };
 
-  const navView: Exclude<SchoolView, "due"> = schoolView === "due" ? "home" : schoolView;
+  const navView: Exclude<SchoolView, "due" | "grades"> = schoolView === "due" || schoolView === "grades" ? "more" : schoolView;
 
   const body = (() => {
     if (schoolView === "timetable") {
@@ -795,6 +808,20 @@ export function SchoolDashboard({
       );
     }
 
+    if (schoolView === "grades") {
+      return (
+        <SchoolGradesPanel
+          classes={courses}
+          tasks={allSchoolTasks}
+          onBack={() => setSchoolView("more")}
+          onOpenTask={onOpenTask}
+          onUpdateClass={(id, updates) => onUpdateClass?.(id, updates)}
+          onUpdateTask={(id, updates) => onUpdateTask?.(id, updates)}
+          onNewAcademic={onNewAcademic}
+        />
+      );
+    }
+
     if (schoolView === "due") {
       return (
         <div className="school-tab-panel" data-testid="school-due">
@@ -848,7 +875,8 @@ export function SchoolDashboard({
                       else setSheet("capture");
                     }
                     else if (item.key === "exams") setSchoolView("assignments");
-                    else if (item.key === "grades" || item.key === "progress") setSchoolView("due");
+                    else if (item.key === "grades") setSchoolView("grades");
+                    else if (item.key === "progress") setSchoolView("due");
                     else onOpenProfile();
                   }}
                 >
@@ -1073,6 +1101,7 @@ export function SchoolDashboard({
                       else setSheet("capture");
                     }
                     else if (item.key === "exams") setSchoolView("assignments");
+                    else if (item.key === "grades") setSchoolView("grades");
                     else setSchoolView("more");
                   }}
                 >
@@ -1134,6 +1163,11 @@ export function SchoolDashboard({
           {schoolView === "due" && (
             <button type="button" role="tab" aria-selected className="selected" onClick={() => setSchoolView("due")}>
               Due
+            </button>
+          )}
+          {schoolView === "grades" && (
+            <button type="button" role="tab" aria-selected className="selected" onClick={() => setSchoolView("grades")}>
+              Grades
             </button>
           )}
         </div>

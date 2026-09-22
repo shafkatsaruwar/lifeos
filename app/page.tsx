@@ -99,7 +99,7 @@ type EnergyLevel = "Low" | "Medium" | "High";
 type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
 type AcademicItemType = "Assignment" | "Project" | "Exam" | "Quiz" | "Lab" | "Reading" | "Discussion";
 type TaskProperty = { id: string; name: string; value: string };
-type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; status?: TaskStatus; notes?: string; handoffNote?: string; nextAction?: string; followUpDate?: string; recurringDays?: number; completedAt?: string; customProperties?: TaskProperty[]; checklist?: string[]; checklistProgress?: boolean[]; focusRemainingSeconds?: number; focusSessionStarted?: boolean; focusSessionRunning?: boolean; focusHalfwayPrompted?: boolean; focusUpdatedAt?: string; classId?: string; academicType?: AcademicItemType; gradeWeight?: number; pointsEarned?: number; pointsPossible?: number; submission?: string; calendarEventId?: string; done?: boolean; canceled?: boolean };
+type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; status?: TaskStatus; notes?: string; handoffNote?: string; nextAction?: string; followUpDate?: string; recurringDays?: number; completedAt?: string; customProperties?: TaskProperty[]; checklist?: string[]; checklistProgress?: boolean[]; focusRemainingSeconds?: number; focusSessionStarted?: boolean; focusSessionRunning?: boolean; focusHalfwayPrompted?: boolean; focusUpdatedAt?: string; classId?: string; academicType?: AcademicItemType; gradeCategoryId?: string; gradeWeight?: number; pointsEarned?: number; pointsPossible?: number; submission?: string; calendarEventId?: string; done?: boolean; canceled?: boolean };
 type FocusSessionUpdate = { remainingSeconds: number; hasStarted: boolean; isRunning: boolean; halfwayPrompted: boolean; focusMinutes?: number; checkpoint?: boolean };
 type ProjectKind = "maintenance" | "finishable";
 type SpaceKind = "class" | "project" | "maintenance";
@@ -107,7 +107,9 @@ type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | 
 type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string; classId?: string; projectName?: string; storagePath?: string; storage?: "cloud" | "local" };
 type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind };
 type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work" | "Synapse"; color: string; notes?: string; location?: string; weekdaysOnly?: boolean };
-type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterStart?: string; semesterEnd?: string; archived?: boolean };
+type GradeBand = { letter: string; min: number };
+type GradeCategory = { id: string; name: string; weight: number };
+type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterStart?: string; semesterEnd?: string; archived?: boolean; gradingScale?: GradeBand[]; gradeCategories?: GradeCategory[]; gradingMode?: "categories" | "items" };
 type Note = { id: string; title: string; body: string; classId?: string; projectName?: string; template?: "blank" | "lined" | "dotted" | "cornell" | "meeting"; /** Handwriting from mobile (Apple PencilKit PKDrawing base64, or legacy strokes); preserved on web updates */ ink?: { version?: 1 | 2; format?: "pencilkit"; data?: string; pencilKitData?: string; strokes?: Array<{ id: string; color: string; width: number; tool: "pen" | "highlighter" | "eraser"; points: Array<{ x: number; y: number; t?: number }> }>; height?: number; updatedAt?: number }; updatedAt: string };
 type AmbientActivity = { title: string; startedAt: string; note?: string; spaceName?: string; spaceColor?: string };
 type AmbientDraft = { title: string; spaceName?: string; sourceLabel?: string } | null;
@@ -437,6 +439,7 @@ const normalizeTask = (task: Partial<Task>): Task => ({
     : [],
   classId: typeof task.classId === "string" ? task.classId : undefined,
   academicType: task.academicType,
+  gradeCategoryId: typeof task.gradeCategoryId === "string" ? task.gradeCategoryId : undefined,
   gradeWeight: typeof task.gradeWeight === "number" ? task.gradeWeight : undefined,
   pointsEarned: typeof task.pointsEarned === "number" && Number.isFinite(task.pointsEarned) ? Math.max(0, task.pointsEarned) : undefined,
   pointsPossible: typeof task.pointsPossible === "number" && Number.isFinite(task.pointsPossible) ? Math.max(0, task.pointsPossible) : undefined,
@@ -466,6 +469,17 @@ const normalizeClass = (record: Partial<ClassRecord>): ClassRecord => ({
   semesterStart: /^\d{4}-\d{2}-\d{2}$/.test(record.semesterStart ?? "") ? record.semesterStart : undefined,
   semesterEnd: /^\d{4}-\d{2}-\d{2}$/.test(record.semesterEnd ?? "") ? record.semesterEnd : undefined,
   archived: Boolean(record.archived),
+  gradingScale: Array.isArray(record.gradingScale)
+    ? record.gradingScale
+        .filter((band) => band && typeof band.letter === "string" && Number.isFinite(band.min))
+        .map((band) => ({ letter: String(band.letter).trim() || "?", min: Math.max(0, Math.min(100, Number(band.min))) }))
+    : undefined,
+  gradeCategories: Array.isArray(record.gradeCategories)
+    ? record.gradeCategories
+        .filter((cat) => cat && typeof cat.id === "string" && typeof cat.name === "string" && Number.isFinite(cat.weight))
+        .map((cat) => ({ id: cat.id, name: cat.name.trim() || "Category", weight: Math.max(0, Math.min(100, Number(cat.weight))) }))
+    : undefined,
+  gradingMode: record.gradingMode === "items" ? "items" : record.gradingMode === "categories" ? "categories" : undefined,
 });
 const isClassArchived = (record: ClassRecord, today = toDateKey(new Date())) => Boolean(record.archived || (record.semesterEnd && record.semesterEnd < today));
 const getTaskStatus = (task: Task): TaskStatus => task.status ?? (task.canceled ? "Canceled" : task.done ? "Done" : "Not started");
@@ -1814,17 +1828,23 @@ export default function LifeOS() {
     openProjectSpace(name);
   };
   const addClass = (classRecord: Omit<ClassRecord, "id">) => {
-    const next = normalizeClass({ ...classRecord, id: `${Date.now()}-${Math.random().toString(36).slice(2)}` });
+    const next = normalizeClass({
+      ...classRecord,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      gradingMode: classRecord.gradingMode ?? "categories",
+    });
     setClasses(items => [...items, next]);
     setSpaceComposer(null);
     openClassSpace(next.id);
     flash(`${next.code} class created`);
   };
-  const updateClass = (id: string, updates: Omit<ClassRecord, "id">) => {
+  const updateClass = (id: string, updates: Partial<Omit<ClassRecord, "id">>, opts?: { quiet?: boolean }) => {
     setClasses(items => items.map(item => item.id === id ? normalizeClass({ ...item, ...updates, id }) : item));
-    setTasks(items => items.map(task => task.classId === id ? { ...task, color: updates.color } : task));
-    setEditingClassId(null);
-    flash("Class details saved");
+    if (updates.color) setTasks(items => items.map(task => task.classId === id ? { ...task, color: updates.color as string } : task));
+    if (!opts?.quiet) {
+      setEditingClassId(null);
+      flash("Class details saved");
+    }
   };
   const deleteClass = (id: string) => {
     if (!window.confirm("Delete this class folder? Assignments and notes will be kept, but unlinked from the class.")) return;
@@ -2414,7 +2434,7 @@ export default function LifeOS() {
               if (nextEvents.length) setCalendarEvents((current) => [...current, ...nextEvents]);
               const dated = nextEvents.length;
               flash(dated ? `Imported ${items.length} tasks · ${dated} on calendar` : `Imported ${items.length} tasks`);
-            }} appearanceLabel={dark ? "Dark" : "Light"} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} enableMasterOS={settingsState.enableMasterOS !== false} onOpenMasterOS={() => go("Mastery")} />}
+            }} appearanceLabel={dark ? "Dark" : "Light"} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} onUpdateClass={(id, updates) => updateClass(id, updates, { quiet: true })} onUpdateTask={(id, updates) => updateTaskDetails(id, updates)} enableMasterOS={settingsState.enableMasterOS !== false} onOpenMasterOS={() => go("Mastery")} />}
             {view === "Work" && <WorkDashboard workHub={workHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onTimesheetFlash={flash} weekStartsMonday={settingsState.weekStartsMonday} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => setWorkView("projects")} onProjectDeleted={(name) => {
               setProjectItems(items => items.filter(project => project.name !== name));
               setTasks(items => items.map(task => task.project === name ? { ...task, project: "Inbox", color: "#625af6" } : task));
@@ -3589,7 +3609,7 @@ function AcademicItemModal({ classRecord, close, add, defaults }: { classRecord:
   const [submission, setSubmission] = useState("");
   const [titleError, setTitleError] = useState("");
   const [pointsError, setPointsError] = useState("");
-  const isAssessment = type === "Quiz" || type === "Exam";
+  const isAssessment = true; // points optional on any coursework for grades tracking
   const possiblePoints = Number(pointsPossible);
   const earnedPoints = Number(pointsEarned);
   const useCurrentTime = () => {
