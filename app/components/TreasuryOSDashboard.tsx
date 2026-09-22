@@ -1049,7 +1049,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
               <Settings2 size={17} />
               <h2><EditableText editing={copyEditing} value={copy.categoriesTitle} onChange={v => setCopy("categoriesTitle", v)} ariaLabel="Categories section title" /></h2>
             </div>
-            <button type="button" onClick={addCategory}><Plus size={14} /> Add category</button>
+            <button type="button" onClick={() => addCategory()}><Plus size={14} /> Add category</button>
           </header>
           <div className="os-module-body treasury-pad">
             <p className="treasury-muted" style={{ marginBottom: 14 }}>
