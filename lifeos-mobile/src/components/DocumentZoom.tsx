@@ -3,9 +3,10 @@ import { StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
-const MIN_SCALE = 0.5;
+const MIN_SCALE = 0.9;
 const MAX_SCALE = 2.5;
-const COMFORT_ZOOM = 1.6;
+/** Double-tap / chip zoom-in target — stays readable, not extreme. */
+const COMFORT_ZOOM = 1.35;
 
 type Props = {
   children: ReactNode;

@@ -766,6 +766,7 @@ export function PageCanvasScreen() {
             inkColor={inkColor}
             inkWidth={inkWidth}
             zoomScale={zoomScale}
+            showFrameBorder={false}
             onInkChange={(ink) => {
               void persistPageById(item.id, { ink });
             }}
@@ -855,8 +856,8 @@ export function PageCanvasScreen() {
               </Text>
             </Pressable>
             <Pressable
-              accessibilityLabel={zoomScale > 1.01 ? "Reset zoom to 100%" : "Zoom to 160%"}
-              onPress={() => setZoomScale((z) => (z > 1.05 ? 1 : 1.6))}
+              accessibilityLabel={zoomScale > 1.01 ? "Reset zoom to 100%" : "Zoom to 135%"}
+              onPress={() => setZoomScale((z) => (z > 1.05 ? 1 : 1.35))}
               style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
             >
               <Text style={[styles.viewChipText, { color: theme.muted }]}>
@@ -889,6 +890,7 @@ export function PageCanvasScreen() {
         </View>
       </View>
 
+      <View style={styles.toolDock}>
       <View
         style={[
           styles.toolRail,
@@ -1091,6 +1093,7 @@ export function PageCanvasScreen() {
           </Pressable>
         </ScrollView>
       ) : null}
+      </View>
 
       <View style={[styles.stage, isWide && styles.stageWide]}>
         <View
@@ -1103,6 +1106,7 @@ export function PageCanvasScreen() {
             }
           }}
         >
+          <View style={styles.pageViewport}>
           <DocumentZoom
             scale={zoomScale}
             onScaleChange={setZoomScale}
@@ -1171,6 +1175,7 @@ export function PageCanvasScreen() {
                   inkColor={inkColor}
                   inkWidth={inkWidth}
                   zoomScale={zoomScale}
+                  showFrameBorder={false}
                   onInkChange={onInkChangeLive}
                   onSelect={(id) => {
                     setSelectedId(id);
@@ -1188,6 +1193,7 @@ export function PageCanvasScreen() {
               </View>
             )}
           </DocumentZoom>
+          </View>
           {!isWide ? (
             <Text style={[styles.hint, { color: theme.muted }]}>
               {viewMode === "seamless"
@@ -1454,13 +1460,21 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   viewChipText: { fontSize: 10, fontWeight: "800" },
+  toolDock: {
+    alignSelf: "flex-end",
+    alignItems: "flex-end",
+    marginRight: 12,
+    marginBottom: 6,
+    maxWidth: "100%",
+    zIndex: 6,
+  },
   toolRail: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "center",
-    marginHorizontal: 12,
-    marginBottom: 6,
+    justifyContent: "flex-end",
+    alignSelf: "flex-end",
+    marginHorizontal: 0,
+    marginBottom: 0,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 22,
     paddingHorizontal: 10,
@@ -1473,12 +1487,21 @@ const styles = StyleSheet.create({
   },
   toolBtn: { width: 40, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   toolDivider: { width: StyleSheet.hairlineWidth, height: 22, marginHorizontal: 4 },
-  contextBar: { maxHeight: 46, marginBottom: 4, alignSelf: "center" },
-  paperRow: { paddingHorizontal: 12, gap: 8, alignItems: "center", justifyContent: "center" },
+  contextBar: { maxHeight: 46, marginBottom: 4, alignSelf: "flex-end" },
+  paperRow: { paddingHorizontal: 4, gap: 8, alignItems: "center", justifyContent: "flex-end" },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   templateHint: { fontSize: 11, fontWeight: "800", marginRight: 4, alignSelf: "center" },
   stage: { flex: 1, minHeight: 0, paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
   stageWide: { flexDirection: "row", paddingHorizontal: 8, paddingBottom: 0, gap: 0 },
+  pageViewport: {
+    flex: 1,
+    minHeight: 0,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "rgba(98,90,246,0.28)",
+    overflow: "hidden",
+    backgroundColor: "rgba(241,245,249,0.65)",
+  },
   pageNavFloat: {
     position: "absolute",
     left: 4,

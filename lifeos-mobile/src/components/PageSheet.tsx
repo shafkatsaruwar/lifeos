@@ -27,6 +27,8 @@ type Props = {
   drawingPolicy?: DrawingPolicy;
   /** Document zoom scale — overlay drag deltas are corrected by 1/zoom. */
   zoomScale?: number;
+  /** When false, parent owns the purple page frame (zoom stays inside it). */
+  showFrameBorder?: boolean;
   inkTool?: InkToolKind;
   inkColor?: string;
   inkWidth?: number;
@@ -53,6 +55,7 @@ export const PageSheet = memo(function PageSheet({
   pencilRef,
   drawingPolicy = "pencilOnly",
   zoomScale = 1,
+  showFrameBorder = true,
   inkTool = "pen",
   inkColor = "202124",
   inkWidth = 5.5,
@@ -82,8 +85,13 @@ export const PageSheet = memo(function PageSheet({
           width,
           height,
           opacity: focusAnim,
-          borderColor: liveInk ? "rgba(98,90,246,0.28)" : "rgba(15,23,42,0.12)",
-          borderWidth: liveInk ? 1.5 : StyleSheet.hairlineWidth,
+          borderColor: showFrameBorder
+            ? liveInk
+              ? "rgba(98,90,246,0.28)"
+              : "rgba(15,23,42,0.12)"
+            : "transparent",
+          borderWidth: showFrameBorder ? (liveInk ? 1.5 : StyleSheet.hairlineWidth) : 0,
+          borderRadius: showFrameBorder ? 14 : 0,
         },
       ]}
     >
@@ -131,7 +139,6 @@ export const PageSheet = memo(function PageSheet({
 
 const styles = StyleSheet.create({
   sheet: {
-    borderRadius: 14,
     overflow: "hidden",
     backgroundColor: PAGE_SHEET_COLOR,
   },

@@ -2,6 +2,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { useMemo, useRef, useState } from "react";
 import {
   PanResponder,
+  Platform,
   Pressable,
   StyleSheet,
   Switch,
@@ -118,8 +119,9 @@ export function InkToolTray({
   if (mode === "eraser") {
     return (
       <View style={styles.wrap}>
-        <View style={styles.eraserCard}>
-          <Text style={styles.eraserTitle}>Eraser</Text>
+        <View style={styles.popoverCard}>
+          <View style={styles.caret} />
+          <Text style={styles.popoverTitle}>Eraser</Text>
           <View style={styles.eraserSizes}>
             {ERASER_SIZES.map((size) => {
               const on = eraserSizeKey === size.key;
@@ -133,7 +135,7 @@ export function InkToolTray({
                   }}
                   style={[styles.eraserSizeHit, on && styles.eraserSizeHitOn]}
                 >
-                  {size.auto ? (
+                  {size.key === "auto" ? (
                     <View style={[styles.autoDot, on && styles.autoDotOn]}>
                       <Text style={[styles.autoText, on && styles.autoTextOn]}>AUTO</Text>
                     </View>
@@ -143,7 +145,7 @@ export function InkToolTray({
                         width: size.dot,
                         height: size.dot,
                         borderRadius: size.dot,
-                        backgroundColor: on ? "#94A3B8" : "#CBD5E1",
+                        backgroundColor: on ? "#0F172A" : "#CBD5E1",
                       }}
                     />
                   )}
@@ -161,7 +163,7 @@ export function InkToolTray({
                 const size = ERASER_SIZES.find((s) => s.key === eraserSizeKey) ?? ERASER_SIZES[2];
                 onSelectEraser(value ? "vectorEraser" : "eraser", size.width);
               }}
-              trackColor={{ false: "#D1D5DB", true: "#5EEAD4" }}
+              trackColor={{ false: "#D1D5DB", true: "#34C759" }}
               thumbColor="#FFFFFF"
             />
           </View>
@@ -280,7 +282,9 @@ export function InkToolTray({
       </View>
 
       {editorSlot != null ? (
-        <View style={styles.widthEditor}>
+        <View style={styles.popoverCardNarrow}>
+          <View style={styles.caret} />
+          <Text style={styles.popoverTitle}>Stroke</Text>
           <View style={styles.presetRow}>
             {tipPresets.map((presetWidth, index) => {
               const slot = index as PresetIndex;
@@ -363,25 +367,79 @@ function WidthSlider({ value, onChange }: { value: number; onChange: (n: number)
 
 const styles = StyleSheet.create({
   wrap: {
-    alignItems: "center",
-    marginBottom: 8,
-    paddingHorizontal: 12,
+    alignItems: "flex-end",
+    marginBottom: 0,
+    marginTop: 8,
+    paddingHorizontal: 0,
     gap: 8,
+  },
+  caret: {
+    position: "absolute",
+    top: -7,
+    alignSelf: "center",
+    width: 14,
+    height: 14,
+    backgroundColor: "#FFFFFF",
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15,23,42,0.08)",
+    transform: [{ rotate: "45deg" }],
+  },
+  popoverCard: {
+    width: 300,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15,23,42,0.08)",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 10,
+    gap: 14,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+  },
+  popoverCardNarrow: {
+    width: 280,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15,23,42,0.08)",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14,
+    paddingTop: 18,
+    paddingBottom: 12,
+    gap: 12,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+  },
+  popoverTitle: {
+    textAlign: "center",
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0F172A",
+    fontStyle: "italic",
+    fontFamily: Platform.OS === "ios" ? "Iowan Old Style" : undefined,
+    marginBottom: 2,
   },
   tray: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(15,23,42,0.08)",
-    backgroundColor: "rgba(245,248,250,0.94)",
-    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
     paddingHorizontal: 10,
     paddingVertical: 6,
     gap: 8,
     shadowColor: "#0F172A",
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
   },
   group: { flexDirection: "row", alignItems: "center", gap: 6 },
   divider: {
@@ -398,7 +456,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tipBtnOn: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "rgba(241,245,249,0.95)",
     shadowColor: "#0F172A",
     shadowOpacity: 0.08,
     shadowRadius: 4,
@@ -433,26 +491,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   widthHitOn: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "rgba(241,245,249,0.95)",
     shadowColor: "#0F172A",
     shadowOpacity: 0.1,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 1 },
-  },
-  widthEditor: {
-    width: 280,
-    borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(15,23,42,0.08)",
-    backgroundColor: "rgba(255,255,255,0.96)",
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 12,
-    gap: 12,
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.14,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 6 },
   },
   presetRow: { flexDirection: "row", justifyContent: "space-between", gap: 10 },
   presetCircle: {
@@ -514,28 +557,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   valueTagText: { fontSize: 12, fontWeight: "800", color: "#111827" },
-  eraserCard: {
-    width: 300,
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(15,23,42,0.08)",
-    backgroundColor: "rgba(248,250,252,0.97)",
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 10,
-    gap: 14,
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.14,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 6 },
-  },
-  eraserTitle: {
-    textAlign: "center",
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#0F172A",
-    fontStyle: "italic",
-  },
   eraserSizes: {
     flexDirection: "row",
     alignItems: "center",
