@@ -600,7 +600,17 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .treasury-live-totals span{color:var(--muted);font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
 .treasury-live-totals b{font-size:16px;letter-spacing:-.02em}
 .treasury-live-totals b.bad{color:#cf625a}
-.treasury-money-input{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:58px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--canvas)}
+.treasury-map-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.treasury-map-empty{grid-column:1/-1;display:grid;place-items:center;gap:10px;padding:28px 16px;border:1px dashed var(--line);border-radius:10px;background:color-mix(in srgb,var(--canvas) 70%,transparent);text-align:center;color:var(--muted);font-size:12px}
+.treasury-money-controls{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.treasury-money-edit-label{display:flex;align-items:center;gap:6px;min-width:0}
+.treasury-map-emoji{width:34px;height:30px;border:1px solid var(--line);border-radius:7px;background:var(--panel);text-align:center;font-size:15px;padding:0;outline:0}
+.treasury-map-name{min-width:0;flex:1;height:30px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);padding:0 8px;font-size:12px;font-weight:650;outline:0}
+.treasury-money-input.editable-field{gap:10px}
+.treasury-money-input.editable-field .treasury-money-meta{flex:1;min-width:0}
+.treasury-money-input.delete-pending{border-color:color-mix(in srgb,#cf625a 45%,var(--line));background:color-mix(in srgb,#cf625a 6%,var(--canvas))}
+.treasury-icon-button.danger.confirm{min-width:40px;color:#cf625a;border-color:color-mix(in srgb,#cf625a 45%,var(--line));background:color-mix(in srgb,#cf625a 12%,var(--panel));font-size:10px;font-weight:750}
+.treasury-delete-confirm{line-height:1}
 .treasury-money-meta{min-width:0;flex:1;display:grid;gap:6px}
 .treasury-money-label{font-size:11px;font-weight:700;color:var(--ink)}
 .treasury-target-field{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:9px;font-weight:600}
