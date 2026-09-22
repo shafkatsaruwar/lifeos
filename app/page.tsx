@@ -3691,11 +3691,11 @@ function LegacyCalendarView({ events, weekStartsMonday, onNew, onImport, onEdit 
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 1440) * 100;
   const eventBlockStyle = (event: CalendarEvent) => {
     const { startMinutes, endMinutes } = getEventDayBlockMinutes(event, selected);
-    const durationMinutes = Math.max(20, endMinutes - startMinutes);
+    const durationMinutes = Math.max(5, endMinutes - startMinutes);
     return {
       top: `${(startMinutes / 1440) * 100}%`,
-      minHeight: 34,
-      height: `${Math.max(2.5, (durationMinutes / 1440) * 100)}%`,
+      minHeight: 12,
+      height: `${(durationMinutes / 1440) * 100}%`,
       borderColor: event.color,
       background: `linear-gradient(135deg, ${event.color}22, var(--panel))`,
     } as React.CSSProperties;
@@ -3752,11 +3752,11 @@ function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 1440) * 100;
   const eventBlockStyle = (event: CalendarEvent) => {
     const { startMinutes, endMinutes } = getEventDayBlockMinutes(event, selected);
-    const durationMinutes = Math.max(20, endMinutes - startMinutes);
+    const durationMinutes = Math.max(5, endMinutes - startMinutes);
     return {
       top: `${(startMinutes / 1440) * 100}%`,
-      minHeight: 34,
-      height: `${Math.max(2.5, (durationMinutes / 1440) * 100)}%`,
+      minHeight: 12,
+      height: `${(durationMinutes / 1440) * 100}%`,
       borderColor: event.color,
       background: `linear-gradient(135deg, ${event.color}22, var(--panel))`,
     } as React.CSSProperties;
