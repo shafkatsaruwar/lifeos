@@ -4,9 +4,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef } from "react";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OnboardingFlow } from "../components/OnboardingFlow";
-import { FloatingTabBar, FLOATING_TAB_BAR_HEIGHT } from "../components/FloatingTabBar";
+import { FloatingTabBar } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { shouldPersistOnboardingComplete, shouldShowOnboarding } from "../lib/onboardingGate";
 import { useLayout } from "../lib/layout";
@@ -202,7 +201,6 @@ function navigateAfterOnboarding(dest: OnboardingDestination) {
 
 export function RootNavigator() {
   const { theme, dark, workspace, updateSettings, onboardingReplay, clearOnboardingReplay } = useLifeOS();
-  const insets = useSafeAreaInsets();
   const { isTablet } = useLayout();
   const pendingDest = useRef<OnboardingDestination | null>(null);
   const migrated = useRef(false);
@@ -274,11 +272,10 @@ export function RootNavigator() {
             tabBarShowLabel: true,
             tabBarHideOnKeyboard: true,
             tabBarStyle: {
-              position: "absolute",
-              backgroundColor: "transparent",
+              backgroundColor: theme.bg,
               borderTopWidth: 0,
               elevation: 0,
-              height: FLOATING_TAB_BAR_HEIGHT + insets.bottom,
+              shadowOpacity: 0,
             },
             tabBarActiveTintColor: theme.accent,
             tabBarInactiveTintColor: "#8E8E93",

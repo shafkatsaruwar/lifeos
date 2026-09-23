@@ -136,7 +136,16 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const activeTint = tabTint(activeRoute, theme.accent, workspace.settings);
 
   return (
-    <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+    <View
+      style={[
+        styles.wrap,
+        {
+          backgroundColor: theme.bg,
+          paddingBottom: Math.max(insets.bottom, 10),
+          borderTopColor: theme.border,
+        },
+      ]}
+    >
       <GestureDetector gesture={pan}>
         <View
           style={[
@@ -205,22 +214,19 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
 export const FLOATING_TAB_BAR_HEIGHT = PILL_H + 22;
 
 /**
- * Extra scroll padding so the last controls clear the floating tab pill + home indicator.
- * Matches the bar wrap: pill height + safe-area paddingBottom + breathing room.
+ * Bottom inset for scroll content. The tab bar is in-layout (not an overlay),
+ * so screens only need a little breathing room above it.
  */
-export function useFloatingTabBarContentPadding(extra = 32) {
-  const insets = useSafeAreaInsets();
-  return PILL_H + Math.max(insets.bottom, 10) + extra;
+export function useFloatingTabBarContentPadding(extra = 16) {
+  return Math.max(8, extra);
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
     alignItems: "center",
     paddingHorizontal: 14,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   pill: {
     height: PILL_H,
