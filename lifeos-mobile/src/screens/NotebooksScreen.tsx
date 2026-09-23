@@ -7,6 +7,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -15,20 +16,24 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { CreateNoteModal } from "../components/CreateNoteModal";
+import { EditNotebookModal } from "../components/EditNotebookModal";
+import { NotebookActionsSheet } from "../components/NotebookActionsSheet";
 import { NotebookCoverFace } from "../components/NotebookCoverFace";
 import { Empty, Page } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { LibrarySubNav } from "../components/LibrarySubNav";
 import { useLifeOS } from "../lib/LifeOSContext";
-import { uid } from "../lib/helpers";
 import { useLayout } from "../lib/layout";
 import {
   createFolder,
   createNotebook,
+  duplicateNotebookBundle,
   emptyNotebookHub,
   NOTEBOOK_COLORS,
+  NOTEBOOK_COVERS,
   pageFromTemplate,
   pagesForNotebook,
+  patchNotebook,
   primaryPageForNotebook,
   restoreNotebook,
   setNotebookFolder,
@@ -64,6 +69,9 @@ export function NotebooksScreen() {
   const [composer, setComposer] = useState<null | "notebook" | "folder">(null);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [movingNotebookId, setMovingNotebookId] = useState<string | null>(null);
+  const [actionsNotebook, setActionsNotebook] = useState<Notebook | null>(null);
+  const [editingNotebook, setEditingNotebook] = useState<Notebook | null>(null);
+  const [editFocusCover, setEditFocusCover] = useState(false);
   const [name, setName] = useState("");
   const [color, setColor] = useState<string>(NOTEBOOK_COLORS[0]);
   const [createFolderId, setCreateFolderId] = useState<string | undefined>(undefined);
@@ -257,32 +265,96 @@ export function NotebooksScreen() {
     setMovingNotebookId(null);
   };
 
-  const confirmNotebookActions = (notebook: Notebook) => {
-    if (notebook.trashedAt) {
-      Alert.alert(notebook.name, undefined, [
-        {
-          text: "Restore",
-          onPress: () => void updateNotebookHub(restoreNotebook(hub, notebook.id)),
-        },
-        { text: "Delete forever", style: "destructive", onPress: () => confirmPurge(notebook) },
-        { text: "Cancel", style: "cancel" },
-      ]);
-      return;
+  const openNotebookActions = (notebook: Notebook) => setActionsNotebook(notebook);
+
+  const openEditNotebook = (notebook: Notebook, focusCover = false) => {
+    setEditFocusCover(focusCover);
+    setEditingNotebook(notebook);
+  };
+
+  const duplicateNotebook = async (notebook: Notebook) => {
+    const pages = pagesForNotebook(workspace.notebookPages, notebook.id);
+    const { notebook: copy, pages: copiedPages } = duplicateNotebookBundle(notebook, pages);
+    await updateNotebookHub({ ...hub, notebooks: [copy, ...hub.notebooks] });
+    await Promise.all(copiedPages.map((page) => upsertNotebookPage(page)));
+  };
+
+  const shareNotebook = async (notebook: Notebook) => {
+    try {
+      await Share.share({
+        message: notebook.name,
+        title: notebook.name,
+      });
+    } catch {
+      // User cancelled or share unavailable — ignore.
     }
-    Alert.alert(notebook.name, undefined, [
-      { text: "Open", onPress: () => openNote(notebook.id) },
-      {
-        text: notebook.starred ? "Remove star" : "Star",
-        onPress: () => void updateNotebookHub(setNotebookStarred(hub, notebook.id, !notebook.starred)),
-      },
-      {
-        text: "Organize…",
-        onPress: () => navigation.navigate("NotebookDetail", { notebookId: notebook.id, organizeOnly: true }),
-      },
-      { text: "Move to folder…", onPress: () => setMovingNotebookId(notebook.id) },
-      { text: "Move to Trash", style: "destructive", onPress: () => moveToTrash(notebook) },
-      { text: "Cancel", style: "cancel" },
-    ]);
+  };
+
+  const showNotebookInfo = (notebook: Notebook) => {
+    const pages = pagesForNotebook(workspace.notebookPages, notebook.id);
+    const folder = hub.folders.find((f) => f.id === notebook.folderId);
+    const coverLabel = NOTEBOOK_COVERS.find((c) => c.key === (notebook.cover ?? "solid"))?.label ?? "Simple";
+    const created = notebook.createdAt ? new Date(notebook.createdAt).toLocaleString() : "—";
+    const updated = notebook.updatedAt ? new Date(notebook.updatedAt).toLocaleString() : "—";
+    Alert.alert(
+      notebook.name,
+      [
+        `Pages: ${pages.length || notebook.pageCount || 1}`,
+        `Cover: ${coverLabel}`,
+        `Folder: ${folder?.name ?? "Unfiled"}`,
+        `Created: ${created}`,
+        `Updated: ${updated}`,
+      ].join("\n"),
+    );
+  };
+
+  const handleNotebookAction = (action: string) => {
+    const notebook = actionsNotebook;
+    if (!notebook) return;
+    switch (action) {
+      case "open":
+        openNote(notebook.id);
+        break;
+      case "share":
+        void shareNotebook(notebook);
+        break;
+      case "move":
+        setMovingNotebookId(notebook.id);
+        break;
+      case "trash":
+        moveToTrash(notebook);
+        break;
+      case "star":
+        void updateNotebookHub(setNotebookStarred(hub, notebook.id, !notebook.starred));
+        break;
+      case "rename":
+        openEditNotebook(notebook, false);
+        break;
+      case "cover":
+        openEditNotebook(notebook, true);
+        break;
+      case "duplicate":
+        void duplicateNotebook(notebook);
+        break;
+      case "organize":
+        navigation.navigate("NotebookDetail", { notebookId: notebook.id, organizeOnly: true });
+        break;
+      case "info":
+        showNotebookInfo(notebook);
+        break;
+      case "restore":
+        void updateNotebookHub(restoreNotebook(hub, notebook.id));
+        break;
+      case "purge":
+        confirmPurge(notebook);
+        break;
+      default:
+        break;
+    }
+  };
+
+  const confirmNotebookActions = (notebook: Notebook) => {
+    openNotebookActions(notebook);
   };
 
   const quickTile = (
@@ -463,22 +535,35 @@ export function NotebooksScreen() {
 
     const notebook = item.notebook;
     return (
-      <Pressable
-        onPress={() => (notebook.trashedAt ? confirmNotebookActions(notebook) : openNote(notebook.id))}
-        onLongPress={() => confirmNotebookActions(notebook)}
-        delayLongPress={280}
-        style={{ width: coverW, marginBottom: 4 }}
-      >
-        {renderCoverFace({
-          color: notebook.color || theme.accent,
-          cover: notebook.cover,
-          starred: notebook.starred,
-        })}
+      <View style={{ width: coverW, marginBottom: 4 }}>
+        <View>
+          <Pressable
+            onPress={() => (notebook.trashedAt ? confirmNotebookActions(notebook) : openNote(notebook.id))}
+            onLongPress={() => confirmNotebookActions(notebook)}
+            delayLongPress={280}
+            accessibilityLabel={notebook.name}
+          >
+            {renderCoverFace({
+              color: notebook.color || theme.accent,
+              cover: notebook.cover,
+              starred: notebook.starred,
+            })}
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Options for ${notebook.name}`}
+            hitSlop={8}
+            onPress={() => confirmNotebookActions(notebook)}
+            style={[styles.moreBtn, { backgroundColor: dark ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.92)" }]}
+          >
+            <Feather name="more-horizontal" size={16} color={theme.text} />
+          </Pressable>
+        </View>
         <Text style={[styles.metaTitle, { color: theme.text }]} numberOfLines={1}>
           {notebook.name}
         </Text>
         <Text style={[styles.metaDate, { color: theme.muted }]}>{formatEdited(notebook.updatedAt)}</Text>
-      </Pressable>
+      </View>
     );
   };
 
@@ -540,11 +625,11 @@ export function NotebooksScreen() {
     filter === "trash" ? (
       <Empty title="Trash is empty." body="Deleted notes land here until you remove them for good." />
     ) : filter === "starred" ? (
-      <Empty title="No starred notes." body="Long-press a note and choose Star to pin it here." />
+      <Empty title="No starred notes." body="Tap ⋯ on a note and choose Add to Starred." />
     ) : activeFolder ? (
       <Empty
         title={`Nothing in ${activeFolder.name} yet.`}
-        body="Create a note here, or long-press a note and move it into this folder."
+        body="Create a note here, or tap ⋯ on a note and Move it into this folder."
       />
     ) : (
       <Empty
@@ -599,6 +684,35 @@ export function NotebooksScreen() {
             setComposer(null);
             navigation.navigate("PageCanvas", { notebookId: notebook.id, pageId: page.id });
           })();
+        }}
+      />
+
+      <NotebookActionsSheet
+        visible={Boolean(actionsNotebook)}
+        notebook={actionsNotebook}
+        onClose={() => setActionsNotebook(null)}
+        onAction={handleNotebookAction}
+      />
+
+      <EditNotebookModal
+        visible={Boolean(editingNotebook)}
+        notebook={editingNotebook}
+        focusCover={editFocusCover}
+        onClose={() => {
+          setEditingNotebook(null);
+          setEditFocusCover(false);
+        }}
+        onSave={(result) => {
+          if (!editingNotebook) return;
+          void updateNotebookHub(
+            patchNotebook(hub, editingNotebook.id, {
+              name: result.name,
+              color: result.color,
+              cover: result.cover,
+            }),
+          );
+          setEditingNotebook(null);
+          setEditFocusCover(false);
         }}
       />
 
@@ -874,6 +988,17 @@ const styles = StyleSheet.create({
   },
   spine: { position: "absolute", left: 0, top: 0, bottom: 0, width: 7 },
   starBadge: { position: "absolute", top: 8, right: 8 },
+  moreBtn: {
+    position: "absolute",
+    right: 8,
+    bottom: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+  },
   newTile: {
     borderRadius: 12,
     borderWidth: 1.5,
