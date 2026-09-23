@@ -32,6 +32,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { syncDataToFirebase, loadDataFromFirebase, loadTasksFromFirebase, listenToFirebaseChanges, stopListeningToFirebaseChanges, pullAllDataFromFirebase, setUserId, clearUserId, getUserId } from "@/lib/dataSync";
+import { coerceFirebaseList } from "@/lib/validation";
 import { readTaskBackup, writeTaskBackup } from "@/lib/taskBackup";
 import { signInWithGoogle, signOut, onAuthStateChanged, whenClientAuthReady } from "@/lib/firebase";
 import { shouldPersistOnboardingComplete } from "@/lib/onboardingGate";
@@ -555,6 +556,7 @@ export default function LifeOS() {
   const [brainHydrated, setBrainHydrated] = useState(false);
   const [classes, setClasses] = useState<ClassRecord[]>([]);
   const [classesHydrated, setClassesHydrated] = useState(false);
+  const [classesSyncEnabled, setClassesSyncEnabled] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [notesHydrated, setNotesHydrated] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
@@ -1233,7 +1235,39 @@ export default function LifeOS() {
     setTasksSyncEnabled(false);
     (async () => {
       const applyList = (raw: unknown[], source: "cloud" | "backup") => {
-        const normalized = raw.map(task => normalizeTask(task as Partial<Task>));
+        // If an older cloud write stripped school fields, restore them from the
+        // local backup so assignments do not vanish from SchoolOS on reload.
+        const backup = source === "cloud" ? readTaskBackup(cloudUserId) : null;
+        const backupById = new Map(
+          (backup ?? [])
+            .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+            .map((item) => [Number((item as { id?: unknown }).id), item] as const)
+            .filter(([id]) => Number.isFinite(id)),
+        );
+        const enriched = raw.map((item) => {
+          if (!item || typeof item !== "object") return item;
+          const task = item as Record<string, unknown>;
+          const prior = backupById.get(Number(task.id));
+          if (!prior) return task;
+          const next = { ...task };
+          if (typeof next.classId !== "string" && typeof prior.classId === "string") {
+            next.classId = prior.classId;
+          }
+          if (next.academicType == null && prior.academicType != null) {
+            next.academicType = prior.academicType;
+          }
+          if (next.gradeCategoryId == null && typeof prior.gradeCategoryId === "string") {
+            next.gradeCategoryId = prior.gradeCategoryId;
+          }
+          if (typeof next.gradeWeight !== "number" && typeof prior.gradeWeight === "number") {
+            next.gradeWeight = prior.gradeWeight;
+          }
+          if (typeof next.submission !== "string" && typeof prior.submission === "string") {
+            next.submission = prior.submission;
+          }
+          return next;
+        });
+        const normalized = enriched.map(task => normalizeTask(task as Partial<Task>));
         const next = isStarterTaskSet(normalized) ? [] : normalized;
         setTasks(next);
         if (next.length) writeTaskBackup(cloudUserId, next);
@@ -1381,21 +1415,27 @@ export default function LifeOS() {
   useEffect(() => {
     if (!cloudUserId) return;
     setClassesHydrated(false);
+    setClassesSyncEnabled(false);
     (async () => {
       try {
         const data = await loadDataFromFirebase('classes');
-        if (Array.isArray(data)) setClasses(data.map(record => normalizeClass(record)));
+        const list = coerceFirebaseList(data);
+        if (list) setClasses(list.map(record => normalizeClass(record as Partial<ClassRecord>)));
+        else setClasses([]);
+        setClassesSyncEnabled(true);
       } catch (error) {
         console.error('Failed to load classes from Firebase:', error);
+        // Keep sync OFF — do not write [] over classes we failed to read.
+        setClassesSyncEnabled(false);
       } finally {
         setClassesHydrated(true);
       }
     })();
   }, [cloudUserId]);
   useEffect(() => {
-    if (!cloudUserId || !classesHydrated) return;
+    if (!cloudUserId || !classesHydrated || !classesSyncEnabled) return;
     syncDataToFirebase('classes', classes);
-  }, [classes, classesHydrated, cloudUserId]);
+  }, [classes, classesHydrated, classesSyncEnabled, cloudUserId]);
   useEffect(() => {
     if (!cloudUserId) return;
     setWeeklyPlanHydrated(false);
@@ -1423,7 +1463,9 @@ export default function LifeOS() {
     (async () => {
       try {
         const data = await loadDataFromFirebase('notes');
-        if (Array.isArray(data)) setNotes(data);
+        const list = coerceFirebaseList(data);
+        if (list) setNotes(list as Note[]);
+        else setNotes([]);
       } catch (error) {
         console.error('Failed to load notes from Firebase:', error);
       } finally {
@@ -1613,7 +1655,8 @@ export default function LifeOS() {
   useEffect(() => {
     if (!cloudUserId || !classesHydrated) return;
     listenToFirebaseChanges('classes', data => {
-      if (Array.isArray(data)) setClasses(data.map(record => normalizeClass(record)));
+      const list = coerceFirebaseList(data);
+      if (list) setClasses(list.map(record => normalizeClass(record as Partial<ClassRecord>)));
     });
     return () => stopListeningToFirebaseChanges('classes');
   }, [classesHydrated, cloudUserId]);
@@ -1621,7 +1664,8 @@ export default function LifeOS() {
   useEffect(() => {
     if (!cloudUserId || !notesHydrated) return;
     listenToFirebaseChanges('notes', data => {
-      if (Array.isArray(data)) setNotes(data);
+      const list = coerceFirebaseList(data);
+      if (list) setNotes(list as Note[]);
     });
     return () => stopListeningToFirebaseChanges('notes');
   }, [cloudUserId, notesHydrated]);
@@ -1833,12 +1877,14 @@ export default function LifeOS() {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       gradingMode: classRecord.gradingMode ?? "categories",
     });
+    setClassesSyncEnabled(true);
     setClasses(items => [...items, next]);
     setSpaceComposer(null);
     openClassSpace(next.id);
     flash(`${next.code} class created`);
   };
   const updateClass = (id: string, updates: Partial<Omit<ClassRecord, "id">>, opts?: { quiet?: boolean }) => {
+    setClassesSyncEnabled(true);
     setClasses(items => items.map(item => item.id === id ? normalizeClass({ ...item, ...updates, id }) : item));
     if (updates.color) setTasks(items => items.map(task => task.classId === id ? { ...task, color: updates.color as string } : task));
     if (!opts?.quiet) {
@@ -1848,6 +1894,7 @@ export default function LifeOS() {
   };
   const deleteClass = (id: string) => {
     if (!window.confirm("Delete this class folder? Assignments and notes will be kept, but unlinked from the class.")) return;
+    setClassesSyncEnabled(true);
     setClasses(items => items.filter(item => item.id !== id));
     setTasks(items => items.map(task => task.classId === id ? { ...task, classId: undefined } : task));
     setNotes(items => items.map(note => note.classId === id ? { ...note, classId: undefined } : note));

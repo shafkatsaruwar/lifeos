@@ -1,7 +1,19 @@
 import { z } from 'zod';
 import { MAX_FOCUS_MINUTES, MIN_FOCUS_MINUTES } from './constants';
 
-// Zod schemas for runtime validation of Firebase data
+const AcademicTypeSchema = z.enum([
+  'Assignment',
+  'Project',
+  'Exam',
+  'Quiz',
+  'Lab',
+  'Reading',
+  'Discussion',
+]);
+
+// Zod schemas for runtime validation of Firebase data.
+// School assignments are normal tasks with classId/academicType — stripping those
+// on load made SchoolOS show "0 due" and then sync wrote the stripped list back.
 export const TaskSchema = z.object({
   id: z.number(),
   title: z.string().min(1, 'Task title required'),
@@ -12,6 +24,8 @@ export const TaskSchema = z.object({
   priority: z.enum(['High', 'Medium', 'Low']),
   focusMinutes: z.number().min(5).max(240),
   energy: z.enum(['Low', 'Medium', 'High']),
+  status: z.string().optional(),
+  notes: z.string().optional(),
   checklist: z.array(z.string()).optional(),
   checklistProgress: z.array(z.boolean()).optional(),
   handoffNote: z.string().optional(),
@@ -21,10 +35,22 @@ export const TaskSchema = z.object({
   completedAt: z.string().optional(),
   done: z.boolean().optional(),
   canceled: z.boolean().optional(),
+  classId: z.string().optional(),
+  academicType: AcademicTypeSchema.or(z.string()).optional(),
+  gradeCategoryId: z.string().optional(),
+  gradeWeight: z.number().optional(),
   pointsEarned: z.number().min(0).optional(),
   pointsPossible: z.number().min(0).optional(),
+  submission: z.string().optional(),
   calendarEventId: z.string().optional(),
-});
+  // Keep loose — malformed props must not drop the whole assignment.
+  customProperties: z.array(z.any()).optional(),
+  focusRemainingSeconds: z.number().optional(),
+  focusSessionStarted: z.boolean().optional(),
+  focusSessionRunning: z.boolean().optional(),
+  focusHalfwayPrompted: z.boolean().optional(),
+  focusUpdatedAt: z.string().optional(),
+}).passthrough();
 
 export const ProjectSchema = z.object({
   name: z.string().min(1),
