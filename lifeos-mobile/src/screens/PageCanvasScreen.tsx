@@ -151,6 +151,7 @@ export function PageCanvasScreen() {
   const drawingPolicy = preferredDrawingPolicy(isTablet);
   const ensuringNextPageRef = useRef(false);
   const moreBtnRef = useRef<View>(null);
+  const eraserTapAtRef = useRef(0);
 
   const [mode, setMode] = useState<PageCanvasMode>("ink");
   modeRef.current = mode;
@@ -834,11 +835,6 @@ export function PageCanvasScreen() {
               {pageIndicator ? ` · ${pageIndicator}` : ""}
             </Text>
           </View>
-          <View ref={moreBtnRef} collapsable={false} style={styles.chromeBtnWrap}>
-            <Pressable accessibilityLabel="More" onPress={openMore} style={styles.chromeBtn}>
-              <Feather name="more-horizontal" size={20} color={theme.text} />
-            </Pressable>
-          </View>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -887,6 +883,11 @@ export function PageCanvasScreen() {
               />
             </Pressable>
           </ScrollView>
+          <View ref={moreBtnRef} collapsable={false} style={styles.chromeBtnWrap}>
+            <Pressable accessibilityLabel="More" onPress={openMore} style={styles.chromeBtn}>
+              <Feather name="more-horizontal" size={20} color={theme.text} />
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -979,11 +980,11 @@ export function PageCanvasScreen() {
           active={mode === "ink" && (inkTool === "eraser" || inkTool === "vectorEraser")}
           onPress={() => {
             const tool = inkTool === "vectorEraser" ? "vectorEraser" : "eraser";
-            if (mode === "ink" && toolPanel === "eraser" && (inkTool === "eraser" || inkTool === "vectorEraser")) {
-              setToolPanel("none");
-              return;
-            }
-            selectInkTool(tool, "eraser");
+            const now = Date.now();
+            const isDouble = now - eraserTapAtRef.current < 320;
+            eraserTapAtRef.current = isDouble ? 0 : now;
+            // Single tap: eraser on only. Double tap: open Noteshelf-style options.
+            selectInkTool(tool, isDouble ? "eraser" : "none");
           }}
         />
         {pencilReady ? (
@@ -1461,9 +1462,9 @@ const styles = StyleSheet.create({
   },
   viewChipText: { fontSize: 10, fontWeight: "800" },
   toolDock: {
-    alignSelf: "flex-end",
-    alignItems: "flex-end",
-    marginRight: 12,
+    alignSelf: "center",
+    alignItems: "center",
+    marginHorizontal: 12,
     marginBottom: 6,
     maxWidth: "100%",
     zIndex: 6,
@@ -1471,8 +1472,8 @@ const styles = StyleSheet.create({
   toolRail: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-end",
-    alignSelf: "flex-end",
+    justifyContent: "center",
+    alignSelf: "center",
     marginHorizontal: 0,
     marginBottom: 0,
     borderWidth: StyleSheet.hairlineWidth,
@@ -1487,8 +1488,8 @@ const styles = StyleSheet.create({
   },
   toolBtn: { width: 40, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   toolDivider: { width: StyleSheet.hairlineWidth, height: 22, marginHorizontal: 4 },
-  contextBar: { maxHeight: 46, marginBottom: 4, alignSelf: "flex-end" },
-  paperRow: { paddingHorizontal: 4, gap: 8, alignItems: "center", justifyContent: "flex-end" },
+  contextBar: { maxHeight: 46, marginBottom: 4, alignSelf: "center" },
+  paperRow: { paddingHorizontal: 12, gap: 8, alignItems: "center", justifyContent: "center" },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   templateHint: { fontSize: 11, fontWeight: "800", marginRight: 4, alignSelf: "center" },
   stage: { flex: 1, minHeight: 0, paddingHorizontal: 12, paddingBottom: 10, gap: 8 },

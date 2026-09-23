@@ -367,7 +367,7 @@ function WidthSlider({ value, onChange }: { value: number; onChange: (n: number)
 
 const styles = StyleSheet.create({
   wrap: {
-    alignItems: "flex-end",
+    alignItems: "center",
     marginBottom: 0,
     marginTop: 8,
     paddingHorizontal: 0,
