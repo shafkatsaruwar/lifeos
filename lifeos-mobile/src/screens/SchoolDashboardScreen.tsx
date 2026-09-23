@@ -19,6 +19,19 @@ import { useLifeOS } from "../lib/LifeOSContext";
 import { SPACE_COLORS, type Theme } from "../lib/theme";
 import { formatDueDate, taskIsOpen, toDateKey, uid } from "../lib/helpers";
 import { parseSyllabusText, pickSyllabusFile, type SyllabusItem } from "../lib/syllabusImport";
+import {
+  computeCourseGrade,
+  formatGradePercent,
+  letterForPercent,
+  normalizeGradeCategories,
+  normalizeGradeScale,
+  resolvePointsPossible,
+} from "../lib/grades";
+import {
+  parseGradebookText,
+  planGradebookApply,
+  suggestCategoryDefaults,
+} from "../lib/gradebookImport";
 import type { CalendarEvent, ClassRecord, Task } from "../types";
 
 type SchoolTab = "home" | "timetable" | "assignments" | "due" | "more";
@@ -100,6 +113,12 @@ export function SchoolDashboardScreen() {
     return toDateKey(now);
   });
   const [wellnessNote, setWellnessNote] = useState("");
+  const [gradesClassId, setGradesClassId] = useState<string | undefined>();
+  const [gradeImportText, setGradeImportText] = useState("");
+  const [gradeImportOpen, setGradeImportOpen] = useState(false);
+  const [manualGradeTitle, setManualGradeTitle] = useState("");
+  const [manualGradePoints, setManualGradePoints] = useState("");
+  const [gradeImportNotice, setGradeImportNotice] = useState("");
 
   const [timetableMode, setTimetableMode] = useState<"day" | "week">("day");
   const [weekAnchor, setWeekAnchor] = useState(() => new Date());
@@ -134,6 +153,12 @@ export function SchoolDashboardScreen() {
 
   const schoolTasks = workspace.tasks.filter((task) => task.classId && taskIsOpen(task));
   const dueThisWeek = schoolTasks.filter((task) => task.due && task.due >= today && task.due <= weekEndKey);
+  // Home "Coming up" should show the next open work even when nothing is due in the next 7 days.
+  const comingUp = [...schoolTasks].sort((a, b) => {
+    const aDue = a.due && a.due >= today ? a.due : a.due ? `9${a.due}` : "9999";
+    const bDue = b.due && b.due >= today ? b.due : b.due ? `9${b.due}` : "9999";
+    return aDue.localeCompare(bDue);
+  });
   const assignments = schoolTasks
     .filter((task) => task.academicType && !["Reading", "Discussion"].includes(task.academicType))
     .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
@@ -251,7 +276,6 @@ export function SchoolDashboardScreen() {
   const readingTasks = schoolTasks
     .filter((task) => task.academicType === "Reading")
     .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
-  const weighted = workspace.tasks.filter((task) => task.classId && task.gradeWeight);
   const completedThisWeek = workspace.tasks.filter(
     (task) => task.classId && task.done && task.completedAt && task.completedAt.slice(0, 10) >= today && task.completedAt.slice(0, 10) <= weekEndKey,
   );
@@ -480,8 +504,8 @@ export function SchoolDashboardScreen() {
             <Text style={styles.sectionLink}>Assignments</Text>
           </Pressable>
         </View>
-        {dueThisWeek.length ? (
-          dueThisWeek.slice(0, 5).map((task) => (
+        {comingUp.length ? (
+          comingUp.slice(0, 5).map((task) => (
             <Pressable
               key={task.id}
               style={styles.taskRow}
@@ -491,14 +515,15 @@ export function SchoolDashboardScreen() {
               <View style={styles.grow}>
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 <Text style={styles.taskMeta}>
-                  {formatCourseLabel(courseFor(task.classId))} · {formatDueDate(task.due)}
+                  {formatCourseLabel(courseFor(task.classId))} · {task.academicType ?? "Assignment"} · {formatDueDate(task.due)}
+                  {task.pointsPossible != null ? ` · ${task.pointsPossible} pts` : ""}
                 </Text>
               </View>
             </Pressable>
           ))
         ) : (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>Nothing due this week. Import a syllabus or capture your next deadline.</Text>
+            <Text style={styles.emptyText}>Nothing due yet. Import a syllabus or capture your next deadline.</Text>
             <View style={styles.emptyActions}>
               <Pressable style={styles.primaryBtn} onPress={openSyllabus} testID="school-home-import-syllabus">
                 <Text style={styles.primaryBtnText}>Import syllabus</Text>
@@ -711,6 +736,7 @@ export function SchoolDashboardScreen() {
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 <Text style={styles.taskMeta}>
                   {formatCourseLabel(courseFor(task.classId))} · {task.academicType ?? "Assignment"} · {formatDueDate(task.due)}
+                  {task.pointsPossible != null ? ` · ${task.pointsPossible} pts` : ""}
                   {task.gradeWeight ? ` · ${task.gradeWeight}%` : ""}
                 </Text>
               </View>
@@ -780,39 +806,273 @@ export function SchoolDashboardScreen() {
         <Text style={styles.pageTitle}>{title}</Text>
 
         {panel === "grades" ? (
-          <>
-            <Text style={styles.pageSub}>Weighted work across your courses</Text>
-            {weighted.length ? (
-              <View style={[styles.listGap, { marginTop: 16 }]}>
-                {weighted.map((task) => {
-                  const earned = task.pointsEarned;
-                  const possible = task.pointsPossible;
-                  const score = earned != null && possible ? `${earned}/${possible}` : task.done ? "Done" : "Open";
-                  return (
-                    <Pressable key={task.id} style={styles.taskRow} onPress={() => navigation.navigate("TasksTab", { screen: "TaskDetail", params: { taskId: task.id } })}>
-                      <View style={styles.grow}>
-                        <Text style={styles.taskTitle}>{task.title}</Text>
-                        <Text style={styles.taskMeta}>
-                          {formatCourseLabel(courseFor(task.classId))} · {task.gradeWeight}% · {score}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-                <View style={styles.statCard}>
-                  <Text style={styles.statLabel}>Logged weight</Text>
-                  <Text style={styles.statValue}>{weighted.reduce((sum, task) => sum + (task.gradeWeight ?? 0), 0)}%</Text>
-                </View>
-              </View>
-            ) : (
-              <View style={[styles.dashedEmpty, { marginTop: 16 }]}>
-                <Text style={styles.emptyText}>Add grade weight when you create an assignment to track what-if scores here.</Text>
-                <Pressable style={[styles.outlineBtn, { marginTop: 12, alignSelf: "center" }]} onPress={() => openCreate("assignment")}>
-                  <Text style={styles.outlineText}>New weighted assignment</Text>
+          (() => {
+            const gradesCourse =
+              courses.find((course) => course.id === (gradesClassId ?? courses[0]?.id)) ?? courses[0];
+            const courseTasks = workspace.tasks.filter(
+              (task) => task.classId === gradesCourse?.id && !task.canceled,
+            );
+            const categories = normalizeGradeCategories(gradesCourse?.gradeCategories);
+            const scale = normalizeGradeScale(gradesCourse?.gradingScale);
+            const gradeResult = gradesCourse
+              ? computeCourseGrade(courseTasks, {
+                  categories,
+                  scale,
+                  mode: gradesCourse.gradingMode === "items" ? "items" : "categories",
+                })
+              : null;
+            const importPreview = parseGradebookText(gradeImportText);
+
+            const applyGradeRows = async (raw: string) => {
+              if (!gradesCourse) return;
+              const rows = parseGradebookText(raw);
+              if (!rows.length) {
+                setGradeImportNotice("Paste from Canvas, Blackboard, Moodle, or Brightspace — or add a title + points.");
+                return;
+              }
+              const plan = planGradebookApply(courseTasks, rows);
+              let nextTasks = workspace.tasks.map((task) => {
+                const update = plan.updates.find((row) => row.id === task.id);
+                if (!update) return task;
+                return {
+                  ...task,
+                  pointsPossible: update.pointsPossible,
+                  academicType: (update.academicType as Task["academicType"]) ?? task.academicType,
+                  ...(update.pointsEarned != null ? { pointsEarned: update.pointsEarned } : {}),
+                };
+              });
+              const stamp = Date.now();
+              const created: Task[] = plan.creates.map((row, index) => ({
+                id: stamp + index,
+                title: row.title,
+                classId: gradesCourse.id,
+                color: gradesCourse.color ?? theme.accent,
+                project: "Inbox",
+                due: today,
+                priority: "Medium",
+                academicType: row.academicType as Task["academicType"],
+                pointsPossible: row.pointsPossible,
+                pointsEarned: row.pointsEarned,
+                focusMinutes: workspace.settings.defaultFocusMinutes ?? 45,
+                energy: workspace.settings.defaultEnergy ?? "Medium",
+                status: "Not started",
+                checklist: [],
+                checklistProgress: [],
+              }));
+              if (created.length) nextTasks = [...nextTasks, ...created];
+              await updateTasks(nextTasks);
+
+              const suggested = suggestCategoryDefaults(rows);
+              let nextCategories = categories.map((cat) =>
+                suggested[cat.id] != null && cat.defaultPoints == null
+                  ? { ...cat, defaultPoints: suggested[cat.id] }
+                  : cat,
+              );
+              if (suggested.discussions != null && !nextCategories.some((cat) => cat.id === "discussions")) {
+                nextCategories = [
+                  ...nextCategories,
+                  { id: "discussions", name: "Discussions", weight: 10, defaultPoints: suggested.discussions },
+                ];
+              }
+              await updateClasses(
+                workspace.classes.map((course) =>
+                  course.id === gradesCourse.id
+                    ? { ...course, gradeCategories: nextCategories }
+                    : course,
+                ),
+              );
+              setGradeImportNotice(
+                `Updated ${plan.updates.length} · added ${plan.creates.length}`,
+              );
+              setGradeImportText("");
+              setManualGradeTitle("");
+              setManualGradePoints("");
+            };
+
+            return (
+              <>
+                <Text style={styles.pageSub}>
+                  Letter standing, points, and what-if — paste from Canvas, Blackboard, Moodle, or Brightspace.
+                </Text>
+                {courses.length ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }} contentContainerStyle={styles.pillRow}>
+                    {courses.map((course) => {
+                      const on = course.id === gradesCourse?.id;
+                      return (
+                        <Pressable
+                          key={course.id}
+                          style={[styles.pill, on && styles.subjectPillSelected]}
+                          onPress={() => setGradesClassId(course.id)}
+                        >
+                          <Text style={[styles.pillText, on && { color: "#FFF" }]}>{course.code}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                ) : null}
+
+                {gradesCourse ? (
+                  <View style={[styles.statCard, { marginTop: 16 }]}>
+                    <Text style={styles.statLabel}>{formatCourseLabel(gradesCourse)}</Text>
+                    <Text style={styles.statValue}>
+                      {gradeResult?.letter ?? "—"}{" "}
+                      <Text style={[styles.pageSub, { fontSize: 18 }]}>
+                        {formatGradePercent(gradeResult?.percent)}
+                      </Text>
+                    </Text>
+                    <Text style={styles.helper}>
+                      {gradeResult
+                        ? `${gradeResult.gradedWeight.toFixed(0)}% logged · ${gradeResult.remainingWeight.toFixed(0)}% open`
+                        : "Add points to see standing"}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={[styles.dashedEmpty, { marginTop: 16 }]}>
+                    <Text style={styles.emptyText}>Add a class first, then import your gradebook points.</Text>
+                  </View>
+                )}
+
+                <Pressable
+                  style={[styles.primaryBtn, { marginTop: 14 }]}
+                  onPress={() => {
+                    setGradeImportOpen((value) => !value);
+                    setGradeImportNotice("");
+                  }}
+                  testID="school-grades-import-points"
+                >
+                  <Text style={styles.primaryBtnText}>
+                    {gradeImportOpen ? "Close import" : "Import points from LMS"}
+                  </Text>
                 </Pressable>
-              </View>
-            )}
-          </>
+
+                {gradeImportOpen ? (
+                  <View style={[styles.menuCard, { marginTop: 12, padding: 14, gap: 10 }]}>
+                    <Text style={styles.helper}>
+                      Add one item, or paste a gradebook table from Canvas / Blackboard / Moodle / Brightspace.
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Title (e.g. 1-1 Discussion)"
+                      placeholderTextColor={theme.muted}
+                      value={manualGradeTitle}
+                      onChangeText={setManualGradeTitle}
+                    />
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <TextInput
+                        style={[styles.input, { flex: 1 }]}
+                        placeholder="Pts"
+                        placeholderTextColor={theme.muted}
+                        keyboardType="decimal-pad"
+                        value={manualGradePoints}
+                        onChangeText={setManualGradePoints}
+                      />
+                      <Pressable
+                        style={styles.outlineBtn}
+                        onPress={() =>
+                          void applyGradeRows(`${manualGradeTitle.trim()}\t${manualGradePoints.trim()}`)
+                        }
+                      >
+                        <Text style={styles.outlineText}>Add</Text>
+                      </Pressable>
+                    </View>
+                    <TextInput
+                      style={[styles.textarea, { minHeight: 120 }]}
+                      placeholder={"Assignment Name\tPoints\nDiscussion 1\t20\nEssay 1\t100"}
+                      placeholderTextColor={theme.muted}
+                      multiline
+                      value={gradeImportText}
+                      onChangeText={setGradeImportText}
+                      testID="school-grades-import-text"
+                    />
+                    {importPreview.length ? (
+                      <Text style={styles.helper}>
+                        Preview · {importPreview.length} item{importPreview.length === 1 ? "" : "s"}
+                      </Text>
+                    ) : null}
+                    <Pressable
+                      style={[styles.primaryBtn, !importPreview.length && styles.primaryDisabled]}
+                      disabled={!importPreview.length}
+                      onPress={() => void applyGradeRows(gradeImportText)}
+                      testID="school-grades-import-apply"
+                    >
+                      <Text style={styles.primaryBtnText}>
+                        Apply to {gradesCourse?.code ?? "class"}
+                      </Text>
+                    </Pressable>
+                    {gradeImportNotice ? <Text style={styles.helper}>{gradeImportNotice}</Text> : null}
+                  </View>
+                ) : null}
+
+                {courseTasks.length ? (
+                  <View style={[styles.listGap, { marginTop: 16 }]}>
+                    {courseTasks.map((task) => {
+                      const line = gradeResult?.items.find((item) => item.id === task.id);
+                      const possible =
+                        task.pointsPossible ??
+                        resolvePointsPossible(task, categories) ??
+                        "";
+                      return (
+                        <View key={task.id} style={styles.taskRow}>
+                          <View style={styles.grow}>
+                            <Text style={styles.taskTitle}>{task.title}</Text>
+                            <Text style={styles.taskMeta}>
+                              {task.academicType ?? "Task"}
+                              {line ? ` · ${line.categoryName}` : ""}
+                              {line?.percent != null
+                                ? ` · ${formatGradePercent(line.percent)} (${letterForPercent(line.percent, scale)})`
+                                : " · not scored"}
+                            </Text>
+                            <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                              <TextInput
+                                style={[styles.input, { flex: 1 }]}
+                                placeholder="Earned"
+                                placeholderTextColor={theme.muted}
+                                keyboardType="decimal-pad"
+                                defaultValue={task.pointsEarned != null ? String(task.pointsEarned) : ""}
+                                onEndEditing={(event) => {
+                                  const raw = event.nativeEvent.text.trim();
+                                  const pointsEarned =
+                                    raw === "" ? undefined : Math.max(0, Number(raw) || 0);
+                                  void updateTasks(
+                                    workspace.tasks.map((item) =>
+                                      item.id === task.id ? { ...item, pointsEarned } : item,
+                                    ),
+                                  );
+                                }}
+                              />
+                              <TextInput
+                                style={[styles.input, { flex: 1 }]}
+                                placeholder="Possible"
+                                placeholderTextColor={theme.muted}
+                                keyboardType="decimal-pad"
+                                defaultValue={possible === "" ? "" : String(possible)}
+                                onEndEditing={(event) => {
+                                  const raw = event.nativeEvent.text.trim();
+                                  const pointsPossible =
+                                    raw === "" ? undefined : Math.max(0, Number(raw) || 0) || undefined;
+                                  void updateTasks(
+                                    workspace.tasks.map((item) =>
+                                      item.id === task.id ? { ...item, pointsPossible } : item,
+                                    ),
+                                  );
+                                }}
+                              />
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <View style={[styles.dashedEmpty, { marginTop: 16 }]}>
+                    <Text style={styles.emptyText}>
+                      No coursework on this class yet. Import points from your LMS or add an assignment.
+                    </Text>
+                  </View>
+                )}
+              </>
+            );
+          })()
         ) : null}
 
         {panel === "exams" ? (

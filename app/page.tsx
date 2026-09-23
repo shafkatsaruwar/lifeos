@@ -109,7 +109,7 @@ type Resource = { id: string; name: string; type: string; size: number; url: str
 type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind };
 type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work" | "Synapse"; color: string; notes?: string; location?: string; weekdaysOnly?: boolean };
 type GradeBand = { letter: string; min: number };
-type GradeCategory = { id: string; name: string; weight: number };
+type GradeCategory = { id: string; name: string; weight: number; defaultPoints?: number };
 type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterStart?: string; semesterEnd?: string; archived?: boolean; gradingScale?: GradeBand[]; gradeCategories?: GradeCategory[]; gradingMode?: "categories" | "items" };
 type Note = { id: string; title: string; body: string; classId?: string; projectName?: string; template?: "blank" | "lined" | "dotted" | "cornell" | "meeting"; /** Handwriting from mobile (Apple PencilKit PKDrawing base64, or legacy strokes); preserved on web updates */ ink?: { version?: 1 | 2; format?: "pencilkit"; data?: string; pencilKitData?: string; strokes?: Array<{ id: string; color: string; width: number; tool: "pen" | "highlighter" | "eraser"; points: Array<{ x: number; y: number; t?: number }> }>; height?: number; updatedAt?: number }; updatedAt: string };
 type AmbientActivity = { title: string; startedAt: string; note?: string; spaceName?: string; spaceColor?: string };
@@ -478,7 +478,18 @@ const normalizeClass = (record: Partial<ClassRecord>): ClassRecord => ({
   gradeCategories: Array.isArray(record.gradeCategories)
     ? record.gradeCategories
         .filter((cat) => cat && typeof cat.id === "string" && typeof cat.name === "string" && Number.isFinite(cat.weight))
-        .map((cat) => ({ id: cat.id, name: cat.name.trim() || "Category", weight: Math.max(0, Math.min(100, Number(cat.weight))) }))
+        .map((cat) => {
+          const defaultPoints =
+            typeof cat.defaultPoints === "number" && Number.isFinite(cat.defaultPoints) && cat.defaultPoints > 0
+              ? Math.round(cat.defaultPoints * 10) / 10
+              : undefined;
+          return {
+            id: cat.id,
+            name: cat.name.trim() || "Category",
+            weight: Math.max(0, Math.min(100, Number(cat.weight))),
+            ...(defaultPoints != null ? { defaultPoints } : {}),
+          };
+        })
     : undefined,
   gradingMode: record.gradingMode === "items" ? "items" : record.gradingMode === "categories" ? "categories" : undefined,
 });
@@ -2481,7 +2492,26 @@ export default function LifeOS() {
               if (nextEvents.length) setCalendarEvents((current) => [...current, ...nextEvents]);
               const dated = nextEvents.length;
               flash(dated ? `Imported ${items.length} tasks · ${dated} on calendar` : `Imported ${items.length} tasks`);
-            }} appearanceLabel={dark ? "Dark" : "Light"} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} onUpdateClass={(id, updates) => updateClass(id, updates, { quiet: true })} onUpdateTask={(id, updates) => updateTaskDetails(id, updates)} enableMasterOS={settingsState.enableMasterOS !== false} onOpenMasterOS={() => go("Mastery")} />}
+            }} appearanceLabel={dark ? "Dark" : "Light"} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} onUpdateClass={(id, updates) => updateClass(id, updates, { quiet: true })} onUpdateTask={(id, updates) => updateTaskDetails(id, {
+              ...updates,
+              academicType: updates.academicType as AcademicItemType | undefined,
+            })} onCreateGradeItems={(classId, items) => {
+              const classRecord = classes.find((item) => item.id === classId);
+              if (!classRecord) return;
+              for (const item of items) {
+                addAcademicTask(classId, {
+                  title: item.title,
+                  due: toDateKey(new Date()),
+                  priority: "Medium",
+                  focusMinutes: settingsState.defaultFocusMinutes,
+                  energy: settingsState.defaultEnergy,
+                  academicType: (item.academicType as AcademicItemType) || "Assignment",
+                  pointsPossible: item.pointsPossible,
+                  pointsEarned: item.pointsEarned,
+                });
+              }
+              flash(items.length === 1 ? `Added “${items[0].title}”` : `Added ${items.length} grade items`);
+            }} enableMasterOS={settingsState.enableMasterOS !== false} onOpenMasterOS={() => go("Mastery")} />}
             {view === "Work" && <WorkDashboard workHub={workHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onTimesheetFlash={flash} weekStartsMonday={settingsState.weekStartsMonday} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => setWorkView("projects")} onProjectDeleted={(name) => {
               setProjectItems(items => items.filter(project => project.name !== name));
               setTasks(items => items.map(task => task.project === name ? { ...task, project: "Inbox", color: "#625af6" } : task));

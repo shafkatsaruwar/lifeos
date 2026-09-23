@@ -560,6 +560,7 @@ export function SchoolDashboard({
   onOpenMasterOS,
   onUpdateClass,
   onUpdateTask,
+  onCreateGradeItems,
 }: {
   tasks: DashboardTask[];
   classes: DashboardClass[];
@@ -591,7 +592,8 @@ export function SchoolDashboard({
   onImportSyllabus?: (payload: SyllabusImportPayload) => void;
   onUpdateTaskStatus?: (id: number, status: "Not started" | "In progress" | "Blocked" | "Done") => void;
   onUpdateClass?: (id: string, updates: Partial<Pick<DashboardClass, "gradingScale" | "gradeCategories" | "gradingMode">>) => void;
-  onUpdateTask?: (id: number, updates: Partial<Pick<DashboardTask, "pointsEarned" | "pointsPossible" | "gradeWeight" | "gradeCategoryId">>) => void;
+  onUpdateTask?: (id: number, updates: Partial<Pick<DashboardTask, "pointsEarned" | "pointsPossible" | "gradeWeight" | "gradeCategoryId" | "academicType">>) => void;
+  onCreateGradeItems?: (classId: string, items: { title: string; academicType: string; pointsPossible: number; pointsEarned?: number }[]) => void;
   enableMasterOS?: boolean;
   onOpenMasterOS?: () => void;
 }) {
@@ -817,6 +819,7 @@ export function SchoolDashboard({
           onOpenTask={onOpenTask}
           onUpdateClass={(id, updates) => onUpdateClass?.(id, updates)}
           onUpdateTask={(id, updates) => onUpdateTask?.(id, updates)}
+          onCreateGradeItems={(classId, items) => onCreateGradeItems?.(classId, items)}
           onNewAcademic={onNewAcademic}
         />
       );

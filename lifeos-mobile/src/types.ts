@@ -76,6 +76,9 @@ export type ClassRecord = {
   /** Local time "HH:MM" (24h). */
   meetingStart?: string;
   meetingEnd?: string;
+  gradingScale?: { letter: string; min: number }[];
+  gradeCategories?: { id: string; name: string; weight: number; defaultPoints?: number }[];
+  gradingMode?: "categories" | "items";
 };
 
 /** Named calendar list (iOS-style) — events point at these via `calendarId`. */
