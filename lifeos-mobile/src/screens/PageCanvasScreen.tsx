@@ -2,7 +2,7 @@ import Feather from "@expo/vector-icons/Feather";
 import Constants from "expo-constants";
 import { initialWindowMetrics } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   Alert,
   FlatList,
@@ -151,7 +151,10 @@ export function PageCanvasScreen() {
   const drawingPolicy = preferredDrawingPolicy(isTablet);
   const ensuringNextPageRef = useRef(false);
   const moreBtnRef = useRef<View>(null);
+  const penBtnRef = useRef<View>(null);
+  const eraserBtnRef = useRef<View>(null);
   const eraserTapAtRef = useRef(0);
+  const [toolAnchor, setToolAnchor] = useState<LayoutRectangle | null>(null);
 
   const [mode, setMode] = useState<PageCanvasMode>("ink");
   modeRef.current = mode;
@@ -691,6 +694,13 @@ export function PageCanvasScreen() {
     });
   };
 
+  const openInkTray = (panel: "pen" | "eraser", ref: RefObject<View | null>) => {
+    ref.current?.measureInWindow((x, y, width, height) => {
+      setToolAnchor({ x, y, width, height });
+      setToolPanel(panel);
+    });
+  };
+
   const runMoreAction = (action: () => void) => {
     setMoreOpen(false);
     requestAnimationFrame(action);
@@ -901,20 +911,23 @@ export function PageCanvasScreen() {
           },
         ]}
       >
-        <ToolBtn
-          icon="edit-3"
-          label="Pen"
-          active={mode === "ink" && (inkTool === "pen" || inkTool === "pencil" || inkTool === "marker")}
-          onPress={() => {
-            const drawing =
-              inkTool === "pen" || inkTool === "pencil" || inkTool === "marker" ? inkTool : "pen";
-            if (mode === "ink" && toolPanel === "pen" && drawing === inkTool) {
-              setToolPanel("none");
-              return;
-            }
-            selectInkTool(drawing, "pen");
-          }}
-        />
+        <View ref={penBtnRef} collapsable={false}>
+          <ToolBtn
+            icon="edit-3"
+            label="Pen"
+            active={mode === "ink" && (inkTool === "pen" || inkTool === "pencil" || inkTool === "marker")}
+            onPress={() => {
+              const drawing =
+                inkTool === "pen" || inkTool === "pencil" || inkTool === "marker" ? inkTool : "pen";
+              if (mode === "ink" && toolPanel === "pen" && drawing === inkTool) {
+                setToolPanel("none");
+                return;
+              }
+              selectInkTool(drawing, "none");
+              openInkTray("pen", penBtnRef);
+            }}
+          />
+        </View>
         <ToolBtn
           icon="type"
           label="Text"
@@ -974,19 +987,22 @@ export function PageCanvasScreen() {
           active={mode === "ink" && inkTool === "lasso"}
           onPress={() => selectInkTool("lasso")}
         />
-        <ToolBtn
-          icon="slash"
-          label="Eraser"
-          active={mode === "ink" && (inkTool === "eraser" || inkTool === "vectorEraser")}
-          onPress={() => {
-            const tool = inkTool === "vectorEraser" ? "vectorEraser" : "eraser";
-            const now = Date.now();
-            const isDouble = now - eraserTapAtRef.current < 320;
-            eraserTapAtRef.current = isDouble ? 0 : now;
-            // Single tap: eraser on only. Double tap: open Noteshelf-style options.
-            selectInkTool(tool, isDouble ? "eraser" : "none");
-          }}
-        />
+        <View ref={eraserBtnRef} collapsable={false}>
+          <ToolBtn
+            icon="slash"
+            label="Eraser"
+            active={mode === "ink" && (inkTool === "eraser" || inkTool === "vectorEraser")}
+            onPress={() => {
+              const tool = inkTool === "vectorEraser" ? "vectorEraser" : "eraser";
+              const now = Date.now();
+              const isDouble = now - eraserTapAtRef.current < 320;
+              eraserTapAtRef.current = isDouble ? 0 : now;
+              // Single tap: eraser on only. Double tap: open options over the note.
+              selectInkTool(tool, "none");
+              if (isDouble) openInkTray("eraser", eraserBtnRef);
+            }}
+          />
+        </View>
         {pencilReady ? (
           <>
             <View style={[styles.toolDivider, { backgroundColor: theme.border }]} />
@@ -1000,22 +1016,29 @@ export function PageCanvasScreen() {
       </View>
 
       {toolPanel === "pen" || toolPanel === "eraser" ? (
-        <InkToolTray
-          mode={toolPanel === "eraser" ? "eraser" : "pen"}
-          inkTool={inkTool}
-          inkColor={inkColor}
-          onSelectTip={(tip: DrawingTip, width: number) => {
-            setToolPanel("pen");
-            applyInk(tip, inkColor, width);
-          }}
-          onColorChange={(color) => applyInk(inkTool, color, inkWidth)}
-          onWidthChange={(width) => applyInk(inkTool, inkColor, width)}
-          onSelectEraser={(tool, width) => {
-            setToolPanel("eraser");
-            applyInk(tool, inkColor, width);
-          }}
-          onClearPage={clearPageInk}
-        />
+        <AnchoredPopover
+          visible
+          bare
+          align="center"
+          width={toolPanel === "eraser" ? 300 : 340}
+          anchor={toolAnchor}
+          onClose={() => setToolPanel("none")}
+        >
+          <InkToolTray
+            mode={toolPanel === "eraser" ? "eraser" : "pen"}
+            inkTool={inkTool}
+            inkColor={inkColor}
+            onSelectTip={(tip: DrawingTip, width: number) => {
+              applyInk(tip, inkColor, width);
+            }}
+            onColorChange={(color) => applyInk(inkTool, color, inkWidth)}
+            onWidthChange={(width) => applyInk(inkTool, inkColor, width)}
+            onSelectEraser={(tool, width) => {
+              applyInk(tool, inkColor, width);
+            }}
+            onClearPage={clearPageInk}
+          />
+        </AnchoredPopover>
       ) : null}
 
       {toolPanel === "shape" ? (

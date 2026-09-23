@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: "center",
     marginBottom: 0,
-    marginTop: 8,
+    marginTop: 0,
     paddingHorizontal: 0,
     gap: 8,
   },
