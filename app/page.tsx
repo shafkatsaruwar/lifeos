@@ -2108,6 +2108,24 @@ export default function LifeOS() {
     setSettingsState(current => current.nowTaskId === id ? { ...current, nowTaskId: null } : current);
     flash("Priority deleted");
   };
+  const deleteTasks = (ids: number[]) => {
+    if (!ids.length) return;
+    const doomed = new Set(ids);
+    setTasks(items => {
+      const next = items.filter(task => !doomed.has(task.id));
+      if (doomed.has(activeTaskId)) setActiveTaskId(next[0]?.id ?? 0);
+      return next;
+    });
+    setActionTaskId(current => current != null && doomed.has(current) ? null : current);
+    setEditingTaskId(current => current != null && doomed.has(current) ? null : current);
+    setTaskPageId(current => current != null && doomed.has(current) ? null : current);
+    setSettingsState(current => (
+      current.nowTaskId != null && doomed.has(current.nowTaskId)
+        ? { ...current, nowTaskId: null }
+        : current
+    ));
+    flash(ids.length === 1 ? "Priority deleted" : `Deleted ${ids.length} tasks`);
+  };
   const syncFromCloud = async () => {
     try {
       const data = await pullAllDataFromFirebase();
@@ -2528,7 +2546,7 @@ export default function LifeOS() {
             {view === "Mastery" && <MasterOSDashboard />}
             {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onOpenTimesheet={() => { setWorkView("timesheet"); go("Work"); }} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableMasterOS={settingsState.enableMasterOS !== false} onboardingCompletedAt={settingsState.onboardingCompletedAt} onMarkOnboarded={() => setSettingsState(current => ({ ...current, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} flash={flash} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
-            {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} />}
+            {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} onDeleteMany={deleteTasks} />}
             {(view === "Today" || view === "Calendar") && <CalendarView events={calendarFeed} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} defaultView={normalizeCalendarDefaultView(settingsState.defaultCalendarView)} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => { if (id.startsWith("task-")) openTaskPage(Number(id.slice(5))); else if (id.startsWith("work-meet-")) { setWorkView("calendar"); go("Work"); } else setEditingCalendarEventId(id); }} onPlanTask={setEditingTaskId} />}
             {view === "Notes" && <NotesView notes={notes} classes={classes} projects={projectItems} selectedNoteId={selectedNoteId} onSelect={setSelectedNoteId} onCreate={() => createNote()} onUpdate={updateNote} onDelete={deleteNote} onImport={importNotes} onCreateTask={createTaskFromNote} />}
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
@@ -3457,8 +3475,127 @@ function SpaceModal({ initialKind, close, addProject, addClass }: { initialKind:
   </motion.form></motion.div>;
 }
 
-function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask }: { tasks: Task[]; classes: ClassRecord[]; onComplete: (id: number) => void; onNew: () => void; onTaskMenu: (id: number) => void; onOpenTask: (id: number) => void }) {
-  return <><div className="page-title"><div><p className="eyebrow">Make it happen</p><h1>Tasks</h1><p>A clear list of what needs your attention.</p></div><button className="primary" onClick={onNew}><Plus size={16} /> New task</button></div><section className="card task-table"><div className="table-view-label">List view</div><div className="table-head"><span>Task</span><span>Space</span><span>Due</span><span>Priority</span><span>Focus</span></div>{tasks.map(t => <div className={`table-row ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""}`} key={t.id}><button className="round-check" disabled={t.canceled} onClick={() => onComplete(t.id)}>{t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}</button><button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button><span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span><span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span><span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span><span>{t.focusMinutes}m · {t.energy}</span><button aria-label={`Actions for ${t.title}`} onClick={() => onTaskMenu(t.id)}><MoreHorizontal size={17} /></button></div>)}</section></>;
+function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDeleteMany }: { tasks: Task[]; classes: ClassRecord[]; onComplete: (id: number) => void; onNew: () => void; onTaskMenu: (id: number) => void; onOpenTask: (id: number) => void; onDeleteMany: (ids: number[]) => void }) {
+  const [selected, setSelected] = useState<number[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const taskIds = tasks.map((task) => task.id);
+  const visibleSelected = selected.filter((id) => taskIds.includes(id));
+  const allSelected = tasks.length > 0 && visibleSelected.length === tasks.length;
+  const someSelected = visibleSelected.length > 0 && !allSelected;
+
+  useEffect(() => {
+    setSelected((current) => {
+      const next = current.filter((id) => taskIds.includes(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [taskIds.join(",")]);
+
+  useEffect(() => {
+    if (!visibleSelected.length) setConfirmDelete(false);
+  }, [visibleSelected.length]);
+
+  const toggleOne = (id: number) => {
+    setConfirmDelete(false);
+    setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  };
+  const toggleAll = () => {
+    setConfirmDelete(false);
+    setSelected(allSelected ? [] : taskIds);
+  };
+  const clearSelection = () => {
+    setConfirmDelete(false);
+    setSelected([]);
+  };
+  const requestDelete = () => {
+    if (!visibleSelected.length) return;
+    setConfirmDelete(true);
+  };
+  const confirmDeleteSelected = () => {
+    if (!visibleSelected.length) return;
+    onDeleteMany(visibleSelected);
+    setSelected([]);
+    setConfirmDelete(false);
+  };
+
+  return (
+    <>
+      <div className="page-title">
+        <div>
+          <p className="eyebrow">Make it happen</p>
+          <h1>Tasks</h1>
+          <p>A clear list of what needs your attention.</p>
+        </div>
+        <div className="page-title-actions">
+          {visibleSelected.length > 0 ? (
+            confirmDelete ? (
+              <>
+                <span className="batch-delete-prompt" data-testid="tasks-batch-delete-prompt">
+                  Delete {visibleSelected.length} permanently?
+                </span>
+                <button type="button" className="ghost" onClick={() => setConfirmDelete(false)}>Cancel</button>
+                <button type="button" className="danger" data-testid="tasks-batch-delete-confirm" onClick={confirmDeleteSelected}>
+                  <Trash2 size={16} /> Confirm delete
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="ghost" onClick={clearSelection}>Clear ({visibleSelected.length})</button>
+                <button type="button" className="danger" data-testid="tasks-batch-delete" onClick={requestDelete}>
+                  <Trash2 size={16} /> Delete {visibleSelected.length}
+                </button>
+              </>
+            )
+          ) : null}
+          <button className="primary" onClick={onNew}><Plus size={16} /> New task</button>
+        </div>
+      </div>
+      <section className="card task-table" data-testid="tasks-table">
+        <div className="table-view-label">List view{visibleSelected.length ? ` · ${visibleSelected.length} selected` : ""}</div>
+        <div className="table-head table-head-selectable">
+          <button
+            type="button"
+            className={`select-check ${allSelected ? "is-on" : ""} ${someSelected ? "is-partial" : ""}`}
+            aria-label={allSelected ? "Deselect all tasks" : "Select all tasks"}
+            data-testid="tasks-select-all"
+            onClick={toggleAll}
+          >
+            {allSelected ? <Check size={12} /> : someSelected ? <span className="select-dash" /> : null}
+          </button>
+          <span>Task</span>
+          <span>Space</span>
+          <span>Due</span>
+          <span>Priority</span>
+          <span>Focus</span>
+        </div>
+        {tasks.map((t) => {
+          const isSelected = selected.includes(t.id);
+          return (
+            <div className={`table-row table-row-selectable ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""} ${isSelected ? "is-selected" : ""}`} key={t.id}>
+              <button
+                type="button"
+                className={`select-check ${isSelected ? "is-on" : ""}`}
+                aria-label={isSelected ? `Deselect ${t.title}` : `Select ${t.title}`}
+                aria-pressed={isSelected}
+                data-testid={`task-select-${t.id}`}
+                onClick={() => toggleOne(t.id)}
+              >
+                {isSelected ? <Check size={12} /> : null}
+              </button>
+              <button className="round-check" disabled={t.canceled} onClick={() => onComplete(t.id)} aria-label={t.done ? `Reopen ${t.title}` : `Complete ${t.title}`}>
+                {t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}
+              </button>
+              <button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button>
+              <span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span>
+              <span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span>
+              <span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span>
+              <span>{t.focusMinutes}m · {t.energy}</span>
+              <button aria-label={`Actions for ${t.title}`} onClick={() => onTaskMenu(t.id)}><MoreHorizontal size={17} /></button>
+            </div>
+          );
+        })}
+      </section>
+    </>
+  );
 }
 
 function ClassesView({ classes, tasks, notes, resources, selectedClassId, onSelectClass, onNewClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource }: { classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedClassId: string | null; onSelectClass: (id: string | null) => void; onNewClass: () => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void> }) {

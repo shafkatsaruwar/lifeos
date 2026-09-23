@@ -845,63 +845,12 @@ export function PageCanvasScreen() {
               {pageIndicator ? ` · ${pageIndicator}` : ""}
             </Text>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chromeTrailingScroll}
-            contentContainerStyle={styles.chromeTrailing}
-          >
-            <Pressable
-              accessibilityLabel={viewMode === "seamless" ? "Seamless view" : "Single page view"}
-              onPress={() => setPageView(viewMode === "seamless" ? "single" : "seamless")}
-              style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
-            >
-              <Feather name={viewMode === "seamless" ? "menu" : "square"} size={13} color={theme.muted} />
-              <Text style={[styles.viewChipText, { color: theme.muted }]}>
-                {viewMode === "seamless" ? "Seamless" : "Single"}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel={zoomScale > 1.01 ? "Reset zoom to 100%" : "Zoom to 135%"}
-              onPress={() => setZoomScale((z) => (z > 1.05 ? 1 : 1.35))}
-              style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
-            >
-              <Text style={[styles.viewChipText, { color: theme.muted }]}>
-                {`${Math.round(zoomScale * 100)}%`}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel="Previous page"
-              disabled={pageIndex <= 0}
-              onPress={() => goPage(-1)}
-              style={[styles.chromeBtn, pageIndex <= 0 && { opacity: 0.3 }]}
-            >
-              <Feather name="chevron-up" size={18} color={theme.text} />
-            </Pressable>
-            <Pressable
-              accessibilityLabel={pageIndex >= pages.length - 1 ? "Add page" : "Next page"}
-              onPress={() => {
-                if (pageIndex >= pages.length - 1) void addPage();
-                else goPage(1);
-              }}
-              style={styles.chromeBtn}
-            >
-              <Feather
-                name={pageIndex >= pages.length - 1 ? "plus" : "chevron-down"}
-                size={18}
-                color={theme.text}
-              />
-            </Pressable>
-          </ScrollView>
-          <View ref={moreBtnRef} collapsable={false} style={styles.chromeBtnWrap}>
-            <Pressable accessibilityLabel="More" onPress={openMore} style={styles.chromeBtn}>
-              <Feather name="more-horizontal" size={20} color={theme.text} />
-            </Pressable>
-          </View>
         </View>
       </View>
 
-      <View style={styles.toolDock}>
+      <View style={[styles.toolDock, { paddingRight: chromePadRight }]}>
+        <View style={styles.toolDockRow}>
+        <View style={styles.toolDockSide} />
       <View
         style={[
           styles.toolRail,
@@ -1014,6 +963,63 @@ export function PageCanvasScreen() {
           <ToolBtn icon="trash-2" label="Delete" danger onPress={deleteSelected} />
         ) : null}
       </View>
+
+        <View style={[styles.toolDockSide, styles.toolDockTrailing]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.viewRailScroll}
+            contentContainerStyle={styles.viewRail}
+          >
+            <Pressable
+              accessibilityLabel={viewMode === "seamless" ? "Seamless view" : "Single page view"}
+              onPress={() => setPageView(viewMode === "seamless" ? "single" : "seamless")}
+              style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
+            >
+              <Feather name={viewMode === "seamless" ? "menu" : "square"} size={13} color={theme.muted} />
+              <Text style={[styles.viewChipText, { color: theme.muted }]}>
+                {viewMode === "seamless" ? "Seamless" : "Single"}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel={zoomScale > 1.01 ? "Reset zoom to 100%" : "Zoom to 135%"}
+              onPress={() => setZoomScale((z) => (z > 1.05 ? 1 : 1.35))}
+              style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
+            >
+              <Text style={[styles.viewChipText, { color: theme.muted }]}>
+                {`${Math.round(zoomScale * 100)}%`}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Previous page"
+              disabled={pageIndex <= 0}
+              onPress={() => goPage(-1)}
+              style={[styles.chromeBtn, pageIndex <= 0 && { opacity: 0.3 }]}
+            >
+              <Feather name="chevron-up" size={18} color={theme.text} />
+            </Pressable>
+            <Pressable
+              accessibilityLabel={pageIndex >= pages.length - 1 ? "Add page" : "Next page"}
+              onPress={() => {
+                if (pageIndex >= pages.length - 1) void addPage();
+                else goPage(1);
+              }}
+              style={styles.chromeBtn}
+            >
+              <Feather
+                name={pageIndex >= pages.length - 1 ? "plus" : "chevron-down"}
+                size={18}
+                color={theme.text}
+              />
+            </Pressable>
+          </ScrollView>
+          <View ref={moreBtnRef} collapsable={false} style={styles.chromeBtnWrap}>
+            <Pressable accessibilityLabel="More" onPress={openMore} style={styles.chromeBtn}>
+              <Feather name="more-horizontal" size={20} color={theme.text} />
+            </Pressable>
+          </View>
+        </View>
+        </View>
 
       {toolPanel === "pen" || toolPanel === "eraser" ? (
         <AnchoredPopover
@@ -1468,8 +1474,6 @@ const styles = StyleSheet.create({
   chromeBtnWrap: { flexShrink: 0 },
   chromeBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   chromeMid: { flex: 1, minWidth: 0, paddingHorizontal: 4, flexShrink: 1 },
-  chromeTrailingScroll: { flexGrow: 0, flexShrink: 0, maxWidth: 220 },
-  chromeTrailing: { flexDirection: "row", alignItems: "center", gap: 2, paddingRight: 4 },
   notebookName: { fontSize: 15, fontWeight: "800" },
   pageName: { fontSize: 11, fontWeight: "700", marginTop: 1 },
   viewChip: {
@@ -1485,18 +1489,37 @@ const styles = StyleSheet.create({
   },
   viewChipText: { fontSize: 10, fontWeight: "800" },
   toolDock: {
-    alignSelf: "center",
+    alignSelf: "stretch",
     alignItems: "center",
     marginHorizontal: 12,
     marginBottom: 6,
     maxWidth: "100%",
     zIndex: 6,
   },
+  toolDockRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "stretch",
+    width: "100%",
+  },
+  toolDockSide: {
+    flex: 1,
+    minWidth: 0,
+  },
+  toolDockTrailing: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 2,
+  },
+  viewRailScroll: { flexGrow: 0, flexShrink: 1, maxWidth: "100%" },
+  viewRail: { flexDirection: "row", alignItems: "center", gap: 2, paddingRight: 2 },
   toolRail: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
+    flexShrink: 0,
     marginHorizontal: 0,
     marginBottom: 0,
     borderWidth: StyleSheet.hairlineWidth,
