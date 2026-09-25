@@ -672,18 +672,18 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 @media (max-width:720px){.subscription-checkout-row{grid-template-columns:1fr}}
 
 /* Pre-auth onboarding (before Google login) */
-.preauth-shell{min-height:100vh;display:grid;place-items:center;padding:28px 20px;background:radial-gradient(ellipse 80% 60% at 50% 0%,#2a254810 0%,transparent 55%),linear-gradient(165deg,#0a0a0c 0%,#141418 48%,#0e0e12 100%);color:#f1f1f2;font-family:var(--font-sans),system-ui,sans-serif}
-.preauth-card{width:min(440px,100%);text-align:left}
-.preauth-brand{font-size:15px;font-weight:750;letter-spacing:-.02em;margin:0 0 28px;opacity:.92}
-.preauth-eyebrow{margin:0 0 10px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#938cff}
-.preauth-title{margin:0 0 14px;font-family:var(--font-display),Iowan Old Style,Baskerville,serif;font-weight:400;font-size:clamp(32px,6vw,40px);line-height:1.08;letter-spacing:-.03em}
-.preauth-body{margin:0;font-size:15px;line-height:1.55;color:#a1a1aa;max-width:34ch}
-.preauth-dots{display:flex;gap:8px;margin:28px 0 22px}
-.preauth-dots button{width:8px;height:8px;padding:0;border:0;border-radius:50%;background:#ffffff22;cursor:pointer}
-.preauth-dots button.selected{background:#8b83ff;width:22px;border-radius:999px}
-.preauth-actions{display:grid;gap:12px}
-.preauth-primary{height:48px;border:0;border-radius:10px;background:#625af6;color:#fff;font-size:14px;font-weight:650;cursor:pointer}
+.preauth-shell{min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:clamp(32px,6vh,64px) clamp(24px,5vw,48px);background:radial-gradient(ellipse 80% 60% at 50% 0%,#2a254810 0%,transparent 55%),linear-gradient(165deg,#0a0a0c 0%,#141418 48%,#0e0e12 100%);color:#f1f1f2;font-family:var(--font-sans),system-ui,sans-serif}
+.preauth-card{width:min(640px,100%);max-width:92vw;text-align:left}
+.preauth-brand{font-size:17px;font-weight:750;letter-spacing:-.02em;margin:0 0 clamp(28px,5vh,44px);opacity:.92}
+.preauth-eyebrow{margin:0 0 12px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#938cff}
+.preauth-title{margin:0 0 18px;font-family:var(--font-display),Iowan Old Style,Baskerville,serif;font-weight:400;font-size:clamp(40px,5.5vw,56px);line-height:1.06;letter-spacing:-.03em}
+.preauth-body{margin:0;font-size:clamp(16px,1.6vw,18px);line-height:1.55;color:#a1a1aa;max-width:46ch}
+.preauth-dots{display:flex;gap:8px;margin:clamp(28px,5vh,40px) 0 24px}
+.preauth-dots button{width:9px;height:9px;padding:0;border:0;border-radius:50%;background:#ffffff22;cursor:pointer}
+.preauth-dots button.selected{background:#8b83ff;width:26px;border-radius:999px}
+.preauth-actions{display:grid;gap:14px;max-width:420px}
+.preauth-primary{height:52px;border:0;border-radius:12px;background:#625af6;color:#fff;font-size:15px;font-weight:650;cursor:pointer}
 .preauth-primary:hover{background:#746cf8}
-.preauth-skip{border:0;background:transparent;color:#a1a1aa;font-size:13px;font-weight:550;cursor:pointer;padding:6px 0}
+.preauth-skip{border:0;background:transparent;color:#a1a1aa;font-size:14px;font-weight:550;cursor:pointer;padding:6px 0;text-align:left}
 .preauth-skip:hover{color:#f1f1f2}
-.preauth-footnote{margin:0;font-size:12px;color:#71717a;line-height:1.45}
+.preauth-footnote{margin:0;font-size:13px;color:#71717a;line-height:1.45}
