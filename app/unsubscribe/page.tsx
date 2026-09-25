@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, Suspense, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getMarketingEmailIdentity, unsubscribeUrl } from "@/lib/email/marketingCompliance";
 
@@ -45,9 +46,9 @@ function UnsubscribeForm() {
 
       {done ? (
         <section className="legal-card">
-          <strong>You're unsubscribed.</strong>
+          <strong>You&apos;re unsubscribed.</strong>
           <p style={{ marginTop: 8 }}>
-            We won't send marketing mail to <code>{email}</code>. You can close this page.
+            We won&apos;t send marketing mail to <code>{email}</code>. You can close this page.
           </p>
         </section>
       ) : (
@@ -87,7 +88,7 @@ function UnsubscribeForm() {
       </section>
 
       <p className="legal-back">
-        <a href="/">← Back to LifeOS</a>
+        <Link href="/">← Back to LifeOS</Link>
       </p>
     </main>
   );

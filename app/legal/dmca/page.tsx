@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { getDmcaAgent } from "@/lib/legal/dmcaAgent";
 
 export const metadata: Metadata = {
@@ -81,7 +82,7 @@ export default function DmcaPage() {
       </section>
 
       <p className="legal-back">
-        <a href="/">← Back to LifeOS</a>
+        <Link href="/">← Back to LifeOS</Link>
       </p>
     </main>
   );
