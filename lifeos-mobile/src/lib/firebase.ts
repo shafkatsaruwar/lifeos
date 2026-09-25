@@ -12,18 +12,16 @@ import { normalizeCalendars } from "./calendars";
 import { emptyNotebookHub } from "./notebooks";
 
 /**
- * Public Firebase web client config (same project as lifeos-mu-three.vercel.app).
- * These values are embedded in the web client bundle already — env vars override
- * when non-empty (blank .env entries fall back to defaults).
+ * Public Firebase web client config — from env only.
+ * Blank env = sign-in disabled until lifeos-mobile/.env is filled from .env.example.
  */
 const env = (value?: string) => value?.trim() || undefined;
 
 const firebaseConfig = {
-  apiKey: env(process.env.EXPO_PUBLIC_FIREBASE_API_KEY) || "AIzaSyAbMSSRscUp7CMbeCYuOp5SC6utZ3QPNNM",
-  authDomain: env(process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN) || "lifeos-45586.firebaseapp.com",
-  databaseURL:
-    env(process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL) || "https://lifeos-45586-default-rtdb.firebaseio.com/",
-  projectId: env(process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID) || "lifeos-45586",
+  apiKey: env(process.env.EXPO_PUBLIC_FIREBASE_API_KEY) || "",
+  authDomain: env(process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN) || "",
+  databaseURL: env(process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL) || "",
+  projectId: env(process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID) || "",
 };
 
 export const firebaseConfigured = Boolean(
@@ -31,11 +29,16 @@ export const firebaseConfigured = Boolean(
 );
 
 function createApp(): FirebaseApp {
+  if (!firebaseConfigured) {
+    throw new Error(
+      "Firebase is not configured. Copy lifeos-mobile/.env.example to .env and set EXPO_PUBLIC_FIREBASE_*.",
+    );
+  }
   if (getApps().length) return getApp();
   return initializeApp(firebaseConfig);
 }
 
-const app = createApp();
+const app = firebaseConfigured ? createApp() : null;
 
 /**
  * Load getReactNativePersistence from the RN build of @firebase/auth.
@@ -78,8 +81,8 @@ function createAuth(firebaseApp: FirebaseApp): Auth {
   }
 }
 
-export const auth = createAuth(app);
-export const database = getDatabase(app);
+export const auth = app ? createAuth(app) : (null as unknown as Auth);
+export const database = app ? getDatabase(app) : (null as unknown as ReturnType<typeof getDatabase>);
 
 export const emptyWorkspace: Workspace = {
   tasks: [],

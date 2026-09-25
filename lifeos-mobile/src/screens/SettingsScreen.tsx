@@ -541,8 +541,7 @@ export function SettingsScreen() {
         <Card>
           <Text style={[styles.cardLabel, { color: theme.text }]}>Data</Text>
           <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 18 }}>
-            Your mobile app reads and updates the exact same private Firebase data as LifeOS on the web (
-            <Text style={{ color: theme.accent }}>lifeos-mu-three.vercel.app</Text>).
+            Your mobile app reads and updates the exact same private Firebase data as LifeOS on the web.
           </Text>
           <View style={[styles.row, { marginTop: 14 }]}>
             <ActionButton label="Sync now" icon="refresh-cw" quiet onPress={sync} />

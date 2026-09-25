@@ -2,7 +2,7 @@
   "expo": {
     "name": "LifeOS",
     "slug": "lifeos-mobile",
-    "owner": "mohammedsaruwars-organization",
+    "owner": "your-expo-username",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -11,12 +11,12 @@
     "ios": {
       "supportsTablet": true,
       "requireFullScreen": false,
-      "bundleIdentifier": "com.shafkatsaruwar.lifeos",
+      "bundleIdentifier": "com.example.lifeos",
       "buildNumber": "14",
       "usesAppleSignIn": true,
       "entitlements": {
         "com.apple.security.application-groups": [
-          "group.com.shafkatsaruwar.lifeos"
+          "group.com.example.lifeos"
         ]
       },
       "infoPlist": {
@@ -79,7 +79,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.shafkatsaruwar.lifeos"
+      "package": "com.example.lifeos"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -116,32 +116,32 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/6021a343-7ac2-421d-a247-35279744602d",
+      "url": "https://u.expo.dev/YOUR_EAS_PROJECT_ID",
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
     },
     "extra": {
       "eas": {
-        "projectId": "6021a343-7ac2-421d-a247-35279744602d",
+        "projectId": "YOUR_EAS_PROJECT_ID",
         "build": {
           "experimental": {
             "ios": {
               "appExtensions": [
                 {
                   "targetName": "LiveActivity",
-                  "bundleIdentifier": "com.shafkatsaruwar.lifeos.LiveActivity",
+                  "bundleIdentifier": "com.example.lifeos.LiveActivity",
                   "entitlements": {
                     "com.apple.security.application-groups": [
-                      "group.com.shafkatsaruwar.lifeos"
+                      "group.com.example.lifeos"
                     ]
                   }
                 },
                 {
                   "targetName": "Share",
-                  "bundleIdentifier": "com.shafkatsaruwar.lifeos.Share",
+                  "bundleIdentifier": "com.example.lifeos.Share",
                   "entitlements": {
                     "com.apple.security.application-groups": [
-                      "group.com.shafkatsaruwar.lifeos"
+                      "group.com.example.lifeos"
                     ]
                   }
                 }

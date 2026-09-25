@@ -6,7 +6,7 @@ LifeOS stores everything under `users/{uid}/…`. These rules keep signed-in use
 
 ## Publish Realtime Database rules (required — do this before the deadline)
 
-1. Open [Firebase Console → LifeOS → Realtime Database → Rules](https://console.firebase.google.com/project/lifeos-45586/database/lifeos-45586-default-rtdb/rules)
+1. Open [Firebase Console → LifeOS → Realtime Database → Rules](https://console.firebase.google.com/project/your-firebase-project/database/your-firebase-project-default-rtdb/rules)
 2. Replace the entire rules document with the contents of [`database.rules.json`](./database.rules.json) (also pasted below)
 3. Click **Publish**
 
@@ -31,11 +31,11 @@ After publishing, the expiry warning goes away and only the signed-in Google acc
 
 If you use cloud file uploads, also set Storage rules from [`storage.rules`](./storage.rules):
 
-[Firebase Console → Storage → Rules](https://console.firebase.google.com/project/lifeos-45586/storage/rules)
+[Firebase Console → Storage → Rules](https://console.firebase.google.com/project/your-firebase-project/storage/rules)
 
 ## CLI deploy (optional)
 
-With the Firebase CLI logged into an account that owns `lifeos-45586`:
+With the Firebase CLI logged into an account that owns `your-firebase-project`:
 
 ```bash
 npx firebase-tools deploy --only database

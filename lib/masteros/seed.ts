@@ -2,9 +2,9 @@ import type { MasterOSState } from "./types";
 import { computeMasteryState } from "./mastery";
 
 const S = {
-  wafia: "stu-wafia",
-  omar: "stu-omar",
-  layla: "stu-layla",
+  alex: "stu-alex",
+  jordan: "stu-jordan",
+  sam: "stu-sam",
   sat: "crs-sat-prep",
   satGroup: "cls-sat-saturday",
 };
@@ -61,7 +61,7 @@ const skills = [...mathSkills, ...rwSkills].map(([id, name, description]) => ({
 
 function skillRow(skillId: string, accuracy: number, attempts: number, lastPracticed: string, review = false) {
   return {
-    studentId: S.wafia,
+    studentId: S.alex,
     skillId,
     accuracy,
     attempts,
@@ -74,9 +74,9 @@ function skillRow(skillId: string, accuracy: number, attempts: number, lastPract
 export function createSeedState(): MasterOSState {
   return {
     students: [
-      { id: S.wafia, name: "Wafia", gradeLevel: "11", notes: "Thoughtful, careful with reading. Algebra setup is the current bottleneck.", createdAt: "2026-07-01T12:00:00.000Z" },
-      { id: S.omar, name: "Omar", gradeLevel: "11", notes: "Strong mental math; needs reading pacing.", createdAt: "2026-07-15T12:00:00.000Z" },
-      { id: S.layla, name: "Layla", gradeLevel: "10", notes: "Motivated in group settings; shy one-on-one.", createdAt: "2026-08-01T12:00:00.000Z" },
+      { id: S.alex, name: "Alex", gradeLevel: "11", notes: "Thoughtful, careful with reading. Algebra setup is the current bottleneck.", createdAt: "2026-07-01T12:00:00.000Z" },
+      { id: S.jordan, name: "Jordan", gradeLevel: "11", notes: "Strong mental math; needs reading pacing.", createdAt: "2026-07-15T12:00:00.000Z" },
+      { id: S.sam, name: "Sam", gradeLevel: "10", notes: "Motivated in group settings; shy one-on-one.", createdAt: "2026-08-01T12:00:00.000Z" },
     ],
     courses: [{
       id: S.sat,
@@ -90,24 +90,24 @@ export function createSeedState(): MasterOSState {
       id: S.satGroup,
       name: "SAT Saturday Group",
       courseId: S.sat,
-      studentIds: [S.wafia, S.omar, S.layla],
+      studentIds: [S.alex, S.jordan, S.sam],
       schedule: "Sat 10:00",
       notes: "Small group · percent and algebra focus",
       createdAt: "2026-08-04T12:00:00.000Z",
     }],
     enrollments: [
-      { studentId: S.wafia, courseId: S.sat },
-      { studentId: S.omar, courseId: S.sat },
-      { studentId: S.layla, courseId: S.sat },
+      { studentId: S.alex, courseId: S.sat },
+      { studentId: S.jordan, courseId: S.sat },
+      { studentId: S.sam, courseId: S.sat },
     ],
     units,
     lessons: [
       {
         id: "les-diag-review",
         unitId: "unit-1",
-        studentId: S.wafia,
+        studentId: S.alex,
         title: "Diagnostic debrief",
-        objective: "Walk through Wafia’s diagnostic by skill and pick the first two targets.",
+        objective: "Walk through Alex’s diagnostic by skill and pick the first two targets.",
         date: "2026-08-11",
         duration: 75,
         status: "complete",
@@ -117,7 +117,7 @@ export function createSeedState(): MasterOSState {
       {
         id: "les-linear",
         unitId: "unit-2",
-        studentId: S.wafia,
+        studentId: S.alex,
         title: "Linear equations, clean setup",
         objective: "Translate word problems into linear equations and solve without dropping signs.",
         date: "2026-08-18",
@@ -129,7 +129,7 @@ export function createSeedState(): MasterOSState {
       {
         id: "les-percent",
         unitId: "unit-4",
-        studentId: S.wafia,
+        studentId: S.alex,
         title: "Percent problems: find the whole",
         objective: "Set up percent-of, percent-change, and reverse-percent questions with a consistent diagram.",
         date: "2026-08-19",
@@ -141,7 +141,7 @@ export function createSeedState(): MasterOSState {
       {
         id: "les-vocab",
         unitId: "unit-6",
-        studentId: S.wafia,
+        studentId: S.alex,
         title: "Vocabulary in context",
         objective: "Use nearby contrast and examples to choose the best meaning — not the first synonym.",
         date: "2026-08-21",
@@ -156,7 +156,7 @@ export function createSeedState(): MasterOSState {
         ["teach", "Teach", "Show the diagnostic heatmap. Math 610 / RW 640 / Total 1250. Skill bars underneath — not just one score."],
         ["examples", "Examples", "Replay one percent miss and one vocab miss. Name the mistake type out loud."],
         ["guided_practice", "Guided Practice", "Together: rewrite two percent setups using part/whole."],
-        ["independent_practice", "Independent Practice", "Wafia classifies 4 missed items: concept vs careless vs vocab."],
+        ["independent_practice", "Independent Practice", "Alex classifies 4 missed items: concept vs careless vs vocab."],
         ["exit_ticket", "Exit Ticket", "1) What is your weakest math skill today? 2) What is the next lesson for?"],
         ["homework", "Homework", "Finish classifying remaining diagnostic misses. 15 minutes max."],
       ]),
@@ -219,10 +219,10 @@ export function createSeedState(): MasterOSState {
       q("q-geo-1", "A triangle has angles 40° and 65°. The third angle is?", "75°", "sk-geo", "easy", "180 − 105 = 75.", "numeric"),
     ],
     assignments: [
-      { id: "asg-diag", courseId: S.sat, studentId: S.wafia, lessonId: "les-diag-review", title: "August diagnostic", type: "diagnostic", assignedDate: "2026-08-04", dueDate: "2026-08-10", status: "graded", totalPoints: 1600, score: 1250 },
-      { id: "asg-linear-hw", courseId: S.sat, studentId: S.wafia, lessonId: "les-linear", title: "Linear equations practice set", type: "homework", assignedDate: "2026-08-18", dueDate: "2026-08-19", status: "graded", totalPoints: 8, score: 6 },
-      { id: "asg-percent", courseId: S.sat, studentId: S.wafia, lessonId: "les-percent", title: "Percent worksheet", type: "worksheet", assignedDate: "2026-08-19", dueDate: "2026-08-21", status: "assigned", totalPoints: 10 },
-      { id: "asg-quiz-alg", courseId: S.sat, studentId: S.wafia, title: "Algebra foundations quiz", type: "quiz", assignedDate: "2026-08-12", dueDate: "2026-08-15", status: "graded", totalPoints: 20, score: 15 },
+      { id: "asg-diag", courseId: S.sat, studentId: S.alex, lessonId: "les-diag-review", title: "August diagnostic", type: "diagnostic", assignedDate: "2026-08-04", dueDate: "2026-08-10", status: "graded", totalPoints: 1600, score: 1250 },
+      { id: "asg-linear-hw", courseId: S.sat, studentId: S.alex, lessonId: "les-linear", title: "Linear equations practice set", type: "homework", assignedDate: "2026-08-18", dueDate: "2026-08-19", status: "graded", totalPoints: 8, score: 6 },
+      { id: "asg-percent", courseId: S.sat, studentId: S.alex, lessonId: "les-percent", title: "Percent worksheet", type: "worksheet", assignedDate: "2026-08-19", dueDate: "2026-08-21", status: "assigned", totalPoints: 10 },
+      { id: "asg-quiz-alg", courseId: S.sat, studentId: S.alex, title: "Algebra foundations quiz", type: "quiz", assignedDate: "2026-08-12", dueDate: "2026-08-15", status: "graded", totalPoints: 20, score: 15 },
     ],
     assignmentQuestions: [
       { assignmentId: "asg-linear-hw", questionId: "q-lin-1", order: 1, points: 4 },
@@ -232,16 +232,16 @@ export function createSeedState(): MasterOSState {
       { assignmentId: "asg-percent", questionId: "q-pct-3", order: 3, points: 3 },
     ],
     questionResults: [
-      { id: "qr-1", studentId: S.wafia, questionId: "q-lin-1", assignmentId: "asg-linear-hw", correct: true, response: "17" },
-      { id: "qr-2", studentId: S.wafia, questionId: "q-lin-2", assignmentId: "asg-linear-hw", correct: false, response: "-8", mistakeType: "careless_mistake" },
-      { id: "qr-3", studentId: S.wafia, questionId: "q-pct-2", assignmentId: "asg-diag", correct: false, response: "56 / 0.3", mistakeType: "concept_not_understood" },
-      { id: "qr-4", studentId: S.wafia, questionId: "q-voc-1", assignmentId: "asg-diag", correct: false, response: "C", mistakeType: "vocabulary_issue" },
+      { id: "qr-1", studentId: S.alex, questionId: "q-lin-1", assignmentId: "asg-linear-hw", correct: true, response: "17" },
+      { id: "qr-2", studentId: S.alex, questionId: "q-lin-2", assignmentId: "asg-linear-hw", correct: false, response: "-8", mistakeType: "careless_mistake" },
+      { id: "qr-3", studentId: S.alex, questionId: "q-pct-2", assignmentId: "asg-diag", correct: false, response: "56 / 0.3", mistakeType: "concept_not_understood" },
+      { id: "qr-4", studentId: S.alex, questionId: "q-voc-1", assignmentId: "asg-diag", correct: false, response: "C", mistakeType: "vocabulary_issue" },
     ],
     assessments: [
       {
         id: "ass-diag",
         courseId: S.sat,
-        studentId: S.wafia,
+        studentId: S.alex,
         type: "diagnostic",
         title: "August SAT diagnostic",
         date: "2026-08-10",
@@ -264,9 +264,9 @@ export function createSeedState(): MasterOSState {
       },
     ],
     teacherNotes: [
-      { id: "tn-1", studentId: S.wafia, text: "Confident when the algebra is already set up. Slows down on story problems.", createdAt: "2026-08-11T18:00:00.000Z" },
-      { id: "tn-2", studentId: S.wafia, courseId: S.sat, lessonId: "les-linear", text: "Rushed through percentage setup last week. Today: understands equations but forgets negative signs.", createdAt: "2026-08-18T17:30:00.000Z" },
-      { id: "tn-3", studentId: S.wafia, skillId: "sk-percent", text: "Needs a consistent part/whole diagram before calculating.", createdAt: "2026-08-11T18:10:00.000Z" },
+      { id: "tn-1", studentId: S.alex, text: "Confident when the algebra is already set up. Slows down on story problems.", createdAt: "2026-08-11T18:00:00.000Z" },
+      { id: "tn-2", studentId: S.alex, courseId: S.sat, lessonId: "les-linear", text: "Rushed through percentage setup last week. Today: understands equations but forgets negative signs.", createdAt: "2026-08-18T17:30:00.000Z" },
+      { id: "tn-3", studentId: S.alex, skillId: "sk-percent", text: "Needs a consistent part/whole diagram before calculating.", createdAt: "2026-08-11T18:10:00.000Z" },
     ],
   };
 }
@@ -307,5 +307,5 @@ function q(
   };
 }
 
-export const DEMO_STUDENT_ID = S.wafia;
+export const DEMO_STUDENT_ID = S.alex;
 export const DEMO_COURSE_ID = S.sat;

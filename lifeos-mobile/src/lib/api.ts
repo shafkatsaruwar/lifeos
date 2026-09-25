@@ -1,15 +1,17 @@
-// Thin client for the deployed LifeOS Next.js backend. All requests hit the
-// live production deployment directly — there is no mobile-specific backend.
-// Contracts here mirror exactly what app/page.tsx + lib/useNLTaskCreation.ts
-// send on web (see app/api/ai/route.ts and app/api/ical/route.ts).
-//
-// Auth note: /api/ai and /api/ical do NOT check a Firebase ID token or userId
-// on the web client either (see route source) — they are stateless AI/proxy
-// endpoints gated only by the server's own ANTHROPIC_API_KEY. So the mobile
-// client replicates the same anonymous POST body shape; no Authorization
-// header is sent, matching web behavior exactly.
+# Thin client for the deployed LifeOS Next.js backend.
+# Set EXPO_PUBLIC_LIFEOS_URL to your web app origin (local or production).
 
-export const API_BASE = "https://lifeos-mu-three.vercel.app";
+const rawBase = (process.env.EXPO_PUBLIC_LIFEOS_URL || "").trim().replace(/\/$/, "");
+
+export const API_BASE =
+  rawBase ||
+  (typeof __DEV__ !== "undefined" && __DEV__ ? "http://localhost:3000" : "");
+
+if (!API_BASE && typeof console !== "undefined") {
+  console.warn(
+    "EXPO_PUBLIC_LIFEOS_URL is unset. AI/calendar API calls need your LifeOS web origin.",
+  );
+}
 
 export type AiParsedTask = {
   title: string;
@@ -22,6 +24,9 @@ export type AiParsedTask = {
 };
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
+  if (!API_BASE) {
+    throw new Error("Set EXPO_PUBLIC_LIFEOS_URL to your LifeOS web app URL.");
+  }
   const response = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -143,6 +148,10 @@ export async function verifyFocusEnforcerProof(
     confidence: 0,
     reason,
   });
+
+  if (!API_BASE) {
+    return softFail("Set EXPO_PUBLIC_LIFEOS_URL to enable photo verify.");
+  }
 
   try {
     const response = await fetch(`${API_BASE}/api/ai`, {

@@ -9,3 +9,8 @@ out/
 *.tsbuildinfo
 .DS_Store
 .vercel
+
+# Personal / local-only artifacts
+lifeos-mobile-backup*/
+*.bak
+app/page.old.tsx

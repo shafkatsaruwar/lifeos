@@ -19,7 +19,7 @@ They are compiled inside the existing **LiveActivity** WidgetKit extension (`ios
 
 RN writes App Group snapshot via `@bacons/apple-targets` `ExtensionStorage`:
 
-- Group: `group.com.shafkatsaruwar.lifeos`
+- Group: `group.com.example.lifeos`
 - Key: `lifeosWidgetSnapshot`
 - Builder: `src/lib/widgets/snapshot.ts`
 

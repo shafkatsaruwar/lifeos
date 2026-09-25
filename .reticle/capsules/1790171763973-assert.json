@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "id": "1790171763973-assert",
+  "createdAt": 1790171763973,
+  "origin": "failed-assert",
+  "expected": "declared consequence",
+  "observed": "no element matched {\"testid\":\"tasks-batch-delete\"} — testids present here: tasks-table, tasks-select-all",
+  "steps": [
+    {
+      "tool": "reticle_act",
+      "anchor": {
+        "kind": "testid",
+        "value": "tasks-select-all",
+        "source": {
+          "file": "app/page.tsx",
+          "line": 3530,
+          "column": 10
+        }
+      },
+      "action": "click"
+    }
+  ]
+}

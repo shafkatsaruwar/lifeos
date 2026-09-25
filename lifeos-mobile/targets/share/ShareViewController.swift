@@ -2,7 +2,7 @@ import UIKit
 import UniformTypeIdentifiers
 
 final class ShareViewController: UIViewController {
-  private let appGroup = "group.com.shafkatsaruwar.lifeos"
+  private let appGroup = "group.com.example.lifeos"
   private let queueKey = "lifeosPendingShares"
 
   override func viewDidLoad() {

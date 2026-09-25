@@ -4,10 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, AppState as RNAppState, StyleSheet, Text, useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { auth, deleteNotebookPageRemote, loadWorkspace, saveNotebookPage, saveWorkspacePart, subscribeWorkspacePart } from "./src/lib/firebase";
+import { auth, deleteNotebookPageRemote, firebaseConfigured, loadWorkspace, saveNotebookPage, saveWorkspacePart, subscribeWorkspacePart } from "./src/lib/firebase";
 import { normalizeTimeTracking } from "./src/lib/timeTracking";
 import { readOnboardingComplete, writeOnboardingComplete } from "./src/lib/onboardingCache";
 import { shouldPersistOnboardingComplete } from "./src/lib/onboardingGate";
+import { mergeSettingsWithEnvironmentDefaults } from "../lib/settingsDefaults";
 import { clearCachedPageInk } from "./src/lib/inkCache";
 import type { NotebookPage, Task, Workspace } from "./src/types";
 import { LifeOSContext, type AppState } from "./src/lib/LifeOSContext";
@@ -55,6 +56,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!firebaseConfigured || !auth) {
+      setLoading(false);
+      setUser(null);
+      setWorkspace(null);
+      return;
+    }
     let cancelled = false;
     // Wait until AsyncStorage persistence has restored (or confirmed null)
     // before showing SignIn — avoids a false logged-out flash on cold start.
@@ -142,6 +149,10 @@ export default function App() {
     // Initial load is a full replace (no local optimistic state yet).
     loadWorkspace(user.uid)
       .then(async (next) => {
+        next = {
+          ...next,
+          settings: mergeSettingsWithEnvironmentDefaults({}, next.settings),
+        };
         const cachedAt = await readOnboardingComplete(user.uid);
         if (!next.settings.onboardingCompletedAt) {
           const healedAt =

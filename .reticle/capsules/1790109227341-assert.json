@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "id": "1790109227341-assert",
+  "createdAt": 1790109227341,
+  "origin": "failed-assert",
+  "expected": "declared consequence",
+  "observed": "no element matched {\"text\":\"Course standing\"}",
+  "steps": [
+    {
+      "tool": "reticle_act",
+      "anchor": {
+        "kind": "testid",
+        "value": "",
+        "source": {
+          "file": "app/components/SchoolPlanner.tsx",
+          "line": 884,
+          "column": 53
+        }
+      },
+      "action": "click"
+    }
+  ]
+}

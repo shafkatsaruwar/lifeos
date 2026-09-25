@@ -18,6 +18,8 @@ Non-obvious gotchas:
 - No local backend/database process exists. Persistence/auth is Firebase (a hosted cloud service). Firebase and the AI/calendar integrations are configured via env vars in `.env.local` (see `.env.example`); none of them are required to run or demo the app locally.
 - The login screen shows a "Dev: Test Login" button ONLY when the hostname is `localhost` or `127.0.0.1`. Use it to enter the app without Firebase credentials — it signs in as a local test user (`lib/constants.ts` `TEST_USER`). Access the app via `http://localhost:3000` (not the LAN IP) so this button appears.
 - With no Firebase env vars, cloud sync is a no-op by design (`lib/dataSync.ts` early-returns when `NEXT_PUBLIC_FIREBASE_DB_URL` is unset), so the app runs fully on local/in-memory state.
+- Firebase config is **env-only** — there is no baked-in production project in the repo. Copy `.env.example` → `.env.local`.
+- New users get **LifeOS + SchoolOS** only; returning users keep existing environment flags (`lib/settingsDefaults.ts`).
 - Root `.npmrc` sets `legacy-peer-deps=true`; installs rely on this, so use plain `npm install`.
 
 Creating a task (quick smoke test): on the "Now" view, type `/t <task title>` in the command input and press Enter.

@@ -45,7 +45,7 @@ npm run dev   # http://localhost:3000
 | `GET /api/mcp` | Discovery JSON, or **SSE** when `Accept` includes `text/event-stream`. |
 | `/api/mcp/http` | Same handlers — use this URL if a client wants a dedicated Streamable HTTP path. |
 
-Every HTTP request needs `Authorization: Bearer <LIFEOS_MCP_TOKEN>` (or `X-LifeOS-Token`). `OPTIONS` is unauthenticated (CORS preflight). Production `https://lifeos-mu-three.vercel.app/api/mcp` returns **503** until `LIFEOS_MCP_TOKEN` is set on Vercel.
+Every HTTP request needs `Authorization: Bearer <LIFEOS_MCP_TOKEN>` (or `X-LifeOS-Token`). `OPTIONS` is unauthenticated (CORS preflight). Production `https://YOUR_HOST/api/mcp` returns **503** until `LIFEOS_MCP_TOKEN` is set on Vercel.
 
 ## Environment (live Firebase)
 

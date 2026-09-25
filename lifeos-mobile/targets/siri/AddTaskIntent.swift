@@ -30,7 +30,7 @@ struct AddTaskIntent: AppIntent {
   }
 
   private func enqueuePendingTask(title: String) {
-    let groupId = "group.com.shafkatsaruwar.lifeos"
+    let groupId = "group.com.example.lifeos"
     let key = "lifeosPendingSiriTasks"
     let entry: [String: Any] = [
       "title": title,

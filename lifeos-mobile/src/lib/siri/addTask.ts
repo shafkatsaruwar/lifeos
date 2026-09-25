@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 import type { Task } from "../../types";
 
-const APP_GROUP = "group.com.shafkatsaruwar.lifeos";
+const APP_GROUP = "group.com.example.lifeos";
 const PENDING_KEY = "lifeosPendingSiriTasks";
 
 export function parseAddTaskUrl(url: string | null | undefined): string | null {

@@ -95,8 +95,8 @@ type MonthlyState = {
 };
 
 const defaultCategories: TreasuryCategory[] = [
-  { id: "parents", name: "Parents / Project Retire Baba", emoji: "❤️", kind: "expense", target: 1100, betweenTarget: 0 },
-  { id: "masters", name: "Master's", emoji: "🎓", kind: "savings", target: 350, betweenTarget: 0 },
+  { id: "family", name: "Family support", emoji: "❤️", kind: "expense", target: 500, betweenTarget: 0 },
+  { id: "education", name: "Education", emoji: "🎓", kind: "savings", target: 300, betweenTarget: 0 },
   { id: "emergency", name: "Emergency Fund", emoji: "🛡️", kind: "savings", target: 200, betweenTarget: 50 },
   { id: "travel", name: "Travel", emoji: "✈️", kind: "savings", target: 150, betweenTarget: 0 },
   { id: "debt", name: "Debt", emoji: "💳", kind: "expense", target: 400, betweenTarget: 400 },
@@ -120,19 +120,19 @@ const defaultSettings: TreasurySettings = {
     budgetModeTitle: "Budget mode",
     employedHelp: "Use each category’s normal target.",
     betweenContractsHelp: "Use each category’s between-contract target.",
-    retireBabaTitle: "Project Retire Baba",
+    retireBabaTitle: "Spotlight goal",
     retireBabaMetricLabel: "This month",
-    retireBabaImpactPrefix: "That replaces about",
-    retireBabaImpactMiddle: "evening DoorDash shifts at",
-    retireBabaImpactSuffix: "/shift.",
-    retireBabaMissing: "Add or restore a category with the built-in Parents role to show this tracker.",
+    retireBabaImpactPrefix: "That covers about",
+    retireBabaImpactMiddle: "hours of focused work at",
+    retireBabaImpactSuffix: "/hour.",
+    retireBabaMissing: "Pick a category for the spotlight tracker in Settings.",
     savingsTitle: "Savings buckets",
     savingsHelp: "Total entered this month across categories marked as savings.",
-    savingsCallout: "Create buckets like Emergency Fund, Tuition, Camera Gear, Travel, or anything else you want to save toward.",
+    savingsCallout: "Create buckets like Emergency Fund, Tuition, Travel, or anything else you want to save toward.",
     moneyMapTitle: "money map",
     incomeInputLabel: "Actual take-home income this month",
     incomeHintPrefix: "Leave this at $0 to use your editable baseline of",
-    monthNotePlaceholder: "Month note, e.g. transit was prepaid last month; phone came from birthday money…",
+    monthNotePlaceholder: "Month note, e.g. transit was prepaid last month…",
     categoriesTitle: "Custom categories",
     categoriesHelp: "Add, rename, delete, or retarget anything. Between-contract targets let the same category automatically shrink or pause when you switch modes.",
     incomeSetupTitle: "Income setup",
@@ -143,17 +143,17 @@ const defaultSettings: TreasurySettings = {
   weeklyHours: 37.5,
   withholdingRate: 20.3,
   monthlyBaseline: 3200,
-  babaEveningShiftValue: 75,
-  contractEnd: "2026-10-31",
+  babaEveningShiftValue: 25,
+  contractEnd: "",
   categories: defaultCategories,
   spotlight: {
-    categoryId: "parents",
-    title: "Project Retire Baba",
+    categoryId: "family",
+    title: "Spotlight goal",
     metricLabel: "This month",
-    impactPrefix: "That replaces about",
-    unitNoun: "evening DoorDash shifts at",
-    unitValue: 75,
-    unitSuffix: "/shift.",
+    impactPrefix: "That covers about",
+    unitNoun: "hours of focused work at",
+    unitValue: 25,
+    unitSuffix: "/hour.",
   },
 };
 
@@ -180,8 +180,8 @@ function createDemoMonthState(monthKey = currentMonthKey()): MonthlyState {
     month: monthKey,
     mode: "employed",
     categoryValues: {
-      parents: 1100,
-      masters: 350,
+      family: 500,
+      education: 300,
       emergency: 200,
       travel: 75,
       debt: 400,
@@ -226,15 +226,17 @@ const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD
 const exactMoney = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 const clamp = (n: number, min = 0) => Math.max(min, Number.isFinite(n) ? n : 0);
 const makeId = () => `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-const LOCAL_SETTINGS_KEY = "shafkat-budget-settings";
+const LOCAL_SETTINGS_KEY = "lifeos-budget-settings";
+const LEGACY_SETTINGS_KEY = "shafkat-budget-settings";
+const monthStorageKey = (month: string) => `lifeos-budget-month-${month}`;
+const legacyMonthStorageKey = (month: string) => `shafkat-budget-month-${month}`;
 const LEGACY_MONTH_KEY = "shafkat-budget-month";
-const monthStorageKey = (month: string) => `shafkat-budget-month-${month}`;
 const lifeosTreasuryPath = (uid: string, suffix: string) => `users/${uid}/treasuryOS/${suffix}`;
 
 function resolveSpotlight(raw: any, categories: TreasuryCategory[]): SpotlightConfig {
-  const fallbackCategoryId = categories.some(c => c.id === "parents")
-    ? "parents"
-    : (categories[0]?.id ?? "parents");
+  const fallbackCategoryId = categories.some(c => c.id === "family")
+    ? "family"
+    : (categories[0]?.id ?? "family");
   const copy = raw?.copy ?? {};
   const spotlight = raw?.spotlight ?? {};
   return {
@@ -333,8 +335,13 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
       let nextSettings = defaultSettings;
       let nextMonth = defaultMonthState();
       try {
-        const localSettings = localStorage.getItem(LOCAL_SETTINGS_KEY);
-        const localMonth = localStorage.getItem(monthStorageKey(defaultMonthState().month)) ?? localStorage.getItem(LEGACY_MONTH_KEY);
+        const localSettings =
+          localStorage.getItem(LOCAL_SETTINGS_KEY) ?? localStorage.getItem(LEGACY_SETTINGS_KEY);
+        const monthKey = defaultMonthState().month;
+        const localMonth =
+          localStorage.getItem(monthStorageKey(monthKey)) ??
+          localStorage.getItem(legacyMonthStorageKey(monthKey)) ??
+          localStorage.getItem(LEGACY_MONTH_KEY);
         hadLocalSettings = Boolean(localSettings);
         hadLocalMonth = Boolean(localMonth);
         if (localSettings) nextSettings = migrateSettings(JSON.parse(localSettings));
@@ -752,7 +759,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
                     <input
                       value={settings.spotlight.title}
                       onChange={e => setSpotlight({ title: e.target.value })}
-                      placeholder="e.g. Emergency runway, Retire Baba, House deposit"
+                      placeholder="e.g. Emergency runway, House deposit, Family support"
                       aria-label="Big project name"
                     />
                   </label>

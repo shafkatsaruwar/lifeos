@@ -36,6 +36,7 @@ import { coerceFirebaseList } from "@/lib/validation";
 import { readTaskBackup, writeTaskBackup } from "@/lib/taskBackup";
 import { signInWithGoogle, signOut, onAuthStateChanged, whenClientAuthReady } from "@/lib/firebase";
 import { shouldPersistOnboardingComplete } from "@/lib/onboardingGate";
+import { mergeSettingsWithEnvironmentDefaults } from "@/lib/settingsDefaults";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
@@ -46,6 +47,9 @@ import { emptyTimeTracking, normalizeTimeTracking, clockIn, clockOut, getActiveE
 import type { TimeTrackingState } from "@/lib/timeTracking";
 import { getFileStorage } from "@/lib/fileStorage";
 import { GlobalNotificationShell } from "@/app/components/NotificationCenter";
+import { AgeGateCheckbox, AGE_GATE_BLOCKED_MESSAGE, ageGateBlockedStyle } from "@/app/components/AgeGateCheckbox";
+import { SubscriptionCheckoutCard } from "@/app/components/SubscriptionCheckoutCard";
+import { SessionReplaySettingsRow } from "@/app/components/PrivacyTelemetry";
 import {
   generateLifeOSNotifications,
   loadDismissedNotificationIds,
@@ -270,11 +274,9 @@ const nav: NavItem[] = [
 ];
 
 const initialTasks: Task[] = [
-  { id: 1, title: "Finalize onboarding flow", project: "Synapse", color: "#635bff", due: "2026-07-10", priority: "High", focusMinutes: 45, energy: "High" },
-  { id: 2, title: "Edit Brooklyn portrait set", project: "Photography", color: "#e48b6b", due: "2026-07-10", priority: "Medium", focusMinutes: 60, energy: "Medium" },
-  { id: 3, title: "Review personal statement draft", project: "Master's Applications", color: "#47a47b", due: "2026-07-10", priority: "High", focusMinutes: 30, energy: "High" },
-  { id: 4, title: "Update catering menu pricing", project: "Mom's Catering", color: "#d99b38", due: "2026-07-11", priority: "Medium", focusMinutes: 25, energy: "Medium" },
-  { id: 5, title: "Prepare portfolio case study", project: "Career", color: "#4e8bd7", due: "2026-07-12", priority: "Low", focusMinutes: 45, energy: "Low" },
+  { id: 1, title: "Add your first priority", project: "Inbox", color: "#625af6", due: "", priority: "High", focusMinutes: 25, energy: "Medium" },
+  { id: 2, title: "Explore Spaces and environments", project: "Inbox", color: "#625af6", due: "", priority: "Medium", focusMinutes: 20, energy: "Low" },
+  { id: 3, title: "Try a short focus session", project: "Inbox", color: "#625af6", due: "", priority: "Low", focusMinutes: 15, energy: "Medium" },
 ];
 
 const initialSettings: SettingsState = {
@@ -297,10 +299,10 @@ const initialSettings: SettingsState = {
   momentumLog: [],
   enableLifeOS: true,
   enableSchoolOS: true,
-  enableWorkOS: true,
-  enableStudyAbroad: true,
-  enableTreasuryOS: true,
-  enableMasterOS: true,
+  enableWorkOS: false,
+  enableStudyAbroad: false,
+  enableTreasuryOS: false,
+  enableMasterOS: false,
   showCaptureCommands: true,
   nowQueueIds: [],
 };
@@ -1158,13 +1160,15 @@ export default function LifeOS() {
         const cachedAt = typeof window !== 'undefined' && cloudUserId
           ? window.localStorage.getItem(`lifeos-onboarding-complete:${cloudUserId}`)
           : null;
-        const merged = firebaseSettings
-          ? { ...initialSettings, ...firebaseSettings }
-          : initialSettings;
-        if (!merged.onboardingCompletedAt && cachedAt) {
-          merged.onboardingCompletedAt = cachedAt;
-          merged.onboardingVersion = merged.onboardingVersion ?? 1;
+        const stored =
+          firebaseSettings && typeof firebaseSettings === "object"
+            ? { ...firebaseSettings }
+            : null;
+        if (stored && !stored.onboardingCompletedAt && cachedAt) {
+          stored.onboardingCompletedAt = cachedAt;
+          stored.onboardingVersion = stored.onboardingVersion ?? 1;
         }
+        const merged = mergeSettingsWithEnvironmentDefaults(initialSettings, stored);
         if (firebaseSettings || merged.onboardingCompletedAt) {
           setSettingsState(merged);
         }
@@ -4287,7 +4291,7 @@ function OutlookCalendarIntegration({ user, flash }: { user?: any; flash: (messa
   const save = async (next: string[]) => { setSelected(next); try { const response = await fetch("/api/outlook/calendar", { method: "PUT", headers: { authorization: "Bearer " + await token(), "content-type": "application/json" }, body: JSON.stringify({ selectedCalendarIds: next }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not save calendar choices."); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save Outlook calendar choices."); } };
   const sync = async () => { try { setBusy(true); setError(""); const response = await fetch("/api/outlook/calendar/sync", { method: "POST", headers: { authorization: "Bearer " + await token() } }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not sync Outlook Calendar."); window.dispatchEvent(new CustomEvent("lifeos:outlook-calendar-events", { detail: Array.isArray(data.events) ? data.events : [] })); flash((data.events?.length || 0) + " Outlook events synced"); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not sync Outlook Calendar."); } finally { setBusy(false); } };
   const disconnect = async () => { if (!window.confirm("Disconnect Outlook Calendar? LifeOS will remove its encrypted connection record.")) return; try { setBusy(true); const response = await fetch("/api/outlook/calendar", { method: "DELETE", headers: { authorization: "Bearer " + await token() } }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not disconnect Outlook."); setConnected(false); setCalendars([]); setSelected([]); flash("Outlook Calendar disconnected"); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not disconnect Outlook Calendar."); } finally { setBusy(false); } };
-  return <section className="card settings-card calendar-connection-card"><div className="card-head"><div><span className="section-icon outlook-calendar-icon"><CalendarDays size={14} /></span><h2>Outlook Calendar</h2></div>{connected && <button onClick={() => void sync()} disabled={busy}><RefreshCw size={14} /> {busy ? "Syncing…" : "Sync now"}</button>}</div><div className="settings-body">{loading ? <p className="settings-note">Checking Outlook Calendar…</p> : !connected ? <div className="integration-empty"><strong>Connect Outlook Calendar.</strong><p>Choose the Microsoft calendars LifeOS can read. Sync is read-only: LifeOS never changes events in Outlook.</p><ol className="integration-steps"><li>Press <b>Connect Outlook Calendar</b> and sign in to Microsoft.</li><li>Approve read-only calendar access.</li><li>Back in LifeOS, check the calendars you want and press <b>Sync now</b>.</li></ol><details className="integration-help"><summary>First-time Microsoft setup (only if Connect does not open)</summary><p>In Microsoft Entra, add <code>https://lifeos-mu-three.vercel.app/api/outlook/callback</code> as a Web redirect URL. Then add <code>MICROSOFT_OUTLOOK_CLIENT_ID</code> and <code>MICROSOFT_OUTLOOK_CLIENT_SECRET</code> to Vercel, and grant Microsoft Graph delegated <code>Calendars.Read</code>.</p></details><button className="primary" onClick={() => void connect()} disabled={busy}><CalendarDays size={15} /> {busy ? "Opening Microsoft…" : "Connect Outlook Calendar"}</button></div> : <><div className="icloud-status"><span><CheckCircle2 size={15} /> Connected securely</span><button onClick={() => void disconnect()} disabled={busy}>Disconnect</button></div><p className="settings-note">Choose the Outlook calendars LifeOS should import.</p>{calendars.length ? <div className="icloud-calendar-list">{calendars.map(calendar => <label key={calendar.id} className="outlook-calendar-option"><input type="checkbox" checked={selected.includes(calendar.id)} onChange={event => void save(event.target.checked ? [...selected, calendar.id] : selected.filter(id => id !== calendar.id))} /><i style={{ background: calendar.color || "#0078d4" }} /><span>{calendar.name}{calendar.primary ? " · Default" : ""}</span></label>)}</div> : <div className="integration-empty"><strong>No Outlook calendars found.</strong><p>Try reconnecting your Microsoft account.</p><button onClick={() => void connect()} disabled={busy}>Reconnect Outlook</button></div>}</>}{error && <p className="gmail-error" role="alert">{error}</p>}</div></section>;
+  return <section className="card settings-card calendar-connection-card"><div className="card-head"><div><span className="section-icon outlook-calendar-icon"><CalendarDays size={14} /></span><h2>Outlook Calendar</h2></div>{connected && <button onClick={() => void sync()} disabled={busy}><RefreshCw size={14} /> {busy ? "Syncing…" : "Sync now"}</button>}</div><div className="settings-body">{loading ? <p className="settings-note">Checking Outlook Calendar…</p> : !connected ? <div className="integration-empty"><strong>Connect Outlook Calendar.</strong><p>Choose the Microsoft calendars LifeOS can read. Sync is read-only: LifeOS never changes events in Outlook.</p><ol className="integration-steps"><li>Press <b>Connect Outlook Calendar</b> and sign in to Microsoft.</li><li>Approve read-only calendar access.</li><li>Back in LifeOS, check the calendars you want and press <b>Sync now</b>.</li></ol><details className="integration-help"><summary>First-time Microsoft setup (only if Connect does not open)</summary><p>In Microsoft Entra, add <code>https://YOUR_HOST/api/outlook/callback</code> as a Web redirect URL. Then add <code>MICROSOFT_OUTLOOK_CLIENT_ID</code> and <code>MICROSOFT_OUTLOOK_CLIENT_SECRET</code> to Vercel, and grant Microsoft Graph delegated <code>Calendars.Read</code>.</p></details><button className="primary" onClick={() => void connect()} disabled={busy}><CalendarDays size={15} /> {busy ? "Opening Microsoft…" : "Connect Outlook Calendar"}</button></div> : <><div className="icloud-status"><span><CheckCircle2 size={15} /> Connected securely</span><button onClick={() => void disconnect()} disabled={busy}>Disconnect</button></div><p className="settings-note">Choose the Outlook calendars LifeOS should import.</p>{calendars.length ? <div className="icloud-calendar-list">{calendars.map(calendar => <label key={calendar.id} className="outlook-calendar-option"><input type="checkbox" checked={selected.includes(calendar.id)} onChange={event => void save(event.target.checked ? [...selected, calendar.id] : selected.filter(id => id !== calendar.id))} /><i style={{ background: calendar.color || "#0078d4" }} /><span>{calendar.name}{calendar.primary ? " · Default" : ""}</span></label>)}</div> : <div className="integration-empty"><strong>No Outlook calendars found.</strong><p>Try reconnecting your Microsoft account.</p><button onClick={() => void connect()} disabled={busy}>Reconnect Outlook</button></div>}</>}{error && <p className="gmail-error" role="alert">{error}</p>}</div></section>;
 }
 function ICloudCalendarAutoSync({ user }: { user: any }) {
   useEffect(() => {
@@ -4464,7 +4468,7 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
     const permission = await Notification.requestPermission();
     flash(permission === "granted" ? "Browser notifications enabled" : "Notifications not enabled");
   };
-  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Workspace</h2></div></div><div className="settings-body settings-body-dense"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{SPACE_COLORS.map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><p className="settings-note">Default accent for Now, Tasks, and the rest of LifeOS.</p><WorkspaceHubsEditor settings={settings} update={update} /><div className="settings-toggle-pair"><ToggleRow title="Compact" desc="Tighter spacing." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div>{settings.enableMasterOS !== false && <p className="settings-note">Mastery · type <code>/mos</code> on Now.</p>}</div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><div className="settings-calendar-default"><span className="settings-field-label">Default view</span><p className="settings-note" style={{ margin: "4px 0 10px" }}>Opens Calendar on this tab first.</p><div className="calendar-mode-tabs" role="group" aria-label="Default calendar view">{(["upcoming", "month", "day"] as CalendarDefaultView[]).map(option => <button key={option} type="button" className={normalizeCalendarDefaultView(settings.defaultCalendarView) === option ? "selected" : ""} onClick={() => update({ defaultCalendarView: option })}>{option === "upcoming" ? "Upcoming" : option === "month" ? "Month" : "Day"}</button>)}</div></div><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><Archive size={14} /></span><h2>Archives</h2></div><span className="count">{archivedTasks.length}</span></div><div className="settings-body"><p className="settings-note">Done and canceled tasks live here so your active lists stay clear. Restore any of them to put it back on your active list.</p><div className="agenda-list">{archivedTasks.length ? archivedTasks.slice(0, 40).map((task) => <div key={task.id} className="agenda-item compact archived-task-row"><i style={{ background: task.color || "var(--accent)" }} /><button type="button" className="archived-task-open" onClick={() => onOpenTask?.(task.id)}><strong>{task.title}</strong><p>{task.canceled || task.status === "Canceled" ? "Canceled" : "Done"}{task.project ? ` · ${task.project}` : ""}{task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</p></button><button type="button" className="archived-task-restore" onClick={() => onRestoreTask?.(task.id)}>Restore</button></div>) : <div className="priority-empty"><strong>No archived tasks yet.</strong><p>When you mark something done or canceled, it shows up here.</p></div>}</div></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body"><ToggleRow title="Show capture commands" desc="When you click the Now capture bar, show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} /><div className="shortcut-list" style={{ marginTop: 12 }}><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>/t</kbd><span>Add task (Now capture bar)</span></div><div><kbd>/break</kbd><span>Take a break</span></div><div><kbd>/focus</kbd><span>Start focus</span></div><div><kbd>/w</kbd><span>Start ambient activity</span></div><div><kbd>/a</kbd><span>AI task</span></div><div><kbd>/spaces</kbd><span>Open Spaces</span></div><div><kbd>/mos</kbd><span>Open Mastery (web / iPad)</span></div></div><p className="settings-note">Capture commands live in the Now capture bar. Type / to filter after you hide the cheatsheet.</p></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
+  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Workspace</h2></div></div><div className="settings-body settings-body-dense"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{SPACE_COLORS.map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><p className="settings-note">Default accent for Now, Tasks, and the rest of LifeOS.</p><WorkspaceHubsEditor settings={settings} update={update} /><div className="settings-toggle-pair"><ToggleRow title="Compact" desc="Tighter spacing." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div>{settings.enableMasterOS !== false && <p className="settings-note">Mastery · type <code>/mos</code> on Now.</p>}</div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><div className="settings-calendar-default"><span className="settings-field-label">Default view</span><p className="settings-note" style={{ margin: "4px 0 10px" }}>Opens Calendar on this tab first.</p><div className="calendar-mode-tabs" role="group" aria-label="Default calendar view">{(["upcoming", "month", "day"] as CalendarDefaultView[]).map(option => <button key={option} type="button" className={normalizeCalendarDefaultView(settings.defaultCalendarView) === option ? "selected" : ""} onClick={() => update({ defaultCalendarView: option })}>{option === "upcoming" ? "Upcoming" : option === "month" ? "Month" : "Day"}</button>)}</div></div><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><Archive size={14} /></span><h2>Archives</h2></div><span className="count">{archivedTasks.length}</span></div><div className="settings-body"><p className="settings-note">Done and canceled tasks live here so your active lists stay clear. Restore any of them to put it back on your active list.</p><div className="agenda-list">{archivedTasks.length ? archivedTasks.slice(0, 40).map((task) => <div key={task.id} className="agenda-item compact archived-task-row"><i style={{ background: task.color || "var(--accent)" }} /><button type="button" className="archived-task-open" onClick={() => onOpenTask?.(task.id)}><strong>{task.title}</strong><p>{task.canceled || task.status === "Canceled" ? "Canceled" : "Done"}{task.project ? ` · ${task.project}` : ""}{task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</p></button><button type="button" className="archived-task-restore" onClick={() => onRestoreTask?.(task.id)}>Restore</button></div>) : <div className="priority-empty"><strong>No archived tasks yet.</strong><p>When you mark something done or canceled, it shows up here.</p></div>}</div></div></section><SubscriptionCheckoutCard /><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><SessionReplaySettingsRow /><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again. Session replay stays off unless you opt in; inputs are always masked.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body"><ToggleRow title="Show capture commands" desc="When you click the Now capture bar, show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} /><div className="shortcut-list" style={{ marginTop: 12 }}><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>/t</kbd><span>Add task (Now capture bar)</span></div><div><kbd>/break</kbd><span>Take a break</span></div><div><kbd>/focus</kbd><span>Start focus</span></div><div><kbd>/w</kbd><span>Start ambient activity</span></div><div><kbd>/a</kbd><span>AI task</span></div><div><kbd>/spaces</kbd><span>Open Spaces</span></div><div><kbd>/mos</kbd><span>Open Mastery (web / iPad)</span></div></div><p className="settings-note">Capture commands live in the Now capture bar. Type / to filter after you hide the cheatsheet.</p></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
 }
 
 function BrainView({ items, onCapture, onArchive, onConvertToTask }: { items: string[]; onCapture: () => void; onArchive: (index: number) => void; onConvertToTask: (index: number, text: string) => void }) {
@@ -4554,8 +4558,21 @@ function ResourcesView({ resources, classes, onUpload, onDelete, onReplace, onDo
 function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [ageBlocked, setAgeBlocked] = useState(false);
+
+  const requireAge = () => {
+    if (ageConfirmed) {
+      setAgeBlocked(false);
+      return true;
+    }
+    setAgeBlocked(true);
+    setError(AGE_GATE_BLOCKED_MESSAGE);
+    return false;
+  };
 
   const handleGoogleSignIn = async () => {
+    if (!requireAge()) return;
     setIsLoading(true);
     setError(null);
     try {
@@ -4578,6 +4595,7 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   };
 
   const handleTestLogin = () => {
+    if (!requireAge()) return;
     if (typeof window !== 'undefined') {
       sessionStorage.setItem(STORAGE_KEYS.USER_ID, TEST_USER.ID);
       logger.debug('Test login initiated');
@@ -4616,6 +4634,18 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
           Your personal operating system for priorities, focus, and growth
         </p>
 
+        <AgeGateCheckbox
+          tone="dark"
+          onChange={(confirmed) => {
+            setAgeConfirmed(confirmed);
+            if (confirmed) {
+              setAgeBlocked(false);
+              setError(null);
+            }
+          }}
+        />
+        {ageBlocked ? <p role="alert" style={ageGateBlockedStyle("dark")}>{AGE_GATE_BLOCKED_MESSAGE}</p> : null}
+
         <div style={{ marginBottom: '32px' }}>
           <div style={{
             fontSize: '12px',
@@ -4626,7 +4656,7 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
           }}>New here?</div>
           <button
             onClick={handleGoogleSignIn}
-            disabled={isLoading}
+            disabled={isLoading || !ageConfirmed}
             style={{
               width: '100%',
               padding: '12px 16px',
@@ -4636,13 +4666,13 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
               borderRadius: '8px',
               fontSize: '14px',
               fontWeight: '500',
-              cursor: isLoading ? 'not-allowed' : 'pointer',
-              opacity: isLoading ? 0.6 : 1,
+              cursor: isLoading || !ageConfirmed ? 'not-allowed' : 'pointer',
+              opacity: isLoading || !ageConfirmed ? 0.6 : 1,
               transition: 'all 0.2s',
               marginBottom: '16px'
             }}
-            onMouseEnter={(e) => !isLoading && (e.currentTarget.style.background = '#7c6fff')}
-            onMouseLeave={(e) => !isLoading && (e.currentTarget.style.background = '#625af6')}
+            onMouseEnter={(e) => !isLoading && ageConfirmed && (e.currentTarget.style.background = '#7c6fff')}
+            onMouseLeave={(e) => !isLoading && ageConfirmed && (e.currentTarget.style.background = '#625af6')}
           >
             {isLoading ? 'Creating account...' : 'Create Account with Google'}
           </button>
@@ -4661,7 +4691,7 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
         }}>Returning user?</div>
         <button
           onClick={handleGoogleSignIn}
-          disabled={isLoading}
+          disabled={isLoading || !ageConfirmed}
           style={{
             width: '100%',
             padding: '12px 16px',
@@ -4671,12 +4701,12 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
             borderRadius: '8px',
             fontSize: '14px',
             fontWeight: '500',
-            cursor: isLoading ? 'not-allowed' : 'pointer',
-            opacity: isLoading ? 0.6 : 1,
+            cursor: isLoading || !ageConfirmed ? 'not-allowed' : 'pointer',
+            opacity: isLoading || !ageConfirmed ? 0.6 : 1,
             transition: 'all 0.2s'
           }}
-          onMouseEnter={(e) => !isLoading && (e.currentTarget.style.background = 'rgba(98, 90, 246, 0.1)')}
-          onMouseLeave={(e) => !isLoading && (e.currentTarget.style.background = 'transparent')}
+          onMouseEnter={(e) => !isLoading && ageConfirmed && (e.currentTarget.style.background = 'rgba(98, 90, 246, 0.1)')}
+          onMouseLeave={(e) => !isLoading && ageConfirmed && (e.currentTarget.style.background = 'transparent')}
         >
           {isLoading ? 'Signing in...' : 'Sign in with Google'}
         </button>
@@ -4694,6 +4724,7 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
         {typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname) && (
           <button
             onClick={handleTestLogin}
+            disabled={!ageConfirmed}
             style={{
               width: '100%',
               padding: '12px 16px',
@@ -4703,12 +4734,13 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
               borderRadius: '8px',
               fontSize: '12px',
               fontWeight: '500',
-              cursor: 'pointer',
+              cursor: ageConfirmed ? 'pointer' : 'not-allowed',
+              opacity: ageConfirmed ? 1 : 0.6,
               transition: 'all 0.2s',
               marginTop: '12px'
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
+            onMouseEnter={(e) => ageConfirmed && (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)')}
+            onMouseLeave={(e) => ageConfirmed && (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
           >
             Dev: Test Login
           </button>
@@ -4719,7 +4751,10 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
           opacity: 0.5,
           marginTop: '24px'
         }}>
-          Your data stays private and syncs across all your devices
+          Your data stays private and syncs across all your devices.{" "}
+          <a href="/legal/dmca" style={{ color: '#938cff' }}>DMCA</a>
+          {" · "}
+          <a href="/unsubscribe" style={{ color: '#938cff' }}>Email preferences</a>
         </p>
       </div>
     </div>

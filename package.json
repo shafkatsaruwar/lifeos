@@ -37,8 +37,9 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",
-    "@reticlehq/next": "^2.14.0",
-    "@reticlehq/react": "^2.14.0",
+    "@reticlehq/browser": "^3.2.0",
+    "@reticlehq/next": "^3.2.0",
+    "@reticlehq/react": "^3.2.0",
     "@swc/core": "^1.15.46",
     "@swc/jest": "^0.2.39",
     "@tauri-apps/cli": "^2.11.4",

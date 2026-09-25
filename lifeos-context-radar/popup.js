@@ -1,5 +1,5 @@
 const DEFAULT_SETTINGS = {
-  lifeosUrl: "https://lifeos-mu-three.vercel.app",
+  lifeosUrl: "http://localhost:3000",
   enabledSites: { linkedin: true, indeed: true, handshake: true, greenhouse: true, lever: true, coursera: true }
 };
 const SITE_LABELS = { linkedin: "LinkedIn", indeed: "Indeed", handshake: "Handshake", greenhouse: "Greenhouse", lever: "Lever", coursera: "Coursera" };
