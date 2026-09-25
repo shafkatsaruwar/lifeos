@@ -51,6 +51,11 @@ import { AgeGateCheckbox, AGE_GATE_BLOCKED_MESSAGE, ageGateBlockedStyle } from "
 import { SubscriptionCheckoutCard } from "@/app/components/SubscriptionCheckoutCard";
 import { SessionReplaySettingsRow } from "@/app/components/PrivacyTelemetry";
 import {
+  PreAuthOnboarding,
+  hasCompletedPreAuthOnboarding,
+  markPreAuthOnboardingComplete,
+} from "@/app/components/PreAuthOnboarding";
+import {
   generateLifeOSNotifications,
   loadDismissedNotificationIds,
   saveDismissedNotificationIds,
@@ -2361,7 +2366,15 @@ export default function LifeOS() {
   }
 
   if (!user) {
-    return <LoginPage onLoginSuccess={() => { setUser({ displayName: TEST_USER.DISPLAY_NAME, email: TEST_USER.EMAIL }); setUserId(TEST_USER.ID); setCloudUserId(TEST_USER.ID); }} />;
+    return (
+      <AuthEntry
+        onLoginSuccess={() => {
+          setUser({ displayName: TEST_USER.DISPLAY_NAME, email: TEST_USER.EMAIL });
+          setUserId(TEST_USER.ID);
+          setCloudUserId(TEST_USER.ID);
+        }}
+      />
+    );
   }
 
   const activeTask = activeTasks.find(task => task.id === activeTaskId) ?? activeTasks.find(task => task.id === settingsState.nowTaskId) ?? activeTasks[0];
@@ -4553,6 +4566,37 @@ function ResourcesView({ resources, classes, onUpload, onDelete, onReplace, onDo
       </section>
     </div>
   </>;
+}
+
+function AuthEntry({ onLoginSuccess }: { onLoginSuccess: () => void }) {
+  const [showLogin, setShowLogin] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setShowLogin(hasCompletedPreAuthOnboarding());
+  }, []);
+
+  if (showLogin === null) {
+    return (
+      <div className="preauth-shell" aria-busy="true">
+        <div className="preauth-card">
+          <div className="preauth-brand">LifeOS</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!showLogin) {
+    return (
+      <PreAuthOnboarding
+        onFinished={() => {
+          markPreAuthOnboardingComplete();
+          setShowLogin(true);
+        }}
+      />
+    );
+  }
+
+  return <LoginPage onLoginSuccess={onLoginSuccess} />;
 }
 
 function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {

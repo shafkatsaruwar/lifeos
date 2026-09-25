@@ -18,6 +18,8 @@ For install/deploy, see the root [README](../README.md).
 
 ## 2. What you see as a new user
 
+Before Google sign-in, first-time visitors see a short **pre-auth onboarding** (Life + School intro). Returning visitors who already finished it go straight to login. Use **I already have an account** to skip.
+
 New accounts start with two environments only:
 
 | Environment | What it’s for |
