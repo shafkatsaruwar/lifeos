@@ -628,10 +628,8 @@ export function SchoolDashboard({
   const allSchoolTasks = tasks.filter((task) => task.classId);
   const dueThisWeek = schoolTasks.filter((task) => task.due && task.due >= today && task.due <= end);
   const overdue = schoolTasks.filter((task) => task.due && task.due < today);
-  const assignments = schoolTasks
-    .filter((task) => task.academicType && !["Reading", "Discussion"].includes(task.academicType))
-    .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
-  const activeAssignments = assignments.length ? assignments : schoolTasks.sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
+  const assignments = [...schoolTasks].sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
+  const activeAssignments = assignments;
   const completedSchool = allSchoolTasks.filter((task) => task.done).length;
   const blockedSchool = schoolTasks.filter((task) => task.status === "Blocked").length;
   const inProgressSchool = schoolTasks.filter((task) => task.status === "In progress").length;
