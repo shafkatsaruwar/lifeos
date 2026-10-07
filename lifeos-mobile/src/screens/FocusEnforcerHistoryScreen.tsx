@@ -7,6 +7,8 @@ import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import {
   computeFocusEnforcerMetrics,
+  focusEnforcerRepeatLabel,
+  normalizeFocusEnforcerRepeat,
   sessionsInLastDays,
   subscribeFocusEnforcerSessions,
   type FocusEnforcerSession,
@@ -89,6 +91,9 @@ export function FocusEnforcerHistoryScreen() {
                 <Text style={{ color: theme.muted, fontSize: 12 }}>
                   {new Date(session.scheduledStartAt).toLocaleString()} · {session.status}
                   {session.startDelayMin != null ? ` · +${session.startDelayMin}m` : ""}
+                  {normalizeFocusEnforcerRepeat(session.repeat) !== "never"
+                    ? ` · ${focusEnforcerRepeatLabel(session.repeat)}`
+                    : ""}
                 </Text>
               </View>
               <Feather name="chevron-right" size={18} color={theme.muted} />
