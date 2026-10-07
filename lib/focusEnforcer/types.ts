@@ -61,6 +61,9 @@ export const DEFAULT_FOCUS_ENFORCER_PREFS: FocusEnforcerPrefs = {
   photoCheckChance: 0.5,
 };
 
+/** How often to spawn the next Focus Enforcer session after this one ends. */
+export type FocusEnforcerRepeat = "never" | "daily" | "weekdays" | "weekly";
+
 export type FocusEnforcerSession = {
   id: string;
   taskId: number;
@@ -70,6 +73,10 @@ export type FocusEnforcerSession = {
   proofRequired: boolean;
   status: FocusEnforcerStatus;
   escalationLevel: FocusEscalationLevel | null;
+  /** Defaults to "never" for sessions created before repeat existed. */
+  repeat?: FocusEnforcerRepeat;
+  /** Stable id shared across a repeating chain (usually the first session id). */
+  seriesId?: string;
   actualStartAt?: string;
   completedAt?: string;
   /** Minutes after scheduledStartAt when the session actually started. */
