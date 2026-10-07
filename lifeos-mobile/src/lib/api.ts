@@ -1,5 +1,5 @@
-# Thin client for the deployed LifeOS Next.js backend.
-# Set EXPO_PUBLIC_LIFEOS_URL to your web app origin (local or production).
+// Thin client for the deployed LifeOS Next.js backend.
+// Set EXPO_PUBLIC_LIFEOS_URL to your web app origin (local or production).
 
 const rawBase = (process.env.EXPO_PUBLIC_LIFEOS_URL || "").trim().replace(/\/$/, "");
 
