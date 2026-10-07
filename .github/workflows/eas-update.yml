@@ -47,6 +47,7 @@ jobs:
       - name: Publish update
         env:
           EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+          EXPO_PUBLIC_EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           CHANNEL="${{ github.event.inputs.channel || 'production' }}"
@@ -54,8 +55,14 @@ jobs:
             echo "Missing GitHub secret EAS_PROJECT_ID (Expo project UUID)."
             exit 1
           fi
+          # Expo GraphQL rejects non-UUID appIds (e.g. leftover YOUR_EAS_PROJECT_ID).
+          if ! echo "$EAS_PROJECT_ID" | grep -Eq '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'; then
+            echo "EAS_PROJECT_ID must be a UUID from expo.dev project settings (got a non-UUID value)."
+            exit 1
+          fi
           if [ -z "$EXPO_TOKEN" ]; then
             echo "Missing GitHub secret EXPO_TOKEN."
             exit 1
           fi
+          # app.config.js reads EAS_PROJECT_ID and overrides app.json placeholders.
           npx eas-cli@latest update --channel "$CHANNEL" --message "main@${GITHUB_SHA::7}" --non-interactive
