@@ -12,16 +12,26 @@ import { normalizeCalendars } from "./calendars";
 import { emptyNotebookHub } from "./notebooks";
 
 /**
- * Public Firebase web client config — from env only.
- * Blank env = sign-in disabled until lifeos-mobile/.env is filled from .env.example.
+ * Public Firebase web client config (same project as the LifeOS web app).
+ * These values are public client identifiers (restricted by Firebase rules /
+ * authorized domains). Env vars override when non-empty so local/.env and
+ * EAS secrets can point at another project; blank OTA env must not wipe them.
  */
 const env = (value?: string) => value?.trim() || undefined;
 
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAbMSSRscUp7CMbeCYuOp5SC6utZ3QPNNM", // pragma: allowlist secret
+  authDomain: "lifeos-45586.firebaseapp.com",
+  databaseURL: "https://lifeos-45586-default-rtdb.firebaseio.com/",
+  projectId: "lifeos-45586",
+};
+
 const firebaseConfig = {
-  apiKey: env(process.env.EXPO_PUBLIC_FIREBASE_API_KEY) || "",
-  authDomain: env(process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN) || "",
-  databaseURL: env(process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL) || "",
-  projectId: env(process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID) || "",
+  apiKey: env(process.env.EXPO_PUBLIC_FIREBASE_API_KEY) || DEFAULT_FIREBASE_CONFIG.apiKey,
+  authDomain: env(process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN) || DEFAULT_FIREBASE_CONFIG.authDomain,
+  databaseURL:
+    env(process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL) || DEFAULT_FIREBASE_CONFIG.databaseURL,
+  projectId: env(process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID) || DEFAULT_FIREBASE_CONFIG.projectId,
 };
 
 export const firebaseConfigured = Boolean(
