@@ -8,12 +8,13 @@ import { OnboardingFlow } from "../components/OnboardingFlow";
 import { PaywallGate } from "../components/PaywallGate";
 import { FloatingTabBar } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
-import { isEntitled } from "../lib/entitlement";
+import { canAccessPaidHubs } from "../lib/entitlement";
 import { shouldPersistOnboardingComplete, shouldShowOnboarding } from "../lib/onboardingGate";
 import { useLayout } from "../lib/layout";
 import { linking } from "../lib/notifications";
 import type { OnboardingDestination } from "../types";
 import { navigationRef } from "./navigationRef";
+import { useNavigation } from "@react-navigation/native";
 
 import { LifeDashboardScreen } from "../screens/LifeDashboardScreen";
 import { LifeDayScreen } from "../screens/LifeDayScreen";
@@ -140,6 +141,18 @@ function SchoolStackNavigator() {
 
 function WorkStackNavigator() {
   const screenOptions = useStackScreenOptions();
+  const { workspace, updateSettings } = useLifeOS();
+  const navigation = useNavigation<any>();
+  if (!canAccessPaidHubs(workspace.settings.entitlement)) {
+    return (
+      <PaywallGate
+        onUnlock={(entitlement) => {
+          void updateSettings({ ...workspace.settings, entitlement, enableWorkOS: true });
+        }}
+        onClose={() => navigation.navigate("NowTab")}
+      />
+    );
+  }
   return (
     <WorkStack.Navigator screenOptions={screenOptions}>
       <WorkStack.Screen name="WorkDashboard" component={WorkDashboardScreen} />
@@ -215,8 +228,6 @@ export function RootNavigator() {
     settings,
     workspace,
   });
-  const needsPaywall = !needsOnboarding && !isEntitled(settings.entitlement);
-
   // Heal a missing Firebase flag for returning accounts (web once stripped
   // onboardingCompletedAt on save). Never run during an explicit replay.
   useEffect(() => {
@@ -233,16 +244,17 @@ export function RootNavigator() {
 
   // After onboarding completes, tabs mount — then honor the chosen first move.
   useEffect(() => {
-    if (needsOnboarding || needsPaywall || !pendingDest.current) return;
+    if (needsOnboarding || !pendingDest.current) return;
     const dest = pendingDest.current;
     pendingDest.current = null;
     const timer = setTimeout(() => navigateAfterOnboarding(dest), 50);
     return () => clearTimeout(timer);
-  }, [needsOnboarding, needsPaywall]);
+  }, [needsOnboarding]);
 
   const showLife = settings.enableLifeOS !== false;
   const showSchool = settings.enableSchoolOS !== false;
-  const showWork = settings.enableWorkOS !== false;
+  // Work stays discoverable; the stack shows the hub paywall until entitled.
+  const showWork = true;
 
   const base = dark ? DarkTheme : DefaultTheme;
   const navTheme = {
@@ -265,12 +277,6 @@ export function RootNavigator() {
           onFinished={(destination) => {
             pendingDest.current = destination ?? { tab: "NowTab" };
             clearOnboardingReplay();
-          }}
-        />
-      ) : needsPaywall ? (
-        <PaywallGate
-          onUnlock={(entitlement) => {
-            void updateSettings({ ...settings, entitlement });
           }}
         />
       ) : (

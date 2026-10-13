@@ -1,11 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  LIFEOS_PROMO_CODE,
-  redeemPromoCode,
-  type Entitlement,
-} from "@/lib/billing/entitlement";
+import { redeemPromoCode, type Entitlement } from "@/lib/billing/entitlement";
 import {
   SUBSCRIPTION_CANCEL_INSTRUCTIONS,
   SUBSCRIPTION_OFFERS,
@@ -16,15 +12,16 @@ import {
 type Props = {
   onUnlock: (entitlement: Entitlement) => void;
   onSubscribe?: (offerId: string) => void;
-  onSignOut?: () => void;
+  onClose?: () => void;
   subscribeBusy?: boolean;
   subscribeNote?: string;
 };
 
+/** Modal paywall for paid hubs (Work, Study Abroad, Treasury, Mastery). */
 export function PaywallGate({
   onUnlock,
   onSubscribe,
-  onSignOut,
+  onClose,
   subscribeBusy,
   subscribeNote,
 }: Props) {
@@ -45,13 +42,27 @@ export function PaywallGate({
   };
 
   return (
-    <div className="paywall-layer" role="dialog" aria-modal="true" aria-labelledby="paywall-title">
+    <div
+      className="paywall-layer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="paywall-title"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose?.();
+      }}
+    >
       <div className="paywall-card">
-        <p className="eyebrow">LifeOS Pro</p>
-        <h1 id="paywall-title">Unlock your operating system</h1>
+        <div className="paywall-card-head">
+          <p className="eyebrow">LifeOS Pro</p>
+          {onClose ? (
+            <button type="button" className="paywall-text-btn" onClick={onClose} aria-label="Close">
+              Not now
+            </button>
+          ) : null}
+        </div>
+        <h1 id="paywall-title">Unlock more hubs</h1>
         <p className="paywall-lead">
-          One calm home for Now, Calendar, tasks, and your environments. Subscribe to continue — or redeem a
-          founder promo for a free year.
+          Home and School stay free. Pro unlocks Work, Study Abroad, Treasury, and Mastery.
         </p>
 
         <div className="paywall-offers">
@@ -87,7 +98,7 @@ export function PaywallGate({
                 setPromo(event.target.value);
                 if (error) setError("");
               }}
-              placeholder='Include the quotes — e.g. "…"'
+              placeholder="Enter promo code"
               autoComplete="off"
               spellCheck={false}
               onKeyDown={(event) => {
@@ -101,23 +112,11 @@ export function PaywallGate({
               Redeem
             </button>
           </div>
-          <p className="paywall-hint">
-            Founder year unlock uses the exact code {LIFEOS_PROMO_CODE} (quotes included).
-          </p>
           {error ? <p className="paywall-error" role="alert">{error}</p> : null}
         </div>
 
         <p className="paywall-footnote">
-          {SUBSCRIPTION_PRODUCT_NAME} ·{" "}
-          <a href="/legal/dmca">Legal</a>
-          {onSignOut ? (
-            <>
-              {" · "}
-              <button type="button" className="paywall-text-btn" onClick={onSignOut}>
-                Sign out
-              </button>
-            </>
-          ) : null}
+          {SUBSCRIPTION_PRODUCT_NAME} · <a href="/legal/dmca">Legal</a>
         </p>
       </div>
     </div>

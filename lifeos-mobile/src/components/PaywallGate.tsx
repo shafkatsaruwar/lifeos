@@ -11,25 +11,21 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  LIFEOS_PROMO_CODE,
-  redeemPromoCode,
-  type Entitlement,
-} from "../lib/entitlement";
+import { redeemPromoCode, type Entitlement } from "../lib/entitlement";
 import {
   SUBSCRIPTION_CANCEL_INSTRUCTIONS,
   SUBSCRIPTION_OFFERS,
   SUBSCRIPTION_RENEWAL_TERMS,
 } from "../../../lib/legal/subscriptionTerms";
-import { signOut } from "firebase/auth";
 import { useLifeOS } from "../lib/LifeOSContext";
-import { auth } from "../lib/firebase";
 
 type Props = {
   onUnlock: (entitlement: Entitlement) => void;
+  onClose?: () => void;
 };
 
-export function PaywallGate({ onUnlock }: Props) {
+/** Full-screen paywall for paid hubs (Work, Mastery, etc.). Home + School stay free. */
+export function PaywallGate({ onUnlock, onClose }: Props) {
   const { theme } = useLifeOS();
   const insets = useSafeAreaInsets();
   const [promo, setPromo] = useState("");
@@ -51,7 +47,7 @@ export function PaywallGate({ onUnlock }: Props) {
 
   const subscribe = (offerId: string) => {
     setNote(
-      "App Store subscriptions activate when LifeOS Pro products are live in App Store Connect. Use a founder promo for a free year, or subscribe on the web when Stripe checkout is configured.",
+      "App Store products activate when LifeOS Pro is live in App Store Connect. Until then, redeem a valid promo code if you have one.",
     );
     void offerId;
   };
@@ -59,10 +55,17 @@ export function PaywallGate({ onUnlock }: Props) {
   return (
     <View style={[styles.root, { backgroundColor: theme.bg, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }]}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={[styles.eyebrow, { color: theme.accent }]}>LifeOS Pro</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Unlock your operating system</Text>
+        <View style={styles.headRow}>
+          <Text style={[styles.eyebrow, { color: theme.accent }]}>LifeOS Pro</Text>
+          {onClose ? (
+            <Pressable onPress={onClose} hitSlop={8}>
+              <Text style={{ color: theme.muted, fontWeight: "700" }}>Not now</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <Text style={[styles.title, { color: theme.text }]}>Unlock more hubs</Text>
         <Text style={[styles.lead, { color: theme.muted }]}>
-          Subscribe to keep using LifeOS on this device — or redeem a founder promo for one free year.
+          Home and School stay free. Pro unlocks Work and other paid hubs.
         </Text>
 
         <View style={styles.offers}>
@@ -96,7 +99,7 @@ export function PaywallGate({ onUnlock }: Props) {
               setPromo(value);
               if (error) setError("");
             }}
-            placeholder='Include the quotes — "…"'
+            placeholder="Enter promo code"
             placeholderTextColor={theme.muted}
             autoCapitalize="none"
             autoCorrect={false}
@@ -111,9 +114,6 @@ export function PaywallGate({ onUnlock }: Props) {
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.redeemText}>Redeem</Text>}
           </Pressable>
         </View>
-        <Text style={[styles.hint, { color: theme.muted }]}>
-          Exact code {LIFEOS_PROMO_CODE} (quotes included) unlocks one year.
-        </Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Pressable
@@ -123,15 +123,6 @@ export function PaywallGate({ onUnlock }: Props) {
           <Feather name="shield" size={14} color={theme.muted} />
           <Text style={{ color: theme.muted, fontSize: 12 }}>Legal</Text>
         </Pressable>
-
-        <Pressable
-          onPress={() => {
-            if (auth) void signOut(auth);
-          }}
-          style={styles.signOut}
-        >
-          <Text style={{ color: "#c65048", fontWeight: "700" }}>Sign out</Text>
-        </Pressable>
       </ScrollView>
     </View>
   );
@@ -140,7 +131,8 @@ export function PaywallGate({ onUnlock }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { paddingHorizontal: 22, paddingBottom: 40, gap: 10 },
-  eyebrow: { fontSize: 11, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase", marginTop: 8 },
+  headRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 },
+  eyebrow: { fontSize: 11, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase" },
   title: { fontSize: 30, fontWeight: "800", letterSpacing: -0.5, marginTop: 4 },
   lead: { fontSize: 15, lineHeight: 22, marginBottom: 8 },
   offers: { gap: 10, marginTop: 8 },
@@ -154,8 +146,6 @@ const styles = StyleSheet.create({
   input: { flex: 1, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15 },
   redeem: { height: 46, paddingHorizontal: 16, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   redeemText: { color: "#fff", fontWeight: "800" },
-  hint: { fontSize: 12, lineHeight: 17 },
   error: { color: "#c65048", fontSize: 13, fontWeight: "700" },
   linkRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 18 },
-  signOut: { marginTop: 10, alignSelf: "flex-start", paddingVertical: 8 },
 });

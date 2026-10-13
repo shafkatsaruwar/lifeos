@@ -1,9 +1,23 @@
-/** LifeOS access entitlement — promo unlock + paid plans. */
+/** LifeOS hub entitlement — promo unlock + paid plans for paid hubs only. */
 
 export const LIFEOS_PROMO_CODE = '"Shafkat Rocks!"';
 
 /** One calendar year of access from redeem time. */
 export const PROMO_ACCESS_MS = 365 * 24 * 60 * 60 * 1000;
+
+/** Hubs that require LifeOS Pro. Home (Life) and School stay free. */
+export const PAID_HUB_NAMES = ["Work", "Study Abroad", "Treasury", "Mastery"] as const;
+
+export type PaidHubName = (typeof PAID_HUB_NAMES)[number];
+
+export const PAID_HUB_ENABLE_KEYS = [
+  "enableWorkOS",
+  "enableStudyAbroad",
+  "enableTreasuryOS",
+  "enableMasterOS",
+] as const;
+
+export type PaidHubEnableKey = (typeof PAID_HUB_ENABLE_KEYS)[number];
 
 export type EntitlementStatus = "none" | "promo" | "pro";
 
@@ -11,17 +25,25 @@ export type EntitlementSource = "promo" | "stripe" | "app_store";
 
 export type Entitlement = {
   status: EntitlementStatus;
-  /** ISO timestamp when access ends (required for promo / timed pro). */
+  /** ISO timestamp when access ends (promo / timed pro). Omit for lifetime. */
   expiresAt?: string;
   unlockedAt?: string;
   source?: EntitlementSource;
-  /** Stored only when unlocked via promo. */
+  /** Stored only when unlocked via promo — never display this string in UI. */
   promoCode?: string;
 };
 
 export type SettingsWithEntitlement = {
   entitlement?: Entitlement | null;
 };
+
+export function isPaidHub(name: string): boolean {
+  return (PAID_HUB_NAMES as readonly string[]).includes(name);
+}
+
+export function isPaidHubEnableKey(key: string): key is PaidHubEnableKey {
+  return (PAID_HUB_ENABLE_KEYS as readonly string[]).includes(key);
+}
 
 export function normalizePromoInput(raw: string): string {
   return raw.trim();
@@ -93,7 +115,7 @@ export function entitlementStatusLabel(
     });
     return `LifeOS Pro · until ${until}`;
   }
-  return "LifeOS Pro";
+  return "LifeOS Pro · Lifetime";
 }
 
 export function formatEntitlementExpiry(
@@ -107,4 +129,23 @@ export function formatEntitlementExpiry(
     day: "numeric",
     year: "numeric",
   });
+}
+
+/** One-time lifetime Pro (no expiry). */
+export function grantLifetimeAccess(
+  source: EntitlementSource = "stripe",
+  now: Date = new Date(),
+): Entitlement {
+  return {
+    status: "pro",
+    source,
+    unlockedAt: now.toISOString(),
+  };
+}
+
+export function canAccessPaidHubs(
+  entitlement?: Entitlement | null,
+  now: Date = new Date(),
+): boolean {
+  return isEntitled(entitlement, now);
 }

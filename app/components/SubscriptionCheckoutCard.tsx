@@ -20,7 +20,7 @@ type Props = {
   onSubscribe?: (offerId: string) => void;
 };
 
-/** Plan & billing — status, Subscribe CTAs, and promo redeem. */
+/** Plan & billing — paid hubs only; Home + School stay free. */
 export function SubscriptionCheckoutCard({
   entitlement,
   onEntitlementChange,
@@ -42,13 +42,13 @@ export function SubscriptionCheckoutCard({
     }
     onEntitlementChange?.(result.entitlement);
     setMessage(
-      expiry || result.entitlement.expiresAt
-        ? `Unlocked through ${new Date(result.entitlement.expiresAt!).toLocaleDateString(undefined, {
+      result.entitlement.expiresAt
+        ? `Hubs unlocked through ${new Date(result.entitlement.expiresAt).toLocaleDateString(undefined, {
             month: "long",
             day: "numeric",
             year: "numeric",
           })}.`
-        : "Unlocked.",
+        : "Paid hubs unlocked.",
     );
     setPromo("");
   };
@@ -67,26 +67,23 @@ export function SubscriptionCheckoutCard({
       <div className="settings-body">
         {entitled ? (
           <p className="settings-note" style={{ marginBottom: 12 }}>
-            You have access
-            {expiry ? ` until ${expiry}` : ""}.
-            {entitlement?.status === "promo"
-              ? " This year was unlocked with a founder promo code."
-              : " Thanks for supporting LifeOS Pro."}
+            Paid hubs are unlocked
+            {expiry ? ` until ${expiry}` : " for life"}. Home and School remain free for everyone.
           </p>
         ) : (
           <p className="settings-note" style={{ marginBottom: 12 }}>
-            LifeOS requires an active plan. Subscribe below, or redeem a founder promo for one free year.
+            Home and School are free. Work, Study Abroad, Treasury, and Mastery need LifeOS Pro.
           </p>
         )}
 
         <div className="subscription-offers">
-          {SUBSCRIPTION_OFFERS.map((offer) => (
+          {SUBSCRIPTION_OFFERS.map((offer, index) => (
             <div className="subscription-checkout-row" key={offer.id}>
               <div className="subscription-checkout-copy">
                 <strong>
                   {offer.label} · {offer.priceLabel}
                 </strong>
-                {offer === SUBSCRIPTION_OFFERS[0] ? (
+                {index === 0 ? (
                   <>
                     <p className="settings-note" style={{ margin: "8px 0 0" }}>
                       <strong>Renewal terms.</strong> {SUBSCRIPTION_RENEWAL_TERMS}
@@ -120,8 +117,8 @@ export function SubscriptionCheckoutCard({
         <div id="lifeos-subscription-disclosures" className="subscription-disclosures">
           <p>
             By subscribing you agree to the renewal terms above. Cancel before the next billing date to avoid the
-            next charge. On iPhone, paid plans use the App Store when products are live; web checkout uses Stripe
-            when configured.
+            next charge. Lifetime does not renew. On iPhone, paid plans use the App Store when products are live;
+            web checkout uses Stripe when configured.
           </p>
         </div>
 
@@ -137,7 +134,7 @@ export function SubscriptionCheckoutCard({
                 setPromo(event.target.value);
                 if (error) setError("");
               }}
-              placeholder='Exact code, quotes included'
+              placeholder="Enter promo code"
               autoComplete="off"
               spellCheck={false}
             />
