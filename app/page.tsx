@@ -3349,8 +3349,8 @@ function Dashboard({ tasks, projects, classes, brainCount, user, onComplete, onF
           const place = eventPlaceLabel(event.location);
           const meeting = resolveEventMeeting(event);
           const notes = eventNotesLabel(event.notes);
-          const subtitle = meeting?.label || place || notes || (event.source === "LifeOS" ? "Focus block" : event.source);
-          return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong><span>{subtitle}</span></div></div>;
+          const subtitle = place || notes || (event.source === "LifeOS" ? "Focus block" : event.source);
+          return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong>{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : <span>{subtitle}</span>}</div></div>;
         }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p><p style={{ marginTop: 6 }}>Share a day plan from Synapse → Settings → LifeOS to see meds and appointments here.</p></div>}
       </section>
       <DashboardGmailCard user={user} onSettings={() => onGo("Settings")} />
@@ -4080,8 +4080,8 @@ function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming
               const place = eventPlaceLabel(event.location);
               const meeting = resolveEventMeeting(event);
               const notes = eventNotesLabel(event.notes);
-              const detail = meeting?.label || place || notes;
-              return <button key={event.id} className="day-event-block" style={eventBlockStyle(event)} onClick={() => onEdit(event.id)}><strong>{event.title}</strong><span>{formatEventRange(event)}</span>{detail && <small>{detail}</small>}</button>;
+              const detail = place || notes;
+              return <div key={event.id} className="day-event-block" style={eventBlockStyle(event)} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><strong>{event.title}</strong><span>{formatEventRange(event)}</span>{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : null}{detail ? <small>{detail}</small> : null}</div>;
             })}</div>
           </div>
         </>}
@@ -4091,9 +4091,12 @@ function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming
           const place = eventPlaceLabel(event.location);
           const meeting = resolveEventMeeting(event);
           const notes = eventNotesLabel(event.notes);
-          return <button className="agenda-item editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)} · {event.source}</p>{place ? <small className="event-place"><MapPin size={11} /> {place}</small> : null}{meeting ? <span role="link" tabIndex={0} className="event-join-link" onClick={clickEvent => { clickEvent.stopPropagation(); window.open(meeting.url, "_blank", "noopener,noreferrer"); }} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); keyEvent.stopPropagation(); window.open(meeting.url, "_blank", "noopener,noreferrer"); } }}>{meeting.label}</span> : null}{notes ? <small>{notes}</small> : null}</div><Pencil size={14} /></button>;
+          return <div className="agenda-item editable" key={event.id} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)} · {event.source}</p>{place ? <small className="event-place"><MapPin size={11} /> {place}</small> : null}{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : null}{notes ? <small>{notes}</small> : null}</div><Pencil size={14} /></div>;
         }) : <div className="priority-empty"><strong>Nothing scheduled.</strong><p>That white space is not a bug. Protect it.</p></div>}</div></section>
-        <section className="card agenda-card"><div className="card-head"><div><span className="section-icon violet"><Clock3 size={14} /></span><h2>Today</h2></div><span className="count">{todayEvents.length}</span></div><div className="agenda-list">{todayEvents.slice(0, 4).map(event => <button className="agenda-item compact editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)}</p></div><Pencil size={14} /></button>)}</div></section>
+        <section className="card agenda-card"><div className="card-head"><div><span className="section-icon violet"><Clock3 size={14} /></span><h2>Today</h2></div><span className="count">{todayEvents.length}</span></div><div className="agenda-list">{todayEvents.slice(0, 4).map(event => {
+          const meeting = resolveEventMeeting(event);
+          return <div className="agenda-item compact editable" key={event.id} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)}</p>{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : null}</div><Pencil size={14} /></div>;
+        })}</div></section>
         <section className="card agenda-card"><div className="card-head"><div><span className="section-icon orange"><ListTodo size={14} /></span><h2>Ready to place</h2></div><span className="count">{tasks.filter(task => !task.startTime || task.due !== selected).length}</span></div><div className="agenda-list">{tasks.filter(task => !task.startTime || task.due !== selected).slice(0, 4).map(task => <button className="agenda-item compact editable" key={task.id} onClick={() => onPlanTask(task.id)}><i style={{ background: task.color }} /><div><strong>{task.title}</strong><p>{task.focusMinutes}m · {task.energy} energy</p></div><Plus size={14} /></button>)}{!tasks.filter(task => !task.startTime || task.due !== selected).length && <div className="priority-empty"><strong>Everything has a place.</strong><p>Leave the rest unscheduled on purpose.</p></div>}</div></section>
       </aside>
     </div>
@@ -5435,7 +5438,9 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, tasks = []
   const datesValid = endDay >= day;
   const timesValid = endDay > day || !end || end > start;
   const rangeValid = datesValid && timesValid;
-  const detectedJoin = detectMeetingProvider(link) ? meetingJoinLabel(detectMeetingProvider(link)!) : null;
+  const detectedProvider = detectMeetingProvider(link);
+  const detectedJoinUrl = extractMeetingUrl(link) || (/^https?:\/\//i.test(link.trim()) ? link.trim() : "");
+  const detectedJoin = detectedProvider && detectedJoinUrl ? meetingJoinLabel(detectedProvider) : null;
   const routeCandidates = tasks
     .filter(task => !task.done && !task.canceled)
     .filter(task => {
@@ -5491,7 +5496,7 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, tasks = []
       <input id="event-location" placeholder="Room, campus, address…" value={location} onChange={inputEvent => setLocation(inputEvent.target.value)} />
       <label htmlFor="event-link">Link</label>
       <input id="event-link" placeholder="Zoom, Teams, or Webex link" value={link} onChange={inputEvent => setLink(inputEvent.target.value)} />
-      {detectedJoin ? <p className="calendar-weekdays-hint" style={{ color: "var(--accent)", fontWeight: 700 }}>{detectedJoin}</p> : null}
+      {detectedJoin && detectedJoinUrl ? <a className="event-join-link" href={detectedJoinUrl} target="_blank" rel="noopener noreferrer">{detectedJoin}</a> : null}
       <label htmlFor="event-notes">Notes</label>
       <textarea id="event-notes" className="event-notes" placeholder="Optional details…" value={notes} onChange={inputEvent => setNotes(inputEvent.target.value)} />
       <ColorSwatches value={color} onChange={setColor} />
