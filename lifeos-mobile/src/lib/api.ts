@@ -75,6 +75,7 @@ export async function fetchIcsFromUrl(url: string): Promise<string> {
 // --- ICS parsing, ported verbatim from app/page.tsx so mobile produces
 // identical CalendarEvent objects from the same feed. ---
 import type { CalendarEvent } from "../types";
+import { eventPlaceLabel, extractMeetingUrl, locationLooksLikeMeetingUrl } from "./meetingLinks";
 
 const unfoldIcs = (text: string) => text.replace(/\r?\n[ \t]/g, "");
 const cleanIcsText = (value = "") => value.replace(/\\n/g, "\n").replace(/\\,/g, ",").replace(/\\;/g, ";").trim();
@@ -104,6 +105,17 @@ export function parseIcsEvents(ics: string): CalendarEvent[] {
       const start = parseIcsDate(getIcsValue(block, "DTSTART"));
       if (!start) return null;
       const uidValue = getIcsValue(block, "UID") || `${getIcsValue(block, "SUMMARY")}-${start}-${index}`;
+      const locationRaw = getIcsValue(block, "LOCATION");
+      const description = getIcsValue(block, "DESCRIPTION");
+      const urlRaw = getIcsValue(block, "URL");
+      const meetingUrl =
+        extractMeetingUrl(urlRaw) ||
+        extractMeetingUrl(locationRaw) ||
+        extractMeetingUrl(description) ||
+        undefined;
+      const place =
+        eventPlaceLabel(locationRaw) ||
+        (locationRaw && !locationLooksLikeMeetingUrl(locationRaw) ? locationRaw : undefined);
       return {
         id: `ical-${uidValue}`,
         title: getIcsValue(block, "SUMMARY") || "Untitled calendar event",
@@ -111,7 +123,9 @@ export function parseIcsEvents(ics: string): CalendarEvent[] {
         end: parseIcsDate(getIcsValue(block, "DTEND")) || undefined,
         source: "iCal" as const,
         color: "#47a47b",
-        notes: getIcsValue(block, "LOCATION") || getIcsValue(block, "DESCRIPTION"),
+        location: place || undefined,
+        url: meetingUrl || (urlRaw.startsWith("http") ? urlRaw : undefined),
+        notes: description || undefined,
       };
     })
     .filter(Boolean) as CalendarEvent[];
