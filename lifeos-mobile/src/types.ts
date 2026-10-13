@@ -109,6 +109,10 @@ export type CalendarEvent = {
   calendarId?: string;
   color?: string;
   notes?: string;
+  /** Physical place (room, campus, address). Meeting URLs belong in `url`. */
+  location?: string;
+  /** Meeting / join link (Zoom, Teams, Webex, etc.). */
+  url?: string;
   /** Recurrence rule; omit or `never` for a one-off event */
   repeat?: EventRepeatFrequency;
   /** Inclusive end date (YYYY-MM-DD) for the series */

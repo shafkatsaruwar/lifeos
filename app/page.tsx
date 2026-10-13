@@ -41,6 +41,7 @@ import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
 import { buildMonthEventSegments, eventOccursOnDate, getEventDateRange, getEventDayBlockMinutes, usesDailyTimeWindow, type MonthEventSegment } from "@/lib/calendarEvents";
+import { coalesceEventMeetingUrl, detectMeetingProvider, eventNotesLabel, eventPlaceLabel, extractMeetingUrl, meetingJoinLabel, resolveEventMeeting } from "@/lib/meetingLinks";
 import { formatFocusMinutesShort, formatFocusSessionLabel, formatFocusTime } from "@/lib/focusTime";
 import { buildTasksFromNote } from "@/lib/noteToTask";
 import { emptyTimeTracking, normalizeTimeTracking, clockIn, clockOut, getActiveEntry } from "@/lib/timeTracking";
@@ -101,7 +102,7 @@ import {
   Mail, Music2, Plus, Search, Settings, Sparkles, Sun, TimerReset, UserRound, X, Zap,
   Ban, Pencil, Trash2, Bell, Download, Palette, Shield, SlidersHorizontal, Coffee, Maximize, Mic, GripVertical,
   GraduationCap, NotebookPen, BookOpen, ExternalLink, Upload, RefreshCw, Bold, Italic, List, Heading1, Highlighter,
-  BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, WalletCards,
+  BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, WalletCards, MapPin,
 } from "lucide-react";
 
 type View = "Life" | "School" | "Work" | "Study Abroad" | "Treasury" | "Mastery" | "Now" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
@@ -116,7 +117,7 @@ type SpaceKind = "class" | "project" | "maintenance";
 type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban" | "BriefcaseBusiness" | "Camera" | "Code2" | "HeartPulse" | "Utensils" | "BookOpen";
 type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string; classId?: string; projectName?: string; storagePath?: string; storage?: "cloud" | "local" };
 type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind };
-type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work" | "Synapse"; color: string; notes?: string; location?: string; weekdaysOnly?: boolean };
+type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work" | "Synapse"; color: string; notes?: string; location?: string; url?: string; weekdaysOnly?: boolean };
 type GradeBand = { letter: string; min: number };
 type GradeCategory = { id: string; name: string; weight: number; defaultPoints?: number };
 type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterStart?: string; semesterEnd?: string; archived?: boolean; gradingScale?: GradeBand[]; gradeCategories?: GradeCategory[]; gradingMode?: "categories" | "items" };
@@ -535,6 +536,10 @@ const parseIcsEvents = (ics: string): CalendarEvent[] => {
     const start = parseIcsDate(getIcsValue(block, "DTSTART"));
     if (!start) return null;
     const uid = getIcsValue(block, "UID") || `${getIcsValue(block, "SUMMARY")}-${start}-${index}`;
+    const locationRaw = getIcsValue(block, "LOCATION");
+    const description = getIcsValue(block, "DESCRIPTION");
+    const urlRaw = getIcsValue(block, "URL");
+    const meetingUrl = extractMeetingUrl(urlRaw) || extractMeetingUrl(locationRaw) || extractMeetingUrl(description) || undefined;
     return {
       id: `ical-${uid}`,
       title: getIcsValue(block, "SUMMARY") || "Untitled calendar event",
@@ -542,7 +547,9 @@ const parseIcsEvents = (ics: string): CalendarEvent[] => {
       end: parseIcsDate(getIcsValue(block, "DTEND")) || undefined,
       source: "iCal" as const,
       color: "#47a47b",
-      notes: getIcsValue(block, "LOCATION") || getIcsValue(block, "DESCRIPTION"),
+      location: eventPlaceLabel(locationRaw) || undefined,
+      url: meetingUrl || (urlRaw.startsWith("http") ? urlRaw : undefined),
+      notes: description || undefined,
     };
   }).filter(Boolean) as CalendarEvent[];
 };
@@ -3339,7 +3346,11 @@ function Dashboard({ tasks, projects, classes, brainCount, user, onComplete, onF
           const end = event.end ? new Date(event.end) : new Date(start.getTime() + 45 * 60_000);
           const startTime = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
           const endTime = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
-          return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong><span>{event.notes || (event.source === "LifeOS" ? "Focus block" : event.source)}</span></div></div>;
+          const place = eventPlaceLabel(event.location);
+          const meeting = resolveEventMeeting(event);
+          const notes = eventNotesLabel(event.notes);
+          const subtitle = meeting?.label || place || notes || (event.source === "LifeOS" ? "Focus block" : event.source);
+          return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong><span>{subtitle}</span></div></div>;
         }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p><p style={{ marginTop: 6 }}>Share a day plan from Synapse → Settings → LifeOS to see meds and appointments here.</p></div>}
       </section>
       <DashboardGmailCard user={user} onSettings={() => onGo("Settings")} />
@@ -4065,12 +4076,23 @@ function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming
           <div className="day-jump-row"><button onClick={() => changeDay(-1)}>Yesterday</button><button onClick={() => { const today = new Date(); setSelected(toDateKey(today)); setCursor(new Date(today.getFullYear(), today.getMonth(), 1)); }}>Today</button><button onClick={() => changeDay(1)}>Tomorrow</button></div>
           <div className="day-timeline">
             <div className="day-hours">{hours.map(hour => <div key={hour} className="day-hour"><span>{new Date(`${selected}T${String(hour).padStart(2, "0")}:00`).toLocaleTimeString("en-US", { hour: "numeric" })}</span></div>)}</div>
-            <div className="day-events-layer">{selectedIsToday && <div className="now-line" style={{ top: `${nowTop}%` }}><span>Now</span></div>}{selectedEvents.map(event => <button key={event.id} className="day-event-block" style={eventBlockStyle(event)} onClick={() => onEdit(event.id)}><strong>{event.title}</strong><span>{formatEventRange(event)}</span>{event.notes && <small>{event.notes}</small>}</button>)}</div>
+            <div className="day-events-layer">{selectedIsToday && <div className="now-line" style={{ top: `${nowTop}%` }}><span>Now</span></div>}{selectedEvents.map(event => {
+              const place = eventPlaceLabel(event.location);
+              const meeting = resolveEventMeeting(event);
+              const notes = eventNotesLabel(event.notes);
+              const detail = meeting?.label || place || notes;
+              return <button key={event.id} className="day-event-block" style={eventBlockStyle(event)} onClick={() => onEdit(event.id)}><strong>{event.title}</strong><span>{formatEventRange(event)}</span>{detail && <small>{detail}</small>}</button>;
+            })}</div>
           </div>
         </>}
       </section>
       <aside className="calendar-side">
-        <section className="card agenda-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>{selectedLabel}</h2></div><span className="count">{selectedEvents.length} events</span></div><div className="agenda-list">{selectedEvents.length ? selectedEvents.map(event => <button className="agenda-item editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)} · {event.source}</p>{event.notes && <small>{event.notes}</small>}</div><Pencil size={14} /></button>) : <div className="priority-empty"><strong>Nothing scheduled.</strong><p>That white space is not a bug. Protect it.</p></div>}</div></section>
+        <section className="card agenda-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>{selectedLabel}</h2></div><span className="count">{selectedEvents.length} events</span></div><div className="agenda-list">{selectedEvents.length ? selectedEvents.map(event => {
+          const place = eventPlaceLabel(event.location);
+          const meeting = resolveEventMeeting(event);
+          const notes = eventNotesLabel(event.notes);
+          return <button className="agenda-item editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)} · {event.source}</p>{place ? <small className="event-place"><MapPin size={11} /> {place}</small> : null}{meeting ? <span role="link" tabIndex={0} className="event-join-link" onClick={clickEvent => { clickEvent.stopPropagation(); window.open(meeting.url, "_blank", "noopener,noreferrer"); }} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); keyEvent.stopPropagation(); window.open(meeting.url, "_blank", "noopener,noreferrer"); } }}>{meeting.label}</span> : null}{notes ? <small>{notes}</small> : null}</div><Pencil size={14} /></button>;
+        }) : <div className="priority-empty"><strong>Nothing scheduled.</strong><p>That white space is not a bug. Protect it.</p></div>}</div></section>
         <section className="card agenda-card"><div className="card-head"><div><span className="section-icon violet"><Clock3 size={14} /></span><h2>Today</h2></div><span className="count">{todayEvents.length}</span></div><div className="agenda-list">{todayEvents.slice(0, 4).map(event => <button className="agenda-item compact editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)}</p></div><Pencil size={14} /></button>)}</div></section>
         <section className="card agenda-card"><div className="card-head"><div><span className="section-icon orange"><ListTodo size={14} /></span><h2>Ready to place</h2></div><span className="count">{tasks.filter(task => !task.startTime || task.due !== selected).length}</span></div><div className="agenda-list">{tasks.filter(task => !task.startTime || task.due !== selected).slice(0, 4).map(task => <button className="agenda-item compact editable" key={task.id} onClick={() => onPlanTask(task.id)}><i style={{ background: task.color }} /><div><strong>{task.title}</strong><p>{task.focusMinutes}m · {task.energy} energy</p></div><Plus size={14} /></button>)}{!tasks.filter(task => !task.startTime || task.due !== selected).length && <div className="priority-empty"><strong>Everything has a place.</strong><p>Leave the rest unscheduled on purpose.</p></div>}</div></section>
       </aside>
@@ -5401,6 +5423,10 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, tasks = []
   const [start, setStart] = useState(event?.start.slice(11, 16) ?? "09:00");
   const [end, setEnd] = useState(event?.end?.slice(11, 16) ?? "10:00");
   const [notes, setNotes] = useState(event?.notes ?? "");
+  const [location, setLocation] = useState(eventPlaceLabel(event?.location) || event?.location || "");
+  const [link, setLink] = useState(
+    event?.url || extractMeetingUrl(event?.location) || extractMeetingUrl(event?.notes) || "",
+  );
   const [color, setColor] = useState(event?.color ?? "#665df6");
   const [weekdaysOnly, setWeekdaysOnly] = useState(Boolean(event?.weekdaysOnly));
   const [pickingTask, setPickingTask] = useState(false);
@@ -5409,6 +5435,7 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, tasks = []
   const datesValid = endDay >= day;
   const timesValid = endDay > day || !end || end > start;
   const rangeValid = datesValid && timesValid;
+  const detectedJoin = detectMeetingProvider(link) ? meetingJoinLabel(detectMeetingProvider(link)!) : null;
   const routeCandidates = tasks
     .filter(task => !task.done && !task.canceled)
     .filter(task => {
@@ -5432,6 +5459,12 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, tasks = []
       source: event?.source ?? "LifeOS",
       color,
       notes: notes.trim() || undefined,
+      location: eventPlaceLabel(location) || undefined,
+      url: coalesceEventMeetingUrl({
+        url: extractMeetingUrl(link) || link.trim() || undefined,
+        location,
+        notes,
+      }),
       weekdaysOnly: weekdaysOnly || undefined,
     });
   };
@@ -5454,8 +5487,13 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, tasks = []
         <span>Weekdays only (Mon–Fri)</span>
       </label>
       <p className="calendar-weekdays-hint">Use this for work blocks that run until a date but skip weekends.</p>
-      <label htmlFor="event-notes">Notes / location</label>
-      <textarea id="event-notes" className="event-notes" placeholder="Location, link, reminder, whatever helps…" value={notes} onChange={inputEvent => setNotes(inputEvent.target.value)} />
+      <label htmlFor="event-location">Location</label>
+      <input id="event-location" placeholder="Room, campus, address…" value={location} onChange={inputEvent => setLocation(inputEvent.target.value)} />
+      <label htmlFor="event-link">Link</label>
+      <input id="event-link" placeholder="Zoom, Teams, or Webex link" value={link} onChange={inputEvent => setLink(inputEvent.target.value)} />
+      {detectedJoin ? <p className="calendar-weekdays-hint" style={{ color: "var(--accent)", fontWeight: 700 }}>{detectedJoin}</p> : null}
+      <label htmlFor="event-notes">Notes</label>
+      <textarea id="event-notes" className="event-notes" placeholder="Optional details…" value={notes} onChange={inputEvent => setNotes(inputEvent.target.value)} />
       <ColorSwatches value={color} onChange={setColor} />
       {isEditing && event && pickingTask && onRouteToTask && (
         <div className="event-task-picker" role="listbox" aria-label="Route to an existing task">

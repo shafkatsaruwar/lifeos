@@ -12,6 +12,7 @@ import {
   toggleIcsImportSelection,
   type IcsImportBatch,
 } from "../lib/icsImportQueue";
+import { eventNotesLabel, eventPlaceLabel, resolveEventMeeting } from "../lib/meetingLinks";
 import { navigationRef } from "../navigation/navigationRef";
 
 /** Global review sheet: stage ICS → pick events → only then write calendar. */
@@ -75,6 +76,8 @@ export function IcsImportReviewHost() {
             {batch.events.map((event) => {
               const on = batch.selectedIds.includes(event.id);
               const duplicate = existingIds.has(event.id);
+              const place = eventPlaceLabel(event.location);
+              const meeting = resolveEventMeeting(event);
               return (
                 <Pressable
                   key={event.id}
@@ -106,9 +109,19 @@ export function IcsImportReviewHost() {
                       {formatEventRange(event)}
                       {duplicate ? " · already on calendar" : ""}
                     </Text>
-                    {event.notes ? (
+                    {place ? (
+                      <Text style={{ color: theme.muted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+                        {place}
+                      </Text>
+                    ) : null}
+                    {meeting ? (
+                      <Text style={{ color: theme.accent, fontSize: 12, fontWeight: "800", marginTop: 2 }}>
+                        {meeting.label}
+                      </Text>
+                    ) : null}
+                    {eventNotesLabel(event.notes) ? (
                       <Text style={{ color: theme.muted, fontSize: 12, marginTop: 2 }} numberOfLines={2}>
-                        {event.notes}
+                        {eventNotesLabel(event.notes)}
                       </Text>
                     ) : null}
                   </View>

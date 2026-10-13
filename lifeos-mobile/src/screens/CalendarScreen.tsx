@@ -7,6 +7,7 @@ import {
   Alert,
   FlatList,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -45,6 +46,15 @@ import {
 } from "../lib/helpers";
 import { fetchIcsFromUrl, parseIcsEvents } from "../lib/api";
 import { stageIcsImport } from "../lib/icsImportQueue";
+import {
+  coalesceEventMeetingUrl,
+  detectMeetingProvider,
+  eventNotesLabel,
+  eventPlaceLabel,
+  extractMeetingUrl,
+  meetingJoinLabel,
+  resolveEventMeeting,
+} from "../lib/meetingLinks";
 import {
   expandEventsInRange,
   parseOccurrenceId,
@@ -126,6 +136,8 @@ export function CalendarScreen() {
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
   const [notes, setNotes] = useState("");
+  const [location, setLocation] = useState("");
+  const [link, setLink] = useState("");
   const [weekdaysOnly, setWeekdaysOnly] = useState(false);
   const [calendarId, setCalendarId] = useState(CAL_PERSONAL_ID);
   const [repeat, setRepeat] = useState<EventRepeatFrequency>("never");
@@ -304,6 +316,13 @@ export function CalendarScreen() {
       setStartTime(master.start.slice(11, 16) || "09:00");
       setEndTime(master.end?.slice(11, 16) || "10:00");
       setNotes(master.notes ?? "");
+      setLocation(eventPlaceLabel(master.location) || master.location || "");
+      setLink(
+        master.url ||
+          extractMeetingUrl(master.location) ||
+          extractMeetingUrl(master.notes) ||
+          "",
+      );
       setWeekdaysOnly(Boolean(master.weekdaysOnly));
       setCalendarId(cal?.id || CAL_PERSONAL_ID);
       setRepeat(master.repeat && master.repeat !== "never" ? master.repeat : "never");
@@ -318,6 +337,8 @@ export function CalendarScreen() {
       setStartTime("09:00");
       setEndTime("10:00");
       setNotes("");
+      setLocation("");
+      setLink("");
       setWeekdaysOnly(false);
       setCalendarId(fallback?.id || CAL_PERSONAL_ID);
       setRepeat("never");
@@ -414,6 +435,12 @@ export function CalendarScreen() {
     const endDayValue = endDay.trim() < day.trim() ? day.trim() : endDay.trim();
     const end = `${endDayValue}T${normalizeTime(endTime)}`;
     const master = workspace.calendar.find((event) => event.id === editingId);
+    const cleanedLocation = eventPlaceLabel(location) || undefined;
+    const cleanedLink = coalesceEventMeetingUrl({
+      url: extractMeetingUrl(link) || link.trim() || undefined,
+      location,
+      notes,
+    });
     const payload: CalendarEvent = {
       id: editingId ?? `lifeos-${Date.now()}`,
       title: clean,
@@ -423,6 +450,8 @@ export function CalendarScreen() {
       calendarId: cal?.id || CAL_PERSONAL_ID,
       color: cal?.color,
       notes: notes.trim() || undefined,
+      location: cleanedLocation,
+      url: cleanedLink,
       weekdaysOnly: weekdaysOnly || undefined,
       repeat: repeat === "never" ? undefined : repeat,
       repeatUntil: repeat === "never" ? undefined : repeatUntil,
@@ -745,6 +774,9 @@ export function CalendarScreen() {
                 taskId !== null
                   ? "Task"
                   : findCalendar(calendars, eventCalendarId(event))?.name || event.source || "LifeOS";
+              const place = eventPlaceLabel(event.location);
+              const meeting = resolveEventMeeting(event);
+              const notesLabel = eventNotesLabel(event.notes);
               return (
                 <Pressable
                   key={event.id}
@@ -757,7 +789,26 @@ export function CalendarScreen() {
                     {" · "}
                     {sourceLabel}
                   </Text>
-                  {event.notes ? <Text style={[styles.dayEventNotes, { color: theme.muted }]}>{event.notes}</Text> : null}
+                  {place ? (
+                    <View style={styles.joinRow}>
+                      <Feather name="map-pin" size={12} color={theme.muted} />
+                      <Text style={[styles.dayEventNotes, { color: theme.muted, marginTop: 0 }]}>{place}</Text>
+                    </View>
+                  ) : null}
+                  {meeting ? (
+                    <Pressable
+                      onPress={(pressEvent) => {
+                        pressEvent.stopPropagation?.();
+                        void Linking.openURL(meeting.url);
+                      }}
+                      hitSlop={6}
+                      style={styles.joinRow}
+                    >
+                      <Feather name="video" size={14} color={theme.accent} />
+                      <Text style={{ color: theme.accent, fontWeight: "800", fontSize: 13 }}>{meeting.label}</Text>
+                    </Pressable>
+                  ) : null}
+                  {notesLabel ? <Text style={[styles.dayEventNotes, { color: theme.muted }]}>{notesLabel}</Text> : null}
                 </Pressable>
               );
             })
@@ -980,6 +1031,34 @@ export function CalendarScreen() {
                   )}
                 </View>
               </View>
+              <Text style={[styles.fieldLabel, { color: theme.muted }]}>Location</Text>
+              <TextInput
+                value={location}
+                onChangeText={setLocation}
+                placeholder="Room, campus, address…"
+                placeholderTextColor={theme.muted}
+                style={[styles.importInput, { color: theme.text, borderColor: theme.border }]}
+              />
+              <Text style={[styles.fieldLabel, { color: theme.muted }]}>Link</Text>
+              <TextInput
+                value={link}
+                onChangeText={setLink}
+                placeholder="Zoom, Teams, or Webex link"
+                placeholderTextColor={theme.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                style={[styles.importInput, { color: theme.text, borderColor: theme.border }]}
+              />
+              {detectMeetingProvider(link) ? (
+                <Text style={{ color: theme.accent, fontSize: 12, fontWeight: "700", marginTop: 4 }}>
+                  {meetingJoinLabel(detectMeetingProvider(link)!)}
+                </Text>
+              ) : link.trim() ? (
+                <Text style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>
+                  Paste a Zoom, Teams, or Webex URL — it’ll show as a join button.
+                </Text>
+              ) : null}
               <Text style={[styles.fieldLabel, { color: theme.muted }]}>Notes</Text>
               <TextInput
                 value={notes}
@@ -1271,6 +1350,7 @@ const styles = StyleSheet.create({
   dayEventTitle: { fontSize: 15, fontWeight: "800" },
   dayEventMeta: { fontSize: 13 },
   dayEventNotes: { fontSize: 12, marginTop: 2 },
+  joinRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4, alignSelf: "flex-start" },
   sectionLabel: { fontSize: 16, fontWeight: "800", marginTop: 10 },
   readyRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 12 },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: 24 },
