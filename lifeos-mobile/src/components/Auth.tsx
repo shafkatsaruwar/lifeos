@@ -221,7 +221,9 @@ export function SignIn() {
         {firebaseConfigured && Platform.OS === "ios" && ageConfirmed ? <AppleSignInButton /> : null}
         {!firebaseConfigured ? (
           <Text style={[styles.setupText, { color: theme.muted }]}>
-            Add the Firebase values to your local .env file first.
+            {__DEV__
+              ? "Add the Firebase values to your local .env file first."
+              : "Cloud sign-in isn’t configured in this build. Reinstall from TestFlight after the next update."}
           </Text>
         ) : null}
         {__DEV__ && firebaseConfigured && !googleClientIdInBuild ? (
