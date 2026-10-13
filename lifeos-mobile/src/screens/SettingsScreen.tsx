@@ -18,6 +18,12 @@ import {
 } from "../lib/focusEnforcer";
 import { resolveNotificationPrefs } from "../lib/notifications";
 import { mergeSynapseCalendarEvents, parseSynapseDayPlan } from "../lib/synapseImport";
+import {
+  entitlementStatusLabel,
+  formatEntitlementExpiry,
+  isEntitled,
+  redeemPromoCode,
+} from "../lib/entitlement";
 import { SPACE_COLORS, DEFAULT_WORKSPACE_COLORS, workspaceColorFor } from "../lib/theme";
 import type { CalendarDefaultView, EnergyLevel, ThemeMode } from "../types";
 
@@ -32,9 +38,12 @@ export function SettingsScreen() {
   const [synapseBusy, setSynapseBusy] = useState(false);
   const [fePrefs, setFePrefs] = useState<FocusEnforcerPrefs>(DEFAULT_FOCUS_ENFORCER_PREFS);
   const [editingWorkspaceColor, setEditingWorkspaceColor] = useState<keyof typeof DEFAULT_WORKSPACE_COLORS | null>(null);
+  const [promo, setPromo] = useState("");
   const themeMode = workspace.settings.themeMode ?? "system";
   const accent = workspace.settings.accent?.trim() || theme.accent;
   const synapseEventCount = workspace.calendar.filter((event) => event.id.startsWith("synapse-")).length;
+  const entitled = isEntitled(workspace.settings.entitlement);
+  const entitlementExpiry = formatEntitlementExpiry(workspace.settings.entitlement);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -513,6 +522,48 @@ export function SettingsScreen() {
                 // Local replay flag — do not rely on clearing Firebase settings
                 // (silent sync was restoring onboardingCompletedAt and killing the flow).
                 startOnboardingReplay();
+              }}
+            />
+          </View>
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
+              <Feather name="star" size={14} color={theme.accent} />
+            </View>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Plan & billing</Text>
+          </View>
+          <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 18 }}>
+            {entitlementStatusLabel(workspace.settings.entitlement)}
+            {entitled && entitlementExpiry ? ` · until ${entitlementExpiry}` : ""}
+          </Text>
+          <Text style={{ color: theme.muted, fontSize: 12, lineHeight: 17, marginTop: 8 }}>
+            Paid plans: $8/month or $60/year. App Store products activate when published; founder promo unlocks one free year.
+          </Text>
+          <TextInput
+            value={promo}
+            onChangeText={setPromo}
+            placeholder='Promo code (quotes included)'
+            placeholderTextColor={theme.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[styles.input, { color: theme.text, borderColor: theme.border, marginTop: 12 }]}
+          />
+          <View style={{ marginTop: 12 }}>
+            <ActionButton
+              label="Redeem promo"
+              icon="gift"
+              quiet
+              onPress={() => {
+                const result = redeemPromoCode(promo);
+                if (!result.ok) {
+                  Alert.alert("Promo code", result.error);
+                  return;
+                }
+                void updateSettings({ ...workspace.settings, entitlement: result.entitlement });
+                setPromo("");
+                Alert.alert("Unlocked", "Founder access is active for one year.");
               }}
             />
           </View>

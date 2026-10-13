@@ -137,6 +137,14 @@ export const SettingsSchema = z.object({
   onboardingCompletedAt: z.string().optional(),
   onboardingVersion: z.number().optional(),
   themeMode: z.enum(['system', 'light', 'dark']).optional(),
+  /** Access entitlement — promo year or paid Pro. */
+  entitlement: z.object({
+    status: z.enum(['none', 'promo', 'pro']),
+    expiresAt: z.string().optional(),
+    unlockedAt: z.string().optional(),
+    source: z.enum(['promo', 'stripe', 'app_store']).optional(),
+    promoCode: z.string().optional(),
+  }).optional().nullable(),
 }).passthrough();
 
 export const ResourceSchema = z.object({

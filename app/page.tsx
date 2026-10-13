@@ -49,7 +49,9 @@ import type { TimeTrackingState } from "@/lib/timeTracking";
 import { getFileStorage } from "@/lib/fileStorage";
 import { GlobalNotificationShell } from "@/app/components/NotificationCenter";
 import { AgeGateCheckbox, AGE_GATE_BLOCKED_MESSAGE, ageGateBlockedStyle } from "@/app/components/AgeGateCheckbox";
+import { PaywallGate } from "@/app/components/PaywallGate";
 import { SubscriptionCheckoutCard } from "@/app/components/SubscriptionCheckoutCard";
+import { isEntitled, type Entitlement } from "@/lib/billing/entitlement";
 import { SessionReplaySettingsRow } from "@/app/components/PrivacyTelemetry";
 import {
   PreAuthOnboarding,
@@ -190,6 +192,14 @@ type SettingsState = {
   /** ISO timestamp when first-run onboarding finished. Synced with mobile. */
   onboardingCompletedAt?: string;
   onboardingVersion?: number;
+  /** Access entitlement — promo year or paid Pro (synced with mobile). */
+  entitlement?: {
+    status: "none" | "promo" | "pro";
+    expiresAt?: string;
+    unlockedAt?: string;
+    source?: "promo" | "stripe" | "app_store";
+    promoCode?: string;
+  } | null;
 };
 
 const projectIcons: Record<ProjectIcon, typeof Home> = { Zap, Aperture, Sparkles, FileText, UserRound, FolderKanban, BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, BookOpen };
@@ -625,6 +635,7 @@ export default function LifeOS() {
   const [editingCalendarEventId, setEditingCalendarEventId] = useState<string | null>(null);
   const [breakOpen, setBreakOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [subscribeNote, setSubscribeNote] = useState("");
   const [actionTaskId, setActionTaskId] = useState<number | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [taskPageId, setTaskPageId] = useState<number | null>(null);
@@ -2426,10 +2437,37 @@ export default function LifeOS() {
   const workspaceName = settingsState.preferredName?.trim() || user?.displayName?.trim() || "there";
   const workspaceInitials = workspaceName.split(/\s+/).filter(Boolean).slice(0, 2).map((part: string) => part[0]).join("").toUpperCase() || "U";
   const needsWorkspaceName = Boolean(user && settingsHydrated && !settingsState.preferredName?.trim());
+  const needsPaywall = Boolean(
+    user && settingsHydrated && !needsWorkspaceName && !isEntitled(settingsState.entitlement),
+  );
+
+  const unlockEntitlement = (entitlement: Entitlement) => {
+    setSettingsState((current) => ({ ...current, entitlement }));
+    flash(
+      entitlement.status === "promo"
+        ? "Founder access unlocked for one year."
+        : "LifeOS Pro unlocked.",
+    );
+  };
+
+  const startSubscribe = (offerId: string) => {
+    setSubscribeNote(
+      "Paid checkout uses Stripe on web and the App Store on iPhone when products are live. For App Store review / founder access, redeem the promo code below (quotes included).",
+    );
+    flash(`Selected ${offerId === "pro-yearly" ? "annual" : "monthly"} plan — redeem a promo or finish store checkout when available.`);
+  };
 
   return (
     <div className="app-shell">
       {notificationShell}
+      {needsPaywall ? (
+        <PaywallGate
+          onUnlock={unlockEntitlement}
+          onSubscribe={startSubscribe}
+          onSignOut={() => void signOut()}
+          subscribeNote={subscribeNote}
+        />
+      ) : null}
       <AnimatePresence>{sidebar && <motion.button aria-label="Close navigation" className="mobile-scrim" onClick={() => setSidebar(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />}</AnimatePresence>
       <aside className={`sidebar ${sidebar ? "sidebar-open" : ""}`}>
         <div className="brand"><div className="brand-mark"><span /><span /><span /></div><span>LifeOS</span></div>

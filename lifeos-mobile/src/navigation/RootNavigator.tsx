@@ -5,8 +5,10 @@ import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef } from "react";
 import { OnboardingFlow } from "../components/OnboardingFlow";
+import { PaywallGate } from "../components/PaywallGate";
 import { FloatingTabBar } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { isEntitled } from "../lib/entitlement";
 import { shouldPersistOnboardingComplete, shouldShowOnboarding } from "../lib/onboardingGate";
 import { useLayout } from "../lib/layout";
 import { linking } from "../lib/notifications";
@@ -213,6 +215,7 @@ export function RootNavigator() {
     settings,
     workspace,
   });
+  const needsPaywall = !needsOnboarding && !isEntitled(settings.entitlement);
 
   // Heal a missing Firebase flag for returning accounts (web once stripped
   // onboardingCompletedAt on save). Never run during an explicit replay.
@@ -230,12 +233,12 @@ export function RootNavigator() {
 
   // After onboarding completes, tabs mount — then honor the chosen first move.
   useEffect(() => {
-    if (needsOnboarding || !pendingDest.current) return;
+    if (needsOnboarding || needsPaywall || !pendingDest.current) return;
     const dest = pendingDest.current;
     pendingDest.current = null;
     const timer = setTimeout(() => navigateAfterOnboarding(dest), 50);
     return () => clearTimeout(timer);
-  }, [needsOnboarding]);
+  }, [needsOnboarding, needsPaywall]);
 
   const showLife = settings.enableLifeOS !== false;
   const showSchool = settings.enableSchoolOS !== false;
@@ -262,6 +265,12 @@ export function RootNavigator() {
           onFinished={(destination) => {
             pendingDest.current = destination ?? { tab: "NowTab" };
             clearOnboardingReplay();
+          }}
+        />
+      ) : needsPaywall ? (
+        <PaywallGate
+          onUnlock={(entitlement) => {
+            void updateSettings({ ...settings, entitlement });
           }}
         />
       ) : (

@@ -19,13 +19,20 @@ export type SubscriptionOffer = {
   available: boolean;
 };
 
-/** Current catalog — mark available:true when Stripe/IAP is wired. */
+/** Current catalog — Subscribe CTAs are live; store/Stripe wiring may still be pending. */
 export const SUBSCRIPTION_OFFERS: SubscriptionOffer[] = [
   {
     id: "pro-monthly",
     label: "LifeOS Pro",
     priceLabel: "$8/month",
     period: "month",
-    available: false,
+    available: true,
+  },
+  {
+    id: "pro-yearly",
+    label: "LifeOS Pro Annual",
+    priceLabel: "$60/year",
+    period: "year",
+    available: true,
   },
 ];
