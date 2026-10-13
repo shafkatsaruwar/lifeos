@@ -778,38 +778,49 @@ export function CalendarScreen() {
               const meeting = resolveEventMeeting(event);
               const notesLabel = eventNotesLabel(event.notes);
               return (
-                <Pressable
+                <View
                   key={event.id}
-                  onPress={() => openCalendarItem(event)}
                   style={[styles.dayEventCard, { borderColor, backgroundColor: theme.surface }]}
                 >
-                  <Text style={[styles.dayEventTitle, { color: theme.text }]}>{event.title}</Text>
-                  <Text style={[styles.dayEventMeta, { color: theme.muted }]}>
-                    {formatEventRange(event)}
-                    {" · "}
-                    {sourceLabel}
-                  </Text>
-                  {place ? (
-                    <View style={styles.joinRow}>
-                      <Feather name="map-pin" size={12} color={theme.muted} />
-                      <Text style={[styles.dayEventNotes, { color: theme.muted, marginTop: 0 }]}>{place}</Text>
-                    </View>
-                  ) : null}
+                  <Pressable onPress={() => openCalendarItem(event)}>
+                    <Text style={[styles.dayEventTitle, { color: theme.text }]}>{event.title}</Text>
+                    <Text style={[styles.dayEventMeta, { color: theme.muted }]}>
+                      {formatEventRange(event)}
+                      {" · "}
+                      {sourceLabel}
+                    </Text>
+                    {place ? (
+                      <View style={styles.joinRow}>
+                        <Feather name="map-pin" size={12} color={theme.muted} />
+                        <Text style={[styles.dayEventNotes, { color: theme.muted, marginTop: 0 }]}>{place}</Text>
+                      </View>
+                    ) : null}
+                    {notesLabel ? <Text style={[styles.dayEventNotes, { color: theme.muted }]}>{notesLabel}</Text> : null}
+                  </Pressable>
                   {meeting ? (
                     <Pressable
-                      onPress={(pressEvent) => {
-                        pressEvent.stopPropagation?.();
+                      accessibilityRole="link"
+                      accessibilityLabel={meeting.label}
+                      onPress={() => {
                         void Linking.openURL(meeting.url);
                       }}
-                      hitSlop={6}
+                      hitSlop={8}
                       style={styles.joinRow}
                     >
                       <Feather name="video" size={14} color={theme.accent} />
-                      <Text style={{ color: theme.accent, fontWeight: "800", fontSize: 13 }}>{meeting.label}</Text>
+                      <Text
+                        style={{
+                          color: theme.accent,
+                          fontWeight: "800",
+                          fontSize: 13,
+                          textDecorationLine: "underline",
+                        }}
+                      >
+                        {meeting.label}
+                      </Text>
                     </Pressable>
                   ) : null}
-                  {notesLabel ? <Text style={[styles.dayEventNotes, { color: theme.muted }]}>{notesLabel}</Text> : null}
-                </Pressable>
+                </View>
               );
             })
           ) : (
@@ -1050,13 +1061,30 @@ export function CalendarScreen() {
                 keyboardType="url"
                 style={[styles.importInput, { color: theme.text, borderColor: theme.border }]}
               />
-              {detectMeetingProvider(link) ? (
-                <Text style={{ color: theme.accent, fontSize: 12, fontWeight: "700", marginTop: 4 }}>
-                  {meetingJoinLabel(detectMeetingProvider(link)!)}
-                </Text>
+              {detectMeetingProvider(link) && (extractMeetingUrl(link) || /^https?:\/\//i.test(link.trim())) ? (
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => {
+                    const url = extractMeetingUrl(link) || link.trim();
+                    if (url) void Linking.openURL(url);
+                  }}
+                  style={styles.joinRow}
+                >
+                  <Feather name="video" size={14} color={theme.accent} />
+                  <Text
+                    style={{
+                      color: theme.accent,
+                      fontSize: 12,
+                      fontWeight: "800",
+                      textDecorationLine: "underline",
+                    }}
+                  >
+                    {meetingJoinLabel(detectMeetingProvider(link)!)}
+                  </Text>
+                </Pressable>
               ) : link.trim() ? (
                 <Text style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>
-                  Paste a Zoom, Teams, or Webex URL — it’ll show as a join button.
+                  Paste a Zoom, Teams, or Webex URL — it’ll show as a join link.
                 </Text>
               ) : null}
               <Text style={[styles.fieldLabel, { color: theme.muted }]}>Notes</Text>
