@@ -2458,7 +2458,7 @@ export default function LifeOS() {
         </nav>
         <div className="sidebar-bottom">
           <button className="nav-item" onClick={() => go("Settings")}><Settings size={17} /><span>Settings</span></button>
-          <button className="profile" onClick={() => go("Settings")}><div className="avatar">{workspaceInitials}</div><div><strong>{workspaceName}</strong><small>Personal workspace</small></div><MoreHorizontal size={16} /></button>
+          <button className="profile" onClick={() => go("Settings")}><div className="avatar">{workspaceInitials}</div><div><strong>{workspaceName}</strong><small>Personal workspace</small></div></button>
         </div>
       </aside>
 
