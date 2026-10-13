@@ -20,6 +20,7 @@ import { FocusLiveActivityBridge } from "./src/components/FocusLiveActivityBridg
 import { NotificationsBridge } from "./src/components/NotificationsBridge";
 import { FocusEnforcerBridge } from "./src/components/FocusEnforcerBridge";
 import { SynapseImportBridge } from "./src/components/SynapseImportBridge";
+import { IcsImportReviewHost } from "./src/components/IcsImportReviewHost";
 import { ShareInboxBridge } from "./src/components/ShareInboxBridge";
 import { SiriTaskBridge } from "./src/components/SiriTaskBridge";
 import { WidgetsBridge } from "./src/components/WidgetsBridge";
@@ -396,6 +397,7 @@ export default function App() {
         <LifeOSContext.Provider value={state}>
           <SynapseImportBridge />
           <ShareInboxBridge />
+          <IcsImportReviewHost />
           <FocusLiveActivityBridge />
           <NotificationsBridge />
           <FocusEnforcerBridge />

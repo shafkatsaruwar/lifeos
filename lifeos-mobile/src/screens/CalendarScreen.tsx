@@ -1,5 +1,7 @@
 import Feather from "@expo/vector-icons/Feather";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -42,6 +44,7 @@ import {
   toDateKey,
 } from "../lib/helpers";
 import { fetchIcsFromUrl, parseIcsEvents } from "../lib/api";
+import { stageIcsImport } from "../lib/icsImportQueue";
 import {
   expandEventsInRange,
   parseOccurrenceId,
@@ -493,24 +496,59 @@ export function CalendarScreen() {
     );
   };
 
-  const doImport = async () => {
+  const stageParsed = (parsed: CalendarEvent[], sourceLabel: string) => {
+    if (!parsed.length) {
+      Alert.alert("No events found", "That file didn’t contain any calendar events.");
+      return false;
+    }
+    const staged = stageIcsImport(parsed, {
+      sourceLabel,
+      existingIds: workspace.calendar.map((event) => event.id),
+    });
+    return Boolean(staged);
+  };
+
+  const doImportUrl = async () => {
     if (!icalUrl.trim()) return;
     setImporting(true);
     try {
       const ics = await fetchIcsFromUrl(icalUrl.trim());
       const parsed = parseIcsEvents(ics);
-      const merged = [
-        ...workspace.calendar.filter((e) => e.source !== "iCal" || !parsed.some((p) => p.id === e.id)),
-        ...parsed,
-      ];
-      const byId = new Map<string, CalendarEvent>();
-      merged.forEach((e) => byId.set(e.id, e));
-      await updateCalendar(Array.from(byId.values()));
-      setImportOpen(false);
-      setIcalUrl("");
-      Alert.alert("Calendar imported", `Added ${parsed.length} event${parsed.length === 1 ? "" : "s"} from the feed.`);
+      if (stageParsed(parsed, "Calendar feed")) {
+        setImportOpen(false);
+        setIcalUrl("");
+      }
     } catch (err: any) {
       Alert.alert("Import failed", err?.message || "Could not read that calendar link.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const doImportFile = async () => {
+    if (importing) return;
+    setImporting(true);
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({
+        type: ["text/calendar", "application/ics", "text/plain", "*/*"],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (picked.canceled || !picked.assets?.[0]) return;
+      const asset = picked.assets[0];
+      const name = asset.name || "calendar.ics";
+      if (!/\.ics$/i.test(name) && asset.mimeType && !/calendar|ics/i.test(asset.mimeType)) {
+        Alert.alert("Pick an .ics file", "Choose a calendar invite or subscription export (.ics).");
+        return;
+      }
+      const text = await FileSystem.readAsStringAsync(asset.uri);
+      const parsed = parseIcsEvents(text);
+      if (stageParsed(parsed, name)) {
+        setImportOpen(false);
+        setIcalUrl("");
+      }
+    } catch (err: any) {
+      Alert.alert("Import failed", err?.message || "Could not read that .ics file.");
     } finally {
       setImporting(false);
     }
@@ -532,7 +570,7 @@ export function CalendarScreen() {
         <View style={styles.headerActions}>
           <IconButton icon="layers" label="Calendars" onPress={() => setCalendarsOpen(true)} />
           <IconButton icon="plus" label="Add event" onPress={() => openComposer(undefined, selected)} />
-          <IconButton icon="link" label="Import iCal" onPress={() => setImportOpen(true)} />
+          <IconButton icon="download" label="Import ICS" onPress={() => setImportOpen(true)} />
         </View>
       </View>
 
@@ -1112,8 +1150,17 @@ export function CalendarScreen() {
       <Modal visible={importOpen} transparent animationType="fade" onRequestClose={() => setImportOpen(false)}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.importCard, { backgroundColor: theme.surface }]}>
-            <Text style={[styles.importTitle, { color: theme.text }]}>Import iCal feed</Text>
-            <Text style={[styles.importSub, { color: theme.muted }]}>Paste a public .ics subscription URL (Google Calendar, Outlook, Apple Calendar public link, etc).</Text>
+            <Text style={[styles.importTitle, { color: theme.text }]}>Import calendar</Text>
+            <Text style={[styles.importSub, { color: theme.muted }]}>
+              Parse an .ics file or feed, then approve which events to add. Nothing lands on your calendar until you confirm.
+            </Text>
+            <ActionButton
+              label={importing ? "Reading…" : "Choose .ics file"}
+              icon="file-text"
+              onPress={() => void doImportFile()}
+              disabled={importing}
+            />
+            <Text style={[styles.fieldLabel, { color: theme.muted }]}>Or paste a public feed URL</Text>
             <TextInput
               value={icalUrl}
               onChangeText={setIcalUrl}
@@ -1125,7 +1172,11 @@ export function CalendarScreen() {
             />
             <View style={styles.row}>
               <ActionButton label="Cancel" quiet onPress={() => setImportOpen(false)} />
-              <ActionButton label={importing ? "Importing…" : "Import"} onPress={doImport} disabled={importing || !icalUrl.trim()} />
+              <ActionButton
+                label={importing ? "Reading…" : "Preview feed"}
+                onPress={() => void doImportUrl()}
+                disabled={importing || !icalUrl.trim()}
+              />
             </View>
             <Pressable onPress={goConnectWeb}>
               <Text style={[styles.connectWebLink, { color: theme.accent }]}>Connect Gmail / Outlook / iCloud on web →</Text>
