@@ -53,6 +53,18 @@ import { PaywallGate } from "@/app/components/PaywallGate";
 import { SubscriptionCheckoutCard } from "@/app/components/SubscriptionCheckoutCard";
 import { canAccessPaidHubs, isHubVisibleInNav, isPaidHub, type Entitlement } from "@/lib/billing/entitlement";
 import { SessionReplaySettingsRow } from "@/app/components/PrivacyTelemetry";
+
+// #region agent log
+const dbg = (payload: Record<string, unknown>) => {
+  try {
+    fetch("/api/debug-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, timestamp: Date.now() }),
+    }).catch(() => {});
+  } catch { /* ignore */ }
+};
+// #endregion
 import {
   PreAuthOnboarding,
   hasCompletedPreAuthOnboarding,
@@ -1212,6 +1224,33 @@ export default function LifeOS() {
           stored.onboardingVersion = stored.onboardingVersion ?? 1;
         }
         const merged = mergeSettingsWithEnvironmentDefaults(initialSettings, stored);
+        // #region agent log
+        dbg({
+          hypothesisId: "B",
+          location: "page.tsx:loadSettings",
+          message: "settings merge from Firebase",
+          data: {
+            hadStored: Boolean(stored),
+            returning: Boolean(stored?.onboardingCompletedAt),
+            storedEnable: stored
+              ? {
+                  work: stored.enableWorkOS,
+                  studyAbroad: stored.enableStudyAbroad,
+                  treasury: stored.enableTreasuryOS,
+                  mastery: stored.enableMasterOS,
+                }
+              : null,
+            mergedEnable: {
+              work: merged.enableWorkOS,
+              studyAbroad: merged.enableStudyAbroad,
+              treasury: merged.enableTreasuryOS,
+              mastery: merged.enableMasterOS,
+            },
+            entitlementStatus: merged.entitlement?.status ?? null,
+            unlocked: canAccessPaidHubs(merged.entitlement),
+          },
+        });
+        // #endregion
         if (firebaseSettings || merged.onboardingCompletedAt) {
           setSettingsState(merged);
         }
@@ -1821,7 +1860,45 @@ export default function LifeOS() {
     if (localUrl) window.setTimeout(() => URL.revokeObjectURL(localUrl), 1000);
   };
   const updateSettings = (updates: Partial<SettingsState>) => {
-    setSettingsState(current => ({ ...current, ...updates }));
+    // #region agent log
+    dbg({
+      hypothesisId: "A",
+      location: "page.tsx:updateSettings",
+      message: "settings update applied",
+      data: {
+        updates: {
+          enableWorkOS: updates.enableWorkOS,
+          enableStudyAbroad: updates.enableStudyAbroad,
+          enableTreasuryOS: updates.enableTreasuryOS,
+          enableMasterOS: updates.enableMasterOS,
+          enableLifeOS: updates.enableLifeOS,
+          enableSchoolOS: updates.enableSchoolOS,
+          keys: Object.keys(updates),
+        },
+      },
+    });
+    // #endregion
+    setSettingsState(current => {
+      const next = { ...current, ...updates };
+      // #region agent log
+      dbg({
+        hypothesisId: "A",
+        location: "page.tsx:updateSettings:next",
+        message: "settings state after merge",
+        data: {
+          enable: {
+            work: next.enableWorkOS,
+            studyAbroad: next.enableStudyAbroad,
+            treasury: next.enableTreasuryOS,
+            mastery: next.enableMasterOS,
+          },
+          unlocked: canAccessPaidHubs(next.entitlement),
+          entitlementStatus: next.entitlement?.status ?? null,
+        },
+      });
+      // #endregion
+      return next;
+    });
     flash("Settings updated");
   };
   const addTask = (
@@ -2354,12 +2431,43 @@ export default function LifeOS() {
   const activeTasks = useMemo(() => tasks.filter(task => !task.done && !task.canceled), [tasks]);
   const floatingFocusTask = useMemo(() => activeTasks.find(task => Boolean(task.focusSessionStarted) && getTaskFocusSeconds(task) > 0), [activeTasks]);
   const visibleNav = useMemo(
-    () =>
-      nav.filter((item) => {
+    () => {
+      const filtered = nav.filter((item) => {
         // Same rules as Settings → Hubs toggles (Pro hubs need unlock + enable).
         return isEnvironmentEnabled(item.name as View);
-      }),
-    [isEnvironmentEnabled],
+      });
+      // #region agent log
+      dbg({
+        hypothesisId: "C,D,E",
+        location: "page.tsx:visibleNav",
+        message: "sidebar visibleNav result",
+        data: {
+          names: filtered.map((item) => item.name),
+          paidPresent: filtered
+            .map((item) => item.name)
+            .filter((name) => ["Work", "Study Abroad", "Treasury", "Mastery"].includes(name)),
+          enable: {
+            work: settingsState.enableWorkOS,
+            studyAbroad: settingsState.enableStudyAbroad,
+            treasury: settingsState.enableTreasuryOS,
+            mastery: settingsState.enableMasterOS,
+          },
+          unlocked: canAccessPaidHubs(settingsState.entitlement),
+          entitlementStatus: settingsState.entitlement?.status ?? null,
+          branchMarker: "hide-disabled-hubs-b1ae+instrumented",
+        },
+      });
+      // #endregion
+      return filtered;
+    },
+    [
+      isEnvironmentEnabled,
+      settingsState.enableWorkOS,
+      settingsState.enableStudyAbroad,
+      settingsState.enableTreasuryOS,
+      settingsState.enableMasterOS,
+      settingsState.entitlement,
+    ],
   );
   useEffect(() => {
     if (!isEnvironmentEnabled(view)) go("Now");
@@ -4526,7 +4634,8 @@ function WorkspaceHubsEditor({
         const current = workspaceColorFor(settings, key);
         const editing = editingKey === key;
         const paid = isPaidHub(navName);
-        const enabled = paid ? hubsUnlocked && settings[enableKey] !== false : settings[enableKey] !== false;
+        const rawEnable = settings[enableKey];
+        const enabled = paid ? hubsUnlocked && rawEnable !== false : rawEnable !== false;
         return (
           <div key={key} className={`workspace-hub-row${editing ? " editing" : ""}`}>
             <div className="workspace-hub-summary">
@@ -4543,6 +4652,22 @@ function WorkspaceHubsEditor({
                 type="button"
                 className={`toggle ${enabled ? "on" : ""}`}
                 onClick={() => {
+                  // #region agent log
+                  dbg({
+                    hypothesisId: "A",
+                    location: "page.tsx:WorkspaceHubsEditor:click",
+                    message: "hub toggle clicked",
+                    data: {
+                      label,
+                      enableKey,
+                      rawEnable,
+                      hubsUnlocked,
+                      enabledUi: enabled,
+                      willOpenPaywall: paid && !hubsUnlocked && !enabled,
+                      nextEnableValue: !(paid && !hubsUnlocked && !enabled) ? !enabled : null,
+                    },
+                  });
+                  // #endregion
                   if (paid && !hubsUnlocked && !enabled) {
                     onRequestPaywall?.(navName as View);
                     return;
