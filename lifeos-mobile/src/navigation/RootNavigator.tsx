@@ -8,7 +8,7 @@ import { OnboardingFlow } from "../components/OnboardingFlow";
 import { PaywallGate } from "../components/PaywallGate";
 import { FloatingTabBar } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
-import { canAccessPaidHubs } from "../lib/entitlement";
+import { canAccessPaidHubs, isHubVisibleInNav } from "../lib/entitlement";
 import { shouldPersistOnboardingComplete, shouldShowOnboarding } from "../lib/onboardingGate";
 import { useLayout } from "../lib/layout";
 import { linking } from "../lib/notifications";
@@ -253,8 +253,8 @@ export function RootNavigator() {
 
   const showLife = settings.enableLifeOS !== false;
   const showSchool = settings.enableSchoolOS !== false;
-  // Work stays discoverable; the stack shows the hub paywall until entitled.
-  const showWork = true;
+  // Match Settings Work toggle: only show when entitled and enableWorkOS is on.
+  const showWork = canAccessPaidHubs(settings.entitlement) && settings.enableWorkOS !== false;
 
   const base = dark ? DarkTheme : DefaultTheme;
   const navTheme = {
