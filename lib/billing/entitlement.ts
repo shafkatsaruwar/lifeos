@@ -181,3 +181,31 @@ export function canAccessPaidHubs(
 ): boolean {
   return isEntitled(entitlement, now);
 }
+
+/**
+ * Whether a hub should appear in the sidebar / tab bar.
+ * Matches Settings → Hubs toggle display: Pro hubs need entitlement AND enable !== false.
+ * Free hubs (Life/School) only need enable !== false.
+ */
+export function isHubVisibleInNav(
+  name: string,
+  options: {
+    entitlement?: Entitlement | null;
+    enableLifeOS?: boolean;
+    enableSchoolOS?: boolean;
+    enableWorkOS?: boolean;
+    enableStudyAbroad?: boolean;
+    enableTreasuryOS?: boolean;
+    enableMasterOS?: boolean;
+  },
+  now: Date = new Date(),
+): boolean {
+  const unlocked = canAccessPaidHubs(options.entitlement, now);
+  if (name === "Life" || name === "Dashboard") return options.enableLifeOS !== false;
+  if (name === "School") return options.enableSchoolOS !== false;
+  if (name === "Work") return unlocked && options.enableWorkOS !== false;
+  if (name === "Study Abroad") return unlocked && options.enableStudyAbroad !== false;
+  if (name === "Treasury") return unlocked && options.enableTreasuryOS !== false;
+  if (name === "Mastery") return unlocked && options.enableMasterOS !== false;
+  return true;
+}

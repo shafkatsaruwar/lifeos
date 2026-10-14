@@ -51,7 +51,7 @@ import { GlobalNotificationShell } from "@/app/components/NotificationCenter";
 import { AgeGateCheckbox, AGE_GATE_BLOCKED_MESSAGE, ageGateBlockedStyle } from "@/app/components/AgeGateCheckbox";
 import { PaywallGate } from "@/app/components/PaywallGate";
 import { SubscriptionCheckoutCard } from "@/app/components/SubscriptionCheckoutCard";
-import { canAccessPaidHubs, isPaidHub, type Entitlement } from "@/lib/billing/entitlement";
+import { canAccessPaidHubs, isHubVisibleInNav, isPaidHub, type Entitlement } from "@/lib/billing/entitlement";
 import { SessionReplaySettingsRow } from "@/app/components/PrivacyTelemetry";
 import {
   PreAuthOnboarding,
@@ -898,15 +898,27 @@ export default function LifeOS() {
     const lifeTaskId = bridgeStudyAbroadTaskToLife(studyAbroadTaskId);
     if (lifeTaskId) openFocus(lifeTaskId);
   }, [bridgeStudyAbroadTaskToLife, openFocus]);
-  const isEnvironmentEnabled = useCallback((name: View) => {
-    if (name === "Life" || name === "Dashboard") return settingsState.enableLifeOS !== false;
-    if (name === "Work") return settingsState.enableWorkOS !== false;
-    if (name === "School") return settingsState.enableSchoolOS !== false;
-    if (name === "Study Abroad") return settingsState.enableStudyAbroad !== false;
-    if (name === "Treasury") return settingsState.enableTreasuryOS !== false;
-    if (name === "Mastery") return settingsState.enableMasterOS !== false;
-    return true;
-  }, [settingsState.enableLifeOS, settingsState.enableSchoolOS, settingsState.enableWorkOS, settingsState.enableStudyAbroad, settingsState.enableTreasuryOS, settingsState.enableMasterOS]);
+  const isEnvironmentEnabled = useCallback(
+    (name: View) =>
+      isHubVisibleInNav(name, {
+        entitlement: settingsState.entitlement,
+        enableLifeOS: settingsState.enableLifeOS,
+        enableSchoolOS: settingsState.enableSchoolOS,
+        enableWorkOS: settingsState.enableWorkOS,
+        enableStudyAbroad: settingsState.enableStudyAbroad,
+        enableTreasuryOS: settingsState.enableTreasuryOS,
+        enableMasterOS: settingsState.enableMasterOS,
+      }),
+    [
+      settingsState.entitlement,
+      settingsState.enableLifeOS,
+      settingsState.enableSchoolOS,
+      settingsState.enableWorkOS,
+      settingsState.enableStudyAbroad,
+      settingsState.enableTreasuryOS,
+      settingsState.enableMasterOS,
+    ],
+  );
 
   const go = useCallback((next: View) => {
     let destination: View = next === "Dashboard" ? "Life" : ["Notes", "Resources", "Brain", "Knowledge"].includes(next) ? "Library" : next;
@@ -2344,8 +2356,7 @@ export default function LifeOS() {
   const visibleNav = useMemo(
     () =>
       nav.filter((item) => {
-        // Respect Settings hub toggles for every environment, including Pro hubs.
-        // Paywall still gates entry via go() / enable toggles when not entitled.
+        // Same rules as Settings → Hubs toggles (Pro hubs need unlock + enable).
         return isEnvironmentEnabled(item.name as View);
       }),
     [isEnvironmentEnabled],

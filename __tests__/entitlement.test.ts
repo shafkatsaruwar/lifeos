@@ -6,6 +6,7 @@ import {
   grantLifetimeAccess,
   isEntitled,
   isLifetimePromoCode,
+  isHubVisibleInNav,
   isPaidHub,
   isValidPromoCode,
   redeemPromoCode,
@@ -84,5 +85,26 @@ describe("entitlement / promo", () => {
       "$49.99/year",
       "$99.99 once",
     ]);
+  });
+
+  it("hides Pro hubs from nav when locked even if enable flags are still true", () => {
+    const legacyOn = {
+      enableLifeOS: true,
+      enableSchoolOS: true,
+      enableWorkOS: true,
+      enableStudyAbroad: true,
+      enableTreasuryOS: true,
+      enableMasterOS: true,
+    };
+    expect(isHubVisibleInNav("Life", legacyOn, now)).toBe(true);
+    expect(isHubVisibleInNav("School", legacyOn, now)).toBe(true);
+    expect(isHubVisibleInNav("Work", legacyOn, now)).toBe(false);
+    expect(isHubVisibleInNav("Study Abroad", legacyOn, now)).toBe(false);
+    expect(isHubVisibleInNav("Treasury", legacyOn, now)).toBe(false);
+    expect(isHubVisibleInNav("Mastery", legacyOn, now)).toBe(false);
+
+    const entitled = { ...legacyOn, entitlement: grantLifetimeAccess("promo", now) };
+    expect(isHubVisibleInNav("Work", entitled, now)).toBe(true);
+    expect(isHubVisibleInNav("Work", { ...entitled, enableWorkOS: false }, now)).toBe(false);
   });
 });
