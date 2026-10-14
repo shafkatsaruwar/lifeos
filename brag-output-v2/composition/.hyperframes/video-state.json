@@ -1,0 +1,317 @@
+{
+  "version": 1,
+  "historyId": "2b621519-1c2e-458d-8cbe-b60b9c7b0d99",
+  "currentRevision": "313f84f2-5884-45ff-90f6-9ad17bffa4c0",
+  "pendingChanges": false,
+  "files": {
+    "assets/audio-data.js": {
+      "hash": "5d9114d685924aa58c94adc888234d5064f81a74afce5a70430e93549733aa45",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/5d/5d9114d685924aa58c94adc888234d5064f81a74afce5a70430e93549733aa45"
+    },
+    "assets/audio-data.json": {
+      "hash": "29bf5bda77e666a2639d1413f2c750bad9f20cf01c83709fed1c95d3547d5801",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/29/29bf5bda77e666a2639d1413f2c750bad9f20cf01c83709fed1c95d3547d5801"
+    },
+    "assets/fonts/EBGaramond-400.woff2": {
+      "hash": "b63448e2680a0dbde70ebb2f3de78f6c515122835491f938e8a8595b46f29210",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/b6/b63448e2680a0dbde70ebb2f3de78f6c515122835491f938e8a8595b46f29210"
+    },
+    "assets/fonts/EBGaramond-700.woff2": {
+      "hash": "5d0f8a497a48fd2a3611d07acc844f65c9fbb35419eafa4e1295f5f0f95f86e4",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/5d/5d0f8a497a48fd2a3611d07acc844f65c9fbb35419eafa4e1295f5f0f95f86e4"
+    },
+    "assets/fonts/Inter-400.woff2": {
+      "hash": "8909904ab6c872eb994093482a88a28eca2cd95912d7b6fecd72103b0dc07edc",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/89/8909904ab6c872eb994093482a88a28eca2cd95912d7b6fecd72103b0dc07edc"
+    },
+    "assets/fonts/Inter-700.woff2": {
+      "hash": "6f56409fd3d64bb85f7d070bce20749db2d66b6d63cec586cc22d1c761be2491",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/6f/6f56409fd3d64bb85f7d070bce20749db2d66b6d63cec586cc22d1c761be2491"
+    },
+    "assets/fonts/inter-latin-400-normal.woff2": {
+      "hash": "dd05e326cf8eac3b55acecf29c842ed73e6e6dd06491cf47f7e8800680ab3e33",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/dd/dd05e326cf8eac3b55acecf29c842ed73e6e6dd06491cf47f7e8800680ab3e33"
+    },
+    "assets/fonts/inter-latin-600-normal.woff2": {
+      "hash": "62553d159189834af73c9a6264704be5b2bee9a08da66a14768d8e5c6ffd2cdb",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/62/62553d159189834af73c9a6264704be5b2bee9a08da66a14768d8e5c6ffd2cdb"
+    },
+    "assets/fonts/inter-latin-700-normal.woff2": {
+      "hash": "aac638f7503cebb084ec494cf00f75f7d8260d50c2f4e7820bccabba09626a3a",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/aa/aac638f7503cebb084ec494cf00f75f7d8260d50c2f4e7820bccabba09626a3a"
+    },
+    "assets/music/bed-34s.mp3": {
+      "hash": "7507b89eaf2ca6a23c1712012b3994c20044b35e45ba56ef3e8671fae8bc47c5",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/75/7507b89eaf2ca6a23c1712012b3994c20044b35e45ba56ef3e8671fae8bc47c5"
+    },
+    "assets/sfx/impact/impactPunch_medium_001.ogg": {
+      "hash": "e71d23abcc3f10d9d6bc9615b2a431fff70b12333a5fcdd9964457564ace4349",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/e7/e71d23abcc3f10d9d6bc9615b2a431fff70b12333a5fcdd9964457564ace4349"
+    },
+    "assets/sfx/impact/impactSoft_heavy_000.ogg": {
+      "hash": "49e7ca88743fca974bb8676ea138b751cfd8f9033b5e7af8736c2a215d6edbc1",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/49/49e7ca88743fca974bb8676ea138b751cfd8f9033b5e7af8736c2a215d6edbc1"
+    },
+    "assets/sfx/impact/impactSoft_heavy_002.ogg": {
+      "hash": "d130ae541951243d3f6ed963d0057450a445ffe117fbf9a084d34eb1635cb563",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/d1/d130ae541951243d3f6ed963d0057450a445ffe117fbf9a084d34eb1635cb563"
+    },
+    "assets/sfx/impact/impactSoft_medium_001.ogg": {
+      "hash": "7642a4fd43e547afe4f7adfadb3dabb681c0ff512f52c1674bae30a726841faf",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/76/7642a4fd43e547afe4f7adfadb3dabb681c0ff512f52c1674bae30a726841faf"
+    },
+    "assets/sfx/impact/impactSoft_medium_004.ogg": {
+      "hash": "b0a4dea90eed47accf50b768beff1166f2f1486fb139e4d025b2427637624bca",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/b0/b0a4dea90eed47accf50b768beff1166f2f1486fb139e4d025b2427637624bca"
+    },
+    "assets/sfx/interface/bong_001.ogg": {
+      "hash": "d21d0f0b782445db579d11e2506b24cd1ac9d664ee33aeaf807761aa7b6fd710",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/d2/d21d0f0b782445db579d11e2506b24cd1ac9d664ee33aeaf807761aa7b6fd710"
+    },
+    "assets/sfx/interface/click_001.ogg": {
+      "hash": "ccfb7fa0cccdd9faec0eb16033c732b1e308d139d80f799161495d58f7adcdb9",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/cc/ccfb7fa0cccdd9faec0eb16033c732b1e308d139d80f799161495d58f7adcdb9"
+    },
+    "assets/sfx/interface/click_002.ogg": {
+      "hash": "adcd1f4adc35f1b41bc1b5bbefeff7aa44f2f3f0d96d3199b544140c7c1e761c",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/ad/adcd1f4adc35f1b41bc1b5bbefeff7aa44f2f3f0d96d3199b544140c7c1e761c"
+    },
+    "assets/sfx/interface/click_003.ogg": {
+      "hash": "2fa929138bc3a0f432696588f66eac94b8f6d463905ec8808c6461ce4b054292",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/2f/2fa929138bc3a0f432696588f66eac94b8f6d463905ec8808c6461ce4b054292"
+    },
+    "assets/sfx/interface/drop_001.ogg": {
+      "hash": "692ee3a6f1821402ca649ff735bee9591dc4846c8098fc7d6a90fd15fa57c1af",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/69/692ee3a6f1821402ca649ff735bee9591dc4846c8098fc7d6a90fd15fa57c1af"
+    },
+    "assets/sfx/interface/switch_002.ogg": {
+      "hash": "6fc395be2ad1f99ce318a5d28f98fb76dbeb676d83a0b28239d8c1fb90736180",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/6f/6fc395be2ad1f99ce318a5d28f98fb76dbeb676d83a0b28239d8c1fb90736180"
+    },
+    "assets/sfx/interface/switch_007.ogg": {
+      "hash": "eeaf60c2abc7e1b715e2b032401bcbf6b3753b77f96b238f861a034a75515967",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/ee/eeaf60c2abc7e1b715e2b032401bcbf6b3753b77f96b238f861a034a75515967"
+    },
+    "assets/sfx/keyboard/keypress-001.wav": {
+      "hash": "7b873548c399b9aa0efbe63052fe1344c5317a9b23455b8be3523f47d434daf1",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/7b/7b873548c399b9aa0efbe63052fe1344c5317a9b23455b8be3523f47d434daf1"
+    },
+    "assets/sfx/keyboard/keypress-003.wav": {
+      "hash": "d67cf9547d99fc65c815c4c68fa9181e0af71419761cbb1d1f0a10eb8491a8d2",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/d6/d67cf9547d99fc65c815c4c68fa9181e0af71419761cbb1d1f0a10eb8491a8d2"
+    },
+    "assets/sfx/keyboard/keypress-005.wav": {
+      "hash": "619eb7e26571657b76fc9e1e3d99e85c3fc2259fa91c4c45f57384a85774ac24",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/61/619eb7e26571657b76fc9e1e3d99e85c3fc2259fa91c4c45f57384a85774ac24"
+    },
+    "assets/sfx/keyboard/keypress-009.wav": {
+      "hash": "25595c1d1e0e18aada04dce3a651dc2c499f1fbc2647c1ab0b3c4e718275b16b",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/25/25595c1d1e0e18aada04dce3a651dc2c499f1fbc2647c1ab0b3c4e718275b16b"
+    },
+    "assets/sfx/keyboard/keypress-012.wav": {
+      "hash": "79de7a9cc035ca4204600a52281129be9f258b1d903c88279b1e7128e57ba86c",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/79/79de7a9cc035ca4204600a52281129be9f258b1d903c88279b1e7128e57ba86c"
+    },
+    "assets/sfx/keyboard/keypress-018.wav": {
+      "hash": "784622e91e8797605fa76c43c0e4745663688c9faf455ff2a951d79f5f4dac65",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/78/784622e91e8797605fa76c43c0e4745663688c9faf455ff2a951d79f5f4dac65"
+    },
+    "assets/sfx/keyboard/keypress-022.wav": {
+      "hash": "8cf602c150e338a94e9c19dcf68b1d80af5adb311c84ec20590a6ab0359b91c5",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/8c/8cf602c150e338a94e9c19dcf68b1d80af5adb311c84ec20590a6ab0359b91c5"
+    },
+    "index.html": {
+      "hash": "924c428a830f3f04ef26aa48f491fbddf3b96b300005ca7219ccbd2c87eed52d",
+      "content": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/92/924c428a830f3f04ef26aa48f491fbddf3b96b300005ca7219ccbd2c87eed52d"
+    }
+  },
+  "revisions": {
+    "ca4e1b92-7f7c-449f-81be-85e88316d700": {
+      "actor": {
+        "kind": "outside",
+        "name": "Outside"
+      },
+      "label": "Changed outside the app",
+      "startedAt": 1791942448185,
+      "endedAt": 1791942448185,
+      "files": {
+        "index.html": {
+          "before": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/80/80c7e554e00be8a097cec37cfcd32740d5bd5596265846bda24ab8c26f322dd0",
+          "after": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/d4/d49cebd734b4dffa85464014ebed6224411ea33c3e8239ed62fc53d89b794951"
+        }
+      }
+    },
+    "cd89d151-6af2-4f57-b7da-63d738b828e4": {
+      "actor": {
+        "kind": "outside",
+        "name": "Outside"
+      },
+      "label": "Changed outside the app",
+      "startedAt": 1791942598795,
+      "endedAt": 1791942598795,
+      "files": {
+        "index.html": {
+          "before": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/d4/d49cebd734b4dffa85464014ebed6224411ea33c3e8239ed62fc53d89b794951",
+          "after": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/98/98b46079a65d047fe46fb0ca36dd0f0b3fc475b30f2af1936f0eb306b8a21a5d"
+        }
+      }
+    },
+    "313f84f2-5884-45ff-90f6-9ad17bffa4c0": {
+      "actor": {
+        "kind": "outside",
+        "name": "Outside"
+      },
+      "label": "Changed outside the app",
+      "startedAt": 1791942617529,
+      "endedAt": 1791942617529,
+      "files": {
+        "index.html": {
+          "before": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/98/98b46079a65d047fe46fb0ca36dd0f0b3fc475b30f2af1936f0eb306b8a21a5d",
+          "after": "/home/ubuntu/.cache/hyperframes/history/2b621519-1c2e-458d-8cbe-b60b9c7b0d99/blobs/92/924c428a830f3f04ef26aa48f491fbddf3b96b300005ca7219ccbd2c87eed52d"
+        }
+      }
+    }
+  },
+  "checks": {
+    "latest": {
+      "revision": "ca4e1b92-7f7c-449f-81be-85e88316d700",
+      "id": "e362d479-1d7e-481b-a9e3-0bfb050e6165"
+    },
+    "revisions": {
+      "ca4e1b92-7f7c-449f-81be-85e88316d700": [
+        {
+          "id": "e362d479-1d7e-481b-a9e3-0bfb050e6165",
+          "scope": "project",
+          "report": "/workspace/brag-output-v2/composition/.hyperframes/artifacts/checks/e362d479-1d7e-481b-a9e3-0bfb050e6165.json",
+          "metadata": {
+            "ok": true,
+            "browserSkipped": false,
+            "options": {
+              "samples": 9,
+              "atTransitions": false,
+              "maxIssues": 80,
+              "collapseStatic": true,
+              "tolerance": 2,
+              "timeout": 3000,
+              "contrast": true,
+              "strict": false,
+              "snapshots": false,
+              "browserGpuMode": "auto"
+            }
+          },
+          "createdAt": 1791942456514,
+          "contentHash": "edb9cc08cc3439f4a21bb91cadc3a070048b509e45733408e7abea660cc20fe1",
+          "revision": "ca4e1b92-7f7c-449f-81be-85e88316d700",
+          "inputFingerprint": "0f382640a0cf722fddbf1c1f7604d21670068ee7526933c6eef56b888ba23e76",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        }
+      ],
+      "cd89d151-6af2-4f57-b7da-63d738b828e4": [
+        {
+          "id": "8c6902a8-bd1e-450d-a9f8-d758260f17d8",
+          "scope": "project",
+          "metadata": {
+            "ok": true,
+            "browserSkipped": false,
+            "options": {
+              "samples": 9,
+              "atTransitions": false,
+              "maxIssues": 80,
+              "collapseStatic": true,
+              "tolerance": 2,
+              "timeout": 3000,
+              "contrast": true,
+              "strict": false,
+              "snapshots": false,
+              "browserGpuMode": "auto"
+            }
+          },
+          "createdAt": 1791942607606,
+          "contentHash": "e0a4bc5b69b4f4c283757dcc1ac8d849a7e6b7e78062972e5eb8bba9e2d422f9",
+          "revision": "cd89d151-6af2-4f57-b7da-63d738b828e4",
+          "inputFingerprint": "5f9149edafd91638d4efc51e9db561e58301c13ec0c2debb863bf818902c67f9",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "30750464-92b5-40bf-be8f-d71e89b5809c"
+        }
+      ]
+    },
+    "unversioned": [
+      {
+        "id": "43b06a9b-57d3-4507-9a8c-3eacb88912e9",
+        "scope": "project",
+        "report": "/workspace/brag-output-v2/composition/.hyperframes/artifacts/checks/43b06a9b-57d3-4507-9a8c-3eacb88912e9.json",
+        "metadata": {
+          "ok": false,
+          "browserSkipped": true,
+          "options": {
+            "samples": 9,
+            "atTransitions": false,
+            "maxIssues": 80,
+            "collapseStatic": true,
+            "tolerance": 2,
+            "timeout": 3000,
+            "contrast": true,
+            "strict": false,
+            "snapshots": false,
+            "browserGpuMode": "auto"
+          }
+        },
+        "createdAt": 1791942424705,
+        "contentHash": "1073fb56a17fcc84283b09cfacee0f9d89a7e9a132f5022fc771b5cd6b22276b",
+        "revision": null,
+        "inputFingerprint": "4e6e5dd9dd4a8e73d9ed02d9a05531fff11db9dcc98a576d40639751b9ba687c",
+        "inputScope": "local-project-files",
+        "attribution": "unversioned"
+      },
+      {
+        "id": "ce3706d9-3f97-4696-b774-5f12158a0ad9",
+        "scope": "project",
+        "report": "/workspace/brag-output-v2/composition/.hyperframes/artifacts/checks/ce3706d9-3f97-4696-b774-5f12158a0ad9.json",
+        "metadata": {
+          "ok": false,
+          "browserSkipped": true,
+          "options": {
+            "samples": 9,
+            "atTransitions": false,
+            "maxIssues": 80,
+            "collapseStatic": true,
+            "tolerance": 2,
+            "timeout": 3000,
+            "contrast": true,
+            "strict": false,
+            "snapshots": false,
+            "browserGpuMode": "auto"
+          }
+        },
+        "createdAt": 1791942431934,
+        "contentHash": "1073fb56a17fcc84283b09cfacee0f9d89a7e9a132f5022fc771b5cd6b22276b",
+        "revision": null,
+        "inputFingerprint": "4e6e5dd9dd4a8e73d9ed02d9a05531fff11db9dcc98a576d40639751b9ba687c",
+        "inputScope": "local-project-files",
+        "attribution": "unversioned"
+      }
+    ]
+  },
+  "snapshots": {
+    "latest": null,
+    "revisions": {},
+    "unversioned": []
+  },
+  "renders": {
+    "latest": {
+      "id": "30750464-92b5-40bf-be8f-d71e89b5809c",
+      "completedAt": 1791942673180,
+      "output": "/workspace/brag-output-v2/LifeOS-Trailer-V2.mp4",
+      "status": "completed",
+      "revision": "313f84f2-5884-45ff-90f6-9ad17bffa4c0"
+    },
+    "retainedRevisions": [
+      "313f84f2-5884-45ff-90f6-9ad17bffa4c0",
+      "ca4e1b92-7f7c-449f-81be-85e88316d700"
+    ]
+  },
+  "pendingArtifactCleanup": []
+}
