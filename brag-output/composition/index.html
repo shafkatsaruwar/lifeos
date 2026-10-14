@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>LifeOS — Brag</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="assets/audio-data.js"></script>
+    <style>
+      @font-face {
+        font-family: "Inter Local";
+        src: url("assets/fonts/Inter-400.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+      }
+      @font-face {
+        font-family: "Inter Local";
+        src: url("assets/fonts/Inter-700.woff2") format("woff2");
+        font-weight: 700;
+        font-style: normal;
+      }
+      @font-face {
+        font-family: "EB Garamond Local";
+        src: url("assets/fonts/EBGaramond-400.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+      }
+      @font-face {
+        font-family: "EB Garamond Local";
+        src: url("assets/fonts/EBGaramond-700.woff2") format("woff2");
+        font-weight: 700;
+        font-style: normal;
+      }
+
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #0a0a0c;
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: "Inter Local", ui-sans-serif, system-ui, sans-serif;
+        color: #202124;
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+      }
+      .scene-inner {
+        position: absolute;
+        inset: 0;
+        will-change: opacity, transform;
+      }
+
+      /* —— Scene 1: dark hook —— */
+      .s1-bg {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(ellipse 80% 55% at 50% 0%, rgba(98, 90, 246, 0.14) 0%, transparent 55%),
+          linear-gradient(165deg, #0a0a0c 0%, #141418 48%, #0e0e12 100%);
+      }
+      .s1-glow {
+        position: absolute;
+        width: 720px;
+        height: 420px;
+        left: 50%;
+        top: 18%;
+        margin-left: -360px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(139, 131, 255, 0.22), transparent 70%);
+        filter: blur(8px);
+        pointer-events: none;
+      }
+      .s1-content {
+        position: absolute;
+        left: 160px;
+        top: 260px;
+        width: 1200px;
+      }
+      .brand-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 44px;
+      }
+      .brand-mark {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        background: #242428;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 3px;
+        padding: 10px 9px;
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 12px 40px rgba(98,90,246,0.18);
+      }
+      .brand-mark span {
+        width: 5px;
+        background: #fff;
+        border-radius: 3px;
+        display: block;
+      }
+      .brand-mark span:nth-child(1) { height: 10px; }
+      .brand-mark span:nth-child(2) { height: 18px; }
+      .brand-mark span:nth-child(3) { height: 13px; }
+      .wordmark {
+        color: #f1f1f2;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+      }
+      .eyebrow {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #938cff;
+        margin-bottom: 18px;
+      }
+      .display {
+        font-family: "EB Garamond Local", "Times New Roman", serif;
+        font-weight: 400;
+        font-size: 92px;
+        line-height: 1.05;
+        letter-spacing: -0.03em;
+        color: #f1f1f2;
+        max-width: 14ch;
+      }
+
+      /* —— Scene 2/3: Now cockpit —— */
+      .paper-bg {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(ellipse 70% 50% at 80% 0%, rgba(98, 90, 246, 0.07), transparent 55%),
+          #f6f7f9;
+      }
+      .now-shell {
+        position: absolute;
+        left: 140px;
+        top: 110px;
+        width: 1640px;
+      }
+      .now-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-bottom: 28px;
+      }
+      .now-top .eyebrow { color: #5f636b; margin-bottom: 10px; }
+      .now-top h2 {
+        font-family: "EB Garamond Local", "Times New Roman", serif;
+        font-size: 56px;
+        font-weight: 400;
+        letter-spacing: -0.025em;
+        color: #202124;
+      }
+      .env-chips { display: flex; gap: 10px; }
+      .chip {
+        height: 36px;
+        padding: 0 14px;
+        border-radius: 999px;
+        border: 1px solid #e8e9ed;
+        background: #fff;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #202124;
+        box-shadow: 0 8px 24px rgba(20, 24, 35, 0.04);
+      }
+      .chip i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: block;
+      }
+      .chip.life i { background: #d99b38; }
+      .chip.school i { background: #8b5cf6; }
+      .panel {
+        background: #fff;
+        border: 1px solid #e8e9ed;
+        border-radius: 18px;
+        box-shadow: 0 16px 48px rgba(20, 24, 35, 0.06);
+        padding: 28px 32px;
+      }
+      .panel-label {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #5f636b;
+        margin-bottom: 14px;
+      }
+      .capture {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        height: 64px;
+        border: 1px solid #e8e9ed;
+        border-radius: 14px;
+        background: #f6f7f9;
+        padding: 0 18px;
+      }
+      .capture.focused {
+        border-color: #625af6;
+        box-shadow: 0 0 0 4px rgba(98, 90, 246, 0.12);
+        background: #fff;
+      }
+      .capture kbd {
+        font-family: "Inter Local", ui-sans-serif, system-ui, sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        color: #4f47d4;
+        background: rgba(98, 90, 246, 0.12);
+        border-radius: 8px;
+        padding: 6px 9px;
+      }
+      .capture-text {
+        font-size: 22px;
+        font-weight: 600;
+        color: #202124;
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+      }
+      .capture-text .caret {
+        display: inline-block;
+        width: 2px;
+        height: 1.1em;
+        background: #625af6;
+        margin-left: 2px;
+        vertical-align: -2px;
+      }
+      .task-row {
+        margin-top: 18px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        min-height: 72px;
+        padding: 14px 18px;
+        border: 1px solid #e8e9ed;
+        border-radius: 14px;
+        background: color-mix(in srgb, #f6f7f9 55%, #fff);
+      }
+      .check {
+        width: 28px;
+        height: 28px;
+        border: 1px solid #e8e9ed;
+        border-radius: 8px;
+        background: #fff;
+      }
+      .task-row strong {
+        display: block;
+        font-size: 18px;
+        font-weight: 700;
+        color: #202124;
+      }
+      .task-row span {
+        display: block;
+        margin-top: 4px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #5f636b;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #8b5cf6;
+        margin-left: auto;
+      }
+
+      /* —— Scene 4: Focus —— */
+      .focus-bg {
+        position: absolute;
+        inset: 0;
+        background: #17171b;
+      }
+      .focus-warm {
+        position: absolute;
+        width: 900px;
+        height: 520px;
+        left: 10%;
+        top: 28%;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(98, 90, 246, 0.16), transparent 68%);
+        pointer-events: none;
+      }
+      .focus-header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 78px;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        display: flex;
+        align-items: center;
+        padding: 0 48px;
+        gap: 14px;
+      }
+      .brand-mark.light { background: rgba(255,255,255,0.08); }
+      .focus-label {
+        margin-left: auto;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #aaaab1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .focus-label i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #6ed4a2;
+        display: block;
+      }
+      .focus-main {
+        position: absolute;
+        left: 120px;
+        top: 220px;
+        width: 1100px;
+      }
+      .focus-project {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #aaaab2;
+        margin-bottom: 18px;
+      }
+      .focus-main h1 {
+        font-family: "EB Garamond Local", "Times New Roman", serif;
+        font-size: 72px;
+        font-weight: 400;
+        line-height: 1.05;
+        letter-spacing: -0.03em;
+        color: #f1f1f2;
+        max-width: 14ch;
+        margin-bottom: 28px;
+      }
+      .focus-timer {
+        font-size: 56px;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+        color: #f1f1f2;
+        font-variant-numeric: tabular-nums;
+      }
+      .focus-sub {
+        margin-top: 12px;
+        font-size: 16px;
+        font-weight: 600;
+        color: #8b83ff;
+      }
+
+      /* —— Scene 5: outro —— */
+      .outro-bg {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(ellipse 60% 45% at 50% 40%, rgba(98, 90, 246, 0.16), transparent 60%),
+          linear-gradient(180deg, #0c0c10 0%, #121218 100%);
+      }
+      .outro-stack {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        text-align: center;
+      }
+      .outro-stack .brand-mark {
+        width: 64px;
+        height: 64px;
+        border-radius: 16px;
+        padding: 14px 12px;
+        gap: 4px;
+      }
+      .outro-stack .brand-mark span { width: 7px; }
+      .outro-stack .brand-mark span:nth-child(1) { height: 14px; }
+      .outro-stack .brand-mark span:nth-child(2) { height: 26px; }
+      .outro-stack .brand-mark span:nth-child(3) { height: 18px; }
+      .outro-name {
+        color: #f1f1f2;
+        font-size: 42px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+      .outro-line {
+        font-family: "EB Garamond Local", "Times New Roman", serif;
+        font-size: 36px;
+        font-weight: 400;
+        color: #c8c8d0;
+        letter-spacing: -0.02em;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="20"
+      data-width="1920"
+      data-height="1080"
+    >
+      <!-- Scene 1: Hook 0–3.5 -->
+      <section id="scene-hook" class="clip" data-start="0" data-duration="3.5" data-track-index="1">
+        <div class="scene-inner" id="s1">
+          <div class="s1-bg"></div>
+          <div class="s1-glow" id="s1-glow"></div>
+          <div class="s1-content">
+            <div class="brand-row" id="s1-brand">
+              <div class="brand-mark" id="s1-mark">
+                <span></span><span></span><span></span>
+              </div>
+              <div class="wordmark">LifeOS</div>
+            </div>
+            <p class="eyebrow" id="s1-eye">Welcome</p>
+            <h1 class="display" id="s1-title">Your life, in focus.</h1>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 2: Now reveal 3.2–6.5 -->
+      <section id="scene-now" class="clip" data-start="3.2" data-duration="3.0" data-track-index="2">
+        <div class="scene-inner" id="s2">
+          <div class="paper-bg"></div>
+          <div class="now-shell">
+            <div class="now-top">
+              <div>
+                <p class="eyebrow" id="s2-eye">Daily cockpit</p>
+                <h2 id="s2-title">Now is your cockpit.</h2>
+              </div>
+              <div class="env-chips">
+                <div class="chip life" id="s2-chip-life"><i></i>Life</div>
+                <div class="chip school" id="s2-chip-school"><i></i>School</div>
+              </div>
+            </div>
+            <div class="panel" id="s2-panel">
+              <p class="panel-label">What matters now</p>
+              <div class="capture">
+                <kbd>/</kbd>
+                <div class="capture-text" style="color:#5f636b">Type a command…</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 3: Capture 6.2–11.9 -->
+      <section id="scene-capture" class="clip" data-start="6.2" data-duration="5.5" data-track-index="3">
+        <div class="scene-inner" id="s3">
+          <div class="paper-bg"></div>
+          <div class="now-shell">
+            <div class="now-top">
+              <div>
+                <p class="eyebrow">Now</p>
+                <h2>Capture what matters.</h2>
+              </div>
+            </div>
+            <div class="panel" id="s3-panel">
+              <p class="panel-label">Command bar</p>
+              <div class="capture focused" id="s3-capture">
+                <kbd>/</kbd>
+                <div class="capture-text" id="s3-typed"><span id="s3-chars"></span><span class="caret" id="s3-caret"></span></div>
+              </div>
+              <div class="task-row" id="s3-task">
+                <div class="check"></div>
+                <div>
+                  <strong>Finish reading chapter 3</strong>
+                  <span>School · Due today · Medium</span>
+                </div>
+                <div class="dot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 4: Focus 11.5–17.0 -->
+      <section id="scene-focus" class="clip" data-start="11.5" data-duration="5.2" data-track-index="4">
+        <div class="scene-inner" id="s4">
+          <div class="focus-bg"></div>
+          <div class="focus-warm" id="s4-warm"></div>
+          <header class="focus-header" id="s4-head">
+            <div class="brand-mark light"><span></span><span></span><span></span></div>
+            <div class="wordmark" style="font-size:18px;color:#f1f1f2">LifeOS</div>
+            <div class="focus-label"><i></i>In session</div>
+          </header>
+          <div class="focus-main" id="s4-main">
+            <p class="focus-project">School · Focus</p>
+            <h1>Finish reading chapter 3</h1>
+            <div class="focus-timer" id="s4-timer">44:59</div>
+            <p class="focus-sub">One meaningful pass. Leave a clear handoff.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 5: Outro 16.5–20 -->
+      <section id="scene-outro" class="clip" data-start="16.5" data-duration="3.5" data-track-index="5">
+        <div class="scene-inner" id="s5">
+          <div class="outro-bg"></div>
+          <div class="outro-stack">
+            <div class="brand-mark" id="s5-mark"><span></span><span></span><span></span></div>
+            <div class="outro-name" id="s5-name">LifeOS</div>
+            <div class="outro-line" id="s5-line">Decide what matters now.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Audio -->
+      <audio id="music" src="assets/music/bed-20s.mp3" data-start="0" data-duration="20" data-track-index="10" data-volume="0.2"></audio>
+      <audio id="sfx-soft1" src="assets/sfx/impact/impactSoft_medium_001.ogg" data-start="0.35" data-duration="0.4" data-track-index="11" data-volume="0.35"></audio>
+      <audio id="sfx-chip1" src="assets/sfx/interface/drop_001.ogg" data-start="4.1" data-duration="0.3" data-track-index="11" data-volume="0.3"></audio>
+      <audio id="sfx-chip2" src="assets/sfx/interface/drop_001.ogg" data-start="4.55" data-duration="0.3" data-track-index="11" data-volume="0.28"></audio>
+      <audio id="sfx-key1" src="assets/sfx/keyboard/keypress-001.wav" data-start="6.85" data-duration="0.12" data-track-index="12" data-volume="0.22"></audio>
+      <audio id="sfx-key2" src="assets/sfx/keyboard/keypress-005.wav" data-start="7.05" data-duration="0.12" data-track-index="12" data-volume="0.2"></audio>
+      <audio id="sfx-key3" src="assets/sfx/keyboard/keypress-009.wav" data-start="7.25" data-duration="0.12" data-track-index="12" data-volume="0.22"></audio>
+      <audio id="sfx-key4" src="assets/sfx/keyboard/keypress-012.wav" data-start="7.55" data-duration="0.12" data-track-index="12" data-volume="0.2"></audio>
+      <audio id="sfx-key5" src="assets/sfx/keyboard/keypress-018.wav" data-start="8.05" data-duration="0.12" data-track-index="12" data-volume="0.22"></audio>
+      <audio id="sfx-key6" src="assets/sfx/keyboard/keypress-022.wav" data-start="8.55" data-duration="0.12" data-track-index="12" data-volume="0.2"></audio>
+      <audio id="sfx-key7" src="assets/sfx/keyboard/keypress-003.wav" data-start="9.05" data-duration="0.12" data-track-index="12" data-volume="0.22"></audio>
+      <audio id="sfx-enter" src="assets/sfx/interface/click_003.ogg" data-start="9.55" data-duration="0.15" data-track-index="12" data-volume="0.4"></audio>
+      <audio id="sfx-task" src="assets/sfx/interface/bong_001.ogg" data-start="9.85" data-duration="0.3" data-track-index="12" data-volume="0.32"></audio>
+      <audio id="sfx-focus" src="assets/sfx/interface/switch_007.ogg" data-start="11.65" data-duration="0.35" data-track-index="13" data-volume="0.28"></audio>
+      <audio id="sfx-logo" src="assets/sfx/impact/impactSoft_medium_004.ogg" data-start="16.85" data-duration="0.4" data-track-index="13" data-volume="0.38"></audio>
+    </div>
+
+    <script>
+      const CAPTURE = "/t Finish reading chapter 3";
+      const charsEl = document.getElementById("s3-chars");
+      // Pre-build character spans for seek-safe typing
+      for (let i = 0; i < CAPTURE.length; i++) {
+        const span = document.createElement("span");
+        span.textContent = CAPTURE[i];
+        span.style.opacity = "0";
+        span.className = "ch";
+        charsEl.appendChild(span);
+      }
+      const charSpans = charsEl.querySelectorAll(".ch");
+
+      const tl = gsap.timeline({ paused: true });
+
+      // Scene 1
+      gsap.set("#s1", { opacity: 1 });
+      gsap.set(["#s1-brand", "#s1-eye", "#s1-title"], { opacity: 0, y: 28 });
+      tl.fromTo("#s1-brand", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 0.15);
+      tl.fromTo("#s1-eye", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 0.45);
+      tl.fromTo("#s1-title", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 0.7);
+      tl.fromTo("#s1-mark", { scale: 0.92 }, { scale: 1.04, duration: 0.35, ease: "power2.out", yoyo: true, repeat: 1 }, 1.15);
+      tl.to("#s1", { opacity: 0, duration: 0.35, ease: "power2.inOut" }, 3.15);
+
+      // Scene 2
+      gsap.set("#s2", { opacity: 0 });
+      gsap.set(["#s2-eye", "#s2-title", "#s2-panel", "#s2-chip-life", "#s2-chip-school"], { opacity: 0, y: 22 });
+      tl.fromTo("#s2", { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "power2.out" }, 3.2);
+      tl.fromTo("#s2-eye", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 3.4);
+      tl.fromTo("#s2-title", { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 3.55);
+      tl.fromTo("#s2-chip-life", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 4.05);
+      tl.fromTo("#s2-chip-school", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 4.45);
+      tl.fromTo("#s2-panel", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 3.9);
+      tl.to("#s2", { opacity: 0, duration: 0.35, ease: "power2.inOut" }, 6.15);
+
+      // Scene 3
+      gsap.set("#s3", { opacity: 0 });
+      gsap.set("#s3-task", { opacity: 0, y: 18 });
+      tl.fromTo("#s3", { opacity: 0 }, { opacity: 1, duration: 0.35, ease: "power2.out" }, 6.2);
+      // Typing: reveal chars one by one (seek-safe via opacity on spans)
+      const typeStart = 6.75;
+      const perChar = 0.095;
+      charSpans.forEach((span, i) => {
+        tl.fromTo(span, { opacity: 0 }, { opacity: 1, duration: 0.04 }, typeStart + i * perChar);
+      });
+      tl.fromTo("#s3-caret", { opacity: 1 }, { opacity: 0.15, duration: 0.35, yoyo: true, repeat: 7, ease: "sine.inOut" }, 6.7);
+      tl.fromTo("#s3-task", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 9.85);
+      tl.to("#s3", { opacity: 0, duration: 0.4, ease: "power2.inOut" }, 11.45);
+
+      // Scene 4
+      gsap.set("#s4", { opacity: 0 });
+      gsap.set(["#s4-head", "#s4-main"], { opacity: 0, y: 20 });
+      tl.fromTo("#s4", { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "power2.out" }, 11.5);
+      tl.fromTo("#s4-head", { opacity: 0, y: -12 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 11.7);
+      tl.fromTo("#s4-main", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 11.95);
+      tl.call(() => { document.getElementById("s4-timer").textContent = "45:00"; }, null, 12.3);
+      tl.call(() => { document.getElementById("s4-timer").textContent = "44:59"; }, null, 13.3);
+      tl.call(() => { document.getElementById("s4-timer").textContent = "44:58"; }, null, 14.3);
+      tl.to("#s4", { opacity: 0, duration: 0.4, ease: "power2.inOut" }, 16.45);
+
+      // Scene 5
+      gsap.set("#s5", { opacity: 0 });
+      gsap.set(["#s5-mark", "#s5-name", "#s5-line"], { opacity: 0, y: 20 });
+      tl.fromTo("#s5", { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "power2.out" }, 16.5);
+      tl.fromTo("#s5-mark", { opacity: 0, y: 16, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: "power3.out" }, 16.75);
+      tl.fromTo("#s5-name", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 17.1);
+      tl.fromTo("#s5-line", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 17.4);
+
+      // Subtle audio-reactive glow (pre-extracted, sync)
+      const AUDIO_DATA = window.AUDIO_DATA;
+      if (AUDIO_DATA && AUDIO_DATA.frames) {
+        const glow = document.getElementById("s1-glow");
+        const warm = document.getElementById("s4-warm");
+        const mark = document.getElementById("s5-mark");
+        // Sample every 2nd frame to keep the timeline lean
+        for (let f = 0; f < AUDIO_DATA.totalFrames; f += 2) {
+          const frame = AUDIO_DATA.frames[f];
+          const t = f / AUDIO_DATA.fps;
+          tl.call(
+            ((bands) => () => {
+              const bass = bands[0] || 0;
+              const mid = bands[2] || 0;
+              if (glow) glow.style.opacity = String(0.55 + bass * 0.45);
+              if (warm) warm.style.opacity = String(0.5 + bass * 0.5);
+              if (mark) {
+                mark.style.boxShadow =
+                  "0 0 0 1px rgba(255,255,255,0.06), 0 16px 48px rgba(98,90,246," +
+                  (0.12 + mid * 0.22) +
+                  ")";
+              }
+            })(frame.bands),
+            null,
+            t,
+          );
+        }
+      }
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
