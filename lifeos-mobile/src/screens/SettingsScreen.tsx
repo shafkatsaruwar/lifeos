@@ -18,6 +18,12 @@ import {
 } from "../lib/focusEnforcer";
 import { resolveNotificationPrefs } from "../lib/notifications";
 import { mergeSynapseCalendarEvents, parseSynapseDayPlan } from "../lib/synapseImport";
+import {
+  canAccessPaidHubs,
+  entitlementStatusLabel,
+  formatEntitlementExpiry,
+  redeemPromoCode,
+} from "../lib/entitlement";
 import { SPACE_COLORS, DEFAULT_WORKSPACE_COLORS, workspaceColorFor } from "../lib/theme";
 import type { CalendarDefaultView, EnergyLevel, ThemeMode } from "../types";
 
@@ -32,9 +38,12 @@ export function SettingsScreen() {
   const [synapseBusy, setSynapseBusy] = useState(false);
   const [fePrefs, setFePrefs] = useState<FocusEnforcerPrefs>(DEFAULT_FOCUS_ENFORCER_PREFS);
   const [editingWorkspaceColor, setEditingWorkspaceColor] = useState<keyof typeof DEFAULT_WORKSPACE_COLORS | null>(null);
+  const [promo, setPromo] = useState("");
   const themeMode = workspace.settings.themeMode ?? "system";
   const accent = workspace.settings.accent?.trim() || theme.accent;
   const synapseEventCount = workspace.calendar.filter((event) => event.id.startsWith("synapse-")).length;
+  const hubsUnlocked = canAccessPaidHubs(workspace.settings.entitlement);
+  const entitlementExpiry = formatEntitlementExpiry(workspace.settings.entitlement);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -434,7 +443,7 @@ export function SettingsScreen() {
             <Text style={[styles.cardLabel, { color: theme.text }]}>Environments</Text>
           </View>
           <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>
-            Show or hide HomeOS, School, and Work tabs. MasterOS opens in-app on iPad (native teaching UI).
+            Home and School are free. Work and MasterOS need LifeOS Pro.
           </Text>
           <View style={styles.settingRow}>
             <View style={styles.grow}>
@@ -460,30 +469,46 @@ export function SettingsScreen() {
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
           <View style={styles.settingRow}>
             <View style={styles.grow}>
-              <Text style={{ color: theme.text, fontWeight: "800" }}>Work</Text>
-              <Text style={{ color: theme.muted, fontSize: 12 }}>Show the Work tab and hub</Text>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>Work · Pro</Text>
+              <Text style={{ color: theme.muted, fontSize: 12 }}>
+                {hubsUnlocked ? "Show the Work tab and hub" : "Unlock with LifeOS Pro"}
+              </Text>
             </View>
             <Switch
-              value={workspace.settings.enableWorkOS !== false}
-              onValueChange={(value) => patchSettings({ enableWorkOS: value })}
+              value={hubsUnlocked && workspace.settings.enableWorkOS !== false}
+              onValueChange={(value) => {
+                if (!hubsUnlocked && value) {
+                  Alert.alert("LifeOS Pro", "Work is a Pro hub. Open the Work tab to subscribe or redeem a promo.");
+                  navigation.navigate("WorkTab");
+                  return;
+                }
+                patchSettings({ enableWorkOS: value });
+              }}
               trackColor={{ true: theme.accent }}
             />
           </View>
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
           <View style={styles.settingRow}>
             <View style={styles.grow}>
-              <Text style={{ color: theme.text, fontWeight: "800" }}>MasterOS</Text>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>MasterOS · Pro</Text>
               <Text style={{ color: theme.muted, fontSize: 12 }}>
                 {isTablet ? "Teaching on iPad — native Hub, Teach, Whiteboard, Grade" : "iPad only · use web at /masteros on desktop"}
               </Text>
             </View>
             <Switch
-              value={workspace.settings.enableMasterOS !== false}
-              onValueChange={(value) => patchSettings({ enableMasterOS: value })}
+              value={hubsUnlocked && workspace.settings.enableMasterOS !== false}
+              onValueChange={(value) => {
+                if (!hubsUnlocked && value) {
+                  Alert.alert("LifeOS Pro", "MasterOS is a Pro hub. Subscribe or redeem a promo to enable it.");
+                  navigation.navigate("WorkTab");
+                  return;
+                }
+                patchSettings({ enableMasterOS: value });
+              }}
               trackColor={{ true: theme.accent }}
             />
           </View>
-          {workspace.settings.enableMasterOS !== false && isTablet ? (
+          {hubsUnlocked && workspace.settings.enableMasterOS !== false && isTablet ? (
             <View style={{ marginTop: 12 }}>
               <ActionButton
                 label="Open MasterOS"
@@ -513,6 +538,48 @@ export function SettingsScreen() {
                 // Local replay flag — do not rely on clearing Firebase settings
                 // (silent sync was restoring onboardingCompletedAt and killing the flow).
                 startOnboardingReplay();
+              }}
+            />
+          </View>
+        </Card>
+
+        <Card>
+          <View style={styles.sectionHead}>
+            <View style={[styles.sectionIcon, { backgroundColor: theme.soft }]}>
+              <Feather name="star" size={14} color={theme.accent} />
+            </View>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Plan & billing</Text>
+          </View>
+          <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 18 }}>
+            {entitlementStatusLabel(workspace.settings.entitlement)}
+            {hubsUnlocked && entitlementExpiry ? ` · until ${entitlementExpiry}` : ""}
+          </Text>
+          <Text style={{ color: theme.muted, fontSize: 12, lineHeight: 17, marginTop: 8 }}>
+            Home and School are free. Pro hubs: $4.99/month, $49.99/year, or $99.99 lifetime.
+          </Text>
+          <TextInput
+            value={promo}
+            onChangeText={setPromo}
+            placeholder="Enter promo code"
+            placeholderTextColor={theme.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[styles.input, { color: theme.text, borderColor: theme.border, marginTop: 12 }]}
+          />
+          <View style={{ marginTop: 12 }}>
+            <ActionButton
+              label="Redeem promo"
+              icon="gift"
+              quiet
+              onPress={() => {
+                const result = redeemPromoCode(promo);
+                if (!result.ok) {
+                  Alert.alert("Promo code", result.error);
+                  return;
+                }
+                void updateSettings({ ...workspace.settings, entitlement: result.entitlement });
+                setPromo("");
+                Alert.alert("Unlocked", "Paid hubs are unlocked for one year.");
               }}
             />
           </View>

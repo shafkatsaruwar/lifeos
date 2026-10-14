@@ -6,26 +6,40 @@
 export const SUBSCRIPTION_PRODUCT_NAME = "LifeOS Pro";
 
 export const SUBSCRIPTION_RENEWAL_TERMS =
-  "Paid plans renew automatically at the then-current price each billing period (monthly or annual, as shown at checkout) until you cancel. You will be charged at the start of each period.";
+  "Monthly and annual plans renew automatically at the then-current price each billing period until you cancel. You will be charged at the start of each period. Lifetime is a one-time purchase and does not renew.";
 
 export const SUBSCRIPTION_CANCEL_INSTRUCTIONS =
-  "Cancel anytime in Settings → Plan & billing → Cancel subscription, or email support@lifeos.app. Cancellation stops future renewals; you keep access through the end of the period you already paid for. App Store / Google Play subscriptions must also be cancelled in that store's subscription settings.";
+  "Cancel anytime in Settings → Plan & billing → Cancel subscription, or email support@lifeos.app. Cancellation stops future renewals; you keep access through the end of the period you already paid for. App Store / Google Play subscriptions must also be cancelled in that store's subscription settings. Lifetime purchases are non-renewing.";
 
 export type SubscriptionOffer = {
   id: string;
   label: string;
   priceLabel: string;
-  period: "month" | "year";
+  period: "month" | "year" | "lifetime";
   available: boolean;
 };
 
-/** Current catalog — mark available:true when Stripe/IAP is wired. */
+/** Paid hubs catalog — Home (Life) and School stay free. */
 export const SUBSCRIPTION_OFFERS: SubscriptionOffer[] = [
   {
     id: "pro-monthly",
     label: "LifeOS Pro",
-    priceLabel: "$8/month",
+    priceLabel: "$4.99/month",
     period: "month",
-    available: false,
+    available: true,
+  },
+  {
+    id: "pro-yearly",
+    label: "LifeOS Pro Annual",
+    priceLabel: "$49.99/year",
+    period: "year",
+    available: true,
+  },
+  {
+    id: "pro-lifetime",
+    label: "LifeOS Pro Lifetime",
+    priceLabel: "$99.99 once",
+    period: "lifetime",
+    available: true,
   },
 ];

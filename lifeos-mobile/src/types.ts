@@ -339,6 +339,14 @@ export type SettingsState = {
   onboardingCompletedAt?: string;
   /** Bump to offer a short “what’s new” flow later without replaying v1. */
   onboardingVersion?: number;
+  /** Access entitlement — promo year or paid Pro (synced with web). */
+  entitlement?: {
+    status: "none" | "promo" | "pro";
+    expiresAt?: string;
+    unlockedAt?: string;
+    source?: "promo" | "stripe" | "app_store";
+    promoCode?: string;
+  } | null;
   currentEnergy?: EnergyLevel;
   ambientActivity?: AmbientActivity | null;
   momentumLog?: MomentumEntry[];
