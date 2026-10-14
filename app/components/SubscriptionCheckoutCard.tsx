@@ -48,7 +48,7 @@ export function SubscriptionCheckoutCard({
             day: "numeric",
             year: "numeric",
           })}.`
-        : "Paid hubs unlocked.",
+        : "LifeOS Pro unlocked for life.",
     );
     setPromo("");
   };
