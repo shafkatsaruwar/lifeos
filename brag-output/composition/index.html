@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=1920, height=1080" />
-    <title>LifeOS — Full Product Brag</title>
+    <title>LifeOS — Hype</title>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
     <script src="assets/audio-data.js"></script>
     <style>
@@ -13,7 +13,7 @@
       @font-face { font-family: "EB Garamond Local"; src: url("assets/fonts/EBGaramond-700.woff2") format("woff2"); font-weight: 700; }
 
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #0a0a0c; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #050507; }
       #root {
         position: relative; width: 100%; height: 100%; overflow: hidden;
         font-family: "Inter Local", ui-sans-serif, system-ui, sans-serif; color: #202124;
@@ -21,70 +21,107 @@
       .clip { position: absolute; inset: 0; overflow: hidden; }
       .scene-inner { position: absolute; inset: 0; }
 
+      .void {
+        position: absolute; inset: 0;
+        background:
+          radial-gradient(ellipse 70% 50% at 50% 40%, rgba(98,90,246,.22), transparent 60%),
+          linear-gradient(160deg, #050507 0%, #12121a 55%, #08080c 100%);
+      }
       .paper {
         position: absolute; inset: 0;
-        background: radial-gradient(ellipse 70% 50% at 80% 0%, rgba(98,90,246,.07), transparent 55%), #f6f7f9;
+        background:
+          radial-gradient(ellipse 60% 40% at 85% 0%, rgba(98,90,246,.12), transparent 50%),
+          #f6f7f9;
       }
-      .dark-bg {
-        position: absolute; inset: 0;
-        background: radial-gradient(ellipse 80% 55% at 50% 0%, rgba(98,90,246,.14) 0%, transparent 55%),
-          linear-gradient(165deg, #0a0a0c 0%, #141418 48%, #0e0e12 100%);
+      .focus-bg { position: absolute; inset: 0; background: #111116; }
+      .flash {
+        position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 50;
       }
-      .focus-bg { position: absolute; inset: 0; background: #17171b; }
       .glow {
-        position: absolute; width: 720px; height: 420px; left: 50%; top: 18%; margin-left: -360px;
-        border-radius: 50%; background: radial-gradient(circle, rgba(139,131,255,.22), transparent 70%);
-        filter: blur(8px); pointer-events: none;
+        position: absolute; width: 900px; height: 520px; left: 50%; top: 20%; margin-left: -450px;
+        border-radius: 50%; background: radial-gradient(circle, rgba(139,131,255,.35), transparent 68%);
+        filter: blur(10px); pointer-events: none;
       }
       .warm {
-        position: absolute; width: 900px; height: 520px; left: 10%; top: 28%; border-radius: 50%;
-        background: radial-gradient(circle, rgba(98,90,246,.16), transparent 68%); pointer-events: none;
+        position: absolute; width: 1000px; height: 560px; left: 8%; top: 22%; border-radius: 50%;
+        background: radial-gradient(circle, rgba(98,90,246,.28), transparent 70%); pointer-events: none;
+      }
+
+      .stinger {
+        font-family: "Inter Local", ui-sans-serif, system-ui, sans-serif;
+        font-weight: 700; text-transform: uppercase; letter-spacing: -.02em;
+        color: #f4f4f7; line-height: .95;
+      }
+      .stinger.xl { font-size: 92px; max-width: 16ch; }
+      .stinger.lg { font-size: 64px; max-width: 18ch; }
+      .stinger.md { font-size: 42px; letter-spacing: .04em; }
+      .stinger.accent { color: #a59cff; }
+
+      .serif {
+        font-family: "EB Garamond Local", "Times New Roman", serif;
+        font-weight: 400; letter-spacing: -.03em; line-height: 1.05;
       }
 
       .brand-mark {
-        width: 42px; height: 42px; border-radius: 12px; background: #242428;
-        display: flex; align-items: flex-end; justify-content: center; gap: 3px; padding: 10px 9px;
-        box-shadow: 0 0 0 1px rgba(255,255,255,.06), 0 12px 40px rgba(98,90,246,.18);
+        width: 56px; height: 56px; border-radius: 14px; background: #242428;
+        display: flex; align-items: flex-end; justify-content: center; gap: 4px; padding: 12px 11px;
+        box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 18px 50px rgba(98,90,246,.35);
       }
-      .brand-mark span { width: 5px; background: #fff; border-radius: 3px; display: block; }
-      .brand-mark span:nth-child(1) { height: 10px; }
-      .brand-mark span:nth-child(2) { height: 18px; }
-      .brand-mark span:nth-child(3) { height: 13px; }
-      .brand-mark.light { background: rgba(255,255,255,.08); }
-      .wordmark { color: #f1f1f2; font-size: 28px; font-weight: 700; letter-spacing: -.025em; }
+      .brand-mark span { width: 6px; background: #fff; border-radius: 3px; display: block; }
+      .brand-mark span:nth-child(1) { height: 12px; }
+      .brand-mark span:nth-child(2) { height: 24px; }
+      .brand-mark span:nth-child(3) { height: 16px; }
+      .brand-mark.light { background: rgba(255,255,255,.1); }
+      .wordmark { color: #f1f1f2; font-size: 34px; font-weight: 700; letter-spacing: -.03em; }
 
-      .eyebrow {
-        font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5f636b;
+      .shell { position: absolute; left: 100px; top: 90px; width: 1720px; }
+      .banner {
+        display: inline-flex; align-items: center; gap: 10px;
+        background: #17171b; color: #f1f1f2; border-radius: 10px;
+        padding: 10px 16px; font-size: 14px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+        margin-bottom: 18px; box-shadow: 0 12px 40px rgba(20,24,35,.18);
       }
-      .display {
-        font-family: "EB Garamond Local", "Times New Roman", serif; font-weight: 400;
-        font-size: 84px; line-height: 1.05; letter-spacing: -.03em;
-      }
-      .title {
-        font-family: "EB Garamond Local", "Times New Roman", serif; font-weight: 400;
-        font-size: 52px; letter-spacing: -.025em; color: #202124;
-      }
-
-      .shell { position: absolute; left: 120px; top: 100px; width: 1680px; }
-      .shell-top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 28px; gap: 24px; }
-      .shell-top .eyebrow { margin-bottom: 10px; color: #5f636b; }
+      .banner i { width: 8px; height: 8px; border-radius: 50%; background: #8b83ff; display: block; }
 
       .panel {
         background: #fff; border: 1px solid #e8e9ed; border-radius: 18px;
-        box-shadow: 0 16px 48px rgba(20,24,35,.06); padding: 24px 28px;
+        box-shadow: 0 22px 60px rgba(20,24,35,.12); padding: 24px 28px;
       }
       .panel-label {
-        font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+        font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
         color: #5f636b; margin-bottom: 14px;
       }
 
-      .chip-row { display: flex; flex-wrap: wrap; gap: 12px; }
-      .chip {
-        height: 48px; padding: 0 18px; border-radius: 999px; border: 1px solid #e8e9ed; background: #fff;
-        display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700; color: #202124;
-        box-shadow: 0 8px 24px rgba(20,24,35,.04);
+      .capture {
+        display: flex; align-items: center; gap: 14px; height: 72px; border: 2px solid #4f47d4;
+        border-radius: 14px; background: #fff; padding: 0 20px;
+        box-shadow: 0 0 0 6px rgba(98,90,246,.14);
       }
-      .chip i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+      .capture kbd {
+        font-family: "Inter Local", ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 700;
+        color: #3b34b0; background: rgba(98,90,246,.14); border-radius: 8px; padding: 7px 10px;
+      }
+      .capture-text { font-size: 26px; font-weight: 700; color: #202124; white-space: nowrap; }
+      .capture-text .caret {
+        display: inline-block; width: 3px; height: 1.15em; background: #625af6; margin-left: 2px; vertical-align: -3px;
+      }
+      .task-row {
+        margin-top: 18px; display: flex; align-items: center; gap: 16px; min-height: 76px;
+        padding: 16px 20px; border: 1px solid #e8e9ed; border-radius: 14px; background: #fff;
+        box-shadow: 0 16px 40px rgba(20,24,35,.08);
+      }
+      .check { width: 30px; height: 30px; border: 2px solid #4f47d4; border-radius: 8px; background: #fff; }
+      .task-row strong { display: block; font-size: 20px; font-weight: 700; }
+      .task-row span { display: block; margin-top: 4px; font-size: 14px; font-weight: 600; color: #5f636b; }
+      .dot { width: 10px; height: 10px; border-radius: 50%; background: #8b5cf6; margin-left: auto; }
+
+      .chip-row { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 28px; }
+      .chip {
+        height: 56px; padding: 0 22px; border-radius: 999px; border: 1px solid #e8e9ed; background: #fff;
+        display: flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 700; color: #202124;
+        box-shadow: 0 14px 36px rgba(20,24,35,.1);
+      }
+      .chip i { width: 12px; height: 12px; border-radius: 50%; display: block; }
       .chip.life i { background: #d99b38; }
       .chip.school i { background: #8b5cf6; }
       .chip.work i { background: #4338ca; }
@@ -92,180 +129,112 @@
       .chip.treasury i { background: #47a47b; }
       .chip.mastery i { background: #625af6; }
 
-      .capture {
-        display: flex; align-items: center; gap: 14px; height: 64px; border: 1px solid #e8e9ed;
-        border-radius: 14px; background: #f6f7f9; padding: 0 18px;
-      }
-      .capture.focused { border-color: #4f47d4; box-shadow: 0 0 0 4px rgba(98,90,246,.12); background: #fff; }
-      .capture kbd {
-        font-family: "Inter Local", ui-sans-serif, system-ui, sans-serif; font-size: 12px; font-weight: 700;
-        color: #4f47d4; background: rgba(98,90,246,.12); border-radius: 8px; padding: 6px 9px;
-      }
-      .capture-text { font-size: 22px; font-weight: 600; color: #202124; white-space: nowrap; }
-      .capture-text .caret {
-        display: inline-block; width: 2px; height: 1.1em; background: #625af6; margin-left: 2px; vertical-align: -2px;
-      }
-      .task-row {
-        margin-top: 16px; display: flex; align-items: center; gap: 16px; min-height: 68px;
-        padding: 14px 18px; border: 1px solid #e8e9ed; border-radius: 14px;
-        background: color-mix(in srgb, #f6f7f9 55%, #fff);
-      }
-      .check { width: 28px; height: 28px; border: 1px solid #e8e9ed; border-radius: 8px; background: #fff; }
-      .task-row strong { display: block; font-size: 18px; font-weight: 700; }
-      .task-row span { display: block; margin-top: 4px; font-size: 13px; font-weight: 600; color: #5f636b; }
-      .dot { width: 8px; height: 8px; border-radius: 50%; background: #8b5cf6; margin-left: auto; }
-
-      .class-grid { display: grid; grid-template-columns: 1fr 1fr 280px; gap: 16px; }
+      .class-grid { display: grid; grid-template-columns: 1fr 1fr 260px; gap: 16px; }
       .class-card {
-        border: 1px solid #e8e9ed; border-radius: 16px; background: #fff; padding: 20px;
-        box-shadow: 0 10px 32px rgba(20,24,35,.04);
+        border: 1px solid #e8e9ed; border-radius: 16px; background: #fff; padding: 22px;
+        box-shadow: 0 16px 40px rgba(20,24,35,.08);
       }
-      .class-card .code { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-      .class-card h3 { font-size: 22px; margin: 10px 0 8px; font-weight: 700; }
+      .class-card .code { font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+      .class-card h3 { font-size: 26px; margin: 10px 0 8px; font-weight: 700; }
       .class-card p { font-size: 14px; color: #5f636b; font-weight: 600; }
+      .gpa {
+        border-radius: 16px; background: #17171b; color: #fff;
+        display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+      }
+      .gpa strong { font-size: 56px; letter-spacing: -.05em; color: #a59cff; }
+      .gpa span { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #c8c8d0; margin-top: 6px; }
       .due-row {
         margin-top: 16px; display: flex; align-items: center; justify-content: space-between;
-        border: 1px solid #e8e9ed; border-radius: 14px; background: #fff; padding: 16px 20px;
+        border: 1px solid #e8e9ed; border-radius: 14px; background: #fff; padding: 18px 22px;
+        box-shadow: 0 14px 36px rgba(20,24,35,.08);
       }
-      .due-row strong { font-size: 17px; }
+      .due-row strong { font-size: 18px; display: block; }
       .due-row span { color: #5f636b; font-size: 13px; font-weight: 600; }
-      .gpa {
-        border-radius: 16px; background: color-mix(in srgb, #8b5cf6 10%, #fff); border: 1px solid color-mix(in srgb, #8b5cf6 28%, #e8e9ed);
-        display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 20px;
-      }
-      .gpa strong { font-size: 48px; letter-spacing: -.04em; color: #4f47d4; }
-      .gpa span { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #5f636b; margin-top: 6px; }
-
-      .split { display: grid; grid-template-columns: 1.1fr .9fr; gap: 18px; }
-      .trow {
-        display: grid; grid-template-columns: 28px 1.4fr .8fr .7fr; gap: 12px; align-items: center;
-        padding: 14px 8px; border-top: 1px solid #e8e9ed; font-size: 14px; font-weight: 600;
-      }
-      .trow:first-of-type { border-top: 0; }
-      .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
-      .cal-day {
-        min-height: 110px; border: 1px solid #e8e9ed; border-radius: 12px; background: #f6f7f9; padding: 8px;
-        font-size: 12px; font-weight: 700; color: #5f636b;
-      }
-      .cal-day strong { display: block; color: #202124; margin-bottom: 8px; font-size: 14px; }
-      .pill {
-        display: block; margin-top: 4px; border-radius: 6px; padding: 4px 6px; font-size: 11px; font-weight: 700; color: #fff;
-      }
-
-      .lib-grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 18px; }
-      .note-card h3 { font-size: 22px; margin-bottom: 10px; font-family: "EB Garamond Local", serif; font-weight: 400; }
-      .note-card p { font-size: 15px; line-height: 1.5; color: #5f636b; font-weight: 600; }
-      .brain {
-        border-radius: 16px; border: 1px solid #e8e9ed; background: #fff; padding: 22px;
-        box-shadow: 0 10px 32px rgba(20,24,35,.04);
-      }
-      .brain .tag {
-        display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700;
-        letter-spacing: .08em; text-transform: uppercase; color: #4f47d4; margin-bottom: 14px;
-      }
-      .brain p { font-size: 20px; font-weight: 700; line-height: 1.35; }
+      .due-hot { color: #3b34b0; font-weight: 800; font-size: 15px; }
 
       .focus-header {
         position: absolute; top: 0; left: 0; right: 0; height: 78px; border-bottom: 1px solid rgba(255,255,255,.08);
         display: flex; align-items: center; padding: 0 48px; gap: 14px;
       }
       .focus-label {
-        margin-left: auto; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+        margin-left: auto; font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
         color: #aaaab1; display: flex; align-items: center; gap: 8px;
       }
       .focus-label i { width: 8px; height: 8px; border-radius: 50%; background: #6ed4a2; display: block; }
-      .focus-main { position: absolute; left: 120px; top: 220px; width: 1100px; }
-      .focus-project { font-size: 14px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #aaaab2; margin-bottom: 18px; }
+      .focus-main { position: absolute; left: 110px; top: 200px; width: 1200px; }
+      .focus-project { font-size: 14px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #aaaab2; margin-bottom: 16px; }
       .focus-main h1 {
-        font-family: "EB Garamond Local", "Times New Roman", serif; font-size: 68px; font-weight: 400;
-        line-height: 1.05; letter-spacing: -.03em; color: #f1f1f2; max-width: 14ch; margin-bottom: 24px;
+        font-family: "EB Garamond Local", "Times New Roman", serif; font-size: 72px; font-weight: 400;
+        color: #f1f1f2; max-width: 14ch; margin-bottom: 22px;
       }
-      .focus-timer { font-size: 56px; font-weight: 700; letter-spacing: -.04em; color: #f1f1f2; font-variant-numeric: tabular-nums; }
-      .focus-sub { margin-top: 12px; font-size: 16px; font-weight: 600; color: #8b83ff; }
+      .focus-timer { font-size: 64px; font-weight: 700; letter-spacing: -.05em; color: #f1f1f2; font-variant-numeric: tabular-nums; }
+      .focus-sub { margin-top: 14px; font-size: 18px; font-weight: 700; color: #a59cff; text-transform: uppercase; letter-spacing: .08em; }
 
-      .pack-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 8px; }
+      .pack-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 10px; }
       .pack {
-        border: 1px solid #e8e9ed; border-radius: 16px; background: #fff; padding: 22px 20px; min-height: 160px;
-        box-shadow: 0 10px 32px rgba(20,24,35,.04);
+        border: 1px solid #e8e9ed; border-radius: 16px; background: #fff; padding: 24px 20px; min-height: 180px;
+        box-shadow: 0 16px 40px rgba(20,24,35,.1);
       }
-      .pack .bar { width: 36px; height: 6px; border-radius: 99px; margin-bottom: 18px; }
-      .pack h3 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
-      .pack p { font-size: 14px; font-weight: 600; color: #5f636b; line-height: 1.4; }
+      .pack .bar { width: 40px; height: 7px; border-radius: 99px; margin-bottom: 20px; }
+      .pack h3 { font-size: 26px; font-weight: 700; margin-bottom: 10px; text-transform: uppercase; letter-spacing: -.02em; }
+      .pack p { font-size: 15px; font-weight: 600; color: #5f636b; line-height: 1.35; }
 
       .outro-stack {
         position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-        justify-content: center; gap: 20px; text-align: center;
+        justify-content: center; gap: 18px; text-align: center;
       }
-      .outro-stack .brand-mark { width: 64px; height: 64px; border-radius: 16px; padding: 14px 12px; gap: 4px; }
-      .outro-stack .brand-mark span { width: 7px; }
-      .outro-stack .brand-mark span:nth-child(1) { height: 14px; }
-      .outro-stack .brand-mark span:nth-child(2) { height: 26px; }
-      .outro-stack .brand-mark span:nth-child(3) { height: 18px; }
-      .outro-name { color: #f1f1f2; font-size: 42px; font-weight: 700; letter-spacing: -.03em; }
+      .outro-stack .brand-mark { width: 72px; height: 72px; border-radius: 18px; padding: 15px 13px; gap: 5px; }
+      .outro-stack .brand-mark span { width: 8px; }
+      .outro-stack .brand-mark span:nth-child(1) { height: 16px; }
+      .outro-stack .brand-mark span:nth-child(2) { height: 30px; }
+      .outro-stack .brand-mark span:nth-child(3) { height: 20px; }
+      .outro-name { color: #fff; font-size: 72px; font-weight: 700; letter-spacing: -.04em; text-transform: uppercase; }
       .outro-line {
-        font-family: "EB Garamond Local", "Times New Roman", serif; font-size: 34px; font-weight: 400; color: #c8c8d0;
+        font-family: "EB Garamond Local", "Times New Roman", serif; font-size: 36px; font-weight: 400; color: #d0d0d8;
       }
+      .blackout { position: absolute; inset: 0; background: #000; opacity: 0; z-index: 40; }
     </style>
   </head>
   <body>
-    <div id="root" data-composition-id="main" data-start="0" data-duration="25" data-width="1920" data-height="1080">
+    <div id="root" data-composition-id="main" data-start="0" data-duration="24" data-width="1920" data-height="1080">
 
-      <!-- 1 Hook 0–2.2 -->
+      <!-- 1 Problem slam -->
       <section id="scene-hook" class="clip" data-start="0" data-duration="2.2" data-track-index="1">
         <div class="scene-inner" id="s1">
-          <div class="dark-bg"></div>
+          <div class="void"></div>
           <div class="glow" id="s1-glow"></div>
-          <div style="position:absolute;left:160px;top:280px;width:1200px">
-            <div style="display:flex;align-items:center;gap:14px;margin-bottom:40px" id="s1-brand">
-              <div class="brand-mark" id="s1-mark"><span></span><span></span><span></span></div>
-              <div class="wordmark">LifeOS</div>
-            </div>
-            <p class="eyebrow" id="s1-eye" style="color:#938cff;margin-bottom:16px">Welcome</p>
-            <h1 class="display" id="s1-title" style="color:#f1f1f2">Your life, in focus.</h1>
+          <div style="position:absolute;left:120px;top:340px;width:1680px">
+            <h1 class="stinger xl" id="s1-line">Your life was<br/>split across apps.</h1>
           </div>
+          <div class="flash" id="s1-flash"></div>
         </div>
       </section>
 
-      <!-- 2 Environments 2.0–5.0 -->
-      <section id="scene-envs" class="clip" data-start="2.0" data-duration="2.8" data-track-index="2">
+      <!-- 2 Name reveal -->
+      <section id="scene-name" class="clip" data-start="2.0" data-duration="2.5" data-track-index="2">
         <div class="scene-inner" id="s2">
-          <div class="paper"></div>
-          <div class="shell">
-            <div class="shell-top">
-              <div>
-                <p class="eyebrow" id="s2-eye">Environments</p>
-                <h2 class="title" id="s2-title">One workspace. Six environments.</h2>
-              </div>
+          <div class="void"></div>
+          <div class="glow" id="s2-glow"></div>
+          <div style="position:absolute;left:120px;top:280px;width:1600px">
+            <div style="display:flex;align-items:center;gap:16px;margin-bottom:36px" id="s2-brand">
+              <div class="brand-mark" id="s2-mark"><span></span><span></span><span></span></div>
+              <div class="stinger md" id="s2-word">LifeOS</div>
             </div>
-            <div class="chip-row" style="margin-top:40px">
-              <div class="chip life" id="chip-life"><i></i>Life</div>
-              <div class="chip school" id="chip-school"><i></i>School</div>
-              <div class="chip work" id="chip-work"><i></i>Work</div>
-              <div class="chip abroad" id="chip-abroad"><i></i>Study Abroad</div>
-              <div class="chip treasury" id="chip-treasury"><i></i>Treasury</div>
-              <div class="chip mastery" id="chip-mastery"><i></i>Mastery</div>
-            </div>
-            <p id="s2-sub" style="margin-top:28px;font-size:18px;font-weight:600;color:#5f636b;max-width:48ch">
-              Start with Life + School. Turn on the rest when you need them.
-            </p>
+            <h1 class="serif" id="s2-title" style="font-size:88px;color:#f1f1f2">Your life, in focus.</h1>
           </div>
         </div>
       </section>
 
-      <!-- 3 Capture 4.8–8.5 -->
-      <section id="scene-capture" class="clip" data-start="4.8" data-duration="3.5" data-track-index="3">
+      <!-- 3 Capture stunt -->
+      <section id="scene-capture" class="clip" data-start="4.3" data-duration="4.0" data-track-index="3">
         <div class="scene-inner" id="s3">
           <div class="paper"></div>
           <div class="shell">
-            <div class="shell-top">
-              <div>
-                <p class="eyebrow">Now</p>
-                <h2 class="title">Capture what matters.</h2>
-              </div>
-            </div>
+            <div class="banner" id="s3-banner"><i></i>Now · command bar</div>
+            <h2 class="stinger lg" id="s3-claim" style="color:#17171b;margin-bottom:28px">Capture with /t.</h2>
             <div class="panel" id="s3-panel">
-              <p class="panel-label">Command bar</p>
-              <div class="capture focused" id="s3-capture">
+              <p class="panel-label">Now · command bar</p>
+              <div class="capture">
                 <kbd>/</kbd>
                 <div class="capture-text"><span id="s3-chars"></span><span class="caret" id="s3-caret"></span></div>
               </div>
@@ -282,178 +251,133 @@
         </div>
       </section>
 
-      <!-- 4 School 8.3–11.5 -->
-      <section id="scene-school" class="clip" data-start="8.3" data-duration="3.0" data-track-index="4">
+      <!-- 4 Env barrage -->
+      <section id="scene-envs" class="clip" data-start="8.1" data-duration="3.3" data-track-index="4">
         <div class="scene-inner" id="s4">
           <div class="paper"></div>
           <div class="shell">
-            <div class="shell-top">
-              <div>
-                <p class="eyebrow">SchoolOS</p>
-                <h2 class="title">Classes, coursework, grades.</h2>
-              </div>
+            <div class="banner" id="s4-banner"><i></i>Environments</div>
+            <h2 class="stinger lg" id="s4-claim" style="color:#17171b">One workspace.<br/>Six environments.</h2>
+            <div class="chip-row">
+              <div class="chip life" id="chip-life"><i></i>Life</div>
+              <div class="chip school" id="chip-school"><i></i>School</div>
+              <div class="chip work" id="chip-work"><i></i>Work</div>
+              <div class="chip abroad" id="chip-abroad"><i></i>Study Abroad</div>
+              <div class="chip treasury" id="chip-treasury"><i></i>Treasury</div>
+              <div class="chip mastery" id="chip-mastery"><i></i>Mastery</div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5 School punch -->
+      <section id="scene-school" class="clip" data-start="11.2" data-duration="3.4" data-track-index="5">
+        <div class="scene-inner" id="s5">
+          <div class="paper"></div>
+          <div class="shell">
+            <div class="banner" id="s5-banner"><i></i>SchoolOS</div>
+            <h2 class="stinger lg" id="s5-claim" style="color:#17171b;margin-bottom:24px">Classes, coursework,<br/>and grades.</h2>
             <div class="class-grid">
-              <div class="class-card" id="s4-c1">
-                <div class="code" style="color:#8b5cf6">CS 240</div>
+              <div class="class-card" id="s5-c1">
+                <div class="code" style="color:#3b34b0">CS 240</div>
                 <h3>Algorithms</h3>
                 <p>Fall · Prof. Alvarez</p>
               </div>
-              <div class="class-card" id="s4-c2">
-                <div class="code" style="color:#d99b38">HIST 110</div>
+              <div class="class-card" id="s5-c2">
+                <div class="code" style="color:#8a5a12">HIST 110</div>
                 <h3>World History</h3>
                 <p>Fall · Seminar</p>
               </div>
-              <div class="gpa" id="s4-gpa">
-                <strong>3.7</strong>
-                <span>Term GPA</span>
-              </div>
+              <div class="gpa" id="s5-gpa"><strong>3.7</strong><span>Term GPA</span></div>
             </div>
-            <div class="due-row" id="s4-due">
+            <div class="due-row" id="s5-due">
               <div>
                 <strong>Essay draft due Friday</strong>
                 <span>HIST 110 · 20% of grade</span>
               </div>
-              <span style="color:#4f47d4;font-weight:800">Due in 2 days</span>
+              <div class="due-hot">Due in 2 days</div>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- 5 Tasks + Calendar 11.3–14.7 -->
-      <section id="scene-tasks-cal" class="clip" data-start="11.3" data-duration="3.2" data-track-index="5">
-        <div class="scene-inner" id="s5">
-          <div class="paper"></div>
-          <div class="shell">
-            <div class="shell-top">
-              <div>
-                <p class="eyebrow">Always on</p>
-                <h2 class="title">Tasks and calendar, shared.</h2>
-              </div>
-            </div>
-            <div class="split">
-              <div class="panel" id="s5-tasks">
-                <p class="panel-label">Tasks</p>
-                <div class="trow"><div class="check"></div><div>Finish reading chapter 3</div><div>School</div><div>Today</div></div>
-                <div class="trow"><div class="check"></div><div>Submit lab write-up</div><div>School</div><div>Thu</div></div>
-                <div class="trow"><div class="check"></div><div>Plan weekend groceries</div><div>Life</div><div>Sat</div></div>
-                <div class="trow"><div class="check"></div><div>Client deck outline</div><div>Work</div><div>Mon</div></div>
-              </div>
-              <div class="panel" id="s5-cal">
-                <p class="panel-label">Calendar</p>
-                <div class="cal-grid">
-                  <div class="cal-day"><strong>14</strong><span class="pill" style="background:#3b34b0">Office hours</span></div>
-                  <div class="cal-day"><strong>15</strong><span class="pill" style="background:#6b4508">Gym</span></div>
-                  <div class="cal-day"><strong>16</strong><span class="pill" style="background:#241c7a">Standup</span></div>
-                  <div class="cal-day"><strong>17</strong></div>
-                  <div class="cal-day"><strong>18</strong><span class="pill" style="background:#3b34b0">Essay due</span></div>
-                  <div class="cal-day"><strong>19</strong></div>
-                  <div class="cal-day"><strong>20</strong></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 6 Library 14.5–17.2 -->
-      <section id="scene-library" class="clip" data-start="14.5" data-duration="2.5" data-track-index="6">
+      <!-- 6 Focus drop -->
+      <section id="scene-focus" class="clip" data-start="14.4" data-duration="3.6" data-track-index="6">
         <div class="scene-inner" id="s6">
-          <div class="paper"></div>
-          <div class="shell">
-            <div class="shell-top">
-              <div>
-                <p class="eyebrow">Library</p>
-                <h2 class="title">Notes and Brain, together.</h2>
-              </div>
-            </div>
-            <div class="lib-grid">
-              <div class="panel note-card" id="s6-note">
-                <p class="panel-label">Notes</p>
-                <h3>Lecture — recursion trees</h3>
-                <p>Base case first. Then draw the call stack. Link this note to CS 240 so the class space stays honest.</p>
-              </div>
-              <div class="brain" id="s6-brain">
-                <div class="tag"><span style="width:8px;height:8px;border-radius:50%;background:#625af6;display:inline-block"></span>Brain inbox</div>
-                <p>Idea: office hours questions for chapter 3</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 7 Focus 17.0–20.4 -->
-      <section id="scene-focus" class="clip" data-start="17.0" data-duration="3.2" data-track-index="7">
-        <div class="scene-inner" id="s7">
           <div class="focus-bg"></div>
-          <div class="warm" id="s7-warm"></div>
-          <header class="focus-header" id="s7-head">
+          <div class="warm" id="s6-warm"></div>
+          <header class="focus-header" id="s6-head">
             <div class="brand-mark light"><span></span><span></span><span></span></div>
-            <div class="wordmark" style="font-size:18px">LifeOS</div>
+            <div class="wordmark" style="font-size:20px">LifeOS</div>
             <div class="focus-label"><i></i>In session</div>
           </header>
-          <div class="focus-main" id="s7-main">
+          <div class="focus-main" id="s6-main">
+            <p class="stinger md accent" id="s6-sting" style="margin-bottom:22px">Enter Focus.</p>
             <p class="focus-project">School · Focus</p>
             <h1>Finish reading chapter 3</h1>
-            <div class="focus-timer" id="s7-timer">44:59</div>
-            <p class="focus-sub">Protected attention. Checklist and notes stay with you.</p>
+            <div class="focus-timer" id="s6-timer">44:59</div>
+            <p class="focus-sub">Timer, checklist, and notes stay with you.</p>
           </div>
         </div>
       </section>
 
-      <!-- 8 Depth packs 20.2–22.7 -->
-      <section id="scene-packs" class="clip" data-start="20.2" data-duration="2.3" data-track-index="8">
-        <div class="scene-inner" id="s8">
+      <!-- 7 Pack power -->
+      <section id="scene-packs" class="clip" data-start="17.8" data-duration="3.2" data-track-index="7">
+        <div class="scene-inner" id="s7">
           <div class="paper"></div>
           <div class="shell">
-            <div class="shell-top">
-              <div>
-                <p class="eyebrow" id="s8-eye">Optional packs</p>
-                <h2 class="title" id="s8-title">Turn on more when you need it.</h2>
-              </div>
-            </div>
+            <div class="banner" id="s7-banner"><i></i>Optional packs</div>
+            <h2 class="stinger lg" id="s7-claim" style="color:#17171b;margin-bottom:18px">Turn on more<br/>when you need it.</h2>
             <div class="pack-grid">
               <div class="pack" id="pack-work"><div class="bar" style="background:#4338ca"></div><h3>Work</h3><p>Projects, meetings, timesheet.</p></div>
               <div class="pack" id="pack-abroad"><div class="bar" style="background:#0d9488"></div><h3>Abroad</h3><p>Programs, docs, deadlines.</p></div>
-              <div class="pack" id="pack-treasury"><div class="bar" style="background:#47a47b"></div><h3>Treasury</h3><p>Budgets without a bank app.</p></div>
-              <div class="pack" id="pack-mastery"><div class="bar" style="background:#625af6"></div><h3>Mastery</h3><p>Teach mode inside LifeOS.</p></div>
+              <div class="pack" id="pack-treasury"><div class="bar" style="background:#47a47b"></div><h3>Treasury</h3><p>Category budgets by month.</p></div>
+              <div class="pack" id="pack-mastery"><div class="bar" style="background:#625af6"></div><h3>Mastery</h3><p>Students, lessons, teach mode.</p></div>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- 9 Outro 22.5–25 -->
-      <section id="scene-outro" class="clip" data-start="22.5" data-duration="2.5" data-track-index="9">
-        <div class="scene-inner" id="s9">
-          <div class="dark-bg"></div>
+      <!-- 8 Outro -->
+      <section id="scene-outro" class="clip" data-start="20.8" data-duration="3.2" data-track-index="8">
+        <div class="scene-inner" id="s8">
+          <div class="void"></div>
+          <div class="glow" id="s8-glow"></div>
           <div class="outro-stack">
-            <div class="brand-mark" id="s9-mark"><span></span><span></span><span></span></div>
-            <div class="outro-name" id="s9-name">LifeOS</div>
-            <div class="outro-line" id="s9-line">One OS. Every part of life.</div>
+            <div class="brand-mark" id="s8-mark"><span></span><span></span><span></span></div>
+            <div class="outro-name" id="s8-name">LifeOS</div>
+            <div class="outro-line" id="s8-line">One OS. Every part of life.</div>
           </div>
+          <div class="blackout" id="s8-black"></div>
         </div>
       </section>
 
       <!-- Audio -->
-      <audio id="music" src="assets/music/bed-25s.mp3" data-start="0" data-duration="25" data-track-index="20" data-volume="0.18"></audio>
-      <audio id="sfx-open" src="assets/sfx/impact/impactSoft_medium_001.ogg" data-start="0.25" data-duration="0.2" data-track-index="21" data-volume="0.32"></audio>
-      <audio id="sfx-c1" src="assets/sfx/interface/drop_001.ogg" data-start="2.55" data-duration="0.12" data-track-index="21" data-volume="0.26"></audio>
-      <audio id="sfx-c2" src="assets/sfx/interface/drop_001.ogg" data-start="2.85" data-duration="0.12" data-track-index="21" data-volume="0.24"></audio>
-      <audio id="sfx-c3" src="assets/sfx/interface/drop_001.ogg" data-start="3.15" data-duration="0.12" data-track-index="21" data-volume="0.24"></audio>
-      <audio id="sfx-c4" src="assets/sfx/interface/drop_001.ogg" data-start="3.45" data-duration="0.12" data-track-index="21" data-volume="0.24"></audio>
-      <audio id="sfx-c5" src="assets/sfx/interface/drop_001.ogg" data-start="3.75" data-duration="0.12" data-track-index="21" data-volume="0.24"></audio>
-      <audio id="sfx-c6" src="assets/sfx/interface/drop_001.ogg" data-start="4.05" data-duration="0.12" data-track-index="21" data-volume="0.26"></audio>
-      <audio id="sfx-key1" src="assets/sfx/keyboard/keypress-001.wav" data-start="5.35" data-duration="0.12" data-track-index="22" data-volume="0.2"></audio>
-      <audio id="sfx-key2" src="assets/sfx/keyboard/keypress-005.wav" data-start="5.65" data-duration="0.12" data-track-index="22" data-volume="0.2"></audio>
-      <audio id="sfx-key3" src="assets/sfx/keyboard/keypress-009.wav" data-start="6.05" data-duration="0.12" data-track-index="22" data-volume="0.2"></audio>
-      <audio id="sfx-key4" src="assets/sfx/keyboard/keypress-012.wav" data-start="6.55" data-duration="0.12" data-track-index="22" data-volume="0.2"></audio>
-      <audio id="sfx-key5" src="assets/sfx/keyboard/keypress-018.wav" data-start="7.05" data-duration="0.12" data-track-index="22" data-volume="0.2"></audio>
-      <audio id="sfx-enter" src="assets/sfx/interface/click_003.ogg" data-start="7.45" data-duration="0.08" data-track-index="22" data-volume="0.38"></audio>
-      <audio id="sfx-task" src="assets/sfx/interface/bong_001.ogg" data-start="7.65" data-duration="0.15" data-track-index="22" data-volume="0.3"></audio>
-      <audio id="sfx-school" src="assets/sfx/interface/drop_001.ogg" data-start="8.7" data-duration="0.12" data-track-index="23" data-volume="0.28"></audio>
-      <audio id="sfx-focus" src="assets/sfx/interface/switch_007.ogg" data-start="17.15" data-duration="0.3" data-track-index="23" data-volume="0.28"></audio>
-      <audio id="sfx-pack" src="assets/sfx/interface/bong_001.ogg" data-start="20.55" data-duration="0.15" data-track-index="23" data-volume="0.28"></audio>
-      <audio id="sfx-logo" src="assets/sfx/impact/impactSoft_medium_004.ogg" data-start="22.85" data-duration="0.18" data-track-index="23" data-volume="0.36"></audio>
+      <audio id="music" src="assets/music/bed-24s.mp3" data-start="0" data-duration="24" data-track-index="20" data-volume="0.3"></audio>
+      <audio id="sfx-slam1" src="assets/sfx/impact/impactSoft_heavy_000.ogg" data-start="0.2" data-duration="0.55" data-track-index="21" data-volume="0.45"></audio>
+      <audio id="sfx-flash" src="assets/sfx/impact/impactPunch_medium_001.ogg" data-start="1.85" data-duration="0.25" data-track-index="21" data-volume="0.35"></audio>
+      <audio id="sfx-name" src="assets/sfx/impact/impactSoft_medium_001.ogg" data-start="2.2" data-duration="0.2" data-track-index="21" data-volume="0.4"></audio>
+      <audio id="sfx-title" src="assets/sfx/interface/bong_001.ogg" data-start="2.85" data-duration="0.15" data-track-index="21" data-volume="0.35"></audio>
+      <audio id="sfx-key1" src="assets/sfx/keyboard/keypress-001.wav" data-start="5.0" data-duration="0.12" data-track-index="22" data-volume="0.28"></audio>
+      <audio id="sfx-key2" src="assets/sfx/keyboard/keypress-009.wav" data-start="5.4" data-duration="0.12" data-track-index="22" data-volume="0.28"></audio>
+      <audio id="sfx-key3" src="assets/sfx/keyboard/keypress-018.wav" data-start="5.9" data-duration="0.12" data-track-index="22" data-volume="0.28"></audio>
+      <audio id="sfx-key4" src="assets/sfx/keyboard/keypress-022.wav" data-start="6.4" data-duration="0.12" data-track-index="22" data-volume="0.28"></audio>
+      <audio id="sfx-enter" src="assets/sfx/interface/click_001.ogg" data-start="6.85" data-duration="0.08" data-track-index="22" data-volume="0.45"></audio>
+      <audio id="sfx-task" src="assets/sfx/impact/impactSoft_heavy_002.ogg" data-start="7.05" data-duration="0.5" data-track-index="22" data-volume="0.42"></audio>
+      <audio id="sfx-c1" src="assets/sfx/interface/drop_001.ogg" data-start="8.55" data-duration="0.12" data-track-index="23" data-volume="0.32"></audio>
+      <audio id="sfx-c2" src="assets/sfx/interface/drop_001.ogg" data-start="8.85" data-duration="0.12" data-track-index="23" data-volume="0.3"></audio>
+      <audio id="sfx-c3" src="assets/sfx/interface/drop_001.ogg" data-start="9.15" data-duration="0.12" data-track-index="23" data-volume="0.3"></audio>
+      <audio id="sfx-c4" src="assets/sfx/interface/drop_001.ogg" data-start="9.45" data-duration="0.12" data-track-index="23" data-volume="0.3"></audio>
+      <audio id="sfx-c5" src="assets/sfx/interface/drop_001.ogg" data-start="9.75" data-duration="0.12" data-track-index="23" data-volume="0.3"></audio>
+      <audio id="sfx-c6" src="assets/sfx/impact/impactSoft_medium_004.ogg" data-start="10.05" data-duration="0.18" data-track-index="23" data-volume="0.38"></audio>
+      <audio id="sfx-school" src="assets/sfx/impact/impactSoft_heavy_000.ogg" data-start="11.4" data-duration="0.5" data-track-index="24" data-volume="0.38"></audio>
+      <audio id="sfx-focus" src="assets/sfx/interface/switch_002.ogg" data-start="14.55" data-duration="0.25" data-track-index="24" data-volume="0.4"></audio>
+      <audio id="sfx-focus2" src="assets/sfx/impact/impactSoft_medium_001.ogg" data-start="14.9" data-duration="0.2" data-track-index="24" data-volume="0.35"></audio>
+      <audio id="sfx-p1" src="assets/sfx/impact/impactPunch_medium_001.ogg" data-start="18.3" data-duration="0.2" data-track-index="25" data-volume="0.32"></audio>
+      <audio id="sfx-p2" src="assets/sfx/impact/impactPunch_medium_001.ogg" data-start="18.65" data-duration="0.2" data-track-index="25" data-volume="0.3"></audio>
+      <audio id="sfx-p3" src="assets/sfx/impact/impactPunch_medium_001.ogg" data-start="19.0" data-duration="0.2" data-track-index="25" data-volume="0.3"></audio>
+      <audio id="sfx-p4" src="assets/sfx/impact/impactSoft_heavy_002.ogg" data-start="19.35" data-duration="0.45" data-track-index="25" data-volume="0.4"></audio>
+      <audio id="sfx-logo" src="assets/sfx/impact/impactSoft_heavy_000.ogg" data-start="21.15" data-duration="0.55" data-track-index="26" data-volume="0.48"></audio>
     </div>
 
     <script>
@@ -469,91 +393,108 @@
       const charSpans = charsEl.querySelectorAll(".ch");
 
       const tl = gsap.timeline({ paused: true });
-      const fade = (id, tIn, tOut) => {
+
+      const enterScene = (id, t, scaleFrom = 1.08) => {
         gsap.set(id, { opacity: 0 });
-        tl.fromTo(id, { opacity: 0 }, { opacity: 1, duration: 0.32, ease: "power2.out" }, tIn);
-        if (tOut != null) tl.to(id, { opacity: 0, duration: 0.28, ease: "power2.inOut" }, tOut);
+        tl.fromTo(id, { opacity: 0, scale: scaleFrom }, { opacity: 1, scale: 1, duration: 0.28, ease: "power3.out" }, t);
+      };
+      const exitScene = (id, t) => {
+        tl.to(id, { opacity: 0, scale: 1.04, duration: 0.22, ease: "power2.in" }, t);
+      };
+      const slam = (sel, t, y = 40) => {
+        gsap.set(sel, { opacity: 0, y, scale: 1.12 });
+        tl.fromTo(sel, { opacity: 0, y, scale: 1.12 }, { opacity: 1, y: 0, scale: 1, duration: 0.38, ease: "power4.out" }, t);
       };
 
-      // Scene 1
-      gsap.set(["#s1-brand", "#s1-eye", "#s1-title"], { opacity: 0, y: 24 });
-      fade("#s1", 0, 1.95);
-      tl.fromTo("#s1-brand", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 0.12);
-      tl.fromTo("#s1-eye", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.35, ease: "power3.out" }, 0.35);
-      tl.fromTo("#s1-title", { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 0.5);
+      // Scene 1 — problem
+      enterScene("#s1", 0, 1.12);
+      slam("#s1-line", 0.15, 50);
+      tl.fromTo("#s1-flash", { opacity: 0 }, { opacity: 0.85, duration: 0.06, yoyo: true, repeat: 1, ease: "none" }, 1.85);
+      exitScene("#s1", 1.95);
 
-      // Scene 2 envs
-      gsap.set(["#s2-eye", "#s2-title", "#s2-sub", "#chip-life", "#chip-school", "#chip-work", "#chip-abroad", "#chip-treasury", "#chip-mastery"], { opacity: 0, y: 18 });
-      fade("#s2", 2.0, 4.75);
-      tl.fromTo("#s2-eye", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35, ease: "power3.out" }, 2.15);
-      tl.fromTo("#s2-title", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 2.25);
-      ["#chip-life", "#chip-school", "#chip-work", "#chip-abroad", "#chip-treasury", "#chip-mastery"].forEach((sel, i) => {
-        tl.fromTo(sel, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" }, 2.5 + i * 0.28);
-      });
-      tl.fromTo("#s2-sub", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 4.15);
+      // Scene 2 — name
+      enterScene("#s2", 2.0, 1.1);
+      gsap.set(["#s2-brand", "#s2-title"], { opacity: 0, y: 30, scale: 1.1 });
+      tl.fromTo("#s2-brand", { opacity: 0, y: 24, scale: 1.15 }, { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power4.out" }, 2.15);
+      tl.fromTo("#s2-mark", { scale: 0.85 }, { scale: 1.08, duration: 0.22, yoyo: true, repeat: 1, ease: "power2.out" }, 2.25);
+      tl.fromTo("#s2-title", { opacity: 0, y: 36, scale: 1.08 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "power4.out" }, 2.7);
+      exitScene("#s2", 4.2);
 
-      // Scene 3 capture
-      gsap.set("#s3-task", { opacity: 0, y: 16 });
-      fade("#s3", 4.8, 8.25);
-      const typeStart = 5.25;
-      const perChar = 0.075;
+      // Scene 3 — capture
+      enterScene("#s3", 4.3, 1.06);
+      slam("#s3-banner", 4.4, 24);
+      slam("#s3-claim", 4.55, 36);
+      gsap.set("#s3-panel", { opacity: 0, y: 30, scale: 1.05 });
+      tl.fromTo("#s3-panel", { opacity: 0, y: 30, scale: 1.05 }, { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power3.out" }, 4.8);
+      gsap.set("#s3-task", { opacity: 0, y: 40, scale: 1.12 });
+      const typeStart = 5.0;
       charSpans.forEach((span, i) => {
-        tl.fromTo(span, { opacity: 0 }, { opacity: 1, duration: 0.03 }, typeStart + i * perChar);
+        tl.fromTo(span, { opacity: 0 }, { opacity: 1, duration: 0.03 }, typeStart + i * 0.065);
       });
-      tl.fromTo("#s3-caret", { opacity: 1 }, { opacity: 0.2, duration: 0.3, yoyo: true, repeat: 6, ease: "sine.inOut" }, 5.2);
-      tl.fromTo("#s3-task", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 7.55);
+      tl.fromTo("#s3-caret", { opacity: 1 }, { opacity: 0.15, duration: 0.25, yoyo: true, repeat: 7, ease: "sine.inOut" }, 4.95);
+      tl.fromTo("#s3-task", { opacity: 0, y: 40, scale: 1.12 }, { opacity: 1, y: 0, scale: 1, duration: 0.35, ease: "power4.out" }, 7.0);
+      exitScene("#s3", 8.0);
 
-      // Scene 4 school
-      gsap.set(["#s4-c1", "#s4-c2", "#s4-gpa", "#s4-due"], { opacity: 0, y: 16 });
-      fade("#s4", 8.3, 11.25);
-      tl.fromTo("#s4-c1", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 8.5);
-      tl.fromTo("#s4-c2", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 8.75);
-      tl.fromTo("#s4-gpa", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 9.0);
-      tl.fromTo("#s4-due", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 9.3);
+      // Scene 4 — envs
+      enterScene("#s4", 8.1, 1.08);
+      slam("#s4-banner", 8.2, 20);
+      slam("#s4-claim", 8.3, 30);
+      ["#chip-life", "#chip-school", "#chip-work", "#chip-abroad", "#chip-treasury", "#chip-mastery"].forEach((sel, i) => {
+        gsap.set(sel, { opacity: 0, y: 28, scale: 1.2 });
+        tl.fromTo(sel, { opacity: 0, y: 28, scale: 1.2 }, { opacity: 1, y: 0, scale: 1, duration: 0.28, ease: "power4.out" }, 8.55 + i * 0.28);
+      });
+      exitScene("#s4", 11.1);
 
-      // Scene 5 tasks/cal
-      gsap.set(["#s5-tasks", "#s5-cal"], { opacity: 0, y: 18 });
-      fade("#s5", 11.3, 14.45);
-      tl.fromTo("#s5-tasks", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 11.5);
-      tl.fromTo("#s5-cal", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 11.85);
+      // Scene 5 — school
+      enterScene("#s5", 11.2, 1.08);
+      slam("#s5-banner", 11.3, 20);
+      slam("#s5-claim", 11.4, 32);
+      gsap.set(["#s5-c1", "#s5-c2", "#s5-gpa", "#s5-due"], { opacity: 0, y: 28, scale: 1.1 });
+      tl.fromTo("#s5-c1", { opacity: 0, y: 28, scale: 1.1 }, { opacity: 1, y: 0, scale: 1, duration: 0.32, ease: "power4.out" }, 11.75);
+      tl.fromTo("#s5-c2", { opacity: 0, y: 28, scale: 1.1 }, { opacity: 1, y: 0, scale: 1, duration: 0.32, ease: "power4.out" }, 11.95);
+      tl.fromTo("#s5-gpa", { opacity: 0, y: 28, scale: 1.15 }, { opacity: 1, y: 0, scale: 1, duration: 0.32, ease: "power4.out" }, 12.15);
+      tl.fromTo("#s5-due", { opacity: 0, y: 30, scale: 1.08 }, { opacity: 1, y: 0, scale: 1, duration: 0.32, ease: "power4.out" }, 12.4);
+      exitScene("#s5", 14.3);
 
-      // Scene 6 library
-      gsap.set(["#s6-note", "#s6-brain"], { opacity: 0, y: 16 });
-      fade("#s6", 14.5, 16.95);
-      tl.fromTo("#s6-note", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 14.7);
-      tl.fromTo("#s6-brain", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 15.05);
+      // Scene 6 — focus
+      enterScene("#s6", 14.4, 1.1);
+      gsap.set(["#s6-head", "#s6-main", "#s6-sting"], { opacity: 0, y: 24 });
+      tl.fromTo("#s6-head", { opacity: 0, y: -16 }, { opacity: 1, y: 0, duration: 0.35, ease: "power3.out" }, 14.55);
+      slam("#s6-sting", 14.7, 28);
+      tl.fromTo("#s6-main", { opacity: 0, y: 30, scale: 1.06 }, { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: "power4.out" }, 15.0);
+      tl.call(() => { document.getElementById("s6-timer").textContent = "45:00"; }, null, 15.4);
+      tl.call(() => { document.getElementById("s6-timer").textContent = "44:59"; }, null, 16.3);
+      tl.call(() => { document.getElementById("s6-timer").textContent = "44:58"; }, null, 17.2);
+      exitScene("#s6", 17.7);
 
-      // Scene 7 focus
-      gsap.set(["#s7-head", "#s7-main"], { opacity: 0, y: 18 });
-      fade("#s7", 17.0, 20.15);
-      tl.fromTo("#s7-head", { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 17.15);
-      tl.fromTo("#s7-main", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 17.35);
-      tl.call(() => { document.getElementById("s7-timer").textContent = "45:00"; }, null, 17.7);
-      tl.call(() => { document.getElementById("s7-timer").textContent = "44:59"; }, null, 18.7);
-      tl.call(() => { document.getElementById("s7-timer").textContent = "44:58"; }, null, 19.7);
-
-      // Scene 8 packs
-      gsap.set(["#s8-eye", "#s8-title", "#pack-work", "#pack-abroad", "#pack-treasury", "#pack-mastery"], { opacity: 0, y: 16 });
-      fade("#s8", 20.2, 22.45);
-      tl.fromTo("#s8-eye", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" }, 20.35);
-      tl.fromTo("#s8-title", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 20.45);
+      // Scene 7 — packs
+      enterScene("#s7", 17.8, 1.08);
+      slam("#s7-banner", 17.9, 18);
+      slam("#s7-claim", 18.0, 28);
       ["#pack-work", "#pack-abroad", "#pack-treasury", "#pack-mastery"].forEach((sel, i) => {
-        tl.fromTo(sel, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.32, ease: "power3.out" }, 20.7 + i * 0.22);
+        gsap.set(sel, { opacity: 0, y: 36, scale: 1.15 });
+        tl.fromTo(sel, { opacity: 0, y: 36, scale: 1.15 }, { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: "power4.out" }, 18.25 + i * 0.32);
       });
+      exitScene("#s7", 20.7);
 
-      // Scene 9 outro
-      gsap.set(["#s9-mark", "#s9-name", "#s9-line"], { opacity: 0, y: 16 });
-      fade("#s9", 22.5, null);
-      tl.fromTo("#s9-mark", { opacity: 0, y: 14, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: "power3.out" }, 22.7);
-      tl.fromTo("#s9-name", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 22.95);
-      tl.fromTo("#s9-line", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 23.2);
+      // Scene 8 — outro
+      enterScene("#s8", 20.8, 1.12);
+      gsap.set(["#s8-mark", "#s8-name", "#s8-line"], { opacity: 0, y: 28, scale: 1.15 });
+      tl.fromTo("#s8-mark", { opacity: 0, y: 24, scale: 1.2 }, { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power4.out" }, 21.0);
+      tl.fromTo("#s8-name", { opacity: 0, y: 30, scale: 1.18 }, { opacity: 1, y: 0, scale: 1, duration: 0.42, ease: "power4.out" }, 21.25);
+      tl.fromTo("#s8-line", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 21.65);
+      tl.to("#s8-black", { opacity: 1, duration: 0.18, ease: "power2.in" }, 23.7);
 
-      // Audio-reactive
+      // Audio reactive — more expressive
       const AUDIO_DATA = window.AUDIO_DATA;
       if (AUDIO_DATA && AUDIO_DATA.frames) {
-        const glow = document.getElementById("s1-glow");
-        const warm = document.getElementById("s7-warm");
-        const mark = document.getElementById("s9-mark");
+        const targets = [
+          document.getElementById("s1-glow"),
+          document.getElementById("s2-glow"),
+          document.getElementById("s6-warm"),
+          document.getElementById("s8-glow"),
+          document.getElementById("s8-mark"),
+        ];
         for (let f = 0; f < AUDIO_DATA.totalFrames; f += 2) {
           const frame = AUDIO_DATA.frames[f];
           const t = f / AUDIO_DATA.fps;
@@ -561,12 +502,15 @@
             ((bands) => () => {
               const bass = bands[0] || 0;
               const mid = bands[2] || 0;
-              if (glow) glow.style.opacity = String(0.55 + bass * 0.45);
-              if (warm) warm.style.opacity = String(0.5 + bass * 0.5);
-              if (mark) {
-                mark.style.boxShadow =
-                  "0 0 0 1px rgba(255,255,255,0.06), 0 16px 48px rgba(98,90,246," +
-                  (0.12 + mid * 0.22) + ")";
+              const o = 0.45 + bass * 0.55;
+              if (targets[0]) targets[0].style.opacity = String(o);
+              if (targets[1]) targets[1].style.opacity = String(o);
+              if (targets[2]) targets[2].style.opacity = String(0.4 + bass * 0.6);
+              if (targets[3]) targets[3].style.opacity = String(o);
+              if (targets[4]) {
+                targets[4].style.boxShadow =
+                  "0 0 0 1px rgba(255,255,255,0.08), 0 22px 60px rgba(98,90,246," +
+                  (0.2 + mid * 0.35) + ")";
               }
             })(frame.bands),
             null,

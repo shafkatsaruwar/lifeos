@@ -1,40 +1,29 @@
-# Hyperframes Composition Brief: LifeOS (full product)
+# Hyperframes Composition Brief: LifeOS (hype trailer)
 
 ## Objective
-Create a short launch-style brag video that shows the full LifeOS surface — not just Now/Focus.
+Cinematic / chaotic-hybrid hype trailer for LifeOS — not a resume walkthrough.
 
 ## Output
-- Composition directory: `brag-output/composition/`
-- Rendered video: `brag-output/brag.mp4`
-- Format: landscape — 1920x1080
-- Duration: 25 seconds
-
-## Source Material
-- Project root: `/workspace`
-- Primary files: README, docs/STARTUP.md, docs/PRD.md, docs/design-system.md, PreAuthOnboarding, app/page.tsx, OSDashboards, globals.css
-- Product name: LifeOS
-- Tagline: Your life, in focus.
-- Key UI to recreate: env chips, Now capture, School Home, Tasks+Calendar, Library/Brain, Focus, depth packs
-- Copy that must appear verbatim:
-  - Your life, in focus.
-  - `/t Finish reading chapter 3`
-  - LifeOS
-  - One OS. Every part of life.
+- `brag-output/composition/` → `brag-output/brag.mp4`
+- Format: landscape 1920x1080
+- Duration: 24 seconds
 
 ## Creative Direction
-- Tone: polished + denser mid-section for coverage
-- Angle: full personal OS tour
-- Avoid: generic SaaS language, abstract filler, unreadably fast text
+- Tone: cinematic + chaotic mid-barrage
+- Direction: overproduced personal-OS launch trailer
+- Pattern: claim slam → UI proof → next slam
+- Avoid: calm checklist energy, soft brochure pacing, generic SaaS copy
 
-## Visual Identity
-- Canvas `#F6F7F9`, ink `#202124`, accent `#625AF6`
-- Env colors per design system
-- Display: EB Garamond Local; Body: Inter Local
+## Copy that must appear
+- YOUR LIFE WAS SPLIT ACROSS APPS.
+- Your life, in focus. / LIFEOS
+- `/t Finish reading chapter 3`
+- ONE OS. EVERY PART OF LIFE.
 
 ## Storyboard
-See `brag-plan.md` (9 scenes, 25s).
+See `brag-plan.md` (8 scenes, 24s).
 
 ## Audio
-- Music: bed trimmed to 25s from vol-1, volume ~0.2
-- Sparse SFX matching chips/typing/focus/logo
-- Subtle audio-reactive on dark scenes
+- Music louder (~0.3)
+- Dense impact SFX on stingers
+- Expressive audio-reactive glow on dark scenes
