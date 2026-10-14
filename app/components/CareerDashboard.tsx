@@ -124,7 +124,7 @@ function Empty({
       <div>
         <p>{children}</p>
         {action && onAction ? (
-          <button type="button" className="os-profile-button" style={{ marginTop: 14 }} onClick={onAction}>
+          <button type="button" className="os-profile-button" style={{ marginTop: 10 }} onClick={onAction}>
             {action}
           </button>
         ) : null}
