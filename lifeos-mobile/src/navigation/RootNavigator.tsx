@@ -253,8 +253,8 @@ export function RootNavigator() {
 
   const showLife = settings.enableLifeOS !== false;
   const showSchool = settings.enableSchoolOS !== false;
-  // Work stays discoverable; the stack shows the hub paywall until entitled.
-  const showWork = true;
+  // Respect Settings hub toggles — Work paywall still shows when enabled but not entitled.
+  const showWork = settings.enableWorkOS !== false;
 
   const base = dark ? DarkTheme : DefaultTheme;
   const navTheme = {
