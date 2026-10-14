@@ -37,6 +37,34 @@
       .flash {
         position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 50;
       }
+      .cut-flash {
+        position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 60;
+        mix-blend-mode: overlay;
+      }
+      .grid-bg {
+        position: absolute; inset: -20%;
+        background-image:
+          linear-gradient(rgba(139,131,255,.08) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(139,131,255,.08) 1px, transparent 1px);
+        background-size: 64px 64px;
+        opacity: 0; pointer-events: none;
+        transform: perspective(900px) rotateX(58deg) translateY(120px);
+      }
+      .particle {
+        position: absolute; width: 6px; height: 6px; border-radius: 50%;
+        background: rgba(165,156,255,.85); box-shadow: 0 0 18px rgba(139,131,255,.55);
+        opacity: 0;
+      }
+      .speed-line {
+        position: absolute; height: 2px; width: 420px;
+        background: linear-gradient(90deg, transparent, rgba(165,156,255,.9), transparent);
+        opacity: 0; pointer-events: none;
+      }
+      .chip-ring {
+        position: absolute; inset: -4px; border-radius: 999px; border: 2px solid rgba(98,90,246,.45);
+        opacity: 0; pointer-events: none;
+      }
+      .chip { position: relative; }
       .glow {
         position: absolute; width: 900px; height: 520px; left: 50%; top: 20%; margin-left: -450px;
         border-radius: 50%; background: radial-gradient(circle, rgba(139,131,255,.35), transparent 68%);
@@ -52,8 +80,10 @@
         font-weight: 700; text-transform: uppercase; letter-spacing: -.02em;
         color: #f4f4f7; line-height: .95;
       }
-      .stinger.xl { font-size: 92px; max-width: 16ch; }
-      .stinger.lg { font-size: 64px; max-width: 18ch; }
+      .stinger.xl { font-size: 100px; max-width: 16ch; text-shadow: 0 0 40px rgba(139,131,255,.35); }
+      .stinger.lg { text-shadow: 0 8px 30px rgba(20,24,35,.12); }
+      .stinger.dark { color: #17171b; text-shadow: none; }
+      .stinger.lg { font-size: 68px; max-width: 18ch; }
       .stinger.md { font-size: 42px; letter-spacing: .04em; }
       .stinger.accent { color: #a59cff; }
 
@@ -197,6 +227,9 @@
   </head>
   <body>
     <div id="root" data-composition-id="main" data-start="0" data-duration="24" data-width="1920" data-height="1080">
+      <div class="cut-flash" id="cut-flash"></div>
+      <div class="grid-bg" id="grid-bg"></div>
+      <div id="particles"></div>
 
       <!-- 1 Problem slam -->
       <section id="scene-hook" class="clip" data-start="0" data-duration="2.2" data-track-index="1">
@@ -204,7 +237,10 @@
           <div class="void"></div>
           <div class="glow" id="s1-glow"></div>
           <div style="position:absolute;left:120px;top:340px;width:1680px">
-            <h1 class="stinger xl" id="s1-line">Your life was<br/>split across apps.</h1>
+            <h1 class="stinger xl" id="s1-line">
+              <span class="w">Your</span> <span class="w">life</span> <span class="w">was</span><br/>
+              <span class="w">split</span> <span class="w">across</span> <span class="w">apps.</span>
+            </h1>
           </div>
           <div class="flash" id="s1-flash"></div>
         </div>
@@ -231,7 +267,7 @@
           <div class="paper"></div>
           <div class="shell">
             <div class="banner" id="s3-banner"><i></i>Now · command bar</div>
-            <h2 class="stinger lg" id="s3-claim" style="color:#17171b;margin-bottom:28px">Capture with /t.</h2>
+            <h2 class="stinger lg dark" id="s3-claim" style="margin-bottom:28px">Capture with /t.</h2>
             <div class="panel" id="s3-panel">
               <p class="panel-label">Now · command bar</p>
               <div class="capture">
@@ -257,7 +293,7 @@
           <div class="paper"></div>
           <div class="shell">
             <div class="banner" id="s4-banner"><i></i>Environments</div>
-            <h2 class="stinger lg" id="s4-claim" style="color:#17171b">One workspace.<br/>Six environments.</h2>
+            <h2 class="stinger lg dark" id="s4-claim">One workspace.<br/>Six environments.</h2>
             <div class="chip-row">
               <div class="chip life" id="chip-life"><i></i>Life</div>
               <div class="chip school" id="chip-school"><i></i>School</div>
@@ -353,7 +389,7 @@
       </section>
 
       <!-- Audio -->
-      <audio id="music" src="assets/music/bed-24s.mp3" data-start="0" data-duration="24" data-track-index="20" data-volume="0.3"></audio>
+      <audio id="music" src="assets/music/bed-24s.mp3" data-start="0" data-duration="24" data-track-index="20" data-volume="0.36"></audio>
       <audio id="sfx-slam1" src="assets/sfx/impact/impactSoft_heavy_000.ogg" data-start="0.2" data-duration="0.55" data-track-index="21" data-volume="0.45"></audio>
       <audio id="sfx-flash" src="assets/sfx/impact/impactPunch_medium_001.ogg" data-start="1.85" data-duration="0.25" data-track-index="21" data-volume="0.35"></audio>
       <audio id="sfx-name" src="assets/sfx/impact/impactSoft_medium_001.ogg" data-start="2.2" data-duration="0.2" data-track-index="21" data-volume="0.4"></audio>
@@ -392,31 +428,76 @@
       }
       const charSpans = charsEl.querySelectorAll(".ch");
 
+      // Particles
+      const particlesEl = document.getElementById("particles");
+      const particleEls = [];
+      for (let i = 0; i < 28; i++) {
+        const p = document.createElement("div");
+        p.className = "particle";
+        p.style.left = `${80 + ((i * 137) % 1680)}px`;
+        p.style.top = `${120 + ((i * 89) % 720)}px`;
+        particlesEl.appendChild(p);
+        particleEls.push(p);
+      }
+      gsap.set("#cut-flash", { opacity: 0 });
+      gsap.set("#grid-bg", { opacity: 0, y: 0 });
+      const speedLine = document.createElement("div");
+      speedLine.className = "speed-line";
+      speedLine.style.left = "200px";
+      speedLine.style.top = "520px";
+      speedLine.style.transform = "rotate(-12deg)";
+      document.getElementById("root").appendChild(speedLine);
+
       const tl = gsap.timeline({ paused: true });
 
+      const flashCut = (t, strength = 0.55) => {
+        tl.fromTo("#cut-flash", { opacity: 0 }, { opacity: strength, duration: 0.035, ease: "power2.in", immediateRender: false }, t);
+        tl.to("#cut-flash", { opacity: 0, duration: 0.14, ease: "power2.out" }, t + 0.035);
+      };
       const enterScene = (id, t, scaleFrom = 1.08) => {
         gsap.set(id, { opacity: 0 });
-        tl.fromTo(id, { opacity: 0, scale: scaleFrom }, { opacity: 1, scale: 1, duration: 0.28, ease: "power3.out" }, t);
+        tl.fromTo(id, { opacity: 0, scale: scaleFrom }, { opacity: 1, scale: 1, duration: 0.24, ease: "power4.out" }, t);
       };
       const exitScene = (id, t) => {
-        tl.to(id, { opacity: 0, scale: 1.04, duration: 0.22, ease: "power2.in" }, t);
+        tl.to(id, { opacity: 0, scale: 1.06, duration: 0.16, ease: "power3.in" }, t);
+        flashCut(t, 0.45);
       };
       const slam = (sel, t, y = 40) => {
-        gsap.set(sel, { opacity: 0, y, scale: 1.12 });
-        tl.fromTo(sel, { opacity: 0, y, scale: 1.12 }, { opacity: 1, y: 0, scale: 1, duration: 0.38, ease: "power4.out" }, t);
+        gsap.set(sel, { opacity: 0, y, scale: 1.16, rotation: -2 });
+        tl.fromTo(sel, { opacity: 0, y, scale: 1.16, rotation: -2 }, { opacity: 1, y: 0, scale: 1, rotation: 0, duration: 0.34, ease: "back.out(1.6)" }, t);
       };
 
+      // Ambient grid + particles on dark scenes
+      tl.fromTo("#grid-bg", { opacity: 0, y: 40 }, { opacity: 0.55, y: 0, duration: 0.6, ease: "power2.out" }, 0);
+      tl.to("#grid-bg", { opacity: 0, duration: 0.25 }, 4.1);
+      tl.fromTo("#grid-bg", { opacity: 0 }, { opacity: 0.35, duration: 0.35, immediateRender: false }, 20.7);
+      particleEls.forEach((p, i) => {
+        gsap.set(p, { opacity: 0, scale: 0.2 });
+        tl.fromTo(p, { opacity: 0, y: 0, scale: 0.3 }, { opacity: 0.85, y: -40 - (i % 5) * 12, scale: 1, duration: 1.2 + (i % 4) * 0.2, ease: "sine.out" }, 0.1 + (i % 8) * 0.08);
+        tl.to(p, { opacity: 0, duration: 0.4 }, 2.0);
+        tl.fromTo(p, { opacity: 0, y: 20 }, { opacity: 0.7, y: -30, duration: 1.4, ease: "sine.out" }, 20.9 + (i % 6) * 0.05);
+      });
+
       // Scene 1 — problem
-      enterScene("#s1", 0, 1.12);
-      slam("#s1-line", 0.15, 50);
-      tl.fromTo("#s1-flash", { opacity: 0 }, { opacity: 0.85, duration: 0.06, yoyo: true, repeat: 1, ease: "none" }, 1.85);
+      enterScene("#s1", 0, 1.14);
+      document.querySelectorAll("#s1-line .w").forEach((w, i) => {
+        gsap.set(w, { display: "inline-block", opacity: 0, y: 36, filter: "blur(6px)" });
+        tl.fromTo(w, { opacity: 0, y: 36, filter: "blur(6px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.28, ease: "power4.out" }, 0.12 + i * 0.11);
+      });
+      tl.fromTo(speedLine, { opacity: 0, x: -120 }, { opacity: 0.9, x: 420, duration: 0.55, ease: "power3.inOut" }, 0.35);
+      tl.to(speedLine, { opacity: 0, duration: 0.2 }, 1.0);
+      tl.fromTo("#s1-flash", { opacity: 0 }, { opacity: 0.9, duration: 0.05, yoyo: true, repeat: 1, ease: "none" }, 1.82);
       exitScene("#s1", 1.95);
 
       // Scene 2 — name
       enterScene("#s2", 2.0, 1.1);
       gsap.set(["#s2-brand", "#s2-title"], { opacity: 0, y: 30, scale: 1.1 });
       tl.fromTo("#s2-brand", { opacity: 0, y: 24, scale: 1.15 }, { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power4.out" }, 2.15);
-      tl.fromTo("#s2-mark", { scale: 0.85 }, { scale: 1.08, duration: 0.22, yoyo: true, repeat: 1, ease: "power2.out" }, 2.25);
+      const markBars = document.querySelectorAll("#s2-mark span");
+      tl.fromTo("#s2-mark", { scale: 0.75, rotation: -8 }, { scale: 1.1, rotation: 0, duration: 0.38, ease: "back.out(2)" }, 2.2);
+      markBars.forEach((bar, i) => {
+        tl.fromTo(bar, { scaleY: 0.4 }, { scaleY: 1.35, duration: 0.12, yoyo: true, repeat: 3, ease: "power2.out" }, 2.35 + i * 0.06);
+      });
       tl.fromTo("#s2-title", { opacity: 0, y: 36, scale: 1.08 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "power4.out" }, 2.7);
       exitScene("#s2", 4.2);
 
@@ -432,7 +513,8 @@
         tl.fromTo(span, { opacity: 0 }, { opacity: 1, duration: 0.03 }, typeStart + i * 0.065);
       });
       tl.fromTo("#s3-caret", { opacity: 1 }, { opacity: 0.15, duration: 0.25, yoyo: true, repeat: 7, ease: "sine.inOut" }, 4.95);
-      tl.fromTo("#s3-task", { opacity: 0, y: 40, scale: 1.12 }, { opacity: 1, y: 0, scale: 1, duration: 0.35, ease: "power4.out" }, 7.0);
+      tl.fromTo("#s3-task", { opacity: 0, y: 50, scale: 1.18, rotation: -1.5 }, { opacity: 1, y: 0, scale: 1, rotation: 0, duration: 0.32, ease: "back.out(2.2)" }, 7.0);
+      tl.fromTo("#s3-panel", { x: 0 }, { x: -6, duration: 0.04, yoyo: true, repeat: 5, ease: "power1.inOut", immediateRender: false }, 7.05);
       exitScene("#s3", 8.0);
 
       // Scene 4 — envs
@@ -440,8 +522,9 @@
       slam("#s4-banner", 8.2, 20);
       slam("#s4-claim", 8.3, 30);
       ["#chip-life", "#chip-school", "#chip-work", "#chip-abroad", "#chip-treasury", "#chip-mastery"].forEach((sel, i) => {
-        gsap.set(sel, { opacity: 0, y: 28, scale: 1.2 });
-        tl.fromTo(sel, { opacity: 0, y: 28, scale: 1.2 }, { opacity: 1, y: 0, scale: 1, duration: 0.28, ease: "power4.out" }, 8.55 + i * 0.28);
+        gsap.set(sel, { opacity: 0, y: 36, scale: 1.28, rotation: -6 + i * 2 });
+        tl.fromTo(sel, { opacity: 0, y: 36, scale: 1.28, rotation: -6 + i * 2 }, { opacity: 1, y: 0, scale: 1, rotation: 0, duration: 0.26, ease: "back.out(1.8)" }, 8.52 + i * 0.22);
+        tl.fromTo(sel, { boxShadow: "0 0 0 rgba(98,90,246,0)" }, { boxShadow: "0 0 0 10px rgba(98,90,246,0.18)", duration: 0.18, yoyo: true, repeat: 1, immediateRender: false }, 8.62 + i * 0.22);
       });
       exitScene("#s4", 11.1);
 
@@ -464,7 +547,9 @@
       tl.fromTo("#s6-main", { opacity: 0, y: 30, scale: 1.06 }, { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: "power4.out" }, 15.0);
       tl.call(() => { document.getElementById("s6-timer").textContent = "45:00"; }, null, 15.4);
       tl.call(() => { document.getElementById("s6-timer").textContent = "44:59"; }, null, 16.3);
+      tl.fromTo("#s6-timer", { scale: 1 }, { scale: 1.08, duration: 0.12, yoyo: true, repeat: 1, ease: "power2.out" }, 16.28);
       tl.call(() => { document.getElementById("s6-timer").textContent = "44:58"; }, null, 17.2);
+      tl.fromTo("#s6-warm", { scale: 1 }, { scale: 1.12, duration: 0.35, yoyo: true, repeat: 1, ease: "sine.inOut" }, 15.2);
       exitScene("#s6", 17.7);
 
       // Scene 7 — packs
@@ -472,8 +557,9 @@
       slam("#s7-banner", 17.9, 18);
       slam("#s7-claim", 18.0, 28);
       ["#pack-work", "#pack-abroad", "#pack-treasury", "#pack-mastery"].forEach((sel, i) => {
-        gsap.set(sel, { opacity: 0, y: 36, scale: 1.15 });
-        tl.fromTo(sel, { opacity: 0, y: 36, scale: 1.15 }, { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: "power4.out" }, 18.25 + i * 0.32);
+        gsap.set(sel, { opacity: 0, y: 44, scale: 1.2, rotation: 3 });
+        tl.fromTo(sel, { opacity: 0, y: 44, scale: 1.2, rotation: 3 }, { opacity: 1, y: 0, scale: 1, rotation: 0, duration: 0.28, ease: "back.out(1.7)" }, 18.22 + i * 0.26);
+        flashCut(18.35 + i * 0.26, 0.25);
       });
       exitScene("#s7", 20.7);
 
@@ -481,7 +567,8 @@
       enterScene("#s8", 20.8, 1.12);
       gsap.set(["#s8-mark", "#s8-name", "#s8-line"], { opacity: 0, y: 28, scale: 1.15 });
       tl.fromTo("#s8-mark", { opacity: 0, y: 24, scale: 1.2 }, { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power4.out" }, 21.0);
-      tl.fromTo("#s8-name", { opacity: 0, y: 30, scale: 1.18 }, { opacity: 1, y: 0, scale: 1, duration: 0.42, ease: "power4.out" }, 21.25);
+      tl.fromTo("#s8-name", { opacity: 0, y: 30, scale: 1.22 }, { opacity: 1, y: 0, scale: 1, duration: 0.42, ease: "back.out(1.4)" }, 21.25);
+      flashCut(21.15, 0.65);
       tl.fromTo("#s8-line", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 21.65);
       tl.to("#s8-black", { opacity: 1, duration: 0.18, ease: "power2.in" }, 23.7);
 
