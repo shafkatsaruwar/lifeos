@@ -211,7 +211,7 @@
 
       .outro-stack {
         position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-        justify-content: center; gap: 18px; text-align: center;
+        justify-content: center; gap: 14px; text-align: center;
       }
       .outro-stack .brand-mark { width: 72px; height: 72px; border-radius: 18px; padding: 15px 13px; gap: 5px; }
       .outro-stack .brand-mark span { width: 8px; }
@@ -220,7 +220,18 @@
       .outro-stack .brand-mark span:nth-child(3) { height: 20px; }
       .outro-name { color: #fff; font-size: 72px; font-weight: 700; letter-spacing: -.04em; text-transform: uppercase; }
       .outro-line {
-        font-family: "EB Garamond Local", "Times New Roman", serif; font-size: 36px; font-weight: 400; color: #d0d0d8;
+        font-family: "EB Garamond Local", "Times New Roman", serif; font-size: 34px; font-weight: 400; color: #d0d0d8;
+      }
+      .cta-pill {
+        margin-top: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 12px;
+        min-width: 420px; height: 72px; padding: 0 36px; border-radius: 16px;
+        background: #8b83ff; color: #0a0a0e; font-size: 28px; font-weight: 700; letter-spacing: -.02em;
+        text-transform: uppercase; box-shadow: 0 0 0 8px rgba(139,131,255,.22), 0 24px 60px rgba(98,90,246,.45);
+      }
+      .cta-pill .arrow { font-size: 26px; line-height: 1; }
+      .cta-sub {
+        margin-top: 4px; font-size: 18px; font-weight: 700; letter-spacing: .14em;
+        text-transform: uppercase; color: #a59cff;
       }
       .blackout { position: absolute; inset: 0; background: #000; opacity: 0; z-index: 40; }
     </style>
@@ -374,7 +385,7 @@
         </div>
       </section>
 
-      <!-- 8 Outro -->
+      <!-- 8 Outro / download CTA -->
       <section id="scene-outro" class="clip" data-start="20.8" data-duration="3.2" data-track-index="8">
         <div class="scene-inner" id="s8">
           <div class="void"></div>
@@ -383,6 +394,8 @@
             <div class="brand-mark" id="s8-mark"><span></span><span></span><span></span></div>
             <div class="outro-name" id="s8-name">LifeOS</div>
             <div class="outro-line" id="s8-line">One OS. Every part of life.</div>
+            <div class="cta-pill" id="s8-cta">Get the app <span class="arrow">→</span></div>
+            <div class="cta-sub" id="s8-bio">Link in bio</div>
           </div>
           <div class="blackout" id="s8-black"></div>
         </div>
@@ -414,6 +427,7 @@
       <audio id="sfx-p3" src="assets/sfx/impact/impactPunch_medium_001.ogg" data-start="19.0" data-duration="0.2" data-track-index="25" data-volume="0.3"></audio>
       <audio id="sfx-p4" src="assets/sfx/impact/impactSoft_heavy_002.ogg" data-start="19.35" data-duration="0.45" data-track-index="25" data-volume="0.4"></audio>
       <audio id="sfx-logo" src="assets/sfx/impact/impactSoft_heavy_000.ogg" data-start="21.15" data-duration="0.55" data-track-index="26" data-volume="0.48"></audio>
+      <audio id="sfx-cta" src="assets/sfx/impact/impactPunch_medium_001.ogg" data-start="21.8" data-duration="0.25" data-track-index="26" data-volume="0.42"></audio>
     </div>
 
     <script>
@@ -563,14 +577,17 @@
       });
       exitScene("#s7", 20.7);
 
-      // Scene 8 — outro
+      // Scene 8 — outro / download CTA
       enterScene("#s8", 20.8, 1.12);
-      gsap.set(["#s8-mark", "#s8-name", "#s8-line"], { opacity: 0, y: 28, scale: 1.15 });
-      tl.fromTo("#s8-mark", { opacity: 0, y: 24, scale: 1.2 }, { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power4.out" }, 21.0);
-      tl.fromTo("#s8-name", { opacity: 0, y: 30, scale: 1.22 }, { opacity: 1, y: 0, scale: 1, duration: 0.42, ease: "back.out(1.4)" }, 21.25);
-      flashCut(21.15, 0.65);
-      tl.fromTo("#s8-line", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 21.65);
-      tl.to("#s8-black", { opacity: 1, duration: 0.18, ease: "power2.in" }, 23.7);
+      gsap.set(["#s8-mark", "#s8-name", "#s8-line", "#s8-cta", "#s8-bio"], { opacity: 0, y: 28, scale: 1.15 });
+      tl.fromTo("#s8-mark", { opacity: 0, y: 24, scale: 1.2 }, { opacity: 1, y: 0, scale: 1, duration: 0.36, ease: "power4.out" }, 20.95);
+      tl.fromTo("#s8-name", { opacity: 0, y: 30, scale: 1.22 }, { opacity: 1, y: 0, scale: 1, duration: 0.38, ease: "back.out(1.4)" }, 21.15);
+      flashCut(21.1, 0.65);
+      tl.fromTo("#s8-line", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.32, ease: "power3.out" }, 21.45);
+      tl.fromTo("#s8-cta", { opacity: 0, y: 36, scale: 1.25 }, { opacity: 1, y: 0, scale: 1, duration: 0.36, ease: "back.out(2)" }, 21.75);
+      tl.fromTo("#s8-cta", { boxShadow: "0 0 0 0 rgba(139,131,255,0), 0 24px 60px rgba(98,90,246,.45)" }, { boxShadow: "0 0 0 14px rgba(139,131,255,.28), 0 24px 60px rgba(98,90,246,.55)", duration: 0.35, yoyo: true, repeat: 3, ease: "sine.inOut", immediateRender: false }, 22.1);
+      tl.fromTo("#s8-bio", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.28, ease: "power3.out" }, 22.15);
+      tl.to("#s8-black", { opacity: 1, duration: 0.16, ease: "power2.in" }, 23.75);
 
       // Audio reactive — more expressive
       const AUDIO_DATA = window.AUDIO_DATA;
