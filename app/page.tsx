@@ -85,6 +85,13 @@ import {
   type StudyAbroadHub,
   type StudyAbroadView,
 } from "@/app/components/StudyAbroadDashboard";
+import {
+  CareerDashboard,
+  emptyCareerHub,
+  type CareerHub,
+  type CareerView,
+} from "@/app/components/CareerDashboard";
+import { normalizeCareerHub } from "@/lib/careerHelpers";
 import { TreasuryOSDashboard } from "@/app/components/TreasuryOSDashboard";
 import { MasterOSDashboard } from "@/app/components/MasterOSDashboard";
 import {
@@ -104,10 +111,10 @@ import {
   Mail, Music2, Plus, Search, Settings, Sparkles, Sun, TimerReset, UserRound, X, Zap,
   Ban, Pencil, Trash2, Bell, Download, Palette, Shield, SlidersHorizontal, Coffee, Maximize, Mic, GripVertical,
   GraduationCap, NotebookPen, BookOpen, ExternalLink, Upload, RefreshCw, Bold, Italic, List, Heading1, Highlighter,
-  BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, WalletCards, MapPin,
+  BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, WalletCards, MapPin, Target,
 } from "lucide-react";
 
-type View = "Life" | "School" | "Work" | "Study Abroad" | "Treasury" | "Mastery" | "Now" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
+type View = "Life" | "School" | "Work" | "Career" | "Study Abroad" | "Treasury" | "Mastery" | "Now" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
 type EnergyLevel = "Low" | "Medium" | "High";
 type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
 type AcademicItemType = "Assignment" | "Project" | "Exam" | "Quiz" | "Lab" | "Reading" | "Discussion";
@@ -132,7 +139,7 @@ type WeeklyPlan = { [dayOfWeek: number]: WeeklyPlanItem[] }; // 0=Sunday through
 // Work OS types imported from OSDashboards
 
 const routedViews: Record<string, View> = {
-  life: "Life", school: "School", work: "Work", "study-abroad": "Study Abroad", studyabroad: "Study Abroad",
+  life: "Life", school: "School", work: "Work", career: "Career", "study-abroad": "Study Abroad", studyabroad: "Study Abroad",
   now: "Now", flow: "Now", dashboard: "Life", today: "Calendar", calendar: "Calendar", spaces: "Spaces",
   library: "Library", notes: "Library", resources: "Library", brain: "Library", knowledge: "Library",
   settings: "Settings", tasks: "Tasks", budget: "Treasury", treasuryos: "Treasury", "treasury-os": "Treasury", treasury: "Treasury",
@@ -154,6 +161,7 @@ type SettingsState = {
     life?: string;
     school?: string;
     work?: string;
+    career?: string;
     studyAbroad?: string;
     treasuryOS?: string;
     masterOS?: string;
@@ -180,6 +188,7 @@ type SettingsState = {
   enableLifeOS?: boolean;
   enableSchoolOS?: boolean;
   enableWorkOS?: boolean;
+  enableCareerOS?: boolean;
   enableStudyAbroad?: boolean;
   enableTreasuryOS?: boolean;
   enableMasterOS?: boolean;
@@ -216,6 +225,7 @@ const DEFAULT_WORKSPACE_COLORS = {
   life: "#d99b38",
   school: "#8b5cf6",
   work: "#4338ca",
+  career: "#0f766e",
   studyAbroad: "#0d9488",
   treasuryOS: "#47a47b",
   masterOS: "#625af6",
@@ -230,11 +240,12 @@ const WORKSPACE_COLOR_OPTIONS: {
   navName: string;
   dataEnv: string;
   cssVar: `--env-${string}`;
-  enableKey: "enableLifeOS" | "enableSchoolOS" | "enableWorkOS" | "enableStudyAbroad" | "enableTreasuryOS" | "enableMasterOS";
+  enableKey: "enableLifeOS" | "enableSchoolOS" | "enableWorkOS" | "enableCareerOS" | "enableStudyAbroad" | "enableTreasuryOS" | "enableMasterOS";
 }[] = [
   { key: "life", label: "Life", navName: "Life", dataEnv: "life", cssVar: "--env-life", enableKey: "enableLifeOS" },
   { key: "school", label: "School", navName: "School", dataEnv: "school", cssVar: "--env-school", enableKey: "enableSchoolOS" },
   { key: "work", label: "Work", navName: "Work", dataEnv: "work", cssVar: "--env-work", enableKey: "enableWorkOS" },
+  { key: "career", label: "Career", navName: "Career", dataEnv: "career", cssVar: "--env-career", enableKey: "enableCareerOS" },
   { key: "studyAbroad", label: "Study Abroad", navName: "Study Abroad", dataEnv: "study-abroad", cssVar: "--env-study-abroad", enableKey: "enableStudyAbroad" },
   { key: "treasuryOS", label: "Treasury", navName: "Treasury", dataEnv: "treasury", cssVar: "--env-treasury", enableKey: "enableTreasuryOS" },
   { key: "masterOS", label: "Mastery", navName: "Mastery", dataEnv: "master", cssVar: "--env-master", enableKey: "enableMasterOS" },
@@ -280,6 +291,7 @@ const nav: NavItem[] = [
   { name: "Now", icon: TimerReset },
   { category: "ENVIRONMENTS", name: "Life", icon: Home },
   { category: "ENVIRONMENTS", name: "Work", icon: BriefcaseBusiness },
+  { category: "ENVIRONMENTS", name: "Career", icon: Target },
   { category: "ENVIRONMENTS", name: "School", icon: GraduationCap },
   { category: "ENVIRONMENTS", name: "Study Abroad", icon: Globe2 },
   { category: "ENVIRONMENTS", name: "Treasury", icon: WalletCards },
@@ -316,6 +328,7 @@ const initialSettings: SettingsState = {
   enableLifeOS: true,
   enableSchoolOS: true,
   enableWorkOS: false,
+  enableCareerOS: false,
   enableStudyAbroad: false,
   enableTreasuryOS: false,
   enableMasterOS: false,
@@ -618,6 +631,9 @@ export default function LifeOS() {
   const [studyAbroadHubHydrated, setStudyAbroadHubHydrated] = useState(false);
   const [studyAbroadView, setStudyAbroadView] = useState<StudyAbroadView>("dashboard");
   const [studyAbroadFocusEntity, setStudyAbroadFocusEntity] = useState<StudyAbroadFocusEntity | null>(null);
+  const [careerHub, setCareerHub] = useState<CareerHub>(emptyCareerHub());
+  const [careerHubHydrated, setCareerHubHydrated] = useState(false);
+  const [careerView, setCareerView] = useState<CareerView>("overview");
   const [workFocusTaskId, setWorkFocusTaskId] = useState<string | null>(null);
   const [workView, setWorkView] = useState<WorkView>("dashboard");
   const [schoolFocusTaskId, setSchoolFocusTaskId] = useState<number | null>(null);
@@ -1036,7 +1052,7 @@ export default function LifeOS() {
     if (typeof window === "undefined") return;
     const writeCurrentView = () => {
       const url = new URL(window.location.href);
-      const routeValue = view === "Dashboard" ? "now" : view === "Calendar" ? "today" : view === "Study Abroad" ? "study-abroad" : view === "Mastery" ? "masteros" : view.toLowerCase();
+      const routeValue = view === "Dashboard" ? "now" : view === "Calendar" ? "today" : view === "Study Abroad" ? "study-abroad" : view === "Career" ? "career" : view === "Mastery" ? "masteros" : view.toLowerCase();
       const currentView = url.searchParams.get("view");
       const shouldClearMos = view !== "Mastery" && url.searchParams.has("mos");
       if (currentView === routeValue && !shouldClearMos) return;
@@ -1172,6 +1188,7 @@ export default function LifeOS() {
       setSchoolHub(emptySchoolHub);
       setWorkHub(emptyWorkHub);
       setStudyAbroadHub(emptyStudyAbroadHub);
+      setCareerHub(emptyCareerHub());
       setWorkFocusTaskId(null);
     }
   }, [cloudUserId]);
@@ -1650,6 +1667,30 @@ export default function LifeOS() {
     if (!cloudUserId || !studyAbroadHubHydrated) return;
     syncDataToFirebase('studyAbroad', studyAbroadHub);
   }, [cloudUserId, studyAbroadHub, studyAbroadHubHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setCareerHubHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('career');
+        if (data && typeof data === "object") {
+          setCareerHub(normalizeCareerHub(data));
+        } else {
+          setCareerHub(emptyCareerHub());
+        }
+      } catch (error) {
+        console.error('Failed to load Career data from Firebase:', error);
+        setCareerHub(emptyCareerHub());
+      } finally {
+        setCareerHubHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !careerHubHydrated) return;
+    syncDataToFirebase('career', careerHub);
+  }, [cloudUserId, careerHub, careerHubHydrated]);
 
   useEffect(() => {
     if (!cloudUserId || !tasksHydrated) return;
@@ -2194,6 +2235,7 @@ export default function LifeOS() {
       if (data.work && typeof data.work === "object") setWorkHub({ ...emptyWorkHub, ...data.work });
       if (data.timeTracking && typeof data.timeTracking === "object") setTimeTracking(normalizeTimeTracking(data.timeTracking));
       if (data.studyAbroad && typeof data.studyAbroad === "object") setStudyAbroadHub(ensureCountriesFromUniversities(normalizeStudyAbroadHub(data.studyAbroad)));
+      if (data.career && typeof data.career === "object") setCareerHub(normalizeCareerHub(data.career));
       if (data.settings) setSettingsState(current => ({ ...current, ...data.settings }));
       if (data.dark !== undefined) setDark(data.dark);
       flash("✓ Cloud data synced successfully");
@@ -2204,7 +2246,7 @@ export default function LifeOS() {
   };
 
   const exportData = () => {
-    const payload = { exportedAt: new Date().toISOString(), tasks, projects: projectItems.map(({ icon: _, ...project }) => project), events: calendarEvents, brainItems, classes, notes, resources, life: lifeHub, school: schoolHub, work: workHub, timeTracking, studyAbroad: studyAbroadHub, settings: settingsState, dark };
+    const payload = { exportedAt: new Date().toISOString(), tasks, projects: projectItems.map(({ icon: _, ...project }) => project), events: calendarEvents, brainItems, classes, notes, resources, life: lifeHub, school: schoolHub, work: workHub, timeTracking, studyAbroad: studyAbroadHub, career: careerHub, settings: settingsState, dark };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -2229,6 +2271,7 @@ export default function LifeOS() {
     setWorkHub(emptyWorkHub);
     setTimeTracking(emptyTimeTracking());
     setStudyAbroadHub(emptyStudyAbroadHub);
+    setCareerHub(emptyCareerHub());
     setSettingsState(initialSettings);
     setDark(false);
     window.location.reload();
@@ -2309,6 +2352,11 @@ export default function LifeOS() {
             const nextStudy = ensureCountriesFromUniversities(normalizeStudyAbroadHub(data.studyAbroad));
             setStudyAbroadHub(nextStudy);
             await syncDataToFirebase('studyAbroad', nextStudy);
+          }
+          if (data.career && typeof data.career === "object") {
+            const nextCareer = normalizeCareerHub(data.career);
+            setCareerHub(nextCareer);
+            await syncDataToFirebase('career', nextCareer);
           }
           if (data.settings) {
             setSettingsState(current => ({ ...current, ...data.settings }));
@@ -2466,6 +2514,7 @@ export default function LifeOS() {
       window.setTimeout(() => {
         setView(hub);
         if (hub === "Work") setSettingsState((current) => ({ ...current, enableWorkOS: true }));
+        if (hub === "Career") setSettingsState((current) => ({ ...current, enableCareerOS: true }));
         if (hub === "Study Abroad") setSettingsState((current) => ({ ...current, enableStudyAbroad: true }));
         if (hub === "Treasury") setSettingsState((current) => ({ ...current, enableTreasuryOS: true }));
         if (hub === "Mastery") setSettingsState((current) => ({ ...current, enableMasterOS: true }));
@@ -2539,7 +2588,7 @@ export default function LifeOS() {
           </div>
         </header>
         <AnimatePresence mode="wait">
-          <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Work" || view === "Study Abroad" || view === "Mastery" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
+          <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Work" || view === "Career" || view === "Study Abroad" || view === "Mastery" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
             {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarFeed} workspaceName={workspaceName} onComplete={complete} onOpenTask={openTaskPage} onOpenProject={openProjectSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => openSpacesList("Projects")} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} enableMasterOS={settingsState.enableMasterOS !== false} onOpenMasterOS={() => go("Mastery")} />}
             {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} events={calendarFeed} school={schoolHub} schoolView={schoolView} onChangeView={setSchoolView} schoolFocusTaskId={schoolFocusTaskId} onSelectFocusTask={setSchoolFocusTaskId} workspaceName={workspaceName} workspaceEmail={user?.email} onComplete={complete} onOpenTask={openTaskPage} onOpenClass={openClassSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={(id) => { setSchoolFocusTaskId(id); openFocus(id); }} onOpenCalendar={() => go("Calendar")} onOpenSettings={() => go("Settings")} onImportTimetable={() => setCalendarImporter(true)} onQuickCapture={(payload) => {
               if (payload.kind === "Note") {
@@ -2627,6 +2676,7 @@ export default function LifeOS() {
               setSelectedProjectName(current => current === name ? null : current);
               flash(`Deleted ${name}`);
             }} />}
+                        {view === "Career" && <CareerDashboard hub={careerHub} careerView={careerView} onChangeView={setCareerView} onChange={setCareerHub} workspaceName={workspaceName} flash={flash} />}
             {view === "Study Abroad" && <StudyAbroadDashboard hub={studyAbroadHub} studyView={studyAbroadView} onChangeView={setStudyAbroadView} onChange={setStudyAbroadHub} workspaceName={workspaceName} onOpenCalendar={() => go("Calendar")} onFocusStudyTask={focusStudyAbroadTask} focusEntity={studyAbroadFocusEntity} onFocusEntityConsumed={() => setStudyAbroadFocusEntity(null)} />}
             {view === "Treasury" && (
               <TreasuryOSDashboard
@@ -2646,7 +2696,7 @@ export default function LifeOS() {
             {view === "Settings" && <AssistantAccessPanel user={user} userId={cloudUserId} flash={flash} />}
             {view === "Settings" && <CalendarConnections user={user} flash={flash} />}
             {view === "Settings" && <SynapseDayPlanImport flash={flash} />}
-            {!["Life", "School", "Work", "Study Abroad", "Treasury", "Mastery", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
+            {!["Life", "School", "Work", "Career", "Study Abroad", "Treasury", "Mastery", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
         </AnimatePresence>
         </>}
