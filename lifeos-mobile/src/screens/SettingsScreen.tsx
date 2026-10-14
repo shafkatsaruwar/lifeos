@@ -579,7 +579,12 @@ export function SettingsScreen() {
                 }
                 void updateSettings({ ...workspace.settings, entitlement: result.entitlement });
                 setPromo("");
-                Alert.alert("Unlocked", "Paid hubs are unlocked for one year.");
+                Alert.alert(
+                  "Unlocked",
+                  result.entitlement.expiresAt
+                    ? "Paid hubs are unlocked for one year."
+                    : "LifeOS Pro unlocked for life.",
+                );
               }}
             />
           </View>

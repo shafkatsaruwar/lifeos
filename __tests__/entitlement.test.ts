@@ -1,19 +1,22 @@
 import {
+  LIFEOS_LIFETIME_PROMO_CODE,
   LIFEOS_PROMO_CODE,
   canAccessPaidHubs,
   entitlementStatusLabel,
   grantLifetimeAccess,
   isEntitled,
+  isLifetimePromoCode,
   isPaidHub,
   isValidPromoCode,
   redeemPromoCode,
+  redeemSuccessMessage,
 } from "../lib/billing/entitlement";
 import { SUBSCRIPTION_OFFERS } from "../lib/legal/subscriptionTerms";
 
 describe("entitlement / promo", () => {
   const now = new Date("2026-10-13T12:00:00.000Z");
 
-  it("requires the exact promo string including quotes", () => {
+  it("requires the exact year promo string including quotes", () => {
     expect(LIFEOS_PROMO_CODE).toBe('"Shafkat Rocks!"');
     expect(isValidPromoCode('"Shafkat Rocks!"')).toBe(true);
     expect(isValidPromoCode("Shafkat Rocks!")).toBe(false);
@@ -21,7 +24,7 @@ describe("entitlement / promo", () => {
     expect(isValidPromoCode('  "Shafkat Rocks!"  ')).toBe(true);
   });
 
-  it("redeems promo for one year of paid-hub access", () => {
+  it("redeems year promo for one year of paid-hub access", () => {
     const result = redeemPromoCode('"Shafkat Rocks!"', now);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -31,6 +34,26 @@ describe("entitlement / promo", () => {
     const yearMs = 365 * 24 * 60 * 60 * 1000;
     expect(expires - now.getTime()).toBe(yearMs);
     expect(isEntitled(result.entitlement, new Date(expires + 1))).toBe(false);
+    expect(redeemSuccessMessage(result.entitlement)).toMatch(/one year/i);
+  });
+
+  it("redeems lifetime code for permanent Pro access", () => {
+    expect(LIFEOS_LIFETIME_PROMO_CODE).toBe("8904272998");
+    expect(isLifetimePromoCode("8904272998")).toBe(true);
+    expect(isLifetimePromoCode(" 8904272998 ")).toBe(true);
+    expect(isValidPromoCode("8904272998")).toBe(true);
+    expect(isValidPromoCode("8904272999")).toBe(false);
+
+    const result = redeemPromoCode("8904272998", now);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.entitlement.status).toBe("pro");
+    expect(result.entitlement.expiresAt).toBeUndefined();
+    expect(result.entitlement.source).toBe("promo");
+    expect(canAccessPaidHubs(result.entitlement, now)).toBe(true);
+    expect(canAccessPaidHubs(result.entitlement, new Date("2099-01-01T00:00:00.000Z"))).toBe(true);
+    expect(entitlementStatusLabel(result.entitlement, now)).toMatch(/Lifetime/i);
+    expect(redeemSuccessMessage(result.entitlement)).toMatch(/for life/i);
   });
 
   it("rejects bad codes", () => {
