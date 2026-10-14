@@ -51,7 +51,10 @@ export function PaywallGate({
         if (event.target === event.currentTarget) onClose?.();
       }}
     >
-      <div className="paywall-card">
+      <div
+        className="paywall-card"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className="paywall-card-head">
           <p className="eyebrow">LifeOS Pro</p>
           {onClose ? (
