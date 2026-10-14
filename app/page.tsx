@@ -2344,8 +2344,8 @@ export default function LifeOS() {
   const visibleNav = useMemo(
     () =>
       nav.filter((item) => {
-        // Paid hubs stay discoverable; go() opens the paywall until entitled.
-        if (isPaidHub(item.name)) return true;
+        // Respect Settings hub toggles for every environment, including Pro hubs.
+        // Paywall still gates entry via go() / enable toggles when not entitled.
         return isEnvironmentEnabled(item.name as View);
       }),
     [isEnvironmentEnabled],
