@@ -1,0 +1,713 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>LifeOS — Full Preview</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="assets/audio-data.js"></script>
+    <style>
+      @font-face { font-family: "Inter Local"; src: url("assets/fonts/Inter-400.woff2") format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Inter Local"; src: url("assets/fonts/Inter-700.woff2") format("woff2"); font-weight: 700; }
+      @font-face { font-family: "EB Garamond Local"; src: url("assets/fonts/EBGaramond-400.woff2") format("woff2"); font-weight: 400; }
+      @font-face { font-family: "EB Garamond Local"; src: url("assets/fonts/EBGaramond-700.woff2") format("woff2"); font-weight: 700; }
+
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #050507; }
+      #root {
+        position: relative; width: 100%; height: 100%; overflow: hidden;
+        font-family: "Inter Local", ui-sans-serif, system-ui, sans-serif; color: #202124;
+      }
+      .clip { position: absolute; inset: 0; overflow: hidden; }
+      .scene-inner { position: absolute; inset: 0; }
+
+      .void {
+        position: absolute; inset: 0;
+        background:
+          radial-gradient(ellipse 70% 50% at 50% 40%, rgba(98,90,246,.22), transparent 60%),
+          linear-gradient(160deg, #050507 0%, #12121a 55%, #08080c 100%);
+      }
+      .paper {
+        position: absolute; inset: 0;
+        background:
+          radial-gradient(ellipse 60% 40% at 85% 0%, rgba(98,90,246,.12), transparent 50%),
+          #f6f7f9;
+      }
+      .focus-bg { position: absolute; inset: 0; background: #111116; }
+      .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 50; }
+      .cut-flash {
+        position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 60;
+        mix-blend-mode: overlay;
+      }
+      .grid-bg {
+        position: absolute; inset: -20%;
+        background-image:
+          linear-gradient(rgba(139,131,255,.08) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(139,131,255,.08) 1px, transparent 1px);
+        background-size: 64px 64px;
+        opacity: 0; pointer-events: none;
+        transform: perspective(900px) rotateX(58deg) translateY(120px);
+      }
+      .glow {
+        position: absolute; width: 900px; height: 520px; left: 50%; top: 20%; margin-left: -450px;
+        border-radius: 50%; background: radial-gradient(circle, rgba(139,131,255,.35), transparent 68%);
+        filter: blur(10px); pointer-events: none;
+      }
+      .warm {
+        position: absolute; width: 1000px; height: 560px; left: 8%; top: 22%; border-radius: 50%;
+        background: radial-gradient(circle, rgba(98,90,246,.28), transparent 70%); pointer-events: none;
+      }
+
+      .stinger {
+        font-family: "Inter Local", ui-sans-serif, system-ui, sans-serif;
+        font-weight: 700; text-transform: uppercase; letter-spacing: -.02em;
+        color: #f4f4f7; line-height: .95;
+      }
+      .stinger.xl { font-size: 92px; max-width: 16ch; text-shadow: 0 0 40px rgba(139,131,255,.35); }
+      .stinger.lg { font-size: 56px; max-width: 20ch; text-shadow: 0 8px 30px rgba(20,24,35,.12); }
+      .stinger.dark { color: #17171b; text-shadow: none; }
+      .stinger.md { font-size: 36px; letter-spacing: .04em; }
+      .stinger.accent { color: #a59cff; }
+      .serif {
+        font-family: "EB Garamond Local", "Times New Roman", serif;
+        font-weight: 400; letter-spacing: -.03em; line-height: 1.05;
+      }
+
+      .brand-mark {
+        width: 56px; height: 56px; border-radius: 14px; background: #242428;
+        display: flex; align-items: flex-end; justify-content: center; gap: 4px; padding: 12px 11px;
+        box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 18px 50px rgba(98,90,246,.35);
+      }
+      .brand-mark span { width: 6px; background: #fff; border-radius: 3px; display: block; }
+      .brand-mark span:nth-child(1) { height: 12px; }
+      .brand-mark span:nth-child(2) { height: 24px; }
+      .brand-mark span:nth-child(3) { height: 16px; }
+      .brand-mark.light { background: rgba(255,255,255,.1); }
+      .wordmark { color: #f1f1f2; font-size: 34px; font-weight: 700; letter-spacing: -.03em; }
+
+      .shell { position: absolute; left: 100px; top: 80px; width: 1720px; }
+      .banner {
+        display: inline-flex; align-items: center; gap: 10px;
+        background: #17171b; color: #f1f1f2; border-radius: 10px;
+        padding: 10px 16px; font-size: 14px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+        margin-bottom: 14px; box-shadow: 0 12px 40px rgba(20,24,35,.18);
+      }
+      .banner i { width: 8px; height: 8px; border-radius: 50%; background: #8b83ff; display: block; }
+
+      .panel {
+        background: #fff; border: 1px solid #e8e9ed; border-radius: 18px;
+        box-shadow: 0 22px 60px rgba(20,24,35,.12); padding: 20px 24px;
+      }
+      .panel-label {
+        font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+        color: #5f636b; margin-bottom: 12px;
+      }
+
+      .capture {
+        display: flex; align-items: center; gap: 14px; height: 64px; border: 2px solid #4f47d4;
+        border-radius: 14px; background: #fff; padding: 0 18px;
+        box-shadow: 0 0 0 6px rgba(98,90,246,.14);
+      }
+      .capture kbd {
+        font-family: "Inter Local", ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 700;
+        color: #3b34b0; background: rgba(98,90,246,.14); border-radius: 8px; padding: 7px 10px;
+      }
+      .capture-text { font-size: 24px; font-weight: 700; color: #202124; white-space: nowrap; }
+      .capture-text .caret {
+        display: inline-block; width: 3px; height: 1.15em; background: #625af6; margin-left: 2px; vertical-align: -3px;
+      }
+      .task-row {
+        margin-top: 14px; display: flex; align-items: center; gap: 14px; min-height: 68px;
+        padding: 14px 18px; border: 1px solid #e8e9ed; border-radius: 14px; background: #fff;
+        box-shadow: 0 16px 40px rgba(20,24,35,.08);
+      }
+      .check { width: 28px; height: 28px; border: 2px solid #4f47d4; border-radius: 8px; background: #fff; }
+      .task-row strong { display: block; font-size: 18px; font-weight: 700; }
+      .task-row span { display: block; margin-top: 4px; font-size: 13px; font-weight: 600; color: #5f636b; }
+      .dot { width: 10px; height: 10px; border-radius: 50%; background: #8b5cf6; margin-left: auto; }
+
+      .chip-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
+      .chip {
+        position: relative; height: 52px; padding: 0 20px; border-radius: 999px; border: 1px solid #e8e9ed; background: #fff;
+        display: inline-flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700;
+        box-shadow: 0 10px 28px rgba(20,24,35,.08);
+      }
+      .chip i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+      .chip.life i { background: #625af6; }
+      .chip.school i { background: #2563eb; }
+      .chip.work i { background: #4338ca; }
+      .chip.abroad i { background: #0d9488; }
+      .chip.treasury i { background: #47a47b; }
+      .chip.mastery i { background: #7c3aed; }
+
+      .feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 8px; }
+      .feat {
+        background: #fff; border: 1px solid #e8e9ed; border-radius: 16px; padding: 20px 18px; min-height: 150px;
+        box-shadow: 0 16px 40px rgba(20,24,35,.1);
+      }
+      .feat .tag {
+        display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+        color: #3b34b0; background: rgba(98,90,246,.12); border-radius: 8px; padding: 5px 9px; margin-bottom: 14px;
+      }
+      .feat h3 { font-size: 24px; font-weight: 700; margin-bottom: 8px; letter-spacing: -.02em; }
+      .feat p { font-size: 15px; font-weight: 600; color: #5f636b; line-height: 1.35; }
+      .feat.wide { grid-column: span 2; }
+      .feat .metric { font-size: 42px; font-weight: 700; letter-spacing: -.04em; color: #17171b; }
+      .feat .metric span { display: block; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #5f636b; margin-top: 4px; }
+
+      .class-grid { display: grid; grid-template-columns: 1.2fr 1.2fr .8fr; gap: 14px; }
+      .class-card, .gpa {
+        background: #fff; border: 1px solid #e8e9ed; border-radius: 16px; padding: 20px; min-height: 140px;
+        box-shadow: 0 16px 40px rgba(20,24,35,.1);
+      }
+      .class-card .code { font-size: 14px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 10px; }
+      .class-card h3 { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
+      .class-card p { font-size: 14px; font-weight: 600; color: #5f636b; }
+      .gpa { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+      .gpa strong { font-size: 56px; font-weight: 700; letter-spacing: -.05em; }
+      .gpa span { font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #5f636b; }
+      .due-row {
+        margin-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+        background: #fff; border: 1px solid #e8e9ed; border-radius: 14px; padding: 16px 20px;
+        box-shadow: 0 12px 32px rgba(20,24,35,.08);
+      }
+      .due-row strong { display: block; font-size: 18px; font-weight: 700; }
+      .due-row span { display: block; margin-top: 4px; font-size: 13px; font-weight: 600; color: #5f636b; }
+      .due-hot {
+        background: #8a5a12; color: #fff; font-size: 13px; font-weight: 700; letter-spacing: .06em;
+        text-transform: uppercase; border-radius: 999px; padding: 10px 14px; white-space: nowrap;
+      }
+
+      .rail-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 10px; }
+      .rail {
+        background: #fff; border: 1px solid #e8e9ed; border-radius: 16px; padding: 22px 20px; min-height: 200px;
+        box-shadow: 0 16px 40px rgba(20,24,35,.1);
+      }
+      .rail .bar { width: 40px; height: 7px; border-radius: 99px; margin-bottom: 18px; }
+      .rail h3 { font-size: 28px; font-weight: 700; margin-bottom: 10px; text-transform: uppercase; letter-spacing: -.02em; }
+      .rail p { font-size: 16px; font-weight: 600; color: #5f636b; line-height: 1.35; }
+      .rail ul { margin-top: 14px; list-style: none; }
+      .rail li {
+        font-size: 15px; font-weight: 700; color: #202124; padding: 8px 0; border-top: 1px solid #eceef2;
+      }
+
+      .focus-header {
+        position: absolute; left: 100px; top: 70px; display: flex; align-items: center; gap: 14px;
+      }
+      .focus-label {
+        margin-left: 12px; display: inline-flex; align-items: center; gap: 8px;
+        background: rgba(255,255,255,.08); color: #d0d0d8; border-radius: 999px;
+        padding: 8px 14px; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+      }
+      .focus-label i { width: 8px; height: 8px; border-radius: 50%; background: #47a47b; }
+      .focus-main { position: absolute; left: 100px; top: 220px; width: 1200px; color: #f1f1f2; }
+      .focus-project { font-size: 16px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #a59cff; margin-bottom: 14px; }
+      .focus-main h1 { font-size: 54px; font-weight: 700; letter-spacing: -.03em; margin-bottom: 18px; }
+      .focus-timer { font-size: 64px; font-weight: 700; letter-spacing: -.05em; color: #f1f1f2; font-variant-numeric: tabular-nums; }
+      .focus-sub { margin-top: 14px; font-size: 18px; font-weight: 700; color: #a59cff; text-transform: uppercase; letter-spacing: .08em; }
+
+      .outro-stack {
+        position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 14px; text-align: center;
+      }
+      .outro-stack .brand-mark { width: 72px; height: 72px; border-radius: 18px; padding: 15px 13px; gap: 5px; }
+      .outro-stack .brand-mark span { width: 8px; }
+      .outro-stack .brand-mark span:nth-child(1) { height: 16px; }
+      .outro-stack .brand-mark span:nth-child(2) { height: 30px; }
+      .outro-stack .brand-mark span:nth-child(3) { height: 20px; }
+      .outro-name { color: #fff; font-size: 72px; font-weight: 700; letter-spacing: -.04em; text-transform: uppercase; }
+      .outro-line {
+        font-family: "EB Garamond Local", "Times New Roman", serif; font-size: 34px; font-weight: 400; color: #d0d0d8;
+      }
+      .cta-pill {
+        margin-top: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 12px;
+        min-width: 420px; height: 72px; padding: 0 36px; border-radius: 16px;
+        background: #8b83ff; color: #0a0a0e; font-size: 28px; font-weight: 700; letter-spacing: -.02em;
+        text-transform: uppercase; box-shadow: 0 0 0 8px rgba(139,131,255,.22), 0 24px 60px rgba(98,90,246,.45);
+      }
+      .cta-pill .arrow { font-size: 26px; line-height: 1; }
+      .cta-sub {
+        margin-top: 4px; font-size: 18px; font-weight: 700; letter-spacing: .14em;
+        text-transform: uppercase; color: #a59cff;
+      }
+      .blackout { position: absolute; inset: 0; background: #000; opacity: 0; z-index: 40; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="28" data-width="1920" data-height="1080">
+      <div class="cut-flash" id="cut-flash"></div>
+      <div class="grid-bg" id="grid-bg"></div>
+
+      <!-- 1 Hook -->
+      <section id="scene-hook" class="clip" data-start="0" data-duration="1.9" data-track-index="1">
+        <div class="scene-inner" id="s1">
+          <div class="void"></div>
+          <div class="glow" id="s1-glow"></div>
+          <div style="position:absolute;left:120px;top:340px;width:1680px">
+            <h1 class="stinger xl" id="s1-line">
+              <span class="w">Your</span> <span class="w">life</span> <span class="w">was</span><br/>
+              <span class="w">split</span> <span class="w">across</span> <span class="w">apps.</span>
+            </h1>
+          </div>
+          <div class="flash" id="s1-flash"></div>
+        </div>
+      </section>
+
+      <!-- 2 Brand -->
+      <section id="scene-name" class="clip" data-start="1.7" data-duration="2.0" data-track-index="2">
+        <div class="scene-inner" id="s2">
+          <div class="void"></div>
+          <div class="glow" id="s2-glow"></div>
+          <div style="position:absolute;left:120px;top:300px;width:1600px">
+            <div style="display:flex;align-items:center;gap:16px;margin-bottom:28px" id="s2-brand">
+              <div class="brand-mark" id="s2-mark"><span></span><span></span><span></span></div>
+              <div class="stinger md" id="s2-word">LifeOS</div>
+            </div>
+            <h1 class="serif" id="s2-title" style="font-size:80px;color:#f1f1f2">Your life, in focus.</h1>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3 Life / Now -->
+      <section id="scene-life" class="clip" data-start="3.5" data-duration="2.8" data-track-index="3">
+        <div class="scene-inner" id="s3">
+          <div class="paper"></div>
+          <div class="shell">
+            <div class="banner" id="s3-banner"><i></i>Life · Now</div>
+            <h2 class="stinger lg dark" id="s3-claim" style="margin-bottom:18px">Capture. Plan. Move.</h2>
+            <div class="panel" id="s3-panel">
+              <p class="panel-label">Now · command bar</p>
+              <div class="capture">
+                <kbd>/</kbd>
+                <div class="capture-text"><span id="s3-chars"></span><span class="caret" id="s3-caret"></span></div>
+              </div>
+              <div class="task-row" id="s3-task">
+                <div class="check"></div>
+                <div>
+                  <strong>Finish reading chapter 3</strong>
+                  <span>School · Due today · Medium</span>
+                </div>
+                <div class="dot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4 Environments -->
+      <section id="scene-envs" class="clip" data-start="6.1" data-duration="2.2" data-track-index="4">
+        <div class="scene-inner" id="s4">
+          <div class="paper"></div>
+          <div class="shell">
+            <div class="banner" id="s4-banner"><i></i>Environments</div>
+            <h2 class="stinger lg dark" id="s4-claim">Six environments.<br/>One workspace.</h2>
+            <div class="chip-row">
+              <div class="chip life" id="chip-life"><i></i>Life</div>
+              <div class="chip school" id="chip-school"><i></i>School</div>
+              <div class="chip work" id="chip-work"><i></i>Work</div>
+              <div class="chip abroad" id="chip-abroad"><i></i>Study Abroad</div>
+              <div class="chip treasury" id="chip-treasury"><i></i>Treasury</div>
+              <div class="chip mastery" id="chip-mastery"><i></i>Mastery</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5 School -->
+      <section id="scene-school" class="clip" data-start="8.1" data-duration="2.6" data-track-index="5">
+        <div class="scene-inner" id="s5">
+          <div class="paper"></div>
+          <div class="shell">
+            <div class="banner" id="s5-banner"><i></i>SchoolOS</div>
+            <h2 class="stinger lg dark" id="s5-claim" style="margin-bottom:16px">Classes, coursework, grades.</h2>
+            <div class="class-grid">
+              <div class="class-card" id="s5-c1">
+                <div class="code" style="color:#3b34b0">CS 240</div>
+                <h3>Algorithms</h3>
+                <p>Assignments · exams · readings</p>
+              </div>
+              <div class="class-card" id="s5-c2">
+                <div class="code" style="color:#8a5a12">HIST 110</div>
+                <h3>World History</h3>
+                <p>Gradebook · what-if grades</p>
+              </div>
+              <div class="gpa" id="s5-gpa"><strong>3.7</strong><span>Term GPA</span></div>
+            </div>
+            <div class="due-row" id="s5-due">
+              <div>
+                <strong>Essay draft due Friday</strong>
+                <span>HIST 110 · 20% of grade</span>
+              </div>
+              <div class="due-hot">Due in 2 days</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 Work -->
+      <section id="scene-work" class="clip" data-start="10.5" data-duration="2.4" data-track-index="6">
+        <div class="scene-inner" id="s6">
+          <div class="paper"></div>
+          <div class="shell">
+            <div class="banner" id="s6-banner"><i></i>Work</div>
+            <h2 class="stinger lg dark" id="s6-claim" style="margin-bottom:16px">Projects, meetings, time.</h2>
+            <div class="feat-grid">
+              <div class="feat" id="s6-a">
+                <div class="tag">Project</div>
+                <h3>Client portal</h3>
+                <p>Deliverables, status, linked tasks.</p>
+              </div>
+              <div class="feat" id="s6-b">
+                <div class="tag">Meeting</div>
+                <h3>Standup · 9:30</h3>
+                <p>Work meetings stay with Work.</p>
+              </div>
+              <div class="feat" id="s6-c">
+                <div class="tag">Timesheet</div>
+                <div class="metric">4.5h<span>Logged today</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7 Study Abroad -->
+      <section id="scene-abroad" class="clip" data-start="12.7" data-duration="2.4" data-track-index="7">
+        <div class="scene-inner" id="s7">
+          <div class="paper"></div>
+          <div class="shell">
+            <div class="banner" id="s7-banner"><i></i>Study Abroad</div>
+            <h2 class="stinger lg dark" id="s7-claim" style="margin-bottom:16px">Programs, apps, funding.</h2>
+            <div class="feat-grid">
+              <div class="feat" id="s7-a">
+                <div class="tag">Program</div>
+                <h3>Tokyo · Spring</h3>
+                <p>University + program tracked.</p>
+              </div>
+              <div class="feat" id="s7-b">
+                <div class="tag">Application</div>
+                <h3>Docs ready</h3>
+                <p>Stages, readiness, reusable docs.</p>
+              </div>
+              <div class="feat" id="s7-c">
+                <div class="tag">Funding</div>
+                <h3>Deadline May 1</h3>
+                <p>Funding items with due dates.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8 Treasury -->
+      <section id="scene-treasury" class="clip" data-start="14.9" data-duration="2.4" data-track-index="8">
+        <div class="scene-inner" id="s8">
+          <div class="paper"></div>
+          <div class="shell">
+            <div class="banner" id="s8-banner"><i></i>Treasury</div>
+            <h2 class="stinger lg dark" id="s8-claim" style="margin-bottom:16px">Budgets by category.</h2>
+            <div class="feat-grid">
+              <div class="feat" id="s8-a">
+                <div class="tag">Rent</div>
+                <div class="metric">$1,200<span>Monthly target</span></div>
+              </div>
+              <div class="feat" id="s8-b">
+                <div class="tag">Food</div>
+                <div class="metric">$420<span>This month</span></div>
+              </div>
+              <div class="feat" id="s8-c">
+                <div class="tag">Mode</div>
+                <h3>Employed</h3>
+                <p>Or between-contracts targets.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 9 Mastery -->
+      <section id="scene-mastery" class="clip" data-start="17.1" data-duration="2.4" data-track-index="9">
+        <div class="scene-inner" id="s9">
+          <div class="paper"></div>
+          <div class="shell">
+            <div class="banner" id="s9-banner"><i></i>Mastery · MasterOS</div>
+            <h2 class="stinger lg dark" id="s9-claim" style="margin-bottom:16px">Teach. Track. Progress.</h2>
+            <div class="feat-grid">
+              <div class="feat" id="s9-a">
+                <div class="tag">Student</div>
+                <h3>Ava Chen</h3>
+                <p>Student roster + progress.</p>
+              </div>
+              <div class="feat" id="s9-b">
+                <div class="tag">Lesson</div>
+                <h3>Lesson 4 · Arrays</h3>
+                <p>Courses and lessons ready.</p>
+              </div>
+              <div class="feat" id="s9-c">
+                <div class="tag">Teach mode</div>
+                <h3>Start session</h3>
+                <p>Teach mode for the lesson.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 10 Focus + rails -->
+      <section id="scene-rails" class="clip" data-start="19.3" data-duration="3.2" data-track-index="10">
+        <div class="scene-inner" id="s10">
+          <div class="paper"></div>
+          <div class="shell">
+            <div class="banner" id="s10-banner"><i></i>Focus · Calendar · Library</div>
+            <h2 class="stinger lg dark" id="s10-claim" style="margin-bottom:14px">Plus the rails that run everything.</h2>
+            <div class="rail-row">
+              <div class="rail" id="s10-a">
+                <div class="bar" style="background:#625af6"></div>
+                <h3>Focus</h3>
+                <p>Timer, checklist, notes.</p>
+                <ul>
+                  <li>45:00 session</li>
+                  <li>Stay with the task</li>
+                </ul>
+              </div>
+              <div class="rail" id="s10-b">
+                <div class="bar" style="background:#2563eb"></div>
+                <h3>Calendar</h3>
+                <p>Events + due markers.</p>
+                <ul>
+                  <li>Month · day · upcoming</li>
+                  <li>Google / Outlook / iCloud</li>
+                </ul>
+              </div>
+              <div class="rail" id="s10-c">
+                <div class="bar" style="background:#0d9488"></div>
+                <h3>Library</h3>
+                <p>Notes, Brain, resources.</p>
+                <ul>
+                  <li>/tm → Brain inbox</li>
+                  <li>Notes + notebooks</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 11 CTA -->
+      <section id="scene-outro" class="clip" data-start="22.3" data-duration="5.7" data-track-index="11">
+        <div class="scene-inner" id="s11">
+          <div class="void"></div>
+          <div class="glow" id="s11-glow"></div>
+          <div class="outro-stack">
+            <div class="brand-mark" id="s11-mark"><span></span><span></span><span></span></div>
+            <div class="outro-name" id="s11-name">LifeOS</div>
+            <div class="outro-line" id="s11-line">One OS. Every part of life.</div>
+            <div class="cta-pill" id="s11-cta">Get the app <span class="arrow">→</span></div>
+            <div class="cta-sub" id="s11-bio">Link in bio</div>
+          </div>
+          <div class="blackout" id="s11-black"></div>
+        </div>
+      </section>
+
+      <!-- Audio -->
+      <audio id="music" src="assets/music/bed-24s.mp3" data-start="0" data-duration="28" data-track-index="20" data-volume="0.36"></audio>
+      <audio id="sfx-slam1" src="assets/sfx/impact/impactSoft_heavy_000.ogg" data-start="0.15" data-duration="0.5" data-track-index="21" data-volume="0.45"></audio>
+      <audio id="sfx-flash" src="assets/sfx/impact/impactPunch_medium_001.ogg" data-start="1.55" data-duration="0.25" data-track-index="21" data-volume="0.35"></audio>
+      <audio id="sfx-name" src="assets/sfx/impact/impactSoft_medium_001.ogg" data-start="1.9" data-duration="0.2" data-track-index="21" data-volume="0.4"></audio>
+      <audio id="sfx-title" src="assets/sfx/interface/bong_001.ogg" data-start="2.4" data-duration="0.15" data-track-index="21" data-volume="0.35"></audio>
+      <audio id="sfx-key1" src="assets/sfx/keyboard/keypress-001.wav" data-start="4.0" data-duration="0.1" data-track-index="22" data-volume="0.28"></audio>
+      <audio id="sfx-key2" src="assets/sfx/keyboard/keypress-009.wav" data-start="4.4" data-duration="0.1" data-track-index="22" data-volume="0.28"></audio>
+      <audio id="sfx-enter" src="assets/sfx/interface/click_001.ogg" data-start="5.35" data-duration="0.08" data-track-index="22" data-volume="0.45"></audio>
+      <audio id="sfx-task" src="assets/sfx/impact/impactSoft_heavy_002.ogg" data-start="5.5" data-duration="0.45" data-track-index="22" data-volume="0.42"></audio>
+      <audio id="sfx-c1" src="assets/sfx/interface/drop_001.ogg" data-start="6.5" data-duration="0.1" data-track-index="23" data-volume="0.32"></audio>
+      <audio id="sfx-c2" src="assets/sfx/interface/drop_001.ogg" data-start="6.7" data-duration="0.1" data-track-index="23" data-volume="0.3"></audio>
+      <audio id="sfx-c3" src="assets/sfx/interface/drop_001.ogg" data-start="6.9" data-duration="0.1" data-track-index="23" data-volume="0.3"></audio>
+      <audio id="sfx-c4" src="assets/sfx/interface/drop_001.ogg" data-start="7.1" data-duration="0.1" data-track-index="23" data-volume="0.3"></audio>
+      <audio id="sfx-c5" src="assets/sfx/interface/drop_001.ogg" data-start="7.3" data-duration="0.1" data-track-index="23" data-volume="0.3"></audio>
+      <audio id="sfx-c6" src="assets/sfx/impact/impactSoft_medium_004.ogg" data-start="7.5" data-duration="0.18" data-track-index="23" data-volume="0.38"></audio>
+      <audio id="sfx-school" src="assets/sfx/impact/impactSoft_heavy_000.ogg" data-start="8.3" data-duration="0.45" data-track-index="24" data-volume="0.38"></audio>
+      <audio id="sfx-work" src="assets/sfx/impact/impactPunch_medium_001.ogg" data-start="10.7" data-duration="0.25" data-track-index="24" data-volume="0.34"></audio>
+      <audio id="sfx-abroad" src="assets/sfx/impact/impactPunch_medium_001.ogg" data-start="12.9" data-duration="0.25" data-track-index="25" data-volume="0.34"></audio>
+      <audio id="sfx-treasury" src="assets/sfx/impact/impactPunch_medium_001.ogg" data-start="15.1" data-duration="0.25" data-track-index="25" data-volume="0.34"></audio>
+      <audio id="sfx-mastery" src="assets/sfx/impact/impactPunch_medium_001.ogg" data-start="17.3" data-duration="0.25" data-track-index="25" data-volume="0.34"></audio>
+      <audio id="sfx-rails" src="assets/sfx/interface/switch_002.ogg" data-start="19.5" data-duration="0.25" data-track-index="26" data-volume="0.4"></audio>
+      <audio id="sfx-logo" src="assets/sfx/impact/impactSoft_heavy_000.ogg" data-start="22.6" data-duration="0.5" data-track-index="26" data-volume="0.48"></audio>
+      <audio id="sfx-cta" src="assets/sfx/impact/impactPunch_medium_001.ogg" data-start="23.5" data-duration="0.25" data-track-index="26" data-volume="0.42"></audio>
+    </div>
+
+    <script>
+      const CAPTURE = "/t Finish reading chapter 3";
+      const charsEl = document.getElementById("s3-chars");
+      for (let i = 0; i < CAPTURE.length; i++) {
+        const span = document.createElement("span");
+        span.textContent = CAPTURE[i];
+        span.style.opacity = "0";
+        span.className = "ch";
+        charsEl.appendChild(span);
+      }
+      const charSpans = charsEl.querySelectorAll(".ch");
+
+      gsap.set("#cut-flash", { opacity: 0 });
+      gsap.set("#grid-bg", { opacity: 0, y: 0 });
+
+      const tl = gsap.timeline({ paused: true });
+
+      const flashCut = (t, strength = 0.45) => {
+        tl.fromTo("#cut-flash", { opacity: 0 }, { opacity: strength, duration: 0.03, ease: "power2.in", immediateRender: false }, t);
+        tl.to("#cut-flash", { opacity: 0, duration: 0.12, ease: "power2.out" }, t + 0.03);
+      };
+      const enterScene = (id, t, scaleFrom = 1.08) => {
+        gsap.set(id, { opacity: 0 });
+        tl.fromTo(id, { opacity: 0, scale: scaleFrom }, { opacity: 1, scale: 1, duration: 0.22, ease: "power4.out" }, t);
+      };
+      const exitScene = (id, t) => {
+        tl.to(id, { opacity: 0, scale: 1.05, duration: 0.14, ease: "power3.in" }, t);
+        flashCut(t, 0.4);
+      };
+      const slam = (sel, t, y = 28) => {
+        gsap.set(sel, { opacity: 0, y, scale: 1.12, rotation: -1.5 });
+        tl.fromTo(sel, { opacity: 0, y, scale: 1.12, rotation: -1.5 }, { opacity: 1, y: 0, scale: 1, rotation: 0, duration: 0.28, ease: "back.out(1.6)" }, t);
+      };
+      const popCards = (sels, t0, step = 0.12) => {
+        sels.forEach((sel, i) => {
+          gsap.set(sel, { opacity: 0, y: 28, scale: 1.12 });
+          tl.fromTo(sel, { opacity: 0, y: 28, scale: 1.12 }, { opacity: 1, y: 0, scale: 1, duration: 0.24, ease: "back.out(1.7)" }, t0 + i * step);
+        });
+      };
+
+      tl.fromTo("#grid-bg", { opacity: 0, y: 30 }, { opacity: 0.5, y: 0, duration: 0.5, ease: "power2.out" }, 0);
+      tl.to("#grid-bg", { opacity: 0, duration: 0.2 }, 3.3);
+      tl.fromTo("#grid-bg", { opacity: 0 }, { opacity: 0.35, duration: 0.3, immediateRender: false }, 22.2);
+
+      // 1 Hook
+      enterScene("#s1", 0, 1.12);
+      document.querySelectorAll("#s1-line .w").forEach((w, i) => {
+        gsap.set(w, { display: "inline-block", opacity: 0, y: 30, filter: "blur(5px)" });
+        tl.fromTo(w, { opacity: 0, y: 30, filter: "blur(5px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.22, ease: "power4.out" }, 0.1 + i * 0.08);
+      });
+      tl.fromTo("#s1-flash", { opacity: 0 }, { opacity: 0.85, duration: 0.05, yoyo: true, repeat: 1, ease: "none" }, 1.5);
+      exitScene("#s1", 1.65);
+
+      // 2 Brand
+      enterScene("#s2", 1.7, 1.1);
+      gsap.set(["#s2-brand", "#s2-title"], { opacity: 0, y: 24, scale: 1.1 });
+      tl.fromTo("#s2-brand", { opacity: 0, y: 20, scale: 1.12 }, { opacity: 1, y: 0, scale: 1, duration: 0.32, ease: "power4.out" }, 1.85);
+      tl.fromTo("#s2-mark", { scale: 0.8, rotation: -6 }, { scale: 1.08, rotation: 0, duration: 0.3, ease: "back.out(2)" }, 1.9);
+      tl.fromTo("#s2-title", { opacity: 0, y: 28, scale: 1.08 }, { opacity: 1, y: 0, scale: 1, duration: 0.36, ease: "power4.out" }, 2.25);
+      exitScene("#s2", 3.4);
+
+      // 3 Life / Now
+      enterScene("#s3", 3.5, 1.06);
+      slam("#s3-banner", 3.55, 16);
+      slam("#s3-claim", 3.65, 24);
+      gsap.set("#s3-panel", { opacity: 0, y: 24, scale: 1.05 });
+      tl.fromTo("#s3-panel", { opacity: 0, y: 24, scale: 1.05 }, { opacity: 1, y: 0, scale: 1, duration: 0.28, ease: "power3.out" }, 3.85);
+      const typeStart = 4.0;
+      charSpans.forEach((span, i) => {
+        tl.fromTo(span, { opacity: 0 }, { opacity: 1, duration: 0.025 }, typeStart + i * 0.045);
+      });
+      tl.fromTo("#s3-caret", { opacity: 1 }, { opacity: 0.15, duration: 0.2, yoyo: true, repeat: 5, ease: "sine.inOut" }, 3.95);
+      gsap.set("#s3-task", { opacity: 0, y: 30, scale: 1.12 });
+      tl.fromTo("#s3-task", { opacity: 0, y: 30, scale: 1.12 }, { opacity: 1, y: 0, scale: 1, duration: 0.26, ease: "back.out(2)" }, 5.45);
+      exitScene("#s3", 6.05);
+
+      // 4 Envs
+      enterScene("#s4", 6.1, 1.06);
+      slam("#s4-banner", 6.15, 14);
+      slam("#s4-claim", 6.25, 20);
+      ["#chip-life", "#chip-school", "#chip-work", "#chip-abroad", "#chip-treasury", "#chip-mastery"].forEach((sel, i) => {
+        gsap.set(sel, { opacity: 0, y: 24, scale: 1.2, rotation: -4 + i });
+        tl.fromTo(sel, { opacity: 0, y: 24, scale: 1.2, rotation: -4 + i }, { opacity: 1, y: 0, scale: 1, rotation: 0, duration: 0.2, ease: "back.out(1.8)" }, 6.45 + i * 0.16);
+      });
+      exitScene("#s4", 8.05);
+
+      // 5 School
+      enterScene("#s5", 8.1, 1.06);
+      slam("#s5-banner", 8.15, 14);
+      slam("#s5-claim", 8.25, 20);
+      popCards(["#s5-c1", "#s5-c2", "#s5-gpa", "#s5-due"], 8.5, 0.12);
+      exitScene("#s5", 10.45);
+
+      // 6 Work
+      enterScene("#s6", 10.5, 1.06);
+      slam("#s6-banner", 10.55, 14);
+      slam("#s6-claim", 10.65, 20);
+      popCards(["#s6-a", "#s6-b", "#s6-c"], 10.9, 0.12);
+      exitScene("#s6", 12.65);
+
+      // 7 Abroad
+      enterScene("#s7", 12.7, 1.06);
+      slam("#s7-banner", 12.75, 14);
+      slam("#s7-claim", 12.85, 20);
+      popCards(["#s7-a", "#s7-b", "#s7-c"], 13.1, 0.12);
+      exitScene("#s7", 14.85);
+
+      // 8 Treasury
+      enterScene("#s8", 14.9, 1.06);
+      slam("#s8-banner", 14.95, 14);
+      slam("#s8-claim", 15.05, 20);
+      popCards(["#s8-a", "#s8-b", "#s8-c"], 15.3, 0.12);
+      exitScene("#s8", 17.05);
+
+      // 9 Mastery
+      enterScene("#s9", 17.1, 1.06);
+      slam("#s9-banner", 17.15, 14);
+      slam("#s9-claim", 17.25, 20);
+      popCards(["#s9-a", "#s9-b", "#s9-c"], 17.5, 0.12);
+      exitScene("#s9", 19.25);
+
+      // 10 Rails
+      enterScene("#s10", 19.3, 1.06);
+      slam("#s10-banner", 19.35, 14);
+      slam("#s10-claim", 19.45, 20);
+      popCards(["#s10-a", "#s10-b", "#s10-c"], 19.7, 0.14);
+      exitScene("#s10", 22.2);
+
+      // 11 CTA
+      enterScene("#s11", 22.3, 1.1);
+      gsap.set(["#s11-mark", "#s11-name", "#s11-line", "#s11-cta", "#s11-bio"], { opacity: 0, y: 24, scale: 1.12 });
+      tl.fromTo("#s11-mark", { opacity: 0, y: 20, scale: 1.15 }, { opacity: 1, y: 0, scale: 1, duration: 0.32, ease: "power4.out" }, 22.45);
+      tl.fromTo("#s11-name", { opacity: 0, y: 26, scale: 1.18 }, { opacity: 1, y: 0, scale: 1, duration: 0.34, ease: "back.out(1.4)" }, 22.65);
+      flashCut(22.55, 0.6);
+      tl.fromTo("#s11-line", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.28, ease: "power3.out" }, 22.95);
+      tl.fromTo("#s11-cta", { opacity: 0, y: 30, scale: 1.2 }, { opacity: 1, y: 0, scale: 1, duration: 0.32, ease: "back.out(2)" }, 23.25);
+      tl.fromTo("#s11-cta", { boxShadow: "0 0 0 0 rgba(139,131,255,0), 0 24px 60px rgba(98,90,246,.45)" }, { boxShadow: "0 0 0 14px rgba(139,131,255,.28), 0 24px 60px rgba(98,90,246,.55)", duration: 0.35, yoyo: true, repeat: 5, ease: "sine.inOut", immediateRender: false }, 23.55);
+      tl.fromTo("#s11-bio", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.24, ease: "power3.out" }, 23.55);
+      tl.to("#s11-black", { opacity: 1, duration: 0.16, ease: "power2.in" }, 27.7);
+
+      const AUDIO_DATA = window.AUDIO_DATA;
+      if (AUDIO_DATA && AUDIO_DATA.frames) {
+        const targets = [
+          document.getElementById("s1-glow"),
+          document.getElementById("s2-glow"),
+          document.getElementById("s11-glow"),
+          document.getElementById("s11-mark"),
+        ];
+        for (let f = 0; f < Math.min(AUDIO_DATA.totalFrames, 840); f += 2) {
+          const frame = AUDIO_DATA.frames[f];
+          const t = f / AUDIO_DATA.fps;
+          tl.call(
+            ((bands) => () => {
+              const bass = bands[0] || 0;
+              const mid = bands[2] || 0;
+              const o = 0.45 + bass * 0.55;
+              if (targets[0]) targets[0].style.opacity = String(o);
+              if (targets[1]) targets[1].style.opacity = String(o);
+              if (targets[2]) targets[2].style.opacity = String(o);
+              if (targets[3]) {
+                targets[3].style.boxShadow =
+                  "0 0 0 1px rgba(255,255,255,0.08), 0 22px 60px rgba(98,90,246," +
+                  (0.2 + mid * 0.35) + ")";
+              }
+            })(frame.bands),
+            null,
+            t,
+          );
+        }
+      }
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
