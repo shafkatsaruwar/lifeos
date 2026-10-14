@@ -17,6 +17,7 @@ describe("settings environment defaults", () => {
     expect(merged.enableLifeOS).toBe(true);
     expect(merged.enableSchoolOS).toBe(true);
     expect(merged.enableWorkOS).toBe(false);
+    expect(merged.enableCareerOS).toBe(true);
     expect(merged.enableStudyAbroad).toBe(false);
     expect(merged.enableTreasuryOS).toBe(false);
     expect(merged.enableMasterOS).toBe(false);

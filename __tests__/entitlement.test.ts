@@ -91,6 +91,7 @@ describe("entitlement / promo", () => {
     const legacyOn = {
       enableLifeOS: true,
       enableSchoolOS: true,
+      enableCareerOS: true,
       enableWorkOS: true,
       enableStudyAbroad: true,
       enableTreasuryOS: true,
@@ -98,6 +99,7 @@ describe("entitlement / promo", () => {
     };
     expect(isHubVisibleInNav("Life", legacyOn, now)).toBe(true);
     expect(isHubVisibleInNav("School", legacyOn, now)).toBe(true);
+    expect(isHubVisibleInNav("Career", legacyOn, now)).toBe(true);
     expect(isHubVisibleInNav("Work", legacyOn, now)).toBe(false);
     expect(isHubVisibleInNav("Study Abroad", legacyOn, now)).toBe(false);
     expect(isHubVisibleInNav("Treasury", legacyOn, now)).toBe(false);
@@ -106,5 +108,6 @@ describe("entitlement / promo", () => {
     const entitled = { ...legacyOn, entitlement: grantLifetimeAccess("promo", now) };
     expect(isHubVisibleInNav("Work", entitled, now)).toBe(true);
     expect(isHubVisibleInNav("Work", { ...entitled, enableWorkOS: false }, now)).toBe(false);
+    expect(isHubVisibleInNav("Career", { ...legacyOn, enableCareerOS: false }, now)).toBe(false);
   });
 });

@@ -127,6 +127,7 @@ export const SettingsSchema = z.object({
   enableLifeOS: z.boolean().optional(),
   enableSchoolOS: z.boolean().optional(),
   enableWorkOS: z.boolean().optional(),
+  enableCareerOS: z.boolean().optional(),
   enableStudyAbroad: z.boolean().optional(),
   enableTreasuryOS: z.boolean().optional(),
   enableMasterOS: z.boolean().optional(),

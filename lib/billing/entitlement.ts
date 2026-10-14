@@ -185,7 +185,7 @@ export function canAccessPaidHubs(
 /**
  * Whether a hub should appear in the sidebar / tab bar.
  * Matches Settings → Hubs toggle display: Pro hubs need entitlement AND enable !== false.
- * Free hubs (Life/School) only need enable !== false.
+ * Free hubs (Life/School/Career) only need enable !== false.
  */
 export function isHubVisibleInNav(
   name: string,
@@ -194,6 +194,7 @@ export function isHubVisibleInNav(
     enableLifeOS?: boolean;
     enableSchoolOS?: boolean;
     enableWorkOS?: boolean;
+    enableCareerOS?: boolean;
     enableStudyAbroad?: boolean;
     enableTreasuryOS?: boolean;
     enableMasterOS?: boolean;
@@ -203,6 +204,7 @@ export function isHubVisibleInNav(
   const unlocked = canAccessPaidHubs(options.entitlement, now);
   if (name === "Life" || name === "Dashboard") return options.enableLifeOS !== false;
   if (name === "School") return options.enableSchoolOS !== false;
+  if (name === "Career") return options.enableCareerOS !== false;
   if (name === "Work") return unlocked && options.enableWorkOS !== false;
   if (name === "Study Abroad") return unlocked && options.enableStudyAbroad !== false;
   if (name === "Treasury") return unlocked && options.enableTreasuryOS !== false;

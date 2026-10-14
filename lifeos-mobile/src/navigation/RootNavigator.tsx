@@ -251,10 +251,9 @@ export function RootNavigator() {
     return () => clearTimeout(timer);
   }, [needsOnboarding]);
 
-  const showLife = settings.enableLifeOS !== false;
-  const showSchool = settings.enableSchoolOS !== false;
-  // Match Settings Work toggle: only show when entitled and enableWorkOS is on.
-  const showWork = canAccessPaidHubs(settings.entitlement) && settings.enableWorkOS !== false;
+  const showLife = isHubVisibleInNav("Life", settings);
+  const showSchool = isHubVisibleInNav("School", settings);
+  const showWork = isHubVisibleInNav("Work", settings);
 
   const base = dark ? DarkTheme : DefaultTheme;
   const navTheme = {
