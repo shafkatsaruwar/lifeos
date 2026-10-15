@@ -19,6 +19,7 @@ import { SignIn } from "./src/components/Auth";
 import { FocusLiveActivityBridge } from "./src/components/FocusLiveActivityBridge";
 import { NotificationsBridge } from "./src/components/NotificationsBridge";
 import { FocusEnforcerBridge } from "./src/components/FocusEnforcerBridge";
+import { ExecutiveBridge } from "./src/components/ExecutiveBridge";
 import { SynapseImportBridge } from "./src/components/SynapseImportBridge";
 import { IcsImportReviewHost } from "./src/components/IcsImportReviewHost";
 import { ShareInboxBridge } from "./src/components/ShareInboxBridge";
@@ -401,6 +402,7 @@ export default function App() {
           <FocusLiveActivityBridge />
           <NotificationsBridge />
           <FocusEnforcerBridge />
+          <ExecutiveBridge />
           <WidgetsBridge />
           <SiriTaskBridge />
           <RootNavigator />

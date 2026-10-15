@@ -44,6 +44,7 @@ import { WorkDashboardScreen } from "../screens/WorkDashboardScreen";
 import { FocusEnforcerSetupScreen } from "../screens/FocusEnforcerSetupScreen";
 import { FocusEnforcerSessionScreen } from "../screens/FocusEnforcerSessionScreen";
 import { FocusEnforcerHistoryScreen } from "../screens/FocusEnforcerHistoryScreen";
+import { ExecutiveHomeScreen } from "../screens/ExecutiveHomeScreen";
 import { MasterOSNavigator } from "./MasterOSNavigator";
 
 const Tab = createBottomTabNavigator();
@@ -87,6 +88,7 @@ function NowStackNavigator() {
       <NowStack.Screen name="FocusEnforcerSetup" component={FocusEnforcerSetupScreen} />
       <NowStack.Screen name="FocusEnforcerSession" component={FocusEnforcerSessionScreen} />
       <NowStack.Screen name="FocusEnforcerHistory" component={FocusEnforcerHistoryScreen} />
+      <NowStack.Screen name="ExecutiveHome" component={ExecutiveHomeScreen} />
       <NowStack.Screen
         name="MasterOS"
         component={MasterOSNavigator}
