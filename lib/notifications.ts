@@ -151,7 +151,8 @@ export function generateLifeOSNotifications(input: {
 
   // Soft guided follow-ups (client-side while app is open — not a closed-tab worker).
   for (const run of input.guidedRuns ?? []) {
-    if (run.status !== "waiting" && run.status !== "paused") continue;
+    const state = (run as { state?: string; status?: string }).state || run.status;
+    if (!["waiting", "paused", "pending", "scheduled"].includes(String(state))) continue;
     const routineName =
       (input.guidedRoutines ?? []).find((r) => r.id === run.routineId)?.name || "Guided routine";
     pushUnique(notifications, {
