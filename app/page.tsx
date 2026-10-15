@@ -1734,7 +1734,7 @@ export default function LifeOS() {
           setGuidedHub(emptyExecutiveHub());
         }
       } catch (error) {
-        console.error('Failed to load Guided Tasks from Firebase:', error);
+        console.error('Failed to load Executive Function hub from Firebase:', error);
         setGuidedHub(emptyExecutiveHub());
       } finally {
         setGuidedHubHydrated(true);
