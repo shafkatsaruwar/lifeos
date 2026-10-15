@@ -296,7 +296,26 @@ export function ExecutiveActiveStrip({
   onOpen?: () => void;
 }) {
   const run = activeRuns(hub)[0];
-  if (!run) return null;
+
+  if (!run) {
+    return (
+      <div className="guided-strip">
+        <div>
+          <span className="guided-mode-chip">
+            <ListChecks size={12} />
+            Executive Function
+          </span>
+          <strong>Commitments — retainers, salah, follow-through</strong>
+        </div>
+        <div className="guided-strip-actions">
+          <button type="button" className="primary" onClick={onOpen}>
+            Open
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const routine = findRoutine(hub, run.routineId);
   if (!routine) return null;
   const step = resolveCurrentStep(routine, run);
