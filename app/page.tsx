@@ -92,6 +92,10 @@ import {
   type CareerView,
 } from "@/app/components/CareerDashboard";
 import { normalizeCareerHub } from "@/lib/careerHelpers";
+import { ExecutiveActiveStrip, ExecutivePanel } from "@/app/components/ExecutivePanel";
+import { emptyExecutiveHub, normalizeExecutiveHub } from "@/lib/executive/hub";
+import { tickExecutiveSchedules } from "@/lib/executive/engine";
+import type { ExecutiveHub } from "@/lib/executive/types";
 import { TreasuryOSDashboard } from "@/app/components/TreasuryOSDashboard";
 import { MasterOSDashboard } from "@/app/components/MasterOSDashboard";
 import {
@@ -633,6 +637,9 @@ export default function LifeOS() {
   const [studyAbroadFocusEntity, setStudyAbroadFocusEntity] = useState<StudyAbroadFocusEntity | null>(null);
   const [careerHub, setCareerHub] = useState<CareerHub>(emptyCareerHub());
   const [careerHubHydrated, setCareerHubHydrated] = useState(false);
+  const [guidedHub, setGuidedHub] = useState<ExecutiveHub>(emptyExecutiveHub());
+  const [guidedHubHydrated, setGuidedHubHydrated] = useState(false);
+  const [guidedPanelOpen, setGuidedPanelOpen] = useState(false);
   const [careerView, setCareerView] = useState<CareerView>("overview");
   const [workFocusTaskId, setWorkFocusTaskId] = useState<string | null>(null);
   const [workView, setWorkView] = useState<WorkView>("dashboard");
@@ -732,8 +739,10 @@ export default function LifeOS() {
         enableSchoolOS: settingsState.enableSchoolOS,
         enableLifeOS: settingsState.enableLifeOS,
       },
+      guidedRuns: guidedHub.runs.map((r) => ({ id: r.id, status: r.state, state: r.state, routineId: r.routineId, currentStepId: r.currentStepId, followUpOfferedAt: r.followUpOfferedAt })),
+      guidedRoutines: guidedHub.routines.map((r) => ({ id: r.id, name: r.name })),
     });
-  }, [workHub, workHubHydrated, tasks, tasksHydrated, projectItems, projectsHydrated, classes, calendarEvents, settingsState.calendarAlerts, settingsState.enableWorkOS, settingsState.enableSchoolOS, settingsState.enableLifeOS, notificationsTick]);
+  }, [workHub, workHubHydrated, tasks, tasksHydrated, projectItems, projectsHydrated, classes, calendarEvents, settingsState.calendarAlerts, settingsState.enableWorkOS, settingsState.enableSchoolOS, settingsState.enableLifeOS, guidedHub, notificationsTick]);
 
   const visibleNotifications = useMemo(
     () => allNotifications.filter(item => !dismissedNotificationIds.has(item.id)),
@@ -1061,6 +1070,10 @@ export default function LifeOS() {
       return;
     }
     if (action.type === "now") go("Now");
+    if (action.type === "guided") {
+      setGuidedPanelOpen(true);
+      go("Now");
+    }
   }, [calendarEvents, go, openProjectSpace, openTaskPage, openWorkProjectSpace, openWorkTask, projectItems, tasks, workHub.deliverables, workHub.meetings]);
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1203,6 +1216,7 @@ export default function LifeOS() {
       setWorkHub(emptyWorkHub);
       setStudyAbroadHub(emptyStudyAbroadHub);
       setCareerHub(emptyCareerHub());
+    setGuidedHub(emptyExecutiveHub());
       setWorkFocusTaskId(null);
     }
   }, [cloudUserId]);
@@ -1692,10 +1706,12 @@ export default function LifeOS() {
           setCareerHub(normalizeCareerHub(data));
         } else {
           setCareerHub(emptyCareerHub());
+    setGuidedHub(emptyExecutiveHub());
         }
       } catch (error) {
         console.error('Failed to load Career data from Firebase:', error);
         setCareerHub(emptyCareerHub());
+    setGuidedHub(emptyExecutiveHub());
       } finally {
         setCareerHubHydrated(true);
       }
@@ -1705,6 +1721,35 @@ export default function LifeOS() {
     if (!cloudUserId || !careerHubHydrated) return;
     syncDataToFirebase('career', careerHub);
   }, [cloudUserId, careerHub, careerHubHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setGuidedHubHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('guided');
+        if (data && typeof data === "object") {
+          setGuidedHub(normalizeExecutiveHub(data));
+        } else {
+          setGuidedHub(emptyExecutiveHub());
+        }
+      } catch (error) {
+        console.error('Failed to load Executive Function hub from Firebase:', error);
+        setGuidedHub(emptyExecutiveHub());
+      } finally {
+        setGuidedHubHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !guidedHubHydrated) return;
+    syncDataToFirebase('guided', guidedHub);
+  }, [cloudUserId, guidedHub, guidedHubHydrated]);
+
+  useEffect(() => {
+    if (!guidedHubHydrated) return;
+    setGuidedHub((current) => tickExecutiveSchedules(current));
+  }, [guidedHubHydrated, notificationsTick]);
 
   useEffect(() => {
     if (!cloudUserId || !tasksHydrated) return;
@@ -2250,6 +2295,7 @@ export default function LifeOS() {
       if (data.timeTracking && typeof data.timeTracking === "object") setTimeTracking(normalizeTimeTracking(data.timeTracking));
       if (data.studyAbroad && typeof data.studyAbroad === "object") setStudyAbroadHub(ensureCountriesFromUniversities(normalizeStudyAbroadHub(data.studyAbroad)));
       if (data.career && typeof data.career === "object") setCareerHub(normalizeCareerHub(data.career));
+      if (data.guided && typeof data.guided === "object") setGuidedHub(normalizeExecutiveHub(data.guided));
       if (data.settings) setSettingsState(current => ({ ...current, ...data.settings }));
       if (data.dark !== undefined) setDark(data.dark);
       flash("✓ Cloud data synced successfully");
@@ -2260,7 +2306,7 @@ export default function LifeOS() {
   };
 
   const exportData = () => {
-    const payload = { exportedAt: new Date().toISOString(), tasks, projects: projectItems.map(({ icon: _, ...project }) => project), events: calendarEvents, brainItems, classes, notes, resources, life: lifeHub, school: schoolHub, work: workHub, timeTracking, studyAbroad: studyAbroadHub, career: careerHub, settings: settingsState, dark };
+    const payload = { exportedAt: new Date().toISOString(), tasks, projects: projectItems.map(({ icon: _, ...project }) => project), events: calendarEvents, brainItems, classes, notes, resources, life: lifeHub, school: schoolHub, work: workHub, timeTracking, studyAbroad: studyAbroadHub, career: careerHub, guided: guidedHub, settings: settingsState, dark };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -2286,6 +2332,7 @@ export default function LifeOS() {
     setTimeTracking(emptyTimeTracking());
     setStudyAbroadHub(emptyStudyAbroadHub);
     setCareerHub(emptyCareerHub());
+    setGuidedHub(emptyExecutiveHub());
     setSettingsState(initialSettings);
     setDark(false);
     window.location.reload();
@@ -2699,7 +2746,7 @@ export default function LifeOS() {
               />
             )}
             {view === "Mastery" && <MasterOSDashboard />}
-            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onOpenTimesheet={() => { setWorkView("timesheet"); go("Work"); }} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableMasterOS={settingsState.enableMasterOS !== false} onboardingCompletedAt={settingsState.onboardingCompletedAt} onMarkOnboarded={() => setSettingsState(current => ({ ...current, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} flash={flash} />}
+            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onOpenTimesheet={() => { setWorkView("timesheet"); go("Work"); }} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableMasterOS={settingsState.enableMasterOS !== false} onboardingCompletedAt={settingsState.onboardingCompletedAt} onMarkOnboarded={() => setSettingsState(current => ({ ...current, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} flash={flash} guidedHub={guidedHub} onGuidedChange={setGuidedHub} onOpenGuided={() => setGuidedPanelOpen(true)} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
             {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} onDeleteMany={deleteTasks} />}
             {(view === "Today" || view === "Calendar") && <CalendarView events={calendarFeed} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} defaultView={normalizeCalendarDefaultView(settingsState.defaultCalendarView)} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => { if (id.startsWith("task-")) openTaskPage(Number(id.slice(5))); else if (id.startsWith("work-meet-")) { setWorkView("calendar"); go("Work"); } else setEditingCalendarEventId(id); }} onPlanTask={setEditingTaskId} />}
@@ -2771,6 +2818,7 @@ export default function LifeOS() {
         {capture && <CaptureModal key="capture-modal" close={() => setCapture(false)} add={(text) => { setBrainItems(x => [text, ...x]); setCapture(false); flash("Thought captured"); }} />}
         {ambientStartOpen && <AmbientStartModal key="ambient-start-modal" close={() => { setAmbientStartOpen(false); setAmbientDraft(null); }} start={beginAmbientActivity} draft={ambientDraft} spaces={[...projectItems.map(item => ({ name: item.name, color: item.color })), ...classes.filter(item => !item.archived).map(item => ({ name: item.code, color: item.color }))]} />}
         {ambientWrapupOpen && settingsState.ambientActivity && <AmbientWrapupModal key="ambient-wrapup-modal" activity={settingsState.ambientActivity} close={() => setAmbientWrapupOpen(false)} finish={wrapUpAmbientActivity} />}
+        {guidedPanelOpen && <motion.div key="guided-panel" className="modal-layer" onMouseDown={() => setGuidedPanelOpen(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="capture-modal guided-modal" style={{ width: "min(720px, calc(100vw - 24px))", maxHeight: "min(88vh, 900px)", overflow: "auto" }} onMouseDown={e => e.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><Sparkles size={16} /></div><div><strong>Executive Function</strong><span>Executive · Guided · Transition</span></div><button type="button" onClick={() => setGuidedPanelOpen(false)} aria-label="Close"><X size={18} /></button></div><div style={{ padding: "0 16px 16px" }}><ExecutivePanel hub={guidedHub} onChange={setGuidedHub} flash={flash} /></div></motion.div></motion.div>}
         {dailyResetOpen && <DailyResetModal key="daily-reset" tasks={tasks} close={() => { setDailyResetOpen(false); setSettingsState(current => ({ ...current, dailyReviewDate: toDateKey(new Date()) })); }} choose={chooseNowTask} complete={complete} />}
         {weeklyReviewOpen && <WeeklyReviewModal key="weekly-review" tasks={tasks} projects={projectItems} classes={classes} close={() => { setWeeklyReviewOpen(false); setSettingsState(current => ({ ...current, weeklyReviewDate: toDateKey(new Date()) })); }} onOpenTask={openTaskPage} onGoSpaces={() => { setWeeklyReviewOpen(false); go("Spaces"); }} />}
         {hubCollection?.scope === "school" && <HubCollectionModal key={`school-${hubCollection.key}`} target={hubCollection} records={schoolHub[hubCollection.key]} close={() => setHubCollection(null)} change={(records) => setSchoolHub(current => ({ ...current, [hubCollection.key]: records }))} />}
@@ -2796,7 +2844,7 @@ export default function LifeOS() {
   );
 }
 
-function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, timeTracking, onTimeTrackingChange, onOpenTimesheet, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableWorkOS, enableStudyAbroad, enableMasterOS, onboardingCompletedAt, onMarkOnboarded, flash }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; timeTracking: TimeTrackingState; onTimeTrackingChange: (next: TimeTrackingState) => void; onOpenTimesheet: () => void; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableWorkOS: boolean; enableStudyAbroad: boolean; enableMasterOS: boolean; onboardingCompletedAt?: string; onMarkOnboarded: () => void; flash: (message: string) => void }) {
+function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, timeTracking, onTimeTrackingChange, onOpenTimesheet, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableWorkOS, enableStudyAbroad, enableMasterOS, onboardingCompletedAt, onMarkOnboarded, flash, guidedHub, onGuidedChange, onOpenGuided}: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; timeTracking: TimeTrackingState; onTimeTrackingChange: (next: TimeTrackingState) => void; onOpenTimesheet: () => void; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableWorkOS: boolean; enableStudyAbroad: boolean; enableMasterOS: boolean; onboardingCompletedAt?: string; onMarkOnboarded: () => void; flash: (message: string) => void; guidedHub: ExecutiveHub; onGuidedChange: (hub: ExecutiveHub) => void; onOpenGuided: () => void }) {
   const [handoff, setHandoff] = useState("");
   const [captureInput, setCaptureInput] = useState("");
   const [captureFocused, setCaptureFocused] = useState(false);
@@ -2930,6 +2978,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       return true;
     }
     if (val === '/spaces') { onGo('Spaces'); return true; }
+    if (val === '/guide' || val === '/guided' || val === '/executive' || val === '/unfreeze') { onOpenGuided(); return true; }
     if (enableStudyAbroad && (val === '/sa' || val === '/study abroad')) { onGo('Study Abroad'); return true; }
     if (enableMasterOS && (val === '/mos' || val === '/masteros')) { onGo('Mastery'); return true; }
     return false;
@@ -3173,6 +3222,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
         </div>
       </div>
     )}
+    <ExecutiveActiveStrip hub={guidedHub} onChange={onGuidedChange} flash={flash} onOpen={onOpenGuided} />
     <div className="page-title">
       <div><p className="eyebrow">{new Date(now).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p><h1>Now</h1><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
       <div className="now-header-actions"><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button onClick={onDailyReset}>Daily reset</button><button onClick={onWeeklyReview}>Weekly review</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
