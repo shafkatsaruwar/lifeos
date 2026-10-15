@@ -250,7 +250,7 @@ export function stopListeningToFirebaseChanges(key: string) {
   }
 }
 
-export async function syncAllData(tasks: any, projects: any, events: any, brainItems: any, settings: any, dark: boolean, classes: any[] = [], notes: any[] = [], resources: any[] = [], life: any = null, school: any = null, work: any = null, studyAbroad: any = null, career: any = null) {
+export async function syncAllData(tasks: any, projects: any, events: any, brainItems: any, settings: any, dark: boolean, classes: any[] = [], notes: any[] = [], resources: any[] = [], life: any = null, school: any = null, work: any = null, studyAbroad: any = null, career: any = null, guided: any = null) {
   await Promise.all([
     syncDataToFirebase('tasks', tasks),
     syncDataToFirebase('projects', projects),
@@ -266,6 +266,7 @@ export async function syncAllData(tasks: any, projects: any, events: any, brainI
     ...(work ? [syncDataToFirebase('work', work)] : []),
     ...(studyAbroad ? [syncDataToFirebase('studyAbroad', studyAbroad)] : []),
     ...(career ? [syncDataToFirebase('career', career)] : []),
+    ...(guided ? [syncDataToFirebase('guided', guided)] : []),
   ]);
 }
 
@@ -274,7 +275,7 @@ export async function pullAllDataFromFirebase() {
   if (typeof window === 'undefined') return null;
 
   try {
-    const [tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school, work, timeTracking, studyAbroad, career] = await Promise.all([
+    const [tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school, work, timeTracking, studyAbroad, career, guided] = await Promise.all([
       loadDataFromFirebase('tasks'),
       loadDataFromFirebase('projects'),
       loadDataFromFirebase('calendar'),
@@ -290,9 +291,10 @@ export async function pullAllDataFromFirebase() {
       loadDataFromFirebase('timeTracking'),
       loadDataFromFirebase('studyAbroad'),
       loadDataFromFirebase('career'),
+      loadDataFromFirebase('guided'),
     ]);
 
-    return { tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school, work, timeTracking, studyAbroad, career };
+    return { tasks, projects, calendar, brain, settings, dark, classes, notes, resources, life, school, work, timeTracking, studyAbroad, career, guided };
   } catch (error) {
     console.error('Failed to pull data from Firebase:', error);
     return null;
