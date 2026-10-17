@@ -93,6 +93,7 @@ import {
 } from "@/app/components/CareerDashboard";
 import { normalizeCareerHub } from "@/lib/careerHelpers";
 import { ExecutiveActiveStrip, ExecutivePanel } from "@/app/components/ExecutivePanel";
+import { NowWeatherWidget } from "@/app/components/NowWeatherWidget";
 import { emptyExecutiveHub, normalizeExecutiveHub } from "@/lib/executive/hub";
 import { tickExecutiveSchedules } from "@/lib/executive/engine";
 import type { ExecutiveHub } from "@/lib/executive/types";
@@ -2879,7 +2880,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     };
     return score(b) - score(a);
   }).filter(task => task.id !== current?.id).slice(0, 5);
-  const todayEvents = events.filter(event => eventOccursOnDate(event, today)).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 3);
+  const todayEvents = events.filter(event => eventOccursOnDate(event, today)).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 8);
   const activeSpace = current?.classId ? classes.find(item => item.id === current.classId)?.code : current?.project;
   const hasDue = (due: string) => /^\d{4}-\d{2}-\d{2}/.test(due);
   const resurfacing = allActive.filter(task => task.id !== current?.id && ((hasDue(task.due) && task.due < today) || (getTaskStatus(task) === "Waiting" && Boolean(task.followUpDate && task.followUpDate <= today)))).slice(0, 3);
@@ -3251,11 +3252,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           <p className="atelier-hero-date">{dateObj.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }).toUpperCase()}</p>
         </div>
         <div className="atelier-now-hero-widgets">
-          <div className="atelier-glass-card atelier-day-widget" aria-label="Today">
-            <strong>{dateObj.toLocaleDateString(undefined, { weekday: "long" })}</strong>
-            <span>{dateObj.toLocaleDateString(undefined, { month: "long", day: "numeric" })}</span>
-            <small>{dateObj.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</small>
-          </div>
+          <NowWeatherWidget />
           <div className="atelier-glass-card atelier-quote-widget">
             <p>“Progress, not perfection.”</p>
             <ArrowRight size={16} aria-hidden />
@@ -3273,15 +3270,19 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       <div className="atelier-now-main">
         <section className="card atelier-today-panel" aria-label="Today">
           <div className="card-head"><div><h2>Today</h2></div></div>
-          <div className="now-today-list">
-            {todayEvents.length ? todayEvents.map((event) => {
+          <div className={`now-today-list${todayEvents.length ? " now-today-timeline" : ""}`}>
+            {todayEvents.length ? todayEvents.map((event, index) => {
               const start = new Date(event.start);
               const time = Number.isNaN(start.getTime()) ? "—" : start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
               return (
                 <div key={event.id} className="now-today-row">
                   <time dateTime={event.start}>{time}</time>
-                  <div>
-                    <strong><i style={{ background: event.color || "var(--accent)" }} aria-hidden />{event.title}</strong>
+                  <div className="now-today-track" aria-hidden>
+                    <i style={{ background: event.color || "var(--accent)" }} />
+                    {index < todayEvents.length - 1 ? <span className="now-today-rail" /> : null}
+                  </div>
+                  <div className="now-today-body">
+                    <strong>{event.title}</strong>
                     <span>{event.source}{event.location ? ` · ${event.location}` : ""}</span>
                   </div>
                 </div>
