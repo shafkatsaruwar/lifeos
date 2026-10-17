@@ -93,6 +93,7 @@ import {
 } from "@/app/components/CareerDashboard";
 import { normalizeCareerHub } from "@/lib/careerHelpers";
 import { ExecutiveActiveStrip, ExecutivePanel } from "@/app/components/ExecutivePanel";
+import { NowWeatherWidget } from "@/app/components/NowWeatherWidget";
 import { SettingsBentoGrid, type SettingsBentoSection } from "@/components/ui/bento-grid-01";
 import { emptyExecutiveHub, normalizeExecutiveHub } from "@/lib/executive/hub";
 import { tickExecutiveSchedules } from "@/lib/executive/engine";
@@ -2877,7 +2878,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     };
     return score(b) - score(a);
   }).filter(task => task.id !== current?.id).slice(0, 5);
-  const todayEvents = events.filter(event => eventOccursOnDate(event, today)).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 3);
+  const todayEvents = events.filter(event => eventOccursOnDate(event, today)).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 8);
   const activeSpace = current?.classId ? classes.find(item => item.id === current.classId)?.code : current?.project;
   const hasDue = (due: string) => /^\d{4}-\d{2}-\d{2}/.test(due);
   const resurfacing = allActive.filter(task => task.id !== current?.id && ((hasDue(task.due) && task.due < today) || (getTaskStatus(task) === "Waiting" && Boolean(task.followUpDate && task.followUpDate <= today)))).slice(0, 3);
@@ -3221,114 +3222,239 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
         </div>
       </div>
     )}
-    <div className="page-title">
-      <div><p className="eyebrow">{new Date(now).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p><h1>Now</h1><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
-      <div className="now-header-actions"><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button onClick={onDailyReset}>Daily reset</button><button onClick={onWeeklyReview}>Weekly review</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
-    </div>
-    {ambientActivity ? (
-      <section className="ambient-active-strip">
-        <div><span className="section-icon orange"><TimerReset size={14} /></span><div><p>YOU’RE ALREADY DOING IT</p><strong>{ambientActivity.title}</strong><small>{formatAmbientDuration(now - new Date(ambientActivity.startedAt).getTime())} so far · no planning required</small></div></div>
-        <button onClick={onWrapAmbient}>Finish & sort later <ArrowRight size={15} /></button>
-      </section>
-    ) : (
-      <div className="capture-bar-wrapper">
-        <section className="capture-bar-section" title="Capture commands: /t, /break, /focus, and more">
-          <span className="section-icon blue"><Command size={16} /></span>
-          <input
-            ref={captureInputRef}
-            type="text"
-            placeholder="Click for commands, or type /"
-            value={captureInput}
-            onChange={(e) => { setCaptureInput(e.currentTarget.value); setSuggestedCommandIndex(-1); }}
-            onFocus={handleCaptureFocus}
-            onClick={handleCaptureFocus}
-            onBlur={handleCaptureBlur}
-            onKeyDown={handleCaptureKeyDown}
-            title="Click to see capture commands"
-          />
-          <span className="capture-hint">/t · /tm · /break · /focus · /clock{enableMasterOS ? " · /mos" : ""}</span>
+    {(() => {
+      const dateObj = new Date(now);
+      const greetingRaw = getGreeting(dateObj, workspaceName);
+      const nameNeedle = workspaceName.trim();
+      const greetingNode = (!nameNeedle || nameNeedle === "there" || greetingRaw.lastIndexOf(nameNeedle) < 0)
+        ? greetingRaw
+        : (() => {
+            const idx = greetingRaw.lastIndexOf(nameNeedle);
+            return <>{greetingRaw.slice(0, idx)}<span className="atelier-name">{nameNeedle}</span>{greetingRaw.slice(idx + nameNeedle.length)}</>;
+          })();
+      const totalFocusSec = (current?.focusMinutes ?? 0) * 60;
+      const focusPct = current && totalFocusSec > 0 && typeof current.focusRemainingSeconds === "number" && current.focusSessionStarted
+        ? Math.max(0, Math.min(100, Math.round(100 * (1 - current.focusRemainingSeconds / totalFocusSec))))
+        : null;
+      const ringR = 54;
+      const ringC = 2 * Math.PI * ringR;
+      const schoolOpen = active.filter((task) => Boolean(task.classId)).length;
+      const lifeOpen = active.filter((task) => !task.classId).length;
+      return (
+    <>
+    <div className="atelier-now">
+      <header className="atelier-now-hero">
+        <div className="atelier-now-hero-copy">
+          <h1 className="atelier-greeting">{greetingNode}</h1>
+          <p className="atelier-hero-copy">A clear mind builds a better tomorrow.</p>
+          <p className="atelier-hero-date">{dateObj.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }).toUpperCase()}</p>
+        </div>
+        <div className="atelier-now-hero-widgets">
+          <NowWeatherWidget />
+          <div className="atelier-glass-card atelier-quote-widget">
+            <p>“Progress, not perfection.”</p>
+            <ArrowRight size={16} aria-hidden />
+          </div>
+        </div>
+      </header>
+
+      {ambientActivity ? (
+        <section className="ambient-active-strip">
+          <div><span className="section-icon orange"><TimerReset size={14} /></span><div><p>YOU’RE ALREADY DOING IT</p><strong>{ambientActivity.title}</strong><small>{formatAmbientDuration(now - new Date(ambientActivity.startedAt).getTime())} so far · no planning required</small></div></div>
+          <button onClick={onWrapAmbient}>Finish & sort later <ArrowRight size={15} /></button>
         </section>
-        {showSuggestions ? (
-          <div className="capture-suggestions" onMouseDown={(e) => e.preventDefault()}>
-            <div className="capture-suggestions-list">
-              {filtered.map((cmd, idx) => (
-                <button
-                  key={cmd.shortcut}
-                  type="button"
-                  className={idx === suggestedCommandIndex ? "suggested" : ""}
-                  onClick={() => {
-                    if (['/w', '/break', '/a', '/focus', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
-                      runInstantCommand(cmd.shortcut);
-                      finishCaptureCommand();
-                    } else {
-                      setCaptureInput(cmd.shortcut + " ");
-                      setSuggestedCommandIndex(-1);
-                      captureInputRef.current?.focus();
-                    }
+      ) : null}
+
+      <div className="atelier-now-main">
+        <section className="card atelier-today-panel" aria-label="Today">
+          <div className="card-head"><div><h2>Today</h2></div></div>
+          <div className={`now-today-list${todayEvents.length ? " now-today-timeline" : ""}`}>
+            {todayEvents.length ? todayEvents.map((event, index) => {
+              const start = new Date(event.start);
+              const time = Number.isNaN(start.getTime()) ? "—" : start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+              return (
+                <div key={event.id} className="now-today-row">
+                  <time dateTime={event.start}>{time}</time>
+                  <div className="now-today-track" aria-hidden>
+                    <i style={{ background: event.color || "var(--accent)" }} />
+                    {index < todayEvents.length - 1 ? <span className="now-today-rail" /> : null}
+                  </div>
+                  <div className="now-today-body">
+                    <strong>{event.title}</strong>
+                    <span>{event.source}{event.location ? ` · ${event.location}` : ""}</span>
+                  </div>
+                </div>
+              );
+            }) : <div className="now-today-empty">No events on the calendar for today. Protect a block when you’re ready.</div>}
+          </div>
+          <div className="now-today-footer"><button type="button" onClick={() => onGo("Today")}>View full day</button></div>
+        </section>
+
+        <div className="atelier-now-mid">
+          <section className="card atelier-focus-panel" title="Your focused task">
+            <div className="atelier-focus-ring-wrap" aria-hidden={focusPct == null}>
+              <svg className="atelier-focus-ring" viewBox="0 0 140 140">
+                <circle cx="70" cy="70" r={ringR} pathLength="100" />
+                <circle
+                  cx="70"
+                  cy="70"
+                  r={ringR}
+                  pathLength="100"
+                  style={{
+                    strokeDasharray: `${focusPct ?? 0} 100`,
                   }}
-                >
-                  <strong>{cmd.shortcut}</strong>
-                  <span>{cmd.desc}</span>
-                </button>
-              ))}
+                />
+              </svg>
+              <div className="atelier-focus-ring-label">
+                {focusPct != null ? <strong>{focusPct}%</strong> : <Focus size={22} />}
+                <span>{focusPct != null ? "Focus" : "Ready"}</span>
+              </div>
             </div>
-            {showCaptureCommands ? (
-              <div className="capture-suggestions-footer">
-                <button type="button" className="capture-dismiss" onClick={() => { onDismissCaptureCommands(); setCaptureFocused(false); }}>
-                  Don&apos;t show again
-                </button>
+            {current ? (
+              <div className="atelier-focus-copy">
+                <p className="eyebrow">{activeSpace || "Focus"}</p>
+                <h2>{current.title}</h2>
+                <p>{current.focusMinutes} min · {current.energy} energy</p>
+                <div className="now-current-actions">
+                  <button className="primary" type="button" onClick={() => onFocus(current.id)}><Focus size={16} /> Start focus</button>
+                  <button type="button" onClick={() => onOpenTask(current.id)}>Open</button>
+                  <button type="button" onClick={() => onComplete(current.id)}><Check size={16} /></button>
+                </div>
+                <div className="atelier-focus-tools">
+                  <button type="button" className="text-button" onClick={() => setQueueOpen((value) => !value)}>{queueOpen ? "Hide queue" : "Open Queue"}</button>
+                  <button type="button" className="text-button" onClick={() => onChoose(null)}>Clear</button>
+                </div>
               </div>
-            ) : null}
+            ) : (
+              <div className="atelier-focus-copy">
+                <p className="eyebrow">Focus</p>
+                <h2>Nothing claiming attention</h2>
+                <p>Choose a next move when you’re ready.</p>
+                <div className="now-current-actions">
+                  <button type="button" className="primary" onClick={onSmartCapture}><Sparkles size={16} /> Make a task</button>
+                  <button type="button" onClick={() => setQueueOpen((value) => !value)}>Open Queue</button>
+                </div>
+              </div>
+            )}
+            {queueOpen && (
+              <div className="now-queue-panel">
+                <div className="now-queue-head"><strong>Up next</strong><span>Drag to reorder · first 5</span></div>
+                {queueTasks.length ? queueTasks.map((task, index) => (
+                  <div
+                    key={task.id}
+                    className={`now-queue-row ${dragQueueId === task.id ? "dragging" : ""}`}
+                    draggable
+                    onDragStart={() => setDragQueueId(task.id)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => { if (dragQueueId != null) moveQueueItem(dragQueueId, task.id); setDragQueueId(null); }}
+                    onDragEnd={() => setDragQueueId(null)}
+                  >
+                    <GripVertical size={14} className="now-queue-grip" />
+                    <em>{index + 1}</em>
+                    <button type="button" className="now-queue-main" onClick={() => switchTo(task)}>
+                      <i style={{ background: task.color }} />
+                      <span><strong>{task.title}</strong><small>{task.classId ? classes.find((item) => item.id === task.classId)?.code : task.project} · {formatDueDate(task.due)}</small></span>
+                    </button>
+                    <button type="button" className="text-button" onClick={() => switchTo(task)}>Make current</button>
+                  </div>
+                )) : <div className="now-queue-empty">Nothing queued yet. Add tasks with <code>/t</code>.</div>}
+              </div>
+            )}
+          </section>
+
+          <div className="atelier-hub-tiles" aria-label="Spaces">
+            <button type="button" className="atelier-hub-tile tile-career" onClick={() => onGo("Career")}>
+              <Target size={18} /><strong>Career</strong><span>Pipeline</span>
+            </button>
+            <button type="button" className="atelier-hub-tile tile-life" onClick={() => onGo("Life")}>
+              <Home size={18} /><strong>Life</strong><span>{lifeOpen} open</span>
+            </button>
+            <button type="button" className="atelier-hub-tile tile-school" onClick={() => onGo("School")}>
+              <GraduationCap size={18} /><strong>School</strong><span>{schoolOpen} open</span>
+            </button>
+            <button type="button" className="atelier-hub-tile tile-tasks" onClick={() => onGo("Tasks")}>
+              <CheckCircle2 size={18} /><strong>Tasks</strong><span>{active.length} open</span>
+            </button>
           </div>
-        ) : null}
+        </div>
       </div>
-    )}
-    <ExecutiveActiveStrip hub={guidedHub} onChange={onGuidedChange} flash={flash} onOpen={onOpenGuided} />
-    <TimesheetNowStrip
-      timeTracking={timeTracking}
-      onChange={onTimeTrackingChange}
-      onOpenTimesheet={onOpenTimesheet}
-      nowMs={now}
-      workTitle={current?.title}
-      onFlash={flash}
-    />
-    <div className="now-layout">
-      <section className="card now-current-card" title="Your focused task. Click any task to focus on it here.">
-        <div className="card-head"><div><span className="section-icon violet"><Focus size={14} /></span><h2>Current task</h2></div><div className="now-current-head-actions"><button type="button" className="text-button" onClick={() => setQueueOpen(value => !value)}>{queueOpen ? "Hide queue" : "Open Queue"}</button>{current && <button className="text-button" onClick={() => onChoose(null)}>Clear</button>}</div></div>
-        {queueOpen && (
-          <div className="now-queue-panel">
-            <div className="now-queue-head"><strong>Up next</strong><span>Drag to reorder · first 5</span></div>
-            {queueTasks.length ? queueTasks.map((task, index) => (
-              <div
-                key={task.id}
-                className={`now-queue-row ${dragQueueId === task.id ? "dragging" : ""}`}
-                draggable
-                onDragStart={() => setDragQueueId(task.id)}
-                onDragOver={event => event.preventDefault()}
-                onDrop={() => { if (dragQueueId != null) moveQueueItem(dragQueueId, task.id); setDragQueueId(null); }}
-                onDragEnd={() => setDragQueueId(null)}
-              >
-                <GripVertical size={14} className="now-queue-grip" />
-                <em>{index + 1}</em>
-                <button type="button" className="now-queue-main" onClick={() => switchTo(task)}>
-                  <i style={{ background: task.color }} />
-                  <span><strong>{task.title}</strong><small>{task.classId ? classes.find(item => item.id === task.classId)?.code : task.project} · {formatDueDate(task.due)}</small></span>
-                </button>
-                <button type="button" className="text-button" onClick={() => switchTo(task)}>Make current</button>
-              </div>
-            )) : <div className="now-queue-empty">Nothing queued yet. Add tasks with <code>/t</code>.</div>}
+
+      <div className="atelier-now-bottom">
+        <section className="card atelier-capture-panel">
+          <div className="card-head"><div><h2>Quick capture</h2></div></div>
+          <div className="atelier-capture-body">
+            <input
+              ref={captureInputRef}
+              type="text"
+              placeholder="Drop a thought, task, or idea…"
+              value={captureInput}
+              onChange={(e) => { setCaptureInput(e.currentTarget.value); setSuggestedCommandIndex(-1); }}
+              onFocus={handleCaptureFocus}
+              onClick={handleCaptureFocus}
+              onBlur={handleCaptureBlur}
+              onKeyDown={handleCaptureKeyDown}
+            />
+            <button type="button" className="atelier-capture-add" onClick={onCapture} aria-label="Capture"><Plus size={18} /></button>
           </div>
-        )}
-        {current ? <div className="now-current-content">
-          <span className="task-dot" style={{ background: current.color }} />
-          <p className="eyebrow">{activeSpace || "Unsorted"} · {current.focusMinutes} min · {current.energy} energy</p>
-          <h2>{current.title}</h2><p>{current.nextAction || current.handoffNote ? `Next visible step: ${current.nextAction || current.handoffNote}` : `${formatDueDate(current.due)} · ${current.priority} priority`}</p>
-          <div className="now-current-actions"><button className="primary" onClick={() => onFocus(current.id)}><Focus size={16} /> Start focus</button><button onClick={() => onOpenTask(current.id)}>Open task</button><button type="button" onClick={() => onComplete(current.id)}><Check size={16} /> Mark as done</button></div>
-          <label className="handoff-field"><span>What is the smallest visible next step?</span><input value={handoff} onChange={event => setHandoff(event.target.value)} onBlur={() => handoff.trim() && onUpdateTask(current.id, { handoffNote: handoff.trim(), nextAction: handoff.trim() })} placeholder={current.nextAction || "Next visible step…"} /></label>
-        </div> : <div className="priority-empty now-empty now-empty-productive"><div><strong>Nothing is claiming your attention.</strong><p>That’s not a void — it’s room to choose your next move on purpose.</p></div><div className="now-idle-actions"><button onClick={onStartAmbient}><TimerReset size={15} /><span><strong>I already started</strong><small>Track it without stopping</small></span></button><button onClick={onSmartCapture}><Sparkles size={15} /><span><strong>Make a task</strong><small>Say it naturally</small></span></button><button onClick={() => onGo("Today")}><CalendarDays size={15} /><span><strong>Protect time</strong><small>Plan a spot today</small></span></button></div></div>}
-      </section>
-      <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} studyAbroadContext={enableStudyAbroad ? buildStudyAbroadCopilotContext(studyAbroadHub) : null} />
+          {showSuggestions ? (
+            <div className="capture-suggestions" onMouseDown={(e) => e.preventDefault()}>
+              <div className="capture-suggestions-list">
+                {filtered.map((cmd, idx) => (
+                  <button
+                    key={cmd.shortcut}
+                    type="button"
+                    className={idx === suggestedCommandIndex ? "suggested" : ""}
+                    onClick={() => {
+                      if (['/w', '/break', '/a', '/focus', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
+                        runInstantCommand(cmd.shortcut);
+                        finishCaptureCommand();
+                      } else {
+                        setCaptureInput(cmd.shortcut + " ");
+                        setSuggestedCommandIndex(-1);
+                        captureInputRef.current?.focus();
+                      }
+                    }}
+                  >
+                    <strong>{cmd.shortcut}</strong>
+                    <span>{cmd.desc}</span>
+                  </button>
+                ))}
+              </div>
+              {showCaptureCommands ? (
+                <div className="capture-suggestions-footer">
+                  <button type="button" className="capture-dismiss" onClick={() => { onDismissCaptureCommands(); setCaptureFocused(false); }}>
+                    Don&apos;t show again
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="atelier-capture-hint">/t · /tm · /break · /focus · /clock{enableMasterOS ? " · /mos" : ""}</p>
+          )}
+        </section>
+        <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} studyAbroadContext={enableStudyAbroad ? buildStudyAbroadCopilotContext(studyAbroadHub) : null} />
+      </div>
+
+      <div className="atelier-now-utility">
+        <div className="atelier-utility-actions">
+          <button type="button" className="atelier-chip" onClick={onDailyReset}>Daily reset</button>
+          <button type="button" className="atelier-chip" onClick={onWeeklyReview}>Weekly review</button>
+          <button type="button" className="atelier-chip primary" onClick={() => onGo("Today")}><CalendarDays size={15} /> Plan today</button>
+        </div>
+        <ExecutiveActiveStrip hub={guidedHub} onChange={onGuidedChange} flash={flash} onOpen={onOpenGuided} />
+        <TimesheetNowStrip
+          timeTracking={timeTracking}
+          onChange={onTimeTrackingChange}
+          onOpenTimesheet={onOpenTimesheet}
+          nowMs={now}
+          workTitle={current?.title}
+          onFlash={flash}
+        />
+      </div>
     </div>
+    </>
+      );
+    })()}
     <section className="card week-brainstorm">
       <div className="card-head">
         <div><span className="section-icon blue"><Brain size={14} /></span><h2>Plan the week</h2></div>
