@@ -1,0 +1,6223 @@
+"use client";
+
+// LifeOS Module Architecture
+// ==========================
+// LifeOS is designed as a pluggable module system where each feature (Tasks, Calendar, Projects, Brain, etc.)
+// is an independent module that owns its own:
+// - Data structures and state management
+// - Logic and business rules
+// - Navigation and routing
+// - UI components and widgets
+//
+// The Dashboard is not a monolithic view that hardcodes all sections. Instead:
+// 1. Each module registers itself and declares what it contributes
+// 2. Modules can contribute: dashboard cards, quick actions, notifications, status summaries
+// 3. Dashboard discovers registered modules and renders their contributions
+// 4. Modules are sorted by order and rendered dynamically
+//
+// This architecture makes LifeOS highly extensible:
+// - New modules (Synapse, Photography, Finance, Career, AI) can be added without modifying Dashboard
+// - Modules can be toggled on/off without breaking the system
+// - Modules are independently testable and maintainable
+// - Future integrations (calendar sync, task automation, etc.) can be modules
+//
+// Gradual Implementation Plan:
+// Phase 1: TasksModule (priorities, today's tasks)
+// Phase 2: FocusModule (next focus, focus sessions)
+// Phase 3: CalendarModule (today's schedule, events)
+// Phase 4: ProjectsModule (active projects, project cards)
+// Phase 5: BrainModule (inbox, capture, notes)
+// Phase 6: Third-party modules (Synapse sync, photography workflows, etc.)
+
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { syncDataToFirebase, loadDataFromFirebase, loadTasksFromFirebase, listenToFirebaseChanges, stopListeningToFirebaseChanges, pullAllDataFromFirebase, setUserId, clearUserId, getUserId } from "@/lib/dataSync";
+import { coerceFirebaseList } from "@/lib/validation";
+import { readTaskBackup, writeTaskBackup } from "@/lib/taskBackup";
+import { signInWithGoogle, signOut, onAuthStateChanged, whenClientAuthReady } from "@/lib/firebase";
+import { shouldPersistOnboardingComplete } from "@/lib/onboardingGate";
+import { mergeSettingsWithEnvironmentDefaults } from "@/lib/settingsDefaults";
+import { logger } from "@/lib/logger";
+import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
+import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
+import { buildMonthEventSegments, eventOccursOnDate, getEventDateRange, getEventDayBlockMinutes, usesDailyTimeWindow, type MonthEventSegment } from "@/lib/calendarEvents";
+import { coalesceEventMeetingUrl, detectMeetingProvider, eventNotesLabel, eventPlaceLabel, extractMeetingUrl, meetingJoinLabel, resolveEventMeeting } from "@/lib/meetingLinks";
+import { formatFocusMinutesShort, formatFocusSessionLabel, formatFocusTime } from "@/lib/focusTime";
+import { buildTasksFromNote } from "@/lib/noteToTask";
+import { emptyTimeTracking, normalizeTimeTracking, clockIn, clockOut, getActiveEntry } from "@/lib/timeTracking";
+import type { TimeTrackingState } from "@/lib/timeTracking";
+import { getFileStorage } from "@/lib/fileStorage";
+import { GlobalNotificationShell } from "@/app/components/NotificationCenter";
+import { AgeGateCheckbox, AGE_GATE_BLOCKED_MESSAGE, ageGateBlockedStyle } from "@/app/components/AgeGateCheckbox";
+import { PaywallGate } from "@/app/components/PaywallGate";
+import { SubscriptionCheckoutCard } from "@/app/components/SubscriptionCheckoutCard";
+import { canAccessPaidHubs, isHubVisibleInNav, isPaidHub, type Entitlement } from "@/lib/billing/entitlement";
+import { SessionReplaySettingsRow } from "@/app/components/PrivacyTelemetry";
+import {
+  PreAuthOnboarding,
+  hasCompletedPreAuthOnboarding,
+  markPreAuthOnboardingComplete,
+} from "@/app/components/PreAuthOnboarding";
+import {
+  generateLifeOSNotifications,
+  loadDismissedNotificationIds,
+  saveDismissedNotificationIds,
+  isBannerCandidate,
+  notificationSourceLabel,
+  type LifeOSNotification,
+  type NotificationAction,
+} from "@/lib/notifications";
+import { NLTaskCreationModal } from "@/app/components/NLTaskCreationModal";
+import { TimesheetNowStrip } from "@/app/components/TimesheetNowStrip";
+import { AssistantAccessPanel } from "@/app/components/AssistantAccessPanel";
+import {
+  HubCollectionModal, LifeDashboard, SchoolClassPickerModal, SchoolDashboard, SchoolProfileModal, WorkDashboard,
+  emptyLifeHub, emptySchoolHub, emptyWorkHub, isSampleWorkHub, formatWorkMeetingWhere, removeWorkProject, captureAddWorkTask,
+  type HubCollectionTarget, type LifeHubKey, type LifeHubState, type SchoolHubKey, type SchoolHubState,
+  type WorkHubState, type WorkProject, type WorkDeliverable, type WorkTask, type WorkMeeting, type WorkView, type SchoolView,
+} from "@/app/components/OSDashboards";
+import {
+  StudyAbroadDashboard,
+  emptyStudyAbroadHub,
+  normalizeStudyAbroadHub,
+  ensureCountriesFromUniversities,
+  type StudyAbroadFocusEntity,
+  type StudyAbroadHub,
+  type StudyAbroadView,
+} from "@/app/components/StudyAbroadDashboard";
+import {
+  CareerDashboard,
+  emptyCareerHub,
+  type CareerHub,
+  type CareerView,
+} from "@/app/components/CareerDashboard";
+import { normalizeCareerHub } from "@/lib/careerHelpers";
+import { ExecutiveActiveStrip, ExecutivePanel } from "@/app/components/ExecutivePanel";
+import { NowWeatherWidget } from "@/app/components/NowWeatherWidget";
+import { SettingsBentoGrid, type SettingsBentoSection } from "@/components/ui/bento-grid-01";
+import { emptyExecutiveHub, normalizeExecutiveHub } from "@/lib/executive/hub";
+import { tickExecutiveSchedules } from "@/lib/executive/engine";
+import type { ExecutiveHub } from "@/lib/executive/types";
+import { TreasuryOSDashboard } from "@/app/components/TreasuryOSDashboard";
+import { MasterOSDashboard } from "@/app/components/MasterOSDashboard";
+import {
+  appendHistory,
+  buildStudyAbroadCopilotContext,
+  newId,
+  nowIso,
+  studyAbroadToCalendarEvents,
+} from "@/lib/studyAbroadHelpers";
+import { mergeSynapseCalendarEvents, type SynapseCalendarEvent } from "@/lib/synapseImport";
+import type { ParsedTask } from "@/lib/useNLTaskCreation";
+import { useTaskBreakdown } from "@/lib/useTaskBreakdown";
+import {
+  Aperture, Archive, ArrowRight, Brain, CalendarDays, Check, CheckCircle2,
+  ChevronDown, Circle, Clock3, Command, FileText, Flame, Focus, FolderKanban,
+  Globe2, Home, Inbox, LayoutGrid, Library, Link2, ListTodo, Menu, Moon, MoreHorizontal,
+  Mail, Music2, Plus, Search, Settings, Sparkles, Sun, TimerReset, UserRound, X, Zap,
+  Ban, Pencil, Trash2, Bell, Download, Palette, Shield, SlidersHorizontal, Coffee, Maximize, Mic, GripVertical,
+  GraduationCap, NotebookPen, BookOpen, ExternalLink, Upload, RefreshCw, Bold, Italic, List, Heading1, Highlighter,
+  BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, WalletCards, MapPin, Target,
+} from "lucide-react";
+
+type View = "Life" | "School" | "Work" | "Career" | "Study Abroad" | "Treasury" | "Mastery" | "Now" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
+type EnergyLevel = "Low" | "Medium" | "High";
+type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
+type AcademicItemType = "Assignment" | "Project" | "Exam" | "Quiz" | "Lab" | "Reading" | "Discussion";
+type TaskProperty = { id: string; name: string; value: string };
+type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; status?: TaskStatus; notes?: string; handoffNote?: string; nextAction?: string; followUpDate?: string; recurringDays?: number; completedAt?: string; customProperties?: TaskProperty[]; checklist?: string[]; checklistProgress?: boolean[]; focusRemainingSeconds?: number; focusSessionStarted?: boolean; focusSessionRunning?: boolean; focusHalfwayPrompted?: boolean; focusUpdatedAt?: string; classId?: string; academicType?: AcademicItemType; gradeCategoryId?: string; gradeWeight?: number; pointsEarned?: number; pointsPossible?: number; submission?: string; calendarEventId?: string; done?: boolean; canceled?: boolean };
+type FocusSessionUpdate = { remainingSeconds: number; hasStarted: boolean; isRunning: boolean; halfwayPrompted: boolean; focusMinutes?: number; checkpoint?: boolean };
+type ProjectKind = "maintenance" | "finishable";
+type SpaceKind = "class" | "project" | "maintenance";
+type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban" | "BriefcaseBusiness" | "Camera" | "Code2" | "HeartPulse" | "Utensils" | "BookOpen";
+type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string; classId?: string; projectName?: string; storagePath?: string; storage?: "cloud" | "local" };
+type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind };
+type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work" | "Synapse"; color: string; notes?: string; location?: string; url?: string; weekdaysOnly?: boolean };
+type GradeBand = { letter: string; min: number };
+type GradeCategory = { id: string; name: string; weight: number; defaultPoints?: number };
+type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterStart?: string; semesterEnd?: string; archived?: boolean; gradingScale?: GradeBand[]; gradeCategories?: GradeCategory[]; gradingMode?: "categories" | "items" };
+type Note = { id: string; title: string; body: string; classId?: string; projectName?: string; template?: "blank" | "lined" | "dotted" | "cornell" | "meeting"; /** Handwriting from mobile (Apple PencilKit PKDrawing base64, or legacy strokes); preserved on web updates */ ink?: { version?: 1 | 2; format?: "pencilkit"; data?: string; pencilKitData?: string; strokes?: Array<{ id: string; color: string; width: number; tool: "pen" | "highlighter" | "eraser"; points: Array<{ x: number; y: number; t?: number }> }>; height?: number; updatedAt?: number }; updatedAt: string };
+type AmbientActivity = { title: string; startedAt: string; note?: string; spaceName?: string; spaceColor?: string };
+type AmbientDraft = { title: string; spaceName?: string; sourceLabel?: string } | null;
+type WeeklyPlanItem = { id: string; text: string };
+type WeeklyPlan = { [dayOfWeek: number]: WeeklyPlanItem[] }; // 0=Sunday through 6=Saturday
+
+// Work OS types imported from OSDashboards
+
+const routedViews: Record<string, View> = {
+  life: "Life", school: "School", work: "Work", career: "Career", "study-abroad": "Study Abroad", studyabroad: "Study Abroad",
+  now: "Now", flow: "Now", dashboard: "Life", today: "Calendar", calendar: "Calendar", spaces: "Spaces",
+  library: "Library", notes: "Library", resources: "Library", brain: "Library", knowledge: "Library",
+  settings: "Settings", tasks: "Tasks", budget: "Treasury", treasuryos: "Treasury", "treasury-os": "Treasury", treasury: "Treasury",
+  masteros: "Mastery", "master-os": "Mastery", master: "Mastery", mastery: "Mastery", mos: "Mastery",
+};
+const viewFromLocation = (): View => {
+  if (typeof window === "undefined") return "Now";
+  return routedViews[new URLSearchParams(window.location.search).get("view")?.toLowerCase() ?? ""] ?? "Now";
+};
+type CalendarDefaultView = "upcoming" | "month" | "day";
+
+const normalizeCalendarDefaultView = (value: unknown): CalendarDefaultView =>
+  value === "month" || value === "day" || value === "upcoming" ? value : "upcoming";
+
+type SettingsState = {
+  accent: string;
+  /** Per-environment accent colors (sidebar + hub tint). */
+  workspaceColors?: {
+    life?: string;
+    school?: string;
+    work?: string;
+    career?: string;
+    studyAbroad?: string;
+    treasuryOS?: string;
+    masterOS?: string;
+  };
+  dailyDigest: boolean;
+  focusReminders: boolean;
+  calendarAlerts: boolean;
+  soundEffects: boolean;
+  defaultFocusMinutes: number;
+  defaultEnergy: EnergyLevel;
+  weekStartsMonday: boolean;
+  /** Initial Calendar tab when opening Today / Calendar. */
+  defaultCalendarView: CalendarDefaultView;
+  compactMode: boolean;
+  reduceMotion: boolean;
+  nowTaskId?: number | null;
+  spaceContext?: Record<string, { lastTaskId?: number; lastFilter?: string; updatedAt?: string }>;
+  ambientActivity?: AmbientActivity | null;
+  currentEnergy?: EnergyLevel;
+  dailyReviewDate?: string;
+  weeklyReviewDate?: string;
+  momentumLog?: { id: string; at: string; type: "done" | "focus" | "capture"; title: string }[];
+  preferredName?: string;
+  enableLifeOS?: boolean;
+  enableSchoolOS?: boolean;
+  enableWorkOS?: boolean;
+  enableCareerOS?: boolean;
+  enableStudyAbroad?: boolean;
+  enableTreasuryOS?: boolean;
+  enableMasterOS?: boolean;
+  /** When true (default), focusing the Now capture bar shows the /command cheatsheet. */
+  showCaptureCommands?: boolean;
+  /** Ordered upcoming task ids for the Now queue (excludes the current nowTaskId). */
+  nowQueueIds?: number[];
+  /** Mobile first-run onboarding — preserved when web syncs settings. */
+  onboardingStartedAt?: string;
+  /** ISO timestamp when first-run onboarding finished. Synced with mobile. */
+  onboardingCompletedAt?: string;
+  onboardingVersion?: number;
+  /** Access entitlement — promo year or paid Pro (synced with mobile). */
+  entitlement?: {
+    status: "none" | "promo" | "pro";
+    expiresAt?: string;
+    unlockedAt?: string;
+    source?: "promo" | "stripe" | "app_store";
+    promoCode?: string;
+  } | null;
+};
+
+const projectIcons: Record<ProjectIcon, typeof Home> = { Zap, Aperture, Sparkles, FileText, UserRound, FolderKanban, BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, BookOpen };
+
+/** Shared swatches for spaces, classes, calendar events, and accent. */
+const SPACE_COLORS = [
+  "#625af6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b", "#cf625a",
+  "#8b5cf6", "#06b6d4", "#0d9488", "#65a30d", "#db2777", "#e11d48",
+  "#4338ca", "#0ea5e9", "#f59e0b", "#ea580c", "#c026d3", "#64748b",
+] as const;
+
+/** Defaults aligned with mobile tab tints for Life / School / Work. */
+const DEFAULT_WORKSPACE_COLORS = {
+  life: "#d99b38",
+  school: "#8b5cf6",
+  work: "#4338ca",
+  career: "#0f766e",
+  studyAbroad: "#0d9488",
+  treasuryOS: "#47a47b",
+  masterOS: "#625af6",
+} as const;
+
+type WorkspaceColorKey = keyof typeof DEFAULT_WORKSPACE_COLORS;
+
+/** Add a row here when shipping a new environment — Settings, CSS vars, and sidebar tint follow. */
+const WORKSPACE_COLOR_OPTIONS: {
+  key: WorkspaceColorKey;
+  label: string;
+  navName: string;
+  dataEnv: string;
+  cssVar: `--env-${string}`;
+  enableKey: "enableLifeOS" | "enableSchoolOS" | "enableWorkOS" | "enableCareerOS" | "enableStudyAbroad" | "enableTreasuryOS" | "enableMasterOS";
+}[] = [
+  { key: "life", label: "Life", navName: "Life", dataEnv: "life", cssVar: "--env-life", enableKey: "enableLifeOS" },
+  { key: "school", label: "School", navName: "School", dataEnv: "school", cssVar: "--env-school", enableKey: "enableSchoolOS" },
+  { key: "work", label: "Work", navName: "Work", dataEnv: "work", cssVar: "--env-work", enableKey: "enableWorkOS" },
+  { key: "career", label: "Career", navName: "Career", dataEnv: "career", cssVar: "--env-career", enableKey: "enableCareerOS" },
+  { key: "studyAbroad", label: "Study Abroad", navName: "Study Abroad", dataEnv: "study-abroad", cssVar: "--env-study-abroad", enableKey: "enableStudyAbroad" },
+  { key: "treasuryOS", label: "Treasury", navName: "Treasury", dataEnv: "treasury", cssVar: "--env-treasury", enableKey: "enableTreasuryOS" },
+  { key: "masterOS", label: "Mastery", navName: "Mastery", dataEnv: "master", cssVar: "--env-master", enableKey: "enableMasterOS" },
+];
+
+const workspaceColorFor = (
+  settings: SettingsState,
+  key: WorkspaceColorKey,
+) => settings.workspaceColors?.[key]?.trim() || DEFAULT_WORKSPACE_COLORS[key];
+
+const accentForView = (view: string, settings: SettingsState) => {
+  const match = WORKSPACE_COLOR_OPTIONS.find(option => option.navName === view);
+  if (match) return workspaceColorFor(settings, match.key);
+  return settings.accent;
+};
+
+const dataEnvForNav = (name: string) =>
+  WORKSPACE_COLOR_OPTIONS.find(option => option.navName === name)?.dataEnv;
+
+const projectIconOptions: { value: ProjectIcon; label: string; icon: typeof Home }[] = [
+  { value: "FolderKanban", label: "Project", icon: FolderKanban }, { value: "BriefcaseBusiness", label: "Career", icon: BriefcaseBusiness },
+  { value: "Code2", label: "Build", icon: Code2 }, { value: "Camera", label: "Photography", icon: Camera },
+  { value: "Utensils", label: "Food", icon: Utensils }, { value: "HeartPulse", label: "Health", icon: HeartPulse },
+  { value: "BookOpen", label: "Learning", icon: BookOpen }, { value: "Sparkles", label: "Creative", icon: Sparkles },
+  { value: "Zap", label: "Momentum", icon: Zap }, { value: "Aperture", label: "Visual", icon: Aperture },
+  { value: "FileText", label: "Writing", icon: FileText }, { value: "UserRound", label: "Personal", icon: UserRound },
+];
+
+function ColorSwatches({ value, onChange, label = "Color" }: { value: string; onChange: (color: string) => void; label?: string }) {
+  const options = SPACE_COLORS.includes(value as typeof SPACE_COLORS[number]) ? [...SPACE_COLORS] : [value, ...SPACE_COLORS];
+  return <>
+    <label>{label}</label>
+    <div className="calendar-color-picker" role="group" aria-label={label}>
+      {options.map(option => <button type="button" aria-label={`Use ${option}`} key={option} className={value === option ? "selected" : ""} style={{ background: option }} onClick={() => onChange(option)} />)}
+    </div>
+  </>;
+}
+
+type NavName = View;
+type NavItem = { category?: string; name: NavName; icon: typeof Home; href?: string };
+
+const nav: NavItem[] = [
+  { name: "Now", icon: TimerReset },
+  { category: "ENVIRONMENTS", name: "Life", icon: Home },
+  { category: "ENVIRONMENTS", name: "Work", icon: BriefcaseBusiness },
+  { category: "ENVIRONMENTS", name: "Career", icon: Target },
+  { category: "ENVIRONMENTS", name: "School", icon: GraduationCap },
+  { category: "ENVIRONMENTS", name: "Study Abroad", icon: Globe2 },
+  { category: "ENVIRONMENTS", name: "Treasury", icon: WalletCards },
+  { category: "ENVIRONMENTS", name: "Mastery", icon: NotebookPen },
+  { category: "NAVIGATION", name: "Tasks", icon: CheckCircle2 },
+  { category: "NAVIGATION", name: "Calendar", icon: CalendarDays },
+  { category: "NAVIGATION", name: "Library", icon: Library },
+];
+
+const initialTasks: Task[] = [
+  { id: 1, title: "Add your first priority", project: "Inbox", color: "#625af6", due: "", priority: "High", focusMinutes: 25, energy: "Medium" },
+  { id: 2, title: "Explore Spaces and environments", project: "Inbox", color: "#625af6", due: "", priority: "Medium", focusMinutes: 20, energy: "Low" },
+  { id: 3, title: "Try a short focus session", project: "Inbox", color: "#625af6", due: "", priority: "Low", focusMinutes: 15, energy: "Medium" },
+];
+
+const initialSettings: SettingsState = {
+  accent: "#625af6",
+  workspaceColors: { ...DEFAULT_WORKSPACE_COLORS },
+  dailyDigest: true,
+  focusReminders: true,
+  calendarAlerts: true,
+  soundEffects: false,
+  defaultFocusMinutes: 45,
+  defaultEnergy: "Medium",
+  weekStartsMonday: false,
+  defaultCalendarView: "upcoming",
+  compactMode: false,
+  reduceMotion: false,
+  nowTaskId: null,
+  spaceContext: {},
+  ambientActivity: null,
+  currentEnergy: "Medium",
+  momentumLog: [],
+  enableLifeOS: true,
+  enableSchoolOS: true,
+  enableWorkOS: false,
+  enableCareerOS: false,
+  enableStudyAbroad: false,
+  enableTreasuryOS: false,
+  enableMasterOS: false,
+  showCaptureCommands: true,
+  nowQueueIds: [],
+};
+
+// New users start with three empty project templates to explore the product
+const initialProjects: Project[] = [
+  { name: "Project 1", desc: "A focused project with a finish line.", progress: 0, color: "#625af6", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable" },
+  { name: "Project 2", desc: "A focused project with a finish line.", progress: 0, color: "#4b8bdc", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable" },
+  { name: "Project 3", desc: "A focused project with a finish line.", progress: 0, color: "#47a47b", icon: FolderKanban, iconName: "FolderKanban", tasks: 0, kind: "finishable" },
+];
+
+const starterTaskSignature = initialTasks.map(task => `${task.id}:${task.title}`).join("|");
+const isStarterTaskSet = (items: Task[]) => items.length === initialTasks.length && items.map(task => `${task.id}:${task.title}`).join("|") === starterTaskSignature;
+const recoverSpacesFromTasks = (items: Task[]): Project[] => {
+  const spaces = new Map<string, Project>();
+  for (const task of items) {
+    if (!task.project || task.project === "Inbox" || task.classId || spaces.has(task.project)) continue;
+    spaces.set(task.project, {
+      name: task.project,
+      desc: "Recovered from tasks already linked to this space.",
+      progress: 0,
+      color: task.color || "#625af6",
+      iconName: "FolderKanban",
+      icon: projectIcons.FolderKanban,
+      tasks: 0,
+      kind: "finishable",
+    });
+  }
+  return [...spaces.values()];
+};
+
+const initialBrainItems: string[] = [];
+
+const initialCalendarEvents: CalendarEvent[] = [];
+
+const defaultFocusChecklist = ["Choose the next visible step", "Make one meaningful pass", "Leave a clear handoff note"];
+const focusChecklistTemplates = [
+  { name: "Default", items: defaultFocusChecklist },
+  { name: "Admin", items: ["Open the right portal or email", "Find the exact required info", "Send / save / confirm it is done"] },
+  { name: "Writing", items: ["Write the messy first pass", "Tighten the strongest points", "Leave one clear next edit note"] },
+  { name: "Deep work", items: ["Define the tiny outcome", "Block distractions", "Make one meaningful pass"] },
+  { name: "Errands", items: ["Check what is needed", "Do the physical / outside step", "Confirm and reset your space"] },
+  { name: "Study", items: ["Pick the exact section", "Active recall before notes", "Write the confusing question"] },
+];
+
+const formatEventTime = (value: string) => new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+const asTaskList = (data: unknown): unknown[] | null => {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") return Object.values(data as Record<string, unknown>);
+  return null;
+};
+const getTaskFocusSeconds = (task: Task) => {
+  const totalSeconds = Math.max(1, task.focusMinutes) * 60;
+  const stored = typeof task.focusRemainingSeconds === "number" && Number.isFinite(task.focusRemainingSeconds)
+    ? Math.max(0, Math.min(totalSeconds, Math.round(task.focusRemainingSeconds)))
+    : totalSeconds;
+  if (!task.focusSessionRunning || !task.focusUpdatedAt) return stored;
+  const elapsed = Math.floor((Date.now() - Date.parse(task.focusUpdatedAt)) / 1000);
+  if (!Number.isFinite(elapsed) || elapsed <= 0) return stored;
+  return Math.max(0, stored - elapsed);
+};
+const mergeTasksFocus = (local: Task[], remote: Task[]) => {
+  const localById = new Map(local.map(task => [task.id, task]));
+  return remote.map(task => {
+    const prev = localById.get(task.id);
+    if (!prev) return task;
+    const localTs = Date.parse(prev.focusUpdatedAt ?? "") || 0;
+    const remoteTs = Date.parse(task.focusUpdatedAt ?? "") || 0;
+    if (remoteTs >= localTs) return task;
+    return {
+      ...task,
+      focusRemainingSeconds: prev.focusRemainingSeconds,
+      focusSessionStarted: prev.focusSessionStarted,
+      focusSessionRunning: prev.focusSessionRunning,
+      focusHalfwayPrompted: prev.focusHalfwayPrompted,
+      focusUpdatedAt: prev.focusUpdatedAt,
+    };
+  });
+};
+const formatEventRange = (event: CalendarEvent) => {
+  const { startKey, endKey } = getEventDateRange(event);
+  const weekdayNote = event.weekdaysOnly ? " · weekdays" : "";
+  const timeRange = `${formatEventTime(event.start)}${event.end ? ` – ${formatEventTime(event.end)}` : ""}`;
+  if (startKey === endKey || usesDailyTimeWindow(event)) return `${timeRange}${weekdayNote}`;
+  const start = new Date(event.start);
+  const end = new Date(event.end ?? `${endKey}T23:59`);
+  const startLabel = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const endLabel = end.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return `${startLabel}, ${formatEventTime(event.start)} → ${endLabel}, ${formatEventTime(event.end ?? `${endKey}T23:59`)}${weekdayNote}`;
+};
+const formatAmbientDuration = (milliseconds: number) => {
+  const minutes = Math.max(0, Math.floor(milliseconds / 60_000));
+  if (minutes < 1) return "just started";
+  if (minutes < 60) return String(minutes) + " min";
+  return String(Math.floor(minutes / 60)) + "h " + String(minutes % 60) + "m";
+};
+const getGreeting = (date: Date, name = "there") => {
+  const hour = date.getHours();
+  if (hour < 5) return `Still up, ${name}?`;
+  if (hour < 12) return `Good morning, ${name}.`;
+  if (hour < 17) return `Good afternoon, ${name}.`;
+  if (hour < 22) return `Good evening, ${name}.`;
+  return `Good night, ${name}.`;
+};
+// Use centralized priority ranking from constants
+const priorityRank = PRIORITY_RANK;
+const normalizeTask = (task: Partial<Task>): Task => ({
+  id: task.id ?? Date.now(),
+  title: task.title ?? "Untitled task",
+  project: task.project ?? "Inbox",
+  color: task.color ?? "#625af6",
+  due: typeof task.due === "string" ? task.due : "",
+  startTime: typeof task.startTime === "string" && /^\d{1,2}:\d{2}/.test(task.startTime)
+    ? (() => {
+        const [hours, minutes] = task.startTime.split(":").map(Number);
+        if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return undefined;
+        if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return undefined;
+        return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+      })()
+    : undefined,
+  priority: task.priority ?? "Medium",
+  focusMinutes: task.focusMinutes ?? 45,
+  energy: task.energy ?? "Medium",
+  status: task.status ?? (task.canceled ? "Canceled" : task.done ? "Done" : "Not started"),
+  notes: typeof task.notes === "string" ? task.notes : "",
+  handoffNote: typeof task.handoffNote === "string" ? task.handoffNote : "",
+  nextAction: typeof task.nextAction === "string" ? task.nextAction : "",
+  followUpDate: /^\d{4}-\d{2}-\d{2}$/.test(task.followUpDate ?? "") ? task.followUpDate : undefined,
+  recurringDays: typeof task.recurringDays === "number" && task.recurringDays > 0 ? Math.min(365, Math.round(task.recurringDays)) : undefined,
+  completedAt: typeof task.completedAt === "string" ? task.completedAt : undefined,
+  customProperties: Array.isArray(task.customProperties)
+    ? task.customProperties.filter(property => property && typeof property.name === "string").map(property => ({
+        id: property.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: property.name,
+        value: property.value ?? "",
+      }))
+    : [],
+  classId: typeof task.classId === "string" ? task.classId : undefined,
+  academicType: task.academicType,
+  gradeCategoryId: typeof task.gradeCategoryId === "string" ? task.gradeCategoryId : undefined,
+  gradeWeight: typeof task.gradeWeight === "number" ? task.gradeWeight : undefined,
+  pointsEarned: typeof task.pointsEarned === "number" && Number.isFinite(task.pointsEarned) ? Math.max(0, task.pointsEarned) : undefined,
+  pointsPossible: typeof task.pointsPossible === "number" && Number.isFinite(task.pointsPossible) ? Math.max(0, task.pointsPossible) : undefined,
+  submission: typeof task.submission === "string" ? task.submission : "",
+  calendarEventId: typeof task.calendarEventId === "string" ? task.calendarEventId : undefined,
+  checklist: Array.isArray(task.checklist) ? task.checklist : [],
+  checklistProgress: Array.isArray(task.checklistProgress) ? task.checklistProgress : [],
+  focusRemainingSeconds: typeof task.focusRemainingSeconds === "number" && Number.isFinite(task.focusRemainingSeconds)
+    ? Math.max(0, Math.min((task.focusMinutes ?? 45) * 60, Math.round(task.focusRemainingSeconds)))
+    : undefined,
+  focusSessionStarted: Boolean(task.focusSessionStarted),
+  focusSessionRunning: Boolean(task.focusSessionRunning),
+  focusHalfwayPrompted: Boolean(task.focusHalfwayPrompted),
+  focusUpdatedAt: typeof task.focusUpdatedAt === "string" ? task.focusUpdatedAt : undefined,
+  done: task.done,
+  canceled: task.canceled,
+});
+const normalizeClass = (record: Partial<ClassRecord>): ClassRecord => ({
+  id: record.id ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  code: record.code?.trim().toUpperCase() || "UNTITLED",
+  name: record.name?.trim() || "Untitled class",
+  term: record.term?.trim() || "",
+  instructor: record.instructor?.trim() || "",
+  location: record.location?.trim() || "",
+  credits: typeof record.credits === "number" ? record.credits : undefined,
+  color: record.color || "#625af6",
+  semesterStart: /^\d{4}-\d{2}-\d{2}$/.test(record.semesterStart ?? "") ? record.semesterStart : undefined,
+  semesterEnd: /^\d{4}-\d{2}-\d{2}$/.test(record.semesterEnd ?? "") ? record.semesterEnd : undefined,
+  archived: Boolean(record.archived),
+  gradingScale: Array.isArray(record.gradingScale)
+    ? record.gradingScale
+        .filter((band) => band && typeof band.letter === "string" && Number.isFinite(band.min))
+        .map((band) => ({ letter: String(band.letter).trim() || "?", min: Math.max(0, Math.min(100, Number(band.min))) }))
+    : undefined,
+  gradeCategories: Array.isArray(record.gradeCategories)
+    ? record.gradeCategories
+        .filter((cat) => cat && typeof cat.id === "string" && typeof cat.name === "string" && Number.isFinite(cat.weight))
+        .map((cat) => {
+          const defaultPoints =
+            typeof cat.defaultPoints === "number" && Number.isFinite(cat.defaultPoints) && cat.defaultPoints > 0
+              ? Math.round(cat.defaultPoints * 10) / 10
+              : undefined;
+          return {
+            id: cat.id,
+            name: cat.name.trim() || "Category",
+            weight: Math.max(0, Math.min(100, Number(cat.weight))),
+            ...(defaultPoints != null ? { defaultPoints } : {}),
+          };
+        })
+    : undefined,
+  gradingMode: record.gradingMode === "items" ? "items" : record.gradingMode === "categories" ? "categories" : undefined,
+});
+const isClassArchived = (record: ClassRecord, today = toDateKey(new Date())) => Boolean(record.archived || (record.semesterEnd && record.semesterEnd < today));
+const getTaskStatus = (task: Task): TaskStatus => task.status ?? (task.canceled ? "Canceled" : task.done ? "Done" : "Not started");
+const dueRank = (due: string) => {
+  const value = due.toLowerCase();
+  if (value === "today") return 0;
+  if (value === "tomorrow") return 1;
+  const parsed = Date.parse(`${due} ${new Date().getFullYear()}`);
+  return Number.isNaN(parsed) ? 999 : parsed;
+};
+
+const unfoldIcs = (text: string) => text.replace(/\r?\n[ \t]/g, "");
+const cleanIcsText = (value = "") => value.replace(/\\n/g, "\n").replace(/\\,/g, ",").replace(/\\;/g, ";").trim();
+const getIcsValue = (block: string, field: string) => {
+  const match = block.match(new RegExp(`^${field}(?:;[^:]*)?:(.*)$`, "m"));
+  return match ? cleanIcsText(match[1]) : "";
+};
+const parseIcsDate = (value: string) => {
+  if (!value) return "";
+  const raw = value.trim();
+  if (/^\d{8}$/.test(raw)) return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}T09:00`;
+  const match = raw.match(/^(\d{4})(\d{2})(\d{2})T?(\d{2})?(\d{2})?/);
+  if (!match) return "";
+  const [, year, month, day, hour = "09", minute = "00"] = match;
+  const suffix = raw.endsWith("Z") ? "Z" : "";
+  const parsed = new Date(`${year}-${month}-${day}T${hour}:${minute}:00${suffix}`);
+  if (Number.isNaN(parsed.getTime())) return `${year}-${month}-${day}T${hour}:${minute}`;
+  return toDateKey(parsed) + `T${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`;
+};
+const parseIcsEvents = (ics: string): CalendarEvent[] => {
+  const text = unfoldIcs(ics);
+  const blocks = text.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g) ?? [];
+  return blocks.map((block, index) => {
+    const start = parseIcsDate(getIcsValue(block, "DTSTART"));
+    if (!start) return null;
+    const uid = getIcsValue(block, "UID") || `${getIcsValue(block, "SUMMARY")}-${start}-${index}`;
+    const locationRaw = getIcsValue(block, "LOCATION");
+    const description = getIcsValue(block, "DESCRIPTION");
+    const urlRaw = getIcsValue(block, "URL");
+    const meetingUrl = extractMeetingUrl(urlRaw) || extractMeetingUrl(locationRaw) || extractMeetingUrl(description) || undefined;
+    return {
+      id: `ical-${uid}`,
+      title: getIcsValue(block, "SUMMARY") || "Untitled calendar event",
+      start,
+      end: parseIcsDate(getIcsValue(block, "DTEND")) || undefined,
+      source: "iCal" as const,
+      color: "#47a47b",
+      location: eventPlaceLabel(locationRaw) || undefined,
+      url: meetingUrl || (urlRaw.startsWith("http") ? urlRaw : undefined),
+      notes: description || undefined,
+    };
+  }).filter(Boolean) as CalendarEvent[];
+};
+
+function IconButton({ children, onClick, label }: { children: React.ReactNode; onClick?: () => void; label: string }) {
+  return <button onClick={onClick} aria-label={label} className="icon-button">{children}</button>;
+}
+
+export default function LifeOS() {
+  logger.debug('LifeOS component rendered');
+  const [user, setUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [cloudUserId, setCloudUserId] = useState<string | null>(null);
+  const [view, setView] = useState<View>(() => viewFromLocation());
+  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tasksHydrated, setTasksHydrated] = useState(false);
+  /** False after a cloud read error so we never sync [] over a still-valid remote list. */
+  const [tasksSyncEnabled, setTasksSyncEnabled] = useState(false);
+  const [palette, setPalette] = useState(false);
+  const [capture, setCapture] = useState(false);
+  const [focus, setFocus] = useState(false);
+  const [activeTaskId, setActiveTaskId] = useState(initialTasks[0].id);
+  const [sidebar, setSidebar] = useState(false);
+  const [dark, setDark] = useState(false);
+  const [settingsState, setSettingsState] = useState<SettingsState>(initialSettings);
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
+  const [query, setQuery] = useState("");
+  const [brainItems, setBrainItems] = useState(initialBrainItems);
+  const [brainHydrated, setBrainHydrated] = useState(false);
+  const [classes, setClasses] = useState<ClassRecord[]>([]);
+  const [classesHydrated, setClassesHydrated] = useState(false);
+  const [classesSyncEnabled, setClassesSyncEnabled] = useState(false);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [notesHydrated, setNotesHydrated] = useState(false);
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [spacesFilter, setSpacesFilter] = useState<"All" | "Classes" | "Projects" | "Maintenance" | "Archived">("All");
+  const [spaceComposer, setSpaceComposer] = useState<SpaceKind | null>(null);
+  const [academicComposerClassId, setAcademicComposerClassId] = useState<string | null>(null);
+  const [projectItems, setProjectItems] = useState(initialProjects);
+  const [projectsHydrated, setProjectsHydrated] = useState(false);
+  const restoredMissingSpaces = useRef(false);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(initialCalendarEvents);
+  const [calendarHydrated, setCalendarHydrated] = useState(false);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [resourcesHydrated, setResourcesHydrated] = useState(false);
+  const [lifeHub, setLifeHub] = useState<LifeHubState>(emptyLifeHub);
+  const [lifeHubHydrated, setLifeHubHydrated] = useState(false);
+  const [schoolHub, setSchoolHub] = useState<SchoolHubState>(emptySchoolHub);
+  const [schoolHubHydrated, setSchoolHubHydrated] = useState(false);
+  const [workHub, setWorkHub] = useState<WorkHubState>(emptyWorkHub);
+  const [workHubHydrated, setWorkHubHydrated] = useState(false);
+  const [timeTracking, setTimeTracking] = useState<TimeTrackingState>(emptyTimeTracking());
+  const [timeTrackingHydrated, setTimeTrackingHydrated] = useState(false);
+  const [studyAbroadHub, setStudyAbroadHub] = useState<StudyAbroadHub>(emptyStudyAbroadHub);
+  const [studyAbroadHubHydrated, setStudyAbroadHubHydrated] = useState(false);
+  const [studyAbroadView, setStudyAbroadView] = useState<StudyAbroadView>("dashboard");
+  const [studyAbroadFocusEntity, setStudyAbroadFocusEntity] = useState<StudyAbroadFocusEntity | null>(null);
+  const [careerHub, setCareerHub] = useState<CareerHub>(emptyCareerHub());
+  const [careerHubHydrated, setCareerHubHydrated] = useState(false);
+  const [guidedHub, setGuidedHub] = useState<ExecutiveHub>(emptyExecutiveHub());
+  const [guidedHubHydrated, setGuidedHubHydrated] = useState(false);
+  const [guidedPanelOpen, setGuidedPanelOpen] = useState(false);
+  const [careerView, setCareerView] = useState<CareerView>("overview");
+  const [workFocusTaskId, setWorkFocusTaskId] = useState<string | null>(null);
+  const [workView, setWorkView] = useState<WorkView>("dashboard");
+  const [schoolFocusTaskId, setSchoolFocusTaskId] = useState<number | null>(null);
+  const [schoolView, setSchoolView] = useState<SchoolView>("home");
+  const [notificationsTick, setNotificationsTick] = useState(0);
+  const [dismissedNotificationIds, setDismissedNotificationIds] = useState<Set<string>>(() => loadDismissedNotificationIds());
+  const [hubCollection, setHubCollection] = useState<HubCollectionTarget | null>(null);
+  const [schoolProfileOpen, setSchoolProfileOpen] = useState(false);
+  const [schoolClassAction, setSchoolClassAction] = useState<"coursework" | "lecture" | null>(null);
+  const [composer, setComposer] = useState<"task" | "project" | null>(null);
+  const [aiTaskComposer, setAiTaskComposer] = useState(false);
+  const [calendarComposer, setCalendarComposer] = useState(false);
+  const [defaultEventDate, setDefaultEventDate] = useState<string | null>(null);
+  const [calendarImporter, setCalendarImporter] = useState(false);
+  const [editingCalendarEventId, setEditingCalendarEventId] = useState<string | null>(null);
+  const [breakOpen, setBreakOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [subscribeNote, setSubscribeNote] = useState("");
+  const [hubPaywallOpen, setHubPaywallOpen] = useState(false);
+  const [pendingPaidHub, setPendingPaidHub] = useState<View | null>(null);
+  const [actionTaskId, setActionTaskId] = useState<number | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
+  const [taskPageId, setTaskPageId] = useState<number | null>(null);
+  const [actionProjectName, setActionProjectName] = useState<string | null>(null);
+  const [actionClassId, setActionClassId] = useState<string | null>(null);
+  const [selectedProjectName, setSelectedProjectName] = useState<string | null>(null);
+  const [fullscreenProject, setFullscreenProject] = useState<string | null>(null);
+  const [editingProjectName, setEditingProjectName] = useState<string | null>(null);
+  const [editingClassId, setEditingClassId] = useState<string | null>(null);
+  const [ambientStartOpen, setAmbientStartOpen] = useState(false);
+  const [ambientWrapupOpen, setAmbientWrapupOpen] = useState(false);
+  const [dailyResetOpen, setDailyResetOpen] = useState(false);
+  const [weeklyReviewOpen, setWeeklyReviewOpen] = useState(false);
+  const [ambientDraft, setAmbientDraft] = useState<AmbientDraft>(null);
+  const [weeklyPlan, setWeeklyPlan] = useState<WeeklyPlan>({});
+  const [weeklyPlanHydrated, setWeeklyPlanHydrated] = useState(false);
+
+  const chooseNowTask = useCallback((taskId: number | null) => {
+    if (taskId !== null) setActiveTaskId(taskId);
+    setSettingsState(current => ({
+      ...current,
+      nowTaskId: taskId,
+      nowQueueIds: taskId == null
+        ? (current.nowQueueIds ?? [])
+        : (current.nowQueueIds ?? []).filter(id => id !== taskId),
+    }));
+  }, []);
+  const enqueueNowTask = useCallback((taskId: number) => {
+    setSettingsState(current => {
+      if (current.nowTaskId === taskId) return current;
+      const queue = current.nowQueueIds ?? [];
+      if (queue.includes(taskId)) return current;
+      return { ...current, nowQueueIds: [...queue, taskId] };
+    });
+  }, []);
+  const setNowQueueIds = useCallback((ids: number[]) => {
+    setSettingsState(current => ({ ...current, nowQueueIds: ids }));
+  }, []);
+  const beginAmbientActivity = (title: string, space?: { name: string; color: string }) => {
+    setSettingsState(current => ({ ...current, ambientActivity: { title: title.trim() || "Unplanned work", startedAt: new Date().toISOString(), spaceName: space?.name, spaceColor: space?.color } }));
+    setAmbientStartOpen(false);
+    flash("Started. You can organize it later.");
+  };
+  const wrapUpAmbientActivity = (outcome: "task" | "note" | "dismiss", note: string) => {
+    const activity = settingsState.ambientActivity;
+    if (!activity) return;
+    if (outcome === "task") {
+      setTasks(items => [...items, normalizeTask({ id: Date.now(), title: activity.title, project: activity.spaceName || "Inbox", color: activity.spaceColor || "#625af6", due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, status: "Not started", notes: note.trim() || "Captured after unplanned work.", customProperties: [], checklist: [], checklistProgress: [] })]);
+      flash(activity.spaceName ? "Saved to " + activity.spaceName : "Saved as a task in Inbox");
+    } else if (outcome === "note") {
+      setNotes(items => [{ id: String(Date.now()) + "-" + Math.random().toString(36).slice(2), title: activity.title, body: note.trim() || "Unplanned work session.", projectName: activity.spaceName, updatedAt: new Date().toISOString() }, ...items]);
+      flash("Saved as a note");
+    } else {
+      flash("Let it go. No admin required.");
+    }
+    setSettingsState(current => ({ ...current, ambientActivity: null }));
+    setAmbientWrapupOpen(false);
+  };
+  const rememberSpaceTask = useCallback((task: Task) => {
+    const key = task.classId ? `class:${task.classId}` : `project:${task.project}`;
+    setSettingsState(current => ({ ...current, spaceContext: { ...current.spaceContext, [key]: { ...current.spaceContext?.[key], lastTaskId: task.id, updatedAt: new Date().toISOString() } } }));
+  }, []);
+  const allNotifications = useMemo(() => {
+    // Wait until cloud data has loaded so demo starter tasks / sample WorkOS
+    // never flash into the notification center.
+    if (!tasksHydrated || !workHubHydrated || !projectsHydrated) return [];
+    return generateLifeOSNotifications({
+      workHub: isSampleWorkHub(workHub) ? emptyWorkHub : workHub,
+      tasks: isStarterTaskSet(tasks) ? [] : tasks,
+      projects: projectItems,
+      classes,
+      events: calendarEvents,
+      settings: {
+        calendarAlerts: settingsState.calendarAlerts,
+        enableWorkOS: settingsState.enableWorkOS,
+        enableSchoolOS: settingsState.enableSchoolOS,
+        enableLifeOS: settingsState.enableLifeOS,
+      },
+      guidedRuns: guidedHub.runs.map((r) => ({ id: r.id, status: r.state, state: r.state, routineId: r.routineId, currentStepId: r.currentStepId, followUpOfferedAt: r.followUpOfferedAt })),
+      guidedRoutines: guidedHub.routines.map((r) => ({ id: r.id, name: r.name })),
+    });
+  }, [workHub, workHubHydrated, tasks, tasksHydrated, projectItems, projectsHydrated, classes, calendarEvents, settingsState.calendarAlerts, settingsState.enableWorkOS, settingsState.enableSchoolOS, settingsState.enableLifeOS, guidedHub, notificationsTick]);
+
+  const visibleNotifications = useMemo(
+    () => allNotifications.filter(item => !dismissedNotificationIds.has(item.id)),
+    [allNotifications, dismissedNotificationIds],
+  );
+
+  useEffect(() => {
+    setNotificationsTick(Date.now());
+    const interval = window.setInterval(() => setNotificationsTick(Date.now()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const systemNotifiedRef = useRef<Set<string>>(new Set());
+  const systemNotifyPrimedRef = useRef(false);
+  useEffect(() => {
+    // iOS Safari (and some WebViews) have no Notification global — guard before touching it.
+    if (typeof window === "undefined" || !("Notification" in window) || Notification.permission !== "granted") return;
+    // Prime on first load so existing items stay in the tab instead of OS-toasting on open.
+    if (!systemNotifyPrimedRef.current) {
+      if (!visibleNotifications.length) return;
+      visibleNotifications.forEach(item => {
+        systemNotifiedRef.current.add(item.id);
+        systemNotifiedRef.current.add(`focus-${item.id}`);
+      });
+      systemNotifyPrimedRef.current = true;
+      return;
+    }
+    const push = (item: (typeof visibleNotifications)[number], tag: string) => {
+      if (systemNotifiedRef.current.has(tag)) return;
+      systemNotifiedRef.current.add(tag);
+      new Notification(`${notificationSourceLabel[item.source]} · ${item.title}`, {
+        body: `${item.dueIn}${item.subtitle ? ` · ${item.subtitle}` : ""}`,
+        tag,
+      });
+    };
+    if (settingsState.calendarAlerts) {
+      visibleNotifications
+        .filter(item => (item.kind === "meeting" || item.kind === "event") && isBannerCandidate(item))
+        .forEach(item => push(item, item.id));
+    }
+    if (settingsState.focusReminders) {
+      visibleNotifications
+        .filter(item => item.kind === "task" && item.urgency === "overdue")
+        .slice(0, 3)
+        .forEach(item => push(item, `focus-${item.id}`));
+    }
+  }, [visibleNotifications, settingsState.calendarAlerts, settingsState.focusReminders]);
+
+  const dismissNotification = useCallback((id: string) => {
+    setDismissedNotificationIds(current => {
+      const next = new Set(current);
+      next.add(id);
+      saveDismissedNotificationIds(next);
+      return next;
+    });
+  }, []);
+
+  const dismissAllNotifications = useCallback(() => {
+    setDismissedNotificationIds(current => {
+      const next = new Set(current);
+      visibleNotifications.forEach(item => next.add(item.id));
+      saveDismissedNotificationIds(next);
+      return next;
+    });
+  }, [visibleNotifications]);
+
+  const openFocus = useCallback((taskId?: number) => {
+    if (taskId) {
+      setActiveTaskId(taskId);
+      chooseNowTask(taskId);
+      const task = tasks.find(item => item.id === taskId);
+      if (task) rememberSpaceTask(task);
+      if (task) setSettingsState(current => ({ ...current, momentumLog: [{ id: String(Date.now()), at: new Date().toISOString(), type: "focus" as const, title: task.title }, ...(current.momentumLog ?? [])].slice(0, 40) }));
+    }
+    setFocus(true);
+  }, [chooseNowTask, rememberSpaceTask, tasks]);
+  const openTaskPage = useCallback((taskId: number) => {
+    const task = tasks.find(item => item.id === taskId);
+    if (task) rememberSpaceTask(task);
+    setTaskPageId(taskId);
+    setSidebar(false);
+  }, [rememberSpaceTask, tasks]);
+  const bridgeWorkTaskToLife = useCallback((workTaskId: string) => {
+    const workTask = workHub.tasks.find(item => item.id === workTaskId);
+    if (!workTask) return null;
+    setWorkFocusTaskId(workTaskId);
+    const deliverable = workHub.deliverables.find(item => item.id === workTask.deliverableId);
+    const project = workHub.projects.find(item => item.id === deliverable?.projectId);
+    const projectName = project?.name ?? "Work";
+    const linked = tasks.find(task =>
+      task.customProperties?.some(property => property.name === "workTaskId" && property.value === workTaskId)
+      || (task.title === workTask.title && task.project === projectName),
+    );
+    if (linked) return linked.id;
+    if (project) {
+      setProjectItems(items => {
+        if (items.some(entry => entry.name === projectName)) return items;
+        return [...items, {
+          name: projectName,
+          desc: project.description?.trim() || "A focused project with a finish line.",
+          progress: 0,
+          color: project.color ?? "#625af6",
+          icon: projectIcons.BriefcaseBusiness,
+          iconName: "BriefcaseBusiness" as ProjectIcon,
+          tasks: 0,
+          kind: "finishable" as ProjectKind,
+        }];
+      });
+    }
+    const priorityMap = { high: "High", medium: "Medium", low: "Low" } as const;
+    const statusMap = { open: "Not started", in_progress: "In progress", blocked: "Blocked", done: "Done" } as const;
+    const lifeTaskId = Date.now();
+    setTasks(items => [...items, normalizeTask({
+      id: lifeTaskId,
+      title: workTask.title,
+      project: projectName,
+      color: project?.color ?? "#625af6",
+      due: workTask.dueDate ?? toDateKey(new Date()),
+      priority: priorityMap[workTask.priority],
+      focusMinutes: settingsState.defaultFocusMinutes,
+      energy: settingsState.defaultEnergy,
+      status: statusMap[workTask.status],
+      notes: workTask.notes ?? workTask.description ?? "",
+      checklist: workTask.checklist ?? [],
+      checklistProgress: workTask.checklistProgress ?? (workTask.checklist ?? []).map(() => false),
+      customProperties: [{ id: "workTaskId", name: "workTaskId", value: workTaskId }],
+    })]);
+    return lifeTaskId;
+  }, [workHub, tasks, settingsState.defaultFocusMinutes, settingsState.defaultEnergy]);
+  const openWorkTask = useCallback((workTaskId: string) => {
+    const lifeTaskId = bridgeWorkTaskToLife(workTaskId);
+    if (lifeTaskId) openTaskPage(lifeTaskId);
+  }, [bridgeWorkTaskToLife, openTaskPage]);
+  const focusWorkTask = useCallback((workTaskId: string) => {
+    const lifeTaskId = bridgeWorkTaskToLife(workTaskId);
+    if (lifeTaskId) openFocus(lifeTaskId);
+  }, [bridgeWorkTaskToLife, openFocus]);
+  const bridgeStudyAbroadTaskToLife = useCallback((studyAbroadTaskId: string) => {
+    const studyTask = studyAbroadHub.tasks.find(item => item.id === studyAbroadTaskId);
+    if (!studyTask) return null;
+    const linked = tasks.find(task =>
+      task.customProperties?.some(property => property.name === "studyAbroadTaskId" && property.value === studyAbroadTaskId)
+      || (task.title === studyTask.title && task.project === "Study Abroad"),
+    );
+    if (linked) return linked.id;
+    setProjectItems(items => {
+      if (items.some(entry => entry.name === "Study Abroad")) return items;
+      return [...items, {
+        name: "Study Abroad",
+        desc: "Study abroad applications, documents, and deadlines.",
+        progress: 0,
+        color: "#2f6fed",
+        icon: projectIcons.BookOpen,
+        iconName: "BookOpen" as ProjectIcon,
+        tasks: 0,
+        kind: "finishable" as ProjectKind,
+      }];
+    });
+    const lifeTaskId = Date.now();
+    setTasks(items => [...items, normalizeTask({
+      id: lifeTaskId,
+      title: studyTask.title,
+      project: "Study Abroad",
+      color: "#2f6fed",
+      due: studyTask.due ?? toDateKey(new Date()),
+      priority: "Medium",
+      focusMinutes: settingsState.defaultFocusMinutes,
+      energy: settingsState.defaultEnergy,
+      status: studyTask.done ? "Done" : "Not started",
+      notes: studyTask.notes ?? "",
+      checklist: [],
+      checklistProgress: [],
+      customProperties: [{ id: "studyAbroadTaskId", name: "studyAbroadTaskId", value: studyAbroadTaskId }],
+    })]);
+    return lifeTaskId;
+  }, [studyAbroadHub.tasks, tasks, settingsState.defaultFocusMinutes, settingsState.defaultEnergy]);
+  const focusStudyAbroadTask = useCallback((studyAbroadTaskId: string) => {
+    const lifeTaskId = bridgeStudyAbroadTaskToLife(studyAbroadTaskId);
+    if (lifeTaskId) openFocus(lifeTaskId);
+  }, [bridgeStudyAbroadTaskToLife, openFocus]);
+  const isEnvironmentEnabled = useCallback(
+    (name: View) =>
+      isHubVisibleInNav(name, {
+        entitlement: settingsState.entitlement,
+        enableLifeOS: settingsState.enableLifeOS,
+        enableSchoolOS: settingsState.enableSchoolOS,
+        enableWorkOS: settingsState.enableWorkOS,
+        enableCareerOS: settingsState.enableCareerOS,
+        enableStudyAbroad: settingsState.enableStudyAbroad,
+        enableTreasuryOS: settingsState.enableTreasuryOS,
+        enableMasterOS: settingsState.enableMasterOS,
+      }),
+    [
+      settingsState.entitlement,
+      settingsState.enableLifeOS,
+      settingsState.enableSchoolOS,
+      settingsState.enableWorkOS,
+      settingsState.enableCareerOS,
+      settingsState.enableStudyAbroad,
+      settingsState.enableTreasuryOS,
+      settingsState.enableMasterOS,
+    ],
+  );
+
+  const go = useCallback((next: View) => {
+    let destination: View = next === "Dashboard" ? "Life" : ["Notes", "Resources", "Brain", "Knowledge"].includes(next) ? "Library" : next;
+    if (isPaidHub(destination) && !canAccessPaidHubs(settingsState.entitlement)) {
+      setPendingPaidHub(destination);
+      setHubPaywallOpen(true);
+      setSidebar(false);
+      return;
+    }
+    if (!isEnvironmentEnabled(destination)) destination = "Now";
+    if (destination === "Spaces") { setSelectedProjectName(null); setSelectedClassId(null); }
+    setView(destination); setSidebar(false); if (destination === "Focus") setFocus(true);
+  }, [isEnvironmentEnabled, settingsState.entitlement]);
+  const openProjectSpace = useCallback((projectName: string, workProject?: WorkProject) => {
+    setProjectItems(items => {
+      if (items.some(project => project.name === projectName)) return items;
+      const source = workProject ?? workHub.projects.find(project => project.name === projectName);
+      if (!source) return items;
+      return [...items, {
+        name: projectName,
+        desc: source.description?.trim() || "A focused project with a finish line.",
+        progress: 0,
+        color: source.color ?? "#625af6",
+        icon: projectIcons.BriefcaseBusiness,
+        iconName: "BriefcaseBusiness" as ProjectIcon,
+        tasks: 0,
+        kind: "finishable" as ProjectKind,
+      }];
+    });
+    const context = settingsState.spaceContext?.[`project:${projectName}`];
+    if (context?.lastTaskId) setActiveTaskId(context.lastTaskId);
+    setSettingsState(current => ({
+      ...current,
+      spaceContext: {
+        ...current.spaceContext,
+        [`project:${projectName}`]: { ...current.spaceContext?.[`project:${projectName}`], updatedAt: new Date().toISOString() },
+      },
+    }));
+    setSpacesFilter("Projects");
+    setSelectedClassId(null);
+    setSelectedProjectName(projectName);
+    setView("Spaces");
+    setSidebar(false);
+  }, [settingsState.spaceContext, workHub.projects]);
+  const openClassSpace = useCallback((classId: string) => {
+    const context = settingsState.spaceContext?.[`class:${classId}`];
+    if (context?.lastTaskId) setActiveTaskId(context.lastTaskId);
+    setSettingsState(current => ({
+      ...current,
+      spaceContext: {
+        ...current.spaceContext,
+        [`class:${classId}`]: { ...current.spaceContext?.[`class:${classId}`], updatedAt: new Date().toISOString() },
+      },
+    }));
+    setSelectedProjectName(null);
+    setSelectedClassId(classId);
+    setView("Spaces");
+    setSidebar(false);
+  }, [settingsState.spaceContext]);
+  const openSpacesList = useCallback((filter: "All" | "Classes" | "Projects" | "Maintenance" | "Archived" = "All") => {
+    setSpacesFilter(filter);
+    setSelectedProjectName(null);
+    setSelectedClassId(null);
+    setView("Spaces");
+    setSidebar(false);
+  }, []);
+  const openWorkProjectSpace = useCallback((projectId: string) => {
+    const workProject = workHub.projects.find(item => item.id === projectId);
+    if (!workProject) return;
+    openProjectSpace(workProject.name, workProject);
+  }, [openProjectSpace, workHub.projects]);
+  const handleNotificationNavigate = useCallback((notification: LifeOSNotification) => {
+    const action: NotificationAction = notification.action;
+    if (action.type === "work") {
+      if (action.view === "projects" && action.itemId) {
+        openWorkProjectSpace(action.itemId);
+        return;
+      }
+      if (action.view === "tasks" && action.itemId) {
+        openWorkTask(action.itemId);
+        return;
+      }
+      if (action.view === "deliverables" && action.itemId) {
+        const deliverable = workHub.deliverables.find(item => item.id === action.itemId);
+        if (deliverable) {
+          openWorkProjectSpace(deliverable.projectId);
+          return;
+        }
+      }
+      if (action.view === "calendar" && action.itemId) {
+        const meeting = workHub.meetings.find(item => item.id === action.itemId);
+        if (meeting?.projectId) {
+          openWorkProjectSpace(meeting.projectId);
+          return;
+        }
+      }
+      setWorkView(action.view);
+      go("Work");
+      return;
+    }
+    if (action.type === "life-project") {
+      if (projectItems.some(project => project.name === action.projectName)) {
+        openProjectSpace(action.projectName);
+        return;
+      }
+      go("Spaces");
+      return;
+    }
+    if (action.type === "life-task" || action.type === "school-task") {
+      if (tasks.some(task => task.id === action.taskId)) {
+        openTaskPage(action.taskId);
+        return;
+      }
+      go(action.type === "school-task" ? "School" : "Tasks");
+      return;
+    }
+    if (action.type === "calendar") {
+      if (action.eventId && calendarEvents.some(event => event.id === action.eventId)) {
+        setEditingCalendarEventId(action.eventId);
+      }
+      go("Calendar");
+      return;
+    }
+    if (action.type === "now") go("Now");
+    if (action.type === "guided") {
+      setGuidedPanelOpen(true);
+      go("Now");
+    }
+  }, [calendarEvents, go, openProjectSpace, openTaskPage, openWorkProjectSpace, openWorkTask, projectItems, tasks, workHub.deliverables, workHub.meetings]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const writeCurrentView = () => {
+      const url = new URL(window.location.href);
+      const routeValue = view === "Dashboard" ? "now" : view === "Calendar" ? "today" : view === "Study Abroad" ? "study-abroad" : view === "Career" ? "career" : view === "Mastery" ? "masteros" : view.toLowerCase();
+      const currentView = url.searchParams.get("view");
+      const shouldClearMos = view !== "Mastery" && url.searchParams.has("mos");
+      if (currentView === routeValue && !shouldClearMos) return;
+      url.searchParams.set("view", routeValue);
+      if (view !== "Mastery") url.searchParams.delete("mos");
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    };
+    const restoreView = () => setView(viewFromLocation());
+    writeCurrentView();
+    window.addEventListener("popstate", restoreView);
+    return () => window.removeEventListener("popstate", restoreView);
+  }, [view]);
+  useEffect(() => {
+    const importICloudEvents = (event: Event) => {
+      const incoming = (event as CustomEvent<CalendarEvent[]>).detail;
+      if (!Array.isArray(incoming)) return;
+      setCalendarEvents(current => [...current.filter(item => !item.id.startsWith("icloud-")), ...incoming]);
+    };
+    window.addEventListener("lifeos:icloud-events", importICloudEvents);
+    return () => window.removeEventListener("lifeos:icloud-events", importICloudEvents);
+  }, []);
+  useEffect(() => {
+    const importGoogleEvents = (event: Event) => {
+      const incoming = (event as CustomEvent<CalendarEvent[]>).detail;
+      if (!Array.isArray(incoming)) return;
+      setCalendarEvents(current => [...current.filter(item => !item.id.startsWith("google-")), ...incoming]);
+    };
+    window.addEventListener("lifeos:google-calendar-events", importGoogleEvents);
+    return () => window.removeEventListener("lifeos:google-calendar-events", importGoogleEvents);
+  }, []);
+  useEffect(() => {
+    const importSynapseEvents = (event: Event) => {
+      const incoming = (event as CustomEvent<SynapseCalendarEvent[]>).detail;
+      if (!Array.isArray(incoming)) return;
+      setCalendarEvents((current) => mergeSynapseCalendarEvents(current, incoming) as CalendarEvent[]);
+    };
+    window.addEventListener("lifeos:synapse-calendar-events", importSynapseEvents);
+    return () => window.removeEventListener("lifeos:synapse-calendar-events", importSynapseEvents);
+  }, []);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette(true); }
+      if (e.key === "Escape") {
+        setPalette(false);
+        setCapture(false);
+        setComposer(null);
+        setAiTaskComposer(false);
+        setCalendarComposer(false);
+        setCalendarImporter(false);
+        setEditingCalendarEventId(null);
+        setBreakOpen(false);
+        setActionTaskId(null);
+        setActionClassId(null);
+        setEditingTaskId(null);
+        setTaskPageId(null);
+        setSpaceComposer(null);
+        setAcademicComposerClassId(null);
+        setActionProjectName(null);
+        setEditingClassId(null);
+        setSelectedProjectName(null);
+        setAmbientStartOpen(false);
+        setAmbientWrapupOpen(false);
+        setAmbientDraft(null);
+        setHubCollection(null);
+        setSchoolProfileOpen(false);
+        setSchoolClassAction(null);
+        setSidebar(false);
+        if (focus) {
+          setFocus(false);
+          setView("Dashboard");
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [focus]);
+
+  useEffect(() => {
+    // Check for test user ID in dev mode
+    const testUserId = typeof window !== 'undefined' ? sessionStorage.getItem(STORAGE_KEYS.USER_ID) : null;
+    if (testUserId === TEST_USER.ID) {
+      logger.debug('Using test user for development');
+      setUser({ displayName: TEST_USER.DISPLAY_NAME, email: TEST_USER.EMAIL });
+      setUserId(testUserId);
+      setCloudUserId(testUserId);
+      setAuthLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+
+    void (async () => {
+      const readyAuth = await whenClientAuthReady();
+      if (cancelled) return;
+      if (!readyAuth) {
+        logger.warn('Firebase auth not initialized');
+        setAuthLoading(false);
+        return;
+      }
+
+      unsubscribe = onAuthStateChanged(readyAuth, (currentUser) => {
+        if (cancelled) return;
+        if (currentUser) {
+          logger.info('User authenticated', { uid: currentUser.uid, email: currentUser.email });
+          setUser(currentUser);
+          setUserId(currentUser.uid);
+          setCloudUserId(currentUser.uid);
+        } else {
+          logger.info('User not authenticated');
+          setUser(null);
+          setCloudUserId(null);
+          clearUserId();
+        }
+        setAuthLoading(false);
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, []);
+  useEffect(() => {
+    if (cloudUserId === null) {
+      setTasks([]);
+      setProjectItems([]);
+      setClasses([]);
+      setNotes([]);
+      setResources([]);
+      setCalendarEvents([]);
+      setLifeHub(emptyLifeHub);
+      setSchoolHub(emptySchoolHub);
+      setWorkHub(emptyWorkHub);
+      setStudyAbroadHub(emptyStudyAbroadHub);
+      setCareerHub(emptyCareerHub());
+    setGuidedHub(emptyExecutiveHub());
+      setWorkFocusTaskId(null);
+    }
+  }, [cloudUserId]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", dark);
+  }, [dark]);
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setSettingsHydrated(false);
+    (async () => {
+      try {
+        const firebaseDark = await loadDataFromFirebase('dark');
+        if (firebaseDark !== null && firebaseDark !== undefined) setDark(firebaseDark);
+
+        const firebaseSettings = await loadDataFromFirebase('settings');
+        const cachedAt = typeof window !== 'undefined' && cloudUserId
+          ? window.localStorage.getItem(`lifeos-onboarding-complete:${cloudUserId}`)
+          : null;
+        const stored =
+          firebaseSettings && typeof firebaseSettings === "object"
+            ? { ...firebaseSettings }
+            : null;
+        if (stored && !stored.onboardingCompletedAt && cachedAt) {
+          stored.onboardingCompletedAt = cachedAt;
+          stored.onboardingVersion = stored.onboardingVersion ?? 1;
+        }
+        const merged = mergeSettingsWithEnvironmentDefaults(initialSettings, stored);
+        if (firebaseSettings || merged.onboardingCompletedAt) {
+          setSettingsState(merged);
+        }
+      } catch (error) {
+        console.error('Failed to load settings from Firebase:', error);
+      } finally {
+        setSettingsHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const activity = params.get("lifeos_activity");
+    if (activity !== "job-application" && activity !== "coursera-course") return;
+    const title = params.get("title")?.slice(0, 120) || (activity === "coursera-course" ? "Google AI Certificate coursework" : "Job application");
+    const spaceName = params.get("space")?.slice(0, 80) || "Career";
+    setAmbientDraft({ title, spaceName, sourceLabel: activity === "coursera-course" ? "Coursera coursework" : "a job application" });
+    setAmbientStartOpen(true);
+    params.delete("lifeos_activity");
+    params.delete("title");
+    params.delete("space");
+    const remainingSearch = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${remainingSearch ? `?${remainingSearch}` : ""}`);
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !settingsHydrated) return;
+    syncDataToFirebase('dark', dark);
+  }, [cloudUserId, dark, settingsHydrated]);
+  useEffect(() => {
+    for (const option of WORKSPACE_COLOR_OPTIONS) {
+      document.documentElement.style.setProperty(option.cssVar, workspaceColorFor(settingsState, option.key));
+    }
+    document.documentElement.style.setProperty("--accent", accentForView(view, settingsState));
+    document.documentElement.classList.toggle("compact", settingsState.compactMode);
+    document.documentElement.classList.toggle("reduce-motion", settingsState.reduceMotion);
+    try {
+      const colors = Object.fromEntries(
+        WORKSPACE_COLOR_OPTIONS.map(option => [option.key, workspaceColorFor(settingsState, option.key)]),
+      );
+      window.localStorage.setItem("lifeos-workspace-colors", JSON.stringify(colors));
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, [settingsState, view]);
+  useEffect(() => {
+    if (!cloudUserId || !settingsHydrated) return;
+    syncDataToFirebase('settings', settingsState);
+    if (settingsState.onboardingCompletedAt && typeof window !== "undefined") {
+      window.localStorage.setItem(`lifeos-onboarding-complete:${cloudUserId}`, settingsState.onboardingCompletedAt);
+      window.localStorage.setItem("lifeos-onboarding-seen", "true");
+    }
+  }, [cloudUserId, settingsState, settingsHydrated]);
+  useEffect(() => {
+    if (!cloudUserId || !settingsHydrated || settingsState.onboardingCompletedAt) return;
+    if (!tasksHydrated || !projectsHydrated || !calendarHydrated) return;
+    const cachedAt = typeof window !== "undefined"
+      ? window.localStorage.getItem(`lifeos-onboarding-complete:${cloudUserId}`)
+      : null;
+    const realTasks = isStarterTaskSet(tasks) ? [] : tasks;
+    const starterProjectNames = initialProjects.map(project => project.name).join("|");
+    const realProjects =
+      projectItems.map(project => project.name).join("|") === starterProjectNames ? [] : projectItems;
+    if (!shouldPersistOnboardingComplete({
+      settings: settingsState,
+      workspace: { tasks: realTasks, projects: realProjects, calendar: calendarEvents, classes, notes, brain: brainItems },
+      deviceCompletedAt: cachedAt,
+    })) return;
+    const at = cachedAt || new Date().toISOString();
+    setSettingsState(current => (
+      current.onboardingCompletedAt
+        ? current
+        : { ...current, onboardingCompletedAt: at, onboardingVersion: current.onboardingVersion ?? 1 }
+    ));
+  }, [brainItems, calendarEvents, calendarHydrated, classes, cloudUserId, notes, projectItems, projectsHydrated, settingsHydrated, settingsState, tasks, tasksHydrated]);
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setTasksHydrated(false);
+    setTasksSyncEnabled(false);
+    (async () => {
+      const applyList = (raw: unknown[], source: "cloud" | "backup") => {
+        // If an older cloud write stripped school fields, restore them from the
+        // local backup so assignments do not vanish from SchoolOS on reload.
+        const backup = source === "cloud" ? readTaskBackup(cloudUserId) : null;
+        const backupById = new Map(
+          (backup ?? [])
+            .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+            .map((item) => [Number((item as { id?: unknown }).id), item] as const)
+            .filter(([id]) => Number.isFinite(id)),
+        );
+        const enriched = raw.map((item) => {
+          if (!item || typeof item !== "object") return item;
+          const task = item as Record<string, unknown>;
+          const prior = backupById.get(Number(task.id));
+          if (!prior) return task;
+          const next = { ...task };
+          if (typeof next.classId !== "string" && typeof prior.classId === "string") {
+            next.classId = prior.classId;
+          }
+          if (next.academicType == null && prior.academicType != null) {
+            next.academicType = prior.academicType;
+          }
+          if (next.gradeCategoryId == null && typeof prior.gradeCategoryId === "string") {
+            next.gradeCategoryId = prior.gradeCategoryId;
+          }
+          if (typeof next.gradeWeight !== "number" && typeof prior.gradeWeight === "number") {
+            next.gradeWeight = prior.gradeWeight;
+          }
+          if (typeof next.submission !== "string" && typeof prior.submission === "string") {
+            next.submission = prior.submission;
+          }
+          return next;
+        });
+        const normalized = enriched.map(task => normalizeTask(task as Partial<Task>));
+        const next = isStarterTaskSet(normalized) ? [] : normalized;
+        setTasks(next);
+        if (next.length) writeTaskBackup(cloudUserId, next);
+        if (source === "backup") {
+          setNotice(`Restored ${next.length} task${next.length === 1 ? "" : "s"} from a local backup`);
+        }
+      };
+
+      const result = await loadTasksFromFirebase();
+      if (result.status === "ok") {
+        if (result.tasks.length) {
+          applyList(result.tasks, "cloud");
+        } else {
+          // Cloud is explicitly empty — try a local remnant before accepting blank.
+          const backup = readTaskBackup(cloudUserId);
+          if (backup?.length) applyList(backup, "backup");
+          else setTasks([]);
+        }
+        setTasksSyncEnabled(true);
+      } else if (result.status === "missing") {
+        const backup = readTaskBackup(cloudUserId);
+        if (backup?.length) applyList(backup, "backup");
+        else setTasks([]);
+        setTasksSyncEnabled(true);
+      } else {
+        console.error("Failed to load tasks from Firebase:", result.message);
+        const backup = readTaskBackup(cloudUserId);
+        if (backup?.length) {
+          applyList(backup, "backup");
+          // Allow sync so the recovered backup can heal the cloud copy.
+          setTasksSyncEnabled(true);
+        } else {
+          setNotice("Couldn't load your tasks from the cloud. Nothing was overwritten.");
+          // Keep sync OFF — do not write [] over remote data we failed to read.
+          setTasksSyncEnabled(false);
+        }
+      }
+      setTasksHydrated(true);
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !tasksHydrated || !tasksSyncEnabled) return;
+    const snapshot = tasks;
+    const timer = window.setTimeout(() => {
+      writeTaskBackup(cloudUserId, snapshot);
+      syncDataToFirebase('tasks', snapshot);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [cloudUserId, tasks, tasksHydrated, tasksSyncEnabled]);
+  useEffect(() => {
+    const activeTasks = tasks.filter(task => !task.done && !task.canceled);
+    if (!activeTasks.length) {
+      setActiveTaskId(0);
+      return;
+    }
+    if (!activeTasks.some(task => task.id === activeTaskId)) setActiveTaskId(activeTasks[0].id);
+  }, [activeTaskId, tasks]);
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setProjectsHydrated(false);
+    (async () => {
+      try {
+        const firebaseProjects = await loadDataFromFirebase('projects');
+        if (firebaseProjects && Array.isArray(firebaseProjects)) {
+          setProjectItems(firebaseProjects.map((project: Partial<Project>) => {
+            const iconName = project.iconName && projectIcons[project.iconName] ? project.iconName : "FolderKanban";
+            return {
+              name: project.name ?? "Untitled project",
+              desc: project.desc ?? "A space for meaningful work.",
+              progress: project.progress ?? 0,
+              color: project.color ?? "#625af6",
+              iconName,
+              icon: projectIcons[iconName],
+              tasks: project.tasks ?? 0,
+              kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+            };
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to load projects from Firebase:', error);
+      } finally {
+        setProjectsHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !projectsHydrated) return;
+    const projectsForStorage = projectItems.map(({ icon: _, ...project }) => project);
+    syncDataToFirebase('projects', projectsForStorage);
+  }, [cloudUserId, projectItems, projectsHydrated]);
+  // The July 18 project validation change briefly treated legacy `iconName`
+  // records as invalid. If that left a real workspace empty, rebuild only the
+  // spaces that are already named on the user's non-starter tasks. New users
+  // keep a blank Spaces area exactly as intended.
+  useEffect(() => {
+    if (!cloudUserId || !projectsHydrated || !tasksHydrated || restoredMissingSpaces.current) return;
+    if (projectItems.length || isStarterTaskSet(tasks)) return;
+    const recovered = recoverSpacesFromTasks(tasks);
+    if (!recovered.length) return;
+    restoredMissingSpaces.current = true;
+    setProjectItems(recovered);
+    setNotice(`Restored ${recovered.length} spaces from your linked tasks`);
+  }, [cloudUserId, projectItems.length, projectsHydrated, tasks, tasksHydrated]);
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setCalendarHydrated(false);
+    (async () => {
+      try {
+        const firebaseEvents = await loadDataFromFirebase('calendar');
+        if (firebaseEvents && Array.isArray(firebaseEvents)) {
+          setCalendarEvents(firebaseEvents);
+        }
+      } catch (error) {
+        console.error('Failed to load calendar events from Firebase:', error);
+      } finally {
+        setCalendarHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !calendarHydrated) return;
+    syncDataToFirebase('calendar', calendarEvents);
+  }, [cloudUserId, calendarEvents, calendarHydrated]);
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setBrainHydrated(false);
+    (async () => {
+      try {
+        const firebaseBrain = await loadDataFromFirebase('brain');
+        if (firebaseBrain && Array.isArray(firebaseBrain)) {
+          setBrainItems(firebaseBrain.filter(item => typeof item === "string"));
+        }
+      } catch (error) {
+        console.error('Failed to load brain items from Firebase:', error);
+      } finally {
+        setBrainHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !brainHydrated) return;
+    syncDataToFirebase('brain', brainItems);
+  }, [cloudUserId, brainItems, brainHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setClassesHydrated(false);
+    setClassesSyncEnabled(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('classes');
+        const list = coerceFirebaseList(data);
+        if (list) setClasses(list.map(record => normalizeClass(record as Partial<ClassRecord>)));
+        else setClasses([]);
+        setClassesSyncEnabled(true);
+      } catch (error) {
+        console.error('Failed to load classes from Firebase:', error);
+        // Keep sync OFF — do not write [] over classes we failed to read.
+        setClassesSyncEnabled(false);
+      } finally {
+        setClassesHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !classesHydrated || !classesSyncEnabled) return;
+    syncDataToFirebase('classes', classes);
+  }, [classes, classesHydrated, classesSyncEnabled, cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setWeeklyPlanHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('weeklyPlan');
+        if (data && typeof data === 'object') {
+          setWeeklyPlan(data);
+        }
+      } catch (error) {
+        console.error('Failed to load weekly plan from Firebase:', error);
+      } finally {
+        setWeeklyPlanHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !weeklyPlanHydrated) return;
+    syncDataToFirebase('weeklyPlan', weeklyPlan);
+  }, [cloudUserId, weeklyPlan, weeklyPlanHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setNotesHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('notes');
+        const list = coerceFirebaseList(data);
+        if (list) setNotes(list as Note[]);
+        else setNotes([]);
+      } catch (error) {
+        console.error('Failed to load notes from Firebase:', error);
+      } finally {
+        setNotesHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !notesHydrated) return;
+    syncDataToFirebase('notes', notes);
+  }, [cloudUserId, notes, notesHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setResourcesHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('resources');
+        if (Array.isArray(data)) setResources(data);
+      } catch (error) {
+        console.error('Failed to load resource metadata from Firebase:', error);
+      } finally {
+        setResourcesHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !resourcesHydrated) return;
+    syncDataToFirebase('resources', resources);
+  }, [cloudUserId, resources, resourcesHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setLifeHubHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('life');
+        if (data && typeof data === "object") setLifeHub({ ...emptyLifeHub, ...data });
+      } catch (error) {
+        console.error('Failed to load LifeOS collections from Firebase:', error);
+      } finally {
+        setLifeHubHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !lifeHubHydrated) return;
+    syncDataToFirebase('life', lifeHub);
+  }, [cloudUserId, lifeHub, lifeHubHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setSchoolHubHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('school');
+        if (data && typeof data === "object") setSchoolHub({ ...emptySchoolHub, ...data, profile: { ...emptySchoolHub.profile, ...data.profile } });
+      } catch (error) {
+        console.error('Failed to load SchoolOS collections from Firebase:', error);
+      } finally {
+        setSchoolHubHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !schoolHubHydrated) return;
+    syncDataToFirebase('school', schoolHub);
+  }, [cloudUserId, schoolHub, schoolHubHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setWorkHubHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('work');
+        if (data && typeof data === "object" && (data.projects?.length || data.tasks?.length || data.deliverables?.length || data.meetings?.length)) {
+          const hub = { ...emptyWorkHub, ...data };
+          // Older builds auto-seeded a demo WorkOS hub; clear it so notifications
+          // only reflect projects/tasks the user actually created.
+          setWorkHub(isSampleWorkHub(hub) ? emptyWorkHub : hub);
+        } else {
+          setWorkHub(emptyWorkHub);
+        }
+      } catch (error) {
+        console.error('Failed to load WorkOS data from Firebase:', error);
+        setWorkHub(emptyWorkHub);
+      } finally {
+        setWorkHubHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !workHubHydrated) return;
+    syncDataToFirebase('work', workHub);
+  }, [cloudUserId, workHub, workHubHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setTimeTrackingHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('timeTracking');
+        if (data && typeof data === "object") setTimeTracking(normalizeTimeTracking(data));
+      } catch (error) {
+        console.error('Failed to load time tracking from Firebase:', error);
+      } finally {
+        setTimeTrackingHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !timeTrackingHydrated) return;
+    syncDataToFirebase('timeTracking', timeTracking);
+  }, [cloudUserId, timeTracking, timeTrackingHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setStudyAbroadHubHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('studyAbroad');
+        if (data && typeof data === "object") {
+          setStudyAbroadHub(ensureCountriesFromUniversities(normalizeStudyAbroadHub(data)));
+        } else {
+          setStudyAbroadHub(emptyStudyAbroadHub);
+        }
+      } catch (error) {
+        console.error('Failed to load Study Abroad data from Firebase:', error);
+        setStudyAbroadHub(emptyStudyAbroadHub);
+      } finally {
+        setStudyAbroadHubHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !studyAbroadHubHydrated) return;
+    syncDataToFirebase('studyAbroad', studyAbroadHub);
+  }, [cloudUserId, studyAbroadHub, studyAbroadHubHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setCareerHubHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('career');
+        if (data && typeof data === "object") {
+          setCareerHub(normalizeCareerHub(data));
+        } else {
+          setCareerHub(emptyCareerHub());
+    setGuidedHub(emptyExecutiveHub());
+        }
+      } catch (error) {
+        console.error('Failed to load Career data from Firebase:', error);
+        setCareerHub(emptyCareerHub());
+    setGuidedHub(emptyExecutiveHub());
+      } finally {
+        setCareerHubHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !careerHubHydrated) return;
+    syncDataToFirebase('career', careerHub);
+  }, [cloudUserId, careerHub, careerHubHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setGuidedHubHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('guided');
+        if (data && typeof data === "object") {
+          setGuidedHub(normalizeExecutiveHub(data));
+        } else {
+          setGuidedHub(emptyExecutiveHub());
+        }
+      } catch (error) {
+        console.error('Failed to load Executive Function hub from Firebase:', error);
+        setGuidedHub(emptyExecutiveHub());
+      } finally {
+        setGuidedHubHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !guidedHubHydrated) return;
+    syncDataToFirebase('guided', guidedHub);
+  }, [cloudUserId, guidedHub, guidedHubHydrated]);
+
+  useEffect(() => {
+    if (!guidedHubHydrated) return;
+    setGuidedHub((current) => tickExecutiveSchedules(current));
+  }, [guidedHubHydrated, notificationsTick]);
+
+  useEffect(() => {
+    if (!cloudUserId || !tasksHydrated) return;
+    listenToFirebaseChanges('tasks', (data) => {
+      const list = asTaskList(data);
+      if (list) setTasks(prev => mergeTasksFocus(prev, list.map(task => normalizeTask(task as Task))));
+    });
+    return () => stopListeningToFirebaseChanges('tasks');
+  }, [cloudUserId, tasksHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId || !projectsHydrated) return;
+    listenToFirebaseChanges('projects', (data) => {
+      if (Array.isArray(data)) {
+        setProjectItems(data.map((project: Partial<Project>) => {
+          const iconName = project.iconName && projectIcons[project.iconName] ? project.iconName : "FolderKanban";
+          return {
+            name: project.name ?? "Untitled project",
+            desc: project.desc ?? "A space for meaningful work.",
+            progress: project.progress ?? 0,
+            color: project.color ?? "#625af6",
+            iconName,
+            icon: projectIcons[iconName],
+            tasks: project.tasks ?? 0,
+            kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+          };
+        }));
+      }
+    });
+    return () => stopListeningToFirebaseChanges('projects');
+  }, [cloudUserId, projectsHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId || !calendarHydrated) return;
+    listenToFirebaseChanges('calendar', (data) => {
+      if (Array.isArray(data)) setCalendarEvents(data);
+    });
+    return () => stopListeningToFirebaseChanges('calendar');
+  }, [cloudUserId, calendarHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId || !brainHydrated) return;
+    listenToFirebaseChanges('brain', (data) => {
+      if (Array.isArray(data)) setBrainItems(data.filter(item => typeof item === "string"));
+    });
+    return () => stopListeningToFirebaseChanges('brain');
+  }, [cloudUserId, brainHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId || !classesHydrated) return;
+    listenToFirebaseChanges('classes', data => {
+      const list = coerceFirebaseList(data);
+      if (list) setClasses(list.map(record => normalizeClass(record as Partial<ClassRecord>)));
+    });
+    return () => stopListeningToFirebaseChanges('classes');
+  }, [classesHydrated, cloudUserId]);
+
+  useEffect(() => {
+    if (!cloudUserId || !notesHydrated) return;
+    listenToFirebaseChanges('notes', data => {
+      const list = coerceFirebaseList(data);
+      if (list) setNotes(list as Note[]);
+    });
+    return () => stopListeningToFirebaseChanges('notes');
+  }, [cloudUserId, notesHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId || !resourcesHydrated) return;
+    listenToFirebaseChanges('resources', data => {
+      if (Array.isArray(data)) setResources(data);
+    });
+    return () => stopListeningToFirebaseChanges('resources');
+  }, [cloudUserId, resourcesHydrated]);
+
+  const complete = (id: number) => {
+    const completedTask = tasks.find(task => task.id === id);
+    const isCompleting = Boolean(completedTask && !completedTask.done);
+    setTasks(items => {
+      const target = items.find(task => task.id === id);
+      if (!target) return items;
+      const next: Task[] = items.map(t => t.id === id ? { ...t, done: !t.done, canceled: false, status: (!t.done ? "Done" : "Not started") as TaskStatus, completedAt: !t.done ? new Date().toISOString() : undefined } : t);
+      if (!target.done && target.recurringDays) {
+        const nextDue = new Date();
+        nextDue.setDate(nextDue.getDate() + target.recurringDays);
+        next.push(normalizeTask({ ...target, id: Date.now(), due: toDateKey(nextDue), done: false, canceled: false, status: "Not started", completedAt: undefined, focusRemainingSeconds: undefined, focusSessionStarted: false, focusHalfwayPrompted: false, checklistProgress: (target.checklist ?? []).map(() => false) }));
+      }
+      return next;
+    });
+    if (isCompleting && completedTask) setSettingsState(current => ({ ...current, momentumLog: [{ id: String(Date.now()), at: new Date().toISOString(), type: "done" as const, title: completedTask.title }, ...(current.momentumLog ?? [])].slice(0, 40) }));
+    setSettingsState(current => current.nowTaskId === id ? { ...current, nowTaskId: null } : current);
+  };
+  const flash = useCallback((message: string) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice(""), 2600);
+  }, []);
+
+  useEffect(() => {
+    if (!settingsState.dailyDigest || !tasksHydrated || typeof window === "undefined") return;
+    const today = toDateKey(new Date());
+    const digestKey = `lifeos-digest-${cloudUserId ?? "local"}`;
+    if (window.localStorage.getItem(digestKey) === today) return;
+    const openTasks = tasks.filter(task => !task.done && !task.canceled);
+    const dueToday = openTasks.filter(task => task.due === today).length;
+    const overdue = openTasks.filter(task => task.due < today).length;
+    window.localStorage.setItem(digestKey, today);
+    flash(`Daily digest: ${openTasks.length} open · ${dueToday} due today · ${overdue} overdue`);
+  }, [cloudUserId, flash, settingsState.dailyDigest, tasks, tasksHydrated]);
+
+  const uploadResource = async (file: File, classId?: string) => {
+    if (file.size > 25 * 1024 * 1024) {
+      flash("That file is over the 25 MB limit");
+      throw new Error("File too large");
+    }
+    try {
+      const ownerId = cloudUserId ?? getUserId() ?? "local";
+      const stored = await getFileStorage().uploadFile(file, ownerId, classId ? `classes/${classId}` : "resources");
+      const next: Resource = { ...stored, name: file.name, type: file.type || "application/octet-stream", size: file.size, uploadedAt: new Date().toISOString(), classId };
+      setResources(items => [...items, next]);
+      flash(stored.storage === "cloud" ? "File uploaded and synced" : "File uploaded on this device");
+    } catch (error) {
+      flash("Upload failed");
+      throw error;
+    }
+  };
+  const deleteResource = async (resource: Resource) => {
+    await getFileStorage().deleteFile(resource.id, resource.storagePath);
+    setResources(items => items.filter(item => item.id !== resource.id));
+    flash("Resource deleted");
+  };
+  const replaceResource = async (resource: Resource, file: File) => {
+    if (file.size > 25 * 1024 * 1024) {
+      flash("That file is over the 25 MB limit");
+      throw new Error("File too large");
+    }
+    try {
+      const stored = await getFileStorage().replaceFile(resource.id, file, resource.storagePath);
+      setResources(items => items.map(item => item.id === resource.id ? { ...item, ...stored, storagePath: stored.storagePath, name: file.name, type: file.type || "application/octet-stream", size: file.size, uploadedAt: new Date().toISOString() } : item));
+      flash("Resource replaced");
+    } catch (error) {
+      flash("Could not replace that file");
+      throw error;
+    }
+  };
+  const downloadResource = async (resource: Resource) => {
+    const localUrl = resource.storage === "local" ? await getFileStorage().getFileUrl(resource.id) : null;
+    const url = resource.storage === "local" ? localUrl : resource.url;
+    if (!url) {
+      flash("This file is not available on this device");
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = resource.name;
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    link.click();
+    if (localUrl) window.setTimeout(() => URL.revokeObjectURL(localUrl), 1000);
+  };
+  const updateSettings = (updates: Partial<SettingsState>) => {
+    setSettingsState(current => ({ ...current, ...updates }));
+    flash("Settings updated");
+  };
+  const addTask = (
+    title: string,
+    _projectKind?: ProjectKind,
+    spaceValue = "",
+    options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string; notes?: string; suppressFlash?: boolean },
+  ) => {
+    const trimmed = title.trim();
+    if (!trimmed) return 0;
+    const id = Date.now();
+    const classId = spaceValue.startsWith("class:") ? spaceValue.slice(6) : undefined;
+    const projectName = spaceValue.startsWith("project:") ? spaceValue.slice(8) : spaceValue && spaceValue !== "Inbox" ? spaceValue : "Inbox";
+    const linkedClass = classes.find(item => item.id === classId);
+    const linkedProject = classId ? undefined : projectItems.find(project => project.name === projectName);
+    setTasks(items => [...items, normalizeTask({
+      id,
+      title: trimmed,
+      project: linkedProject?.name ?? "Inbox",
+      classId,
+      academicType: classId ? "Assignment" : undefined,
+      color: linkedClass?.color ?? linkedProject?.color ?? "#625af6",
+      due: "",
+      priority: options?.priority ?? "Medium",
+      focusMinutes: options?.focusMinutes ?? settingsState.defaultFocusMinutes,
+      energy: options?.energy ?? settingsState.defaultEnergy,
+      status: "Not started",
+      notes: options?.notes ?? "",
+      customProperties: [],
+      checklist: [],
+      checklistProgress: [],
+    })]);
+    setComposer(null);
+    if (!options?.suppressFlash) {
+      flash(
+        options?.flashLabel
+          || (linkedClass ? `Task linked to ${linkedClass.code}` : linkedProject ? `Task linked to ${linkedProject.name}` : "Task added"),
+      );
+    }
+    return id;
+  };
+  const createTaskFromNote = (note: Note) => {
+    const payloads = buildTasksFromNote(note, {
+      defaultFocusMinutes: settingsState.defaultFocusMinutes,
+      defaultEnergy: settingsState.defaultEnergy,
+    });
+    if (!payloads.length) return;
+    const stamp = Date.now();
+    const newTasks = payloads.map((payload, index) => {
+      const classId = payload.spaceValue.startsWith("class:") ? payload.spaceValue.slice(6) : undefined;
+      const projectName = payload.spaceValue.startsWith("project:") ? payload.spaceValue.slice(8) : "Inbox";
+      const linkedClass = classes.find(item => item.id === classId);
+      const linkedProject = classId ? undefined : projectItems.find(project => project.name === projectName);
+      return normalizeTask({
+        id: stamp + index,
+        title: payload.title,
+        project: linkedProject?.name ?? "Inbox",
+        classId,
+        academicType: classId ? "Assignment" : undefined,
+        color: linkedClass?.color ?? linkedProject?.color ?? "#625af6",
+        due: "",
+        priority: "Medium",
+        focusMinutes: settingsState.defaultFocusMinutes,
+        energy: settingsState.defaultEnergy,
+        status: "Not started",
+        notes: payload.notes,
+        customProperties: [],
+        checklist: [],
+        checklistProgress: [],
+      });
+    });
+    setTasks(items => [...items, ...newTasks]);
+    flash(newTasks.length > 1 ? `${newTasks.length} tasks created from note` : "Task created from note");
+  };
+  const addAiTask = (task: ParsedTask) => {
+    const requestedSpace = task.project.trim().toLowerCase();
+    const linkedClass = classes.find(item => item.code.toLowerCase() === requestedSpace || item.name.toLowerCase() === requestedSpace);
+    const linkedProject = linkedClass ? undefined : projectItems.find(item => item.name.toLowerCase() === requestedSpace);
+    setTasks(items => [...items, normalizeTask({
+      id: Date.now(),
+      title: task.title,
+      project: linkedProject?.name ?? "Inbox",
+      classId: linkedClass?.id,
+      academicType: linkedClass ? "Assignment" : undefined,
+      color: linkedClass?.color ?? linkedProject?.color ?? "#625af6",
+      due: task.due || toDateKey(new Date()),
+      startTime: task.startTime,
+      priority: task.priority,
+      focusMinutes: task.focusMinutes,
+      energy: task.energy,
+      status: "Not started",
+      notes: task.notes ?? "",
+      customProperties: [],
+      checklist: [],
+      checklistProgress: [],
+    })]);
+    setAiTaskComposer(false);
+    flash(linkedClass ? `AI task linked to ${linkedClass.code}` : linkedProject ? `AI task linked to ${linkedProject.name}` : "AI task added to Inbox");
+  };
+  const addProject = (name: string, kind: ProjectKind = "finishable", _taskProject?: string, icon: ProjectIcon = "FolderKanban", description?: string, color = "#625af6") => {
+    const iconComponent = projectIcons[icon];
+    setProjectItems(items => [...items, { name, desc: description?.trim() || (kind === "maintenance" ? "An ongoing system to keep healthy." : "A focused project with a finish line."), progress: kind === "maintenance" ? 100 : 0, color, icon: iconComponent, iconName: icon, tasks: 0, kind }]);
+    setComposer(null);
+    setSpaceComposer(null);
+    flash(kind === "maintenance" ? "Maintenance space created" : "Finishable project created");
+    openProjectSpace(name);
+  };
+  const addClass = (classRecord: Omit<ClassRecord, "id">) => {
+    const next = normalizeClass({
+      ...classRecord,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      gradingMode: classRecord.gradingMode ?? "categories",
+    });
+    setClassesSyncEnabled(true);
+    setClasses(items => [...items, next]);
+    setSpaceComposer(null);
+    openClassSpace(next.id);
+    flash(`${next.code} class created`);
+  };
+  const updateClass = (id: string, updates: Partial<Omit<ClassRecord, "id">>, opts?: { quiet?: boolean }) => {
+    setClassesSyncEnabled(true);
+    setClasses(items => items.map(item => item.id === id ? normalizeClass({ ...item, ...updates, id }) : item));
+    if (updates.color) setTasks(items => items.map(task => task.classId === id ? { ...task, color: updates.color as string } : task));
+    if (!opts?.quiet) {
+      setEditingClassId(null);
+      flash("Class details saved");
+    }
+  };
+  const deleteClass = (id: string) => {
+    if (!window.confirm("Delete this class folder? Assignments and notes will be kept, but unlinked from the class.")) return;
+    setClassesSyncEnabled(true);
+    setClasses(items => items.filter(item => item.id !== id));
+    setTasks(items => items.map(task => task.classId === id ? { ...task, classId: undefined } : task));
+    setNotes(items => items.map(note => note.classId === id ? { ...note, classId: undefined } : note));
+    setResources(items => items.map(resource => resource.classId === id ? { ...resource, classId: undefined } : resource));
+    setSelectedClassId(null);
+    flash("Class folder deleted; its work was kept");
+  };
+  const addAcademicTask = (classId: string, task: Pick<Task, "title" | "due" | "startTime" | "priority" | "focusMinutes" | "energy" | "academicType" | "gradeWeight" | "pointsEarned" | "pointsPossible" | "submission">) => {
+    const classRecord = classes.find(item => item.id === classId);
+    if (!classRecord) return;
+    setTasks(items => [...items, normalizeTask({
+      ...task,
+      id: Date.now(),
+      classId,
+      project: "Inbox",
+      color: classRecord.color,
+      status: "Not started",
+      notes: "",
+      checklist: [],
+      checklistProgress: [],
+    })]);
+    setAcademicComposerClassId(null);
+    flash(`${task.academicType ?? "Assignment"} added to ${classRecord.code}`);
+  };
+  const createNote = (classId?: string, projectName?: string, title = "Untitled note") => {
+    const next: Note = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, title: title.trim() || "Untitled note", body: "", classId, projectName, updatedAt: new Date().toISOString() };
+    setNotes(items => [next, ...items]);
+    setSelectedNoteId(next.id);
+    setView("Notes");
+    setSelectedClassId(null);
+    setSelectedProjectName(null);
+    flash("New note ready");
+  };
+  const updateNote = (id: string, updates: Partial<Note>) => setNotes(items => items.map(note => note.id === id ? { ...note, ...updates, updatedAt: new Date().toISOString() } : note));
+  const importNotes = (incoming: Note[]) => {
+    const imported = incoming.filter(note => note && typeof note.title === "string" && typeof note.body === "string").map(note => ({ ...note, id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, updatedAt: note.updatedAt || new Date().toISOString(), template: ["blank", "lined", "dotted", "cornell", "meeting"].includes(note.template ?? "") ? note.template : "blank" }));
+    if (!imported.length) { flash("No valid notes were found in that file"); return; }
+    setNotes(items => [...imported, ...items]);
+    setSelectedNoteId(imported[0].id);
+    flash(`${imported.length} note${imported.length === 1 ? "" : "s"} imported`);
+  };
+  const deleteNote = (id: string) => {
+    setNotes(items => items.filter(note => note.id !== id));
+    setSelectedNoteId(current => current === id ? null : current);
+    flash("Note deleted permanently");
+  };
+  const updateProjectKind = (name: string, kind: ProjectKind) => {
+    setProjectItems(items => items.map(project => project.name === name ? {
+      ...project,
+      kind,
+      desc: kind === "maintenance" && project.desc === "A focused project with a finish line." ? "An ongoing system to keep healthy." : project.desc,
+      progress: kind === "maintenance" && project.progress === 0 ? 100 : project.progress,
+    } : project));
+    setActionProjectName(null);
+    flash(kind === "maintenance" ? "Set as maintenance" : "Set as finishable project");
+  };
+  const deleteProject = (name: string) => {
+    setProjectItems(items => items.filter(project => project.name !== name));
+    setTasks(items => items.map(task => task.project === name ? { ...task, project: "Inbox", color: "#625af6" } : task));
+    setNotes(items => items.map(note => note.projectName === name ? { ...note, projectName: undefined } : note));
+    // Work OS keeps its own project list — drop any Work project with the same name too.
+    setWorkHub(hub => {
+      const workProject = hub.projects.find(project => project.name === name);
+      return workProject ? removeWorkProject(hub, workProject.id) : hub;
+    });
+    setActionProjectName(null);
+    setSelectedProjectName(null);
+    flash("Project deleted");
+  };
+  const updateProject = (oldName: string, newName: string, desc: string, color: string, icon: ProjectIcon) => {
+    setProjectItems(items => items.map(project => project.name === oldName ? { ...project, name: newName, desc, color, icon: projectIcons[icon], iconName: icon } : project));
+    setTasks(items => items.map(task => task.project === oldName ? { ...task, project: newName, color } : task));
+    setNotes(items => items.map(note => note.projectName === oldName ? { ...note, projectName: newName } : note));
+    setSelectedProjectName(current => current === oldName ? newName : current);
+    setEditingProjectName(null);
+    setActionProjectName(null);
+    flash("Project updated");
+  };
+  const addCalendarEvent = (event: CalendarEvent) => {
+    setCalendarEvents(items => [...items, event]);
+    setCalendarComposer(false);
+    flash("Calendar event added");
+  };
+  const updateCalendarEvent = (event: CalendarEvent) => {
+    setCalendarEvents(items => items.map(item => item.id === event.id ? event : item));
+    setEditingCalendarEventId(null);
+    flash("Calendar event updated");
+  };
+  const deleteCalendarEvent = (id: string) => {
+    setCalendarEvents(items => items.filter(event => event.id !== id));
+    setEditingCalendarEventId(null);
+    flash("Calendar event deleted");
+  };
+  const routeCalendarEventToTask = (event: CalendarEvent, taskId: number) => {
+    const target = tasks.find(task => task.id === taskId);
+    if (!target) return;
+    const due = /^\d{4}-\d{2}-\d{2}/.test(event.start) ? event.start.slice(0, 10) : target.due;
+    const startTime = /^\d{2}:\d{2}/.test(event.start.slice(11, 16)) ? event.start.slice(11, 16) : target.startTime;
+    setTasks(items => items.map(task => {
+      if (task.id === taskId) {
+        return {
+          ...task,
+          calendarEventId: event.id,
+          due,
+          startTime,
+        };
+      }
+      if (task.calendarEventId === event.id) {
+        return { ...task, calendarEventId: undefined };
+      }
+      return task;
+    }));
+    setEditingCalendarEventId(null);
+    flash(`Routed under ${target.title}`);
+  };
+  const openLinkedCalendarTask = (event: CalendarEvent) => {
+    const linkedTask = tasks.find(task => task.calendarEventId === event.id);
+    if (!linkedTask) return;
+    setEditingCalendarEventId(null);
+    setTaskPageId(linkedTask.id);
+  };
+  const importCalendarEvents = (events: CalendarEvent[]) => {
+    setCalendarEvents(items => {
+      const seen = new Set(items.map(event => event.id));
+      return [...items, ...events.filter(event => !seen.has(event.id))];
+    });
+    setCalendarImporter(false);
+    flash(`${events.length} iCal event${events.length === 1 ? "" : "s"} imported`);
+  };
+  const updateTask = (id: number, updates: Pick<Task, "title" | "focusMinutes" | "energy" | "project" | "classId" | "academicType" | "color" | "due" | "startTime">) => {
+    setTasks(items => items.map(task => task.id === id ? { ...task, ...updates } : task));
+    setEditingTaskId(null);
+    flash("Priority updated");
+  };
+  const updateTaskDetails = (id: number, updates: Partial<Task>) => {
+    setTasks(items => items.map(task => {
+      if (task.id !== id) return task;
+      const next = { ...task, ...updates };
+      if (updates.status) {
+        next.done = updates.status === "Done";
+        next.canceled = updates.status === "Canceled";
+      }
+      return next;
+    }));
+  };
+  const linkTaskToProject = (id: number, project: Project) => {
+    setTasks(items => items.map(task => task.id === id ? { ...task, project: project.name, color: project.color } : task));
+    flash(`Linked to ${project.name}`);
+  };
+  const updateTaskChecklist = useCallback((id: number, checklist: string[]) => {
+    setTasks(items => items.map(task => task.id === id ? { ...task, checklist } : task));
+  }, []);
+  const updateTaskChecklistProgress = useCallback((id: number, progress: boolean[]) => {
+    setTasks(items => items.map(task => task.id === id ? { ...task, checklistProgress: progress } : task));
+  }, []);
+  const updateFocusSession = useCallback((id: number, session: FocusSessionUpdate) => {
+    const stamped = new Date().toISOString();
+    setTasks(items => items.map(task => {
+      if (task.id !== id) return task;
+      // Heartbeats must never un-pause a session the phone just saved.
+      if (session.checkpoint && !task.focusSessionRunning) return task;
+      const nextFocusMinutes = Math.max(5, Math.min(240, session.focusMinutes ?? task.focusMinutes));
+      const remainingSeconds = Math.max(0, Math.min(nextFocusMinutes * 60, Math.round(session.remainingSeconds)));
+      if (session.checkpoint) {
+        if (task.focusRemainingSeconds === remainingSeconds) return task;
+        return { ...task, focusRemainingSeconds: remainingSeconds, focusUpdatedAt: stamped };
+      }
+      if (
+        task.focusRemainingSeconds === remainingSeconds
+        && task.focusMinutes === nextFocusMinutes
+        && Boolean(task.focusSessionStarted) === session.hasStarted
+        && Boolean(task.focusSessionRunning) === session.isRunning
+        && Boolean(task.focusHalfwayPrompted) === session.halfwayPrompted
+      ) return task;
+      return {
+        ...task,
+        focusMinutes: nextFocusMinutes,
+        focusRemainingSeconds: remainingSeconds,
+        focusSessionStarted: session.hasStarted,
+        focusSessionRunning: session.isRunning,
+        focusHalfwayPrompted: session.halfwayPrompted,
+        focusUpdatedAt: stamped,
+      };
+    }));
+  }, []);
+  const toggleCanceled = (id: number) => {
+    setTasks(items => items.map(task => task.id === id ? { ...task, canceled: !task.canceled, done: false, status: task.canceled ? "Not started" : "Canceled" } : task));
+    setActionTaskId(null);
+    flash("Priority status updated");
+  };
+  const deleteTask = (id: number) => {
+    setTasks(items => {
+      const next = items.filter(task => task.id !== id);
+      if (activeTaskId === id) setActiveTaskId(next[0]?.id ?? 0);
+      return next;
+    });
+    setActionTaskId(null);
+    setEditingTaskId(null);
+    setTaskPageId(current => current === id ? null : current);
+    setSettingsState(current => current.nowTaskId === id ? { ...current, nowTaskId: null } : current);
+    flash("Priority deleted");
+  };
+  const deleteTasks = (ids: number[]) => {
+    if (!ids.length) return;
+    const doomed = new Set(ids);
+    setTasks(items => {
+      const next = items.filter(task => !doomed.has(task.id));
+      if (doomed.has(activeTaskId)) setActiveTaskId(next[0]?.id ?? 0);
+      return next;
+    });
+    setActionTaskId(current => current != null && doomed.has(current) ? null : current);
+    setEditingTaskId(current => current != null && doomed.has(current) ? null : current);
+    setTaskPageId(current => current != null && doomed.has(current) ? null : current);
+    setSettingsState(current => (
+      current.nowTaskId != null && doomed.has(current.nowTaskId)
+        ? { ...current, nowTaskId: null }
+        : current
+    ));
+    flash(ids.length === 1 ? "Priority deleted" : `Deleted ${ids.length} tasks`);
+  };
+  const syncFromCloud = async () => {
+    try {
+      const data = await pullAllDataFromFirebase();
+      if (!data) {
+        flash("No cloud data found. Make sure you're online.");
+        return;
+      }
+      if (data.tasks && Array.isArray(data.tasks)) setTasks(data.tasks.map(task => normalizeTask(task)));
+      if (data.projects && Array.isArray(data.projects)) {
+        setProjectItems(data.projects.map((project: Partial<Project>) => {
+          const iconName = project.iconName && projectIcons[project.iconName] ? project.iconName : "FolderKanban";
+          return {
+            name: project.name ?? "Untitled project",
+            desc: project.desc ?? "A space for meaningful work.",
+            progress: project.progress ?? 0,
+            color: project.color ?? "#625af6",
+            iconName,
+            icon: projectIcons[iconName],
+            tasks: project.tasks ?? 0,
+            kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+          };
+        }));
+      }
+      if (data.calendar && Array.isArray(data.calendar)) setCalendarEvents(data.calendar);
+      if (data.brain && Array.isArray(data.brain)) setBrainItems(data.brain.filter(item => typeof item === "string"));
+      if (data.classes && Array.isArray(data.classes)) setClasses(data.classes);
+      if (data.notes && Array.isArray(data.notes)) setNotes(data.notes);
+      if (data.resources && Array.isArray(data.resources)) setResources(data.resources);
+      if (data.life && typeof data.life === "object") setLifeHub({ ...emptyLifeHub, ...data.life });
+      if (data.school && typeof data.school === "object") setSchoolHub({ ...emptySchoolHub, ...data.school, profile: { ...emptySchoolHub.profile, ...data.school.profile } });
+      if (data.work && typeof data.work === "object") setWorkHub({ ...emptyWorkHub, ...data.work });
+      if (data.timeTracking && typeof data.timeTracking === "object") setTimeTracking(normalizeTimeTracking(data.timeTracking));
+      if (data.studyAbroad && typeof data.studyAbroad === "object") setStudyAbroadHub(ensureCountriesFromUniversities(normalizeStudyAbroadHub(data.studyAbroad)));
+      if (data.career && typeof data.career === "object") setCareerHub(normalizeCareerHub(data.career));
+      if (data.guided && typeof data.guided === "object") setGuidedHub(normalizeExecutiveHub(data.guided));
+      if (data.settings) setSettingsState(current => ({ ...current, ...data.settings }));
+      if (data.dark !== undefined) setDark(data.dark);
+      flash("✓ Cloud data synced successfully");
+    } catch (error) {
+      flash("Error syncing from cloud");
+      console.error("Sync error:", error);
+    }
+  };
+
+  const exportData = () => {
+    const payload = { exportedAt: new Date().toISOString(), tasks, projects: projectItems.map(({ icon: _, ...project }) => project), events: calendarEvents, brainItems, classes, notes, resources, life: lifeHub, school: schoolHub, work: workHub, timeTracking, studyAbroad: studyAbroadHub, career: careerHub, guided: guidedHub, settings: settingsState, dark };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `lifeos-export-${toDateKey(new Date())}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    flash("LifeOS data exported");
+  };
+
+  const resetLocalData = () => {
+    if (!window.confirm("Reset LifeOS data? This will clear everything and reload.")) return;
+    setTasks([]);
+    setProjectItems([]);
+    setCalendarEvents([]);
+    setBrainItems([]);
+    setClasses([]);
+    setNotes([]);
+    setResources([]);
+    setLifeHub(emptyLifeHub);
+    setSchoolHub(emptySchoolHub);
+    setWorkHub(emptyWorkHub);
+    setTimeTracking(emptyTimeTracking());
+    setStudyAbroadHub(emptyStudyAbroadHub);
+    setCareerHub(emptyCareerHub());
+    setGuidedHub(emptyExecutiveHub());
+    setSettingsState(initialSettings);
+    setDark(false);
+    window.location.reload();
+  };
+
+  const importData = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json";
+    input.onchange = (event: any) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e: any) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (data.tasks && Array.isArray(data.tasks)) {
+            setTasks(data.tasks.map((task: any) => normalizeTask(task)));
+            await syncDataToFirebase('tasks', data.tasks);
+          }
+          if (data.projects && Array.isArray(data.projects)) {
+            setProjectItems(data.projects.map((project: Partial<Project>) => {
+              const iconName = project.iconName && projectIcons[project.iconName] ? project.iconName : "FolderKanban";
+              return {
+                name: project.name ?? "Untitled project",
+                desc: project.desc ?? "A space for meaningful work.",
+                progress: project.progress ?? 0,
+                color: project.color ?? "#625af6",
+                iconName,
+                icon: projectIcons[iconName],
+                tasks: project.tasks ?? 0,
+                kind: project.kind === "maintenance" ? "maintenance" : "finishable",
+              };
+            }));
+            await syncDataToFirebase('projects', data.projects);
+          }
+          if (data.events && Array.isArray(data.events)) {
+            setCalendarEvents(data.events);
+            await syncDataToFirebase('calendar', data.events);
+          }
+          if (data.brainItems && Array.isArray(data.brainItems)) {
+            setBrainItems(data.brainItems.filter((item: any) => typeof item === "string"));
+            await syncDataToFirebase('brain', data.brainItems);
+          }
+          if (data.classes && Array.isArray(data.classes)) {
+            setClasses(data.classes);
+            await syncDataToFirebase('classes', data.classes);
+          }
+          if (data.notes && Array.isArray(data.notes)) {
+            setNotes(data.notes);
+            await syncDataToFirebase('notes', data.notes);
+          }
+          if (data.resources && Array.isArray(data.resources)) {
+            setResources(data.resources);
+            await syncDataToFirebase('resources', data.resources);
+          }
+          if (data.life && typeof data.life === "object") {
+            const nextLife = { ...emptyLifeHub, ...data.life };
+            setLifeHub(nextLife);
+            await syncDataToFirebase('life', nextLife);
+          }
+          if (data.school && typeof data.school === "object") {
+            const nextSchool = { ...emptySchoolHub, ...data.school, profile: { ...emptySchoolHub.profile, ...data.school.profile } };
+            setSchoolHub(nextSchool);
+            await syncDataToFirebase('school', nextSchool);
+          }
+          if (data.work && typeof data.work === "object") {
+            const nextWork = { ...emptyWorkHub, ...data.work };
+            setWorkHub(nextWork);
+            await syncDataToFirebase('work', nextWork);
+          }
+          if (data.timeTracking && typeof data.timeTracking === "object") {
+            const nextTimeTracking = normalizeTimeTracking(data.timeTracking);
+            setTimeTracking(nextTimeTracking);
+            await syncDataToFirebase('timeTracking', nextTimeTracking);
+          }
+          if (data.studyAbroad && typeof data.studyAbroad === "object") {
+            const nextStudy = ensureCountriesFromUniversities(normalizeStudyAbroadHub(data.studyAbroad));
+            setStudyAbroadHub(nextStudy);
+            await syncDataToFirebase('studyAbroad', nextStudy);
+          }
+          if (data.career && typeof data.career === "object") {
+            const nextCareer = normalizeCareerHub(data.career);
+            setCareerHub(nextCareer);
+            await syncDataToFirebase('career', nextCareer);
+          }
+          if (data.settings) {
+            setSettingsState(current => ({ ...current, ...data.settings }));
+            await syncDataToFirebase('settings', data.settings);
+          }
+          if (data.dark !== undefined) {
+            setDark(data.dark);
+            await syncDataToFirebase('dark', data.dark);
+          }
+          flash("✓ LifeOS data imported and synced to cloud");
+        } catch {
+          alert("Invalid data file. Make sure you're using a LifeOS export.");
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
+  const handleLogout = async () => {
+    if (!window.confirm("Sign out of LifeOS? You'll need to sign back in to access your data.")) return;
+    try {
+      await signOut();
+      setUser(null);
+    } catch (error) {
+      console.error('Logout failed:', error);
+      flash('Failed to sign out');
+    }
+  };
+
+  const activeTasks = useMemo(() => tasks.filter(task => !task.done && !task.canceled), [tasks]);
+  const floatingFocusTask = useMemo(() => activeTasks.find(task => Boolean(task.focusSessionStarted) && getTaskFocusSeconds(task) > 0), [activeTasks]);
+  const visibleNav = useMemo(
+    () =>
+      nav.filter((item) => {
+        // Same rules as Settings → Hubs toggles (Pro hubs need unlock + enable).
+        return isEnvironmentEnabled(item.name as View);
+      }),
+    [isEnvironmentEnabled],
+  );
+  useEffect(() => {
+    if (!isEnvironmentEnabled(view)) go("Now");
+  }, [view, isEnvironmentEnabled, go]);
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    const matches = (value: string) => !q || value.toLowerCase().includes(q);
+    const base = [
+      ...visibleNav.map(n => n.name),
+      ...projectItems.map(p => p.name),
+      ...classes.map(item => item.code),
+      ...notes.map(note => note.title),
+      ...activeTasks.map(t => t.title),
+    ].filter(matches);
+    if (settingsState.enableStudyAbroad === false) return base;
+    const studyHits = [
+      ...studyAbroadHub.programs.map(item => `SA · Program · ${item.name}`),
+      ...studyAbroadHub.universities.map(item => `SA · University · ${item.name}`),
+      ...studyAbroadHub.countries.map(item => `SA · Country · ${item.name}`),
+      ...studyAbroadHub.tasks.filter(item => !item.done).map(item => `SA · Task · ${item.title}`),
+      ...studyAbroadHub.applications.map(item => {
+        const program = studyAbroadHub.programs.find(program => program.id === item.programId);
+        return `SA · Application · ${program?.name || "Program"}`;
+      }),
+    ].filter(matches);
+    if (view === "Study Abroad") return [...studyHits, ...base];
+    return [...base, ...studyHits];
+  }, [activeTasks, classes, notes, projectItems, query, settingsState.enableStudyAbroad, studyAbroadHub, view, visibleNav]);
+  const calendarFeed = useMemo(
+    () => [
+      ...calendarEvents,
+      ...tasksToCalendarEvents(tasks),
+      ...(settingsState.enableWorkOS === false ? [] : workMeetingsToCalendarEvents(workHub.meetings, workHub.projects)),
+      ...(settingsState.enableStudyAbroad === false ? [] : studyAbroadToCalendarEvents(studyAbroadHub.timelineEvents)),
+    ],
+    [calendarEvents, settingsState.enableWorkOS, settingsState.enableStudyAbroad, tasks, workHub.meetings, workHub.projects, studyAbroadHub.timelineEvents],
+  );
+
+  if (authLoading) {
+    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0a0a0a', color: '#fff' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: '32px', marginBottom: '20px' }}>LifeOS</div>
+        <div style={{ fontSize: '14px', opacity: 0.6 }}>Loading...</div>
+      </div>
+    </div>;
+  }
+
+  if (!user) {
+    return (
+      <AuthEntry
+        onLoginSuccess={() => {
+          setUser({ displayName: TEST_USER.DISPLAY_NAME, email: TEST_USER.EMAIL });
+          setUserId(TEST_USER.ID);
+          setCloudUserId(TEST_USER.ID);
+        }}
+      />
+    );
+  }
+
+  const activeTask = activeTasks.find(task => task.id === activeTaskId) ?? activeTasks.find(task => task.id === settingsState.nowTaskId) ?? activeTasks[0];
+  const taskPageTask = taskPageId === null ? null : tasks.find(task => task.id === taskPageId) ?? null;
+  const notificationShell = (
+    <GlobalNotificationShell
+      notifications={visibleNotifications}
+      onNavigate={handleNotificationNavigate}
+      onDismiss={dismissNotification}
+      onDismissAll={dismissAllNotifications}
+    />
+  );
+
+  if (taskPageTask) {
+    return <>
+      {notificationShell}
+      <TaskWorkspace
+      task={taskPageTask}
+      tasks={taskPageTask.done || taskPageTask.canceled ? [...activeTasks, taskPageTask] : activeTasks}
+      projects={projectItems}
+      classes={classes}
+      onExit={() => setTaskPageId(null)}
+      onSwitch={setTaskPageId}
+      onUpdate={updates => updateTaskDetails(taskPageTask.id, updates)}
+      onFocus={() => { chooseNowTask(taskPageTask.id); rememberSpaceTask(taskPageTask); setTaskPageId(null); setFocus(true); }}
+      onMarkDone={() => { updateTaskDetails(taskPageTask.id, { status: "Done" }); chooseNowTask(settingsState.nowTaskId === taskPageTask.id ? null : settingsState.nowTaskId ?? null); setTaskPageId(null); flash("Done. Cleared from active views."); }}
+      onDelete={() => deleteTask(taskPageTask.id)}
+    />
+    </>;
+  }
+  if (focus) {
+    if (!activeTask) return <>
+      {notificationShell}
+      <EmptyFocus onExit={() => { setFocus(false); setView("Now"); }} onNewTask={() => { setFocus(false); setComposer("task"); }} />
+    </>;
+    return <>
+      {notificationShell}
+      <FocusMode key={activeTask.id} task={activeTask} tasks={activeTasks} soundEffectsEnabled={settingsState.soundEffects} onUpdateNotes={(id, notes) => updateTaskDetails(id, { notes })} onSwitch={(id) => { setActiveTaskId(id); chooseNowTask(id); const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); }} onUpdateChecklist={updateTaskChecklist} onUpdateChecklistProgress={updateTaskChecklistProgress} onUpdateFocusSession={updateFocusSession} onComplete={complete} onExit={(destination) => { setFocus(false); setView(destination ?? "Now"); }} />
+    </>;
+  }
+
+  const workspaceName = settingsState.preferredName?.trim() || user?.displayName?.trim() || "there";
+  const workspaceInitials = workspaceName.split(/\s+/).filter(Boolean).slice(0, 2).map((part: string) => part[0]).join("").toUpperCase() || "U";
+  const needsWorkspaceName = Boolean(user && settingsHydrated && !settingsState.preferredName?.trim());
+
+  const unlockEntitlement = (entitlement: Entitlement) => {
+    setSettingsState((current) => ({ ...current, entitlement }));
+    setHubPaywallOpen(false);
+    flash(
+      !entitlement.expiresAt
+        ? "LifeOS Pro unlocked for life."
+        : entitlement.status === "promo"
+          ? "Paid hubs unlocked for one year."
+          : "LifeOS Pro unlocked for paid hubs.",
+    );
+    if (pendingPaidHub) {
+      const hub = pendingPaidHub;
+      setPendingPaidHub(null);
+      // Re-enter after unlock so enable flags / view can proceed.
+      window.setTimeout(() => {
+        setView(hub);
+        if (hub === "Work") setSettingsState((current) => ({ ...current, enableWorkOS: true }));
+        if (hub === "Career") setSettingsState((current) => ({ ...current, enableCareerOS: true }));
+        if (hub === "Study Abroad") setSettingsState((current) => ({ ...current, enableStudyAbroad: true }));
+        if (hub === "Treasury") setSettingsState((current) => ({ ...current, enableTreasuryOS: true }));
+        if (hub === "Mastery") setSettingsState((current) => ({ ...current, enableMasterOS: true }));
+      }, 0);
+    }
+  };
+
+  const startSubscribe = (offerId: string) => {
+    const label =
+      offerId === "pro-lifetime" ? "lifetime" : offerId === "pro-yearly" ? "annual" : "monthly";
+    setSubscribeNote(
+      "Paid checkout uses Stripe on web and the App Store on iPhone when products are live. If you have a promo code, enter it below.",
+    );
+    flash(`Selected ${label} plan — finish store checkout when available, or redeem a promo code.`);
+  };
+
+  return (
+    <div className="app-shell">
+      {notificationShell}
+      {hubPaywallOpen ? (
+        <PaywallGate
+          onUnlock={unlockEntitlement}
+          onSubscribe={startSubscribe}
+          onClose={() => {
+            setHubPaywallOpen(false);
+            setPendingPaidHub(null);
+          }}
+          subscribeNote={subscribeNote}
+        />
+      ) : null}
+      <AnimatePresence>{sidebar && <motion.button aria-label="Close navigation" className="mobile-scrim" onClick={() => setSidebar(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />}</AnimatePresence>
+      <aside className={`sidebar ${sidebar ? "sidebar-open" : ""}`}>
+        <div className="brand"><div className="brand-mark"><span /><span /><span /></div><span>LifeOS</span></div>
+        <button className="search-trigger" onClick={() => setPalette(true)}><Search size={15} /><span>Search anything</span><kbd>⌘ K</kbd></button>
+        <nav>
+          {visibleNav.map((item, idx) => {
+            const Icon = item.icon;
+            const showCategory = Boolean(item.category && (idx === 0 || visibleNav[idx - 1].category !== item.category));
+            return (
+              <div key={item.name}>
+                {showCategory && <p className="nav-label">{item.category}</p>}
+                {item.href ? (
+                  <a className="nav-item" href={item.href} onClick={() => setSidebar(false)} data-env={dataEnvForNav(item.name)}><Icon size={17} strokeWidth={1.8} /><span>{item.name}</span><ExternalLink size={13} className="nav-external-icon" /></a>
+                ) : (
+                  <button
+                    className={`nav-item ${view === item.name ? "active" : ""}`}
+                    data-env={dataEnvForNav(item.name)}
+                    onClick={() => go(item.name as View)}
+                  >
+                    <Icon size={17} strokeWidth={1.8} /><span>{item.name}</span>{item.name === "Brain" && <em>{brainItems.length}</em>}{item.name === "Spaces" && projectItems.length + classes.length > 0 && <em>{projectItems.length + classes.length}</em>}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </nav>
+        <div className="sidebar-bottom">
+          <button className="nav-item" onClick={() => go("Settings")}><Settings size={17} /><span>Settings</span></button>
+          <button className="profile" onClick={() => go("Settings")}><div className="avatar">{workspaceInitials}</div><div><strong>{workspaceName}</strong><small>Personal workspace</small></div></button>
+        </div>
+      </aside>
+
+      {user && <><ICloudCalendarAutoSync user={user} /><GoogleCalendarAutoSync user={user} /></>}
+      <main>
+        {!fullscreenProject && <>
+        <header className="topbar">
+          <IconButton label="Open navigation" onClick={() => setSidebar(true)}><Menu size={19} /></IconButton>
+          <div className="breadcrumb"><span>LifeOS</span><span>/</span><strong>{view}</strong></div>
+          <div className="top-actions">
+            <IconButton label="Toggle theme" onClick={() => setDark(v => !v)}>{dark ? <Sun size={18} /> : <Moon size={18} />}</IconButton>
+          </div>
+        </header>
+        <AnimatePresence mode="wait">
+          <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Work" || view === "Career" || view === "Study Abroad" || view === "Mastery" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
+            {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarFeed} workspaceName={workspaceName} onComplete={complete} onOpenTask={openTaskPage} onOpenProject={openProjectSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => openSpacesList("Projects")} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} enableMasterOS={settingsState.enableMasterOS !== false} onOpenMasterOS={() => go("Mastery")} />}
+            {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} events={calendarFeed} school={schoolHub} schoolView={schoolView} onChangeView={setSchoolView} schoolFocusTaskId={schoolFocusTaskId} onSelectFocusTask={setSchoolFocusTaskId} workspaceName={workspaceName} workspaceEmail={user?.email} onComplete={complete} onOpenTask={openTaskPage} onOpenClass={openClassSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={(id) => { setSchoolFocusTaskId(id); openFocus(id); }} onOpenCalendar={() => go("Calendar")} onOpenSettings={() => go("Settings")} onImportTimetable={() => setCalendarImporter(true)} onQuickCapture={(payload) => {
+              if (payload.kind === "Note") {
+                createNote(payload.classId, undefined, payload.title);
+                return;
+              }
+              const dueBase = new Date();
+              if (payload.when === "tomorrow") dueBase.setDate(dueBase.getDate() + 1);
+              const due = payload.when === "custom" && payload.customDate ? payload.customDate : toDateKey(dueBase);
+              const academicType = "Assignment";
+              if (payload.classId && classes.some(item => item.id === payload.classId && !isClassArchived(item))) {
+                addAcademicTask(payload.classId, { title: payload.title, due, priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType });
+              } else if (classes.some(item => !isClassArchived(item))) {
+                const fallback = classes.find(item => !isClassArchived(item))!;
+                addAcademicTask(fallback.id, { title: payload.title, due, priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType });
+              } else {
+                flash("Add a course first");
+                setSpaceComposer("class");
+              }
+            }} onAddCalendarEvent={(payload) => {
+              const start = payload.startTime ? `${payload.date}T${payload.startTime}:00` : `${payload.date}T09:00:00`;
+              const end = payload.endTime ? `${payload.date}T${payload.endTime}:00` : undefined;
+              addCalendarEvent({ id: `school-${Date.now()}`, title: payload.label ? `${payload.title} · ${payload.label}` : payload.title, start, end, source: "LifeOS", color: payload.color, notes: payload.type });
+              flash("Added to calendar");
+            }} onImportSyllabus={({ classId, items, fileName }) => {
+              const classRecord = classes.find((item) => item.id === classId && !isClassArchived(item));
+              if (!classRecord) {
+                flash("Add a course first");
+                setSpaceComposer("class");
+                return;
+              }
+              const stamp = Date.now();
+              const nextTasks = items.map((item, index) => normalizeTask({
+                id: stamp + index,
+                title: item.title,
+                due: item.due ?? "",
+                priority: "Medium",
+                focusMinutes: settingsState.defaultFocusMinutes,
+                energy: settingsState.defaultEnergy,
+                academicType: item.academicType,
+                classId,
+                project: "Inbox",
+                color: classRecord.color,
+                status: "Not started",
+                notes: fileName ? `Imported from ${fileName}` : "Imported from syllabus",
+                checklist: [],
+                checklistProgress: [],
+              }));
+              const nextEvents = items.flatMap((item, index) => item.due ? [{
+                id: `syllabus-${stamp}-${index}`,
+                title: item.title,
+                start: `${item.due}T09:00:00`,
+                source: "LifeOS" as const,
+                color: classRecord.color || "#8B5CF6",
+                notes: fileName ? `Due date from syllabus (${fileName})` : "Due date from syllabus",
+              }] : []);
+              setTasks((current) => [...current, ...nextTasks]);
+              if (nextEvents.length) setCalendarEvents((current) => [...current, ...nextEvents]);
+              const dated = nextEvents.length;
+              flash(dated ? `Imported ${items.length} tasks · ${dated} on calendar` : `Imported ${items.length} tasks`);
+            }} appearanceLabel={dark ? "Dark" : "Light"} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} onUpdateClass={(id, updates) => updateClass(id, updates, { quiet: true })} onUpdateTask={(id, updates) => updateTaskDetails(id, {
+              ...updates,
+              academicType: updates.academicType as AcademicItemType | undefined,
+            })} onCreateGradeItems={(classId, items) => {
+              const classRecord = classes.find((item) => item.id === classId);
+              if (!classRecord) return;
+              for (const item of items) {
+                addAcademicTask(classId, {
+                  title: item.title,
+                  due: toDateKey(new Date()),
+                  priority: "Medium",
+                  focusMinutes: settingsState.defaultFocusMinutes,
+                  energy: settingsState.defaultEnergy,
+                  academicType: (item.academicType as AcademicItemType) || "Assignment",
+                  pointsPossible: item.pointsPossible,
+                  pointsEarned: item.pointsEarned,
+                });
+              }
+              flash(items.length === 1 ? `Added “${items[0].title}”` : `Added ${items.length} grade items`);
+            }} enableMasterOS={settingsState.enableMasterOS !== false} onOpenMasterOS={() => go("Mastery")} />}
+            {view === "Work" && <WorkDashboard workHub={workHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onTimesheetFlash={flash} weekStartsMonday={settingsState.weekStartsMonday} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => setWorkView("projects")} onProjectDeleted={(name) => {
+              setProjectItems(items => items.filter(project => project.name !== name));
+              setTasks(items => items.map(task => task.project === name ? { ...task, project: "Inbox", color: "#625af6" } : task));
+              setNotes(items => items.map(note => note.projectName === name ? { ...note, projectName: undefined } : note));
+              setSelectedProjectName(current => current === name ? null : current);
+              flash(`Deleted ${name}`);
+            }} />}
+                        {view === "Career" && <CareerDashboard hub={careerHub} careerView={careerView} onChangeView={setCareerView} onChange={setCareerHub} workspaceName={workspaceName} flash={flash} />}
+            {view === "Study Abroad" && <StudyAbroadDashboard hub={studyAbroadHub} studyView={studyAbroadView} onChangeView={setStudyAbroadView} onChange={setStudyAbroadHub} workspaceName={workspaceName} onOpenCalendar={() => go("Calendar")} onFocusStudyTask={focusStudyAbroadTask} focusEntity={studyAbroadFocusEntity} onFocusEntityConsumed={() => setStudyAbroadFocusEntity(null)} />}
+            {view === "Treasury" && (
+              <TreasuryOSDashboard
+                lifeosUser={cloudUserId && user ? { uid: cloudUserId, email: user.email ?? null, displayName: user.displayName } : null}
+              />
+            )}
+            {view === "Mastery" && <MasterOSDashboard />}
+            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onOpenTimesheet={() => { setWorkView("timesheet"); go("Work"); }} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableMasterOS={settingsState.enableMasterOS !== false} onboardingCompletedAt={settingsState.onboardingCompletedAt} onMarkOnboarded={() => setSettingsState(current => ({ ...current, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} flash={flash} guidedHub={guidedHub} onGuidedChange={setGuidedHub} onOpenGuided={() => setGuidedPanelOpen(true)} />}
+            {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
+            {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} onDeleteMany={deleteTasks} />}
+            {(view === "Today" || view === "Calendar") && <CalendarView events={calendarFeed} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} defaultView={normalizeCalendarDefaultView(settingsState.defaultCalendarView)} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => { if (id.startsWith("task-")) openTaskPage(Number(id.slice(5))); else if (id.startsWith("work-meet-")) { setWorkView("calendar"); go("Work"); } else setEditingCalendarEventId(id); }} onPlanTask={setEditingTaskId} />}
+            {view === "Notes" && <NotesView notes={notes} classes={classes} projects={projectItems} selectedNoteId={selectedNoteId} onSelect={setSelectedNoteId} onCreate={() => createNote()} onUpdate={updateNote} onDelete={deleteNote} onImport={importNotes} onCreateTask={createTaskFromNote} />}
+            {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
+            {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onCreateTask={createTaskFromNote} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
+            {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} onConvertToTask={(index, text) => { addTask(text, undefined, "", { flashLabel: "Task created from brain" }); setBrainItems(items => items.filter((_, i) => i !== index)); }} />}
+            {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} />}
+            {!["Life", "School", "Work", "Career", "Study Abroad", "Treasury", "Mastery", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
+          </motion.div>
+        </AnimatePresence>
+        </>}
+      </main>
+      {!focus && floatingFocusTask && <FloatingFocusDock task={floatingFocusTask} onResume={(session) => { updateFocusSession(floatingFocusTask.id, session); setActiveTaskId(floatingFocusTask.id); chooseNowTask(floatingFocusTask.id); setFocus(true); }} onUpdateSession={(session) => updateFocusSession(floatingFocusTask.id, session)} onEnd={() => updateFocusSession(floatingFocusTask.id, { remainingSeconds: getTaskFocusSeconds(floatingFocusTask), hasStarted: false, isRunning: false, halfwayPrompted: Boolean(floatingFocusTask.focusHalfwayPrompted) })} />}
+      <AnimatePresence>
+        {needsWorkspaceName && <WelcomeNameModal key="welcome-name-modal" suggestedName={user?.displayName} save={(preferredName) => setSettingsState(current => ({ ...current, preferredName, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} />}
+        {palette && <CommandPalette key="command-palette" query={query} setQuery={setQuery} results={filtered} close={() => { setPalette(false); setQuery(""); }} go={go} onFocus={() => { setPalette(false); openFocus(); }} onCapture={() => { setPalette(false); setCapture(true); }} onNewTask={() => { setPalette(false); setComposer("task"); }} onResult={(result) => {
+          const task = activeTasks.find(item => item.title === result);
+          const project = projectItems.find(item => item.name === result);
+          const classRecord = classes.find(item => item.code === result);
+          const note = notes.find(item => item.title === result);
+          setPalette(false); setQuery("");
+          if (result.startsWith("SA · Program · ")) {
+            const name = result.slice("SA · Program · ".length);
+            const program = studyAbroadHub.programs.find(item => item.name === name);
+            if (program) { setStudyAbroadFocusEntity({ kind: "program", id: program.id }); go("Study Abroad"); }
+            return;
+          }
+          if (result.startsWith("SA · University · ")) {
+            const name = result.slice("SA · University · ".length);
+            const university = studyAbroadHub.universities.find(item => item.name === name);
+            if (university) { setStudyAbroadFocusEntity({ kind: "university", id: university.id }); go("Study Abroad"); }
+            return;
+          }
+          if (result.startsWith("SA · Country · ")) {
+            const name = result.slice("SA · Country · ".length);
+            const country = studyAbroadHub.countries.find(item => item.name === name);
+            if (country) { setStudyAbroadFocusEntity({ kind: "country", id: country.id }); go("Study Abroad"); }
+            return;
+          }
+          if (result.startsWith("SA · Task · ")) {
+            const name = result.slice("SA · Task · ".length);
+            const studyTask = studyAbroadHub.tasks.find(item => item.title === name && !item.done);
+            if (studyTask) focusStudyAbroadTask(studyTask.id);
+            return;
+          }
+          if (result.startsWith("SA · Application · ")) {
+            const name = result.slice("SA · Application · ".length);
+            const application = studyAbroadHub.applications.find(item => {
+              const program = studyAbroadHub.programs.find(program => program.id === item.programId);
+              return (program?.name || "Program") === name;
+            });
+            if (application) { setStudyAbroadFocusEntity({ kind: "application", id: application.id }); go("Study Abroad"); }
+            return;
+          }
+          if (task) openTaskPage(task.id);
+          else if (project) openProjectSpace(project.name);
+          else if (classRecord) openClassSpace(classRecord.id);
+          else if (note) { setSelectedNoteId(note.id); setView("Notes"); }
+          else if (visibleNav.some(item => item.name === result)) {
+            const navHit = visibleNav.find(item => item.name === result);
+            if (navHit?.href) window.location.href = navHit.href;
+            else go(result as View);
+          }
+        }} />}
+        {capture && <CaptureModal key="capture-modal" close={() => setCapture(false)} add={(text) => { setBrainItems(x => [text, ...x]); setCapture(false); flash("Thought captured"); }} />}
+        {ambientStartOpen && <AmbientStartModal key="ambient-start-modal" close={() => { setAmbientStartOpen(false); setAmbientDraft(null); }} start={beginAmbientActivity} draft={ambientDraft} spaces={[...projectItems.map(item => ({ name: item.name, color: item.color })), ...classes.filter(item => !item.archived).map(item => ({ name: item.code, color: item.color }))]} />}
+        {ambientWrapupOpen && settingsState.ambientActivity && <AmbientWrapupModal key="ambient-wrapup-modal" activity={settingsState.ambientActivity} close={() => setAmbientWrapupOpen(false)} finish={wrapUpAmbientActivity} />}
+        {guidedPanelOpen && <motion.div key="guided-panel" className="modal-layer" onMouseDown={() => setGuidedPanelOpen(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="capture-modal guided-modal" style={{ width: "min(720px, calc(100vw - 24px))", maxHeight: "min(88vh, 900px)", overflow: "auto" }} onMouseDown={e => e.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><Sparkles size={16} /></div><div><strong>Executive Function</strong><span>Executive · Guided · Transition</span></div><button type="button" onClick={() => setGuidedPanelOpen(false)} aria-label="Close"><X size={18} /></button></div><div style={{ padding: "0 16px 16px" }}><ExecutivePanel hub={guidedHub} onChange={setGuidedHub} flash={flash} /></div></motion.div></motion.div>}
+        {dailyResetOpen && <DailyResetModal key="daily-reset" tasks={tasks} close={() => { setDailyResetOpen(false); setSettingsState(current => ({ ...current, dailyReviewDate: toDateKey(new Date()) })); }} choose={chooseNowTask} complete={complete} />}
+        {weeklyReviewOpen && <WeeklyReviewModal key="weekly-review" tasks={tasks} projects={projectItems} classes={classes} close={() => { setWeeklyReviewOpen(false); setSettingsState(current => ({ ...current, weeklyReviewDate: toDateKey(new Date()) })); }} onOpenTask={openTaskPage} onGoSpaces={() => { setWeeklyReviewOpen(false); go("Spaces"); }} />}
+        {hubCollection?.scope === "school" && <HubCollectionModal key={`school-${hubCollection.key}`} target={hubCollection} records={schoolHub[hubCollection.key]} close={() => setHubCollection(null)} change={(records) => setSchoolHub(current => ({ ...current, [hubCollection.key]: records }))} />}
+        {schoolProfileOpen && <SchoolProfileModal profile={schoolHub.profile} close={() => setSchoolProfileOpen(false)} save={(profile) => setSchoolHub(current => ({ ...current, profile }))} />}
+        {schoolClassAction && <SchoolClassPickerModal classes={classes} title={schoolClassAction === "lecture" ? "New lecture note" : "New coursework"} close={() => setSchoolClassAction(null)} pick={(classId) => { const action = schoolClassAction; setSchoolClassAction(null); if (action === "lecture") createNote(classId); else setAcademicComposerClassId(classId); }} />}
+        {aiTaskComposer && <NLTaskCreationModal key="ai-task-modal" close={() => setAiTaskComposer(false)} onSubmit={addAiTask} existingTasks={tasks} existingProjects={[...projectItems.map(project => project.name), ...classes.map(item => item.code)]} />}
+        {composer && <CreateModal key={`create-${composer}`} kind={composer} projects={projectItems} classes={classes} close={() => setComposer(null)} submit={(value, projectKind, taskProject) => composer === "task" ? addTask(value, projectKind, taskProject) : addProject(value, projectKind)} />}
+        {spaceComposer && <SpaceModal key={`space-modal-${spaceComposer}`} initialKind={spaceComposer} close={() => setSpaceComposer(null)} addProject={(name, kind, description, color, icon) => addProject(name, kind, undefined, icon, description, color)} addClass={addClass} />}
+        {academicComposerClassId && classes.find(item => item.id === academicComposerClassId) && <AcademicItemModal key={`academic-${academicComposerClassId}`} classRecord={classes.find(item => item.id === academicComposerClassId)!} close={() => setAcademicComposerClassId(null)} add={(task) => addAcademicTask(academicComposerClassId, task)} defaults={{ focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy }} />}
+        {calendarComposer && <CalendarEventModal key="calendar-event-modal" close={() => { setCalendarComposer(false); setDefaultEventDate(null); }} add={addCalendarEvent} defaultDate={defaultEventDate} />}
+        {editingCalendarEventId && calendarEvents.find(event => event.id === editingCalendarEventId) && <CalendarEventModal key={`calendar-edit-${editingCalendarEventId}`} event={calendarEvents.find(event => event.id === editingCalendarEventId)!} close={() => setEditingCalendarEventId(null)} add={updateCalendarEvent} remove={deleteCalendarEvent} tasks={activeTasks} linkedTaskId={tasks.find(task => task.calendarEventId === editingCalendarEventId)?.id} onOpenLinkedTask={openLinkedCalendarTask} onRouteToTask={routeCalendarEventToTask} />}
+        {calendarImporter && <CalendarImportModal key="calendar-import-modal" close={() => setCalendarImporter(false)} add={importCalendarEvents} />}
+        {breakOpen && <BreakModal key="break-modal" close={() => setBreakOpen(false)} done={() => { setBreakOpen(false); flash("Break complete — ease back in"); }} />}
+        {actionTaskId !== null && tasks.find(task => task.id === actionTaskId) && <TaskActionsModal key={`task-actions-${actionTaskId}`} task={tasks.find(task => task.id === actionTaskId)!} close={() => setActionTaskId(null)} open={() => { openTaskPage(actionTaskId); setActionTaskId(null); }} edit={() => { setEditingTaskId(actionTaskId); setActionTaskId(null); }} toggleCanceled={() => toggleCanceled(actionTaskId)} remove={() => deleteTask(actionTaskId)} />}
+        {actionClassId && classes.find(item => item.id === actionClassId) && <ClassActionsModal key={`class-actions-${actionClassId}`} classRecord={classes.find(item => item.id === actionClassId)!} close={() => setActionClassId(null)} edit={() => { setEditingClassId(actionClassId); setActionClassId(null); }} remove={() => { deleteClass(actionClassId); setActionClassId(null); }} />}
+        {editingTaskId !== null && tasks.find(task => task.id === editingTaskId) && <EditTaskModal key={`edit-task-${editingTaskId}`} task={tasks.find(task => task.id === editingTaskId)!} tasks={tasks} projects={projectItems} classes={classes} close={() => setEditingTaskId(null)} save={(updates) => updateTask(editingTaskId, updates)} />}
+        {editingProjectName && projectItems.find(project => project.name === editingProjectName) && <EditProjectModal key={`edit-project-${editingProjectName}`} project={projectItems.find(project => project.name === editingProjectName)!} close={() => setEditingProjectName(null)} save={(name, desc, color, icon) => updateProject(editingProjectName, name, desc, color, icon)} />}
+        {editingClassId && classes.find(item => item.id === editingClassId) && <EditClassModal key={`edit-class-${editingClassId}`} classRecord={classes.find(item => item.id === editingClassId)!} close={() => setEditingClassId(null)} save={(updates) => updateClass(editingClassId, updates)} />}
+        {actionProjectName && projectItems.find(project => project.name === actionProjectName) && <ProjectActionsModal key={`project-actions-${actionProjectName}`} project={projectItems.find(project => project.name === actionProjectName)!} close={() => setActionProjectName(null)} setKind={(kind) => updateProjectKind(actionProjectName, kind)} onDelete={() => deleteProject(actionProjectName)} onEdit={() => { setEditingProjectName(actionProjectName); setActionProjectName(null); }} />}
+        {notice && <motion.div key="notice-toast" className="toast" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}><CheckCircle2 size={15} /> {notice}</motion.div>}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, timeTracking, onTimeTrackingChange, onOpenTimesheet, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableWorkOS, enableStudyAbroad, enableMasterOS, onboardingCompletedAt, onMarkOnboarded, flash, guidedHub, onGuidedChange, onOpenGuided}: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; timeTracking: TimeTrackingState; onTimeTrackingChange: (next: TimeTrackingState) => void; onOpenTimesheet: () => void; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableWorkOS: boolean; enableStudyAbroad: boolean; enableMasterOS: boolean; onboardingCompletedAt?: string; onMarkOnboarded: () => void; flash: (message: string) => void; guidedHub: ExecutiveHub; onGuidedChange: (hub: ExecutiveHub) => void; onOpenGuided: () => void }) {
+  const [handoff, setHandoff] = useState("");
+  const [captureInput, setCaptureInput] = useState("");
+  const [captureFocused, setCaptureFocused] = useState(false);
+  const [suggestedCommandIndex, setSuggestedCommandIndex] = useState(-1);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [dragQueueId, setDragQueueId] = useState<number | null>(null);
+  const captureInputRef = useRef<HTMLInputElement | null>(null);
+  const captureBlurTimer = useRef<number | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    if (onboardingCompletedAt) return false;
+    const seen = localStorage.getItem('lifeos-onboarding-seen');
+    return !seen;
+  });
+  useEffect(() => {
+    if (onboardingCompletedAt) setShowOnboarding(false);
+  }, [onboardingCompletedAt]);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
+  useEffect(() => () => { if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current); }, []);
+  const today = toDateKey(new Date());
+  const allActive = tasks.filter(task => !task.done && !task.canceled);
+  const active = allActive.filter(task => getTaskStatus(task) !== "Waiting" || !task.followUpDate || task.followUpDate <= today);
+  const current = active.find(task => task.id === nowTaskId);
+  const recommendations = [...active].sort((a, b) => {
+    const score = (task: Task) => {
+      const days = task.due ? Math.round((new Date(`${task.due}T12:00`).getTime() - new Date(`${today}T12:00`).getTime()) / 86_400_000) : 30;
+      const dueScore = days <= 0 ? 100 : days === 1 ? 65 : Math.max(0, 35 - days * 4);
+      const priorityScore = task.priority === "High" ? 38 : task.priority === "Medium" ? 20 : 8;
+      const energyScore = task.energy === currentEnergy ? 28 : currentEnergy === "Low" && task.energy === "High" ? -26 : -3;
+      return dueScore + priorityScore + energyScore - Math.min(task.focusMinutes, 90) / 12;
+    };
+    return score(b) - score(a);
+  }).filter(task => task.id !== current?.id).slice(0, 5);
+  const todayEvents = events.filter(event => eventOccursOnDate(event, today)).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 8);
+  const activeSpace = current?.classId ? classes.find(item => item.id === current.classId)?.code : current?.project;
+  const hasDue = (due: string) => /^\d{4}-\d{2}-\d{2}/.test(due);
+  const resurfacing = allActive.filter(task => task.id !== current?.id && ((hasDue(task.due) && task.due < today) || (getTaskStatus(task) === "Waiting" && Boolean(task.followUpDate && task.followUpDate <= today)))).slice(0, 3);
+  const queueTasks = (() => {
+    const byId = new Map(active.map(task => [task.id, task]));
+    const orderedIds = nowQueueIds.filter(id => id !== nowTaskId && byId.has(id));
+    const remaining = recommendations.map(task => task.id).filter(id => !orderedIds.includes(id) && id !== nowTaskId);
+    return [...orderedIds, ...remaining].slice(0, 5).map(id => byId.get(id)!).filter(Boolean);
+  })();
+  const moveQueueItem = (fromId: number, toId: number) => {
+    if (fromId === toId) return;
+    const ids = queueTasks.map(task => task.id);
+    const from = ids.indexOf(fromId);
+    const to = ids.indexOf(toId);
+    if (from < 0 || to < 0) return;
+    const next = [...ids];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    const rest = nowQueueIds.filter(id => !next.includes(id) && id !== nowTaskId);
+    onSetQueue([...next, ...rest]);
+  };
+
+  const switchTo = (task: Task) => {
+    if (current && handoff.trim()) onUpdateTask(current.id, { handoffNote: handoff.trim() });
+    setHandoff("");
+    onChoose(task.id);
+  };
+  const closeOnboarding = () => {
+    setShowOnboarding(false);
+    if (typeof window !== 'undefined') localStorage.setItem('lifeos-onboarding-seen', 'true');
+    onMarkOnboarded();
+  };
+  const commands = [
+    { shortcut: '/t', label: 'Add task', desc: 'Create a new task' },
+    { shortcut: '/tm', label: 'Minor task', desc: 'Low-energy errand — water, charge, quick chore' },
+    { shortcut: '/proj', label: 'Add project', desc: 'Start a new project' },
+    { shortcut: '/asg', label: 'Add assignment', desc: 'School mode only' },
+    { shortcut: '/note', label: 'Add note', desc: 'Capture a quick note' },
+    { shortcut: '/focus', label: 'Start focus', desc: 'Enter a focus session' },
+    { shortcut: '/break', label: 'Break', desc: 'I need a break' },
+    { shortcut: '/clock', label: 'Clock in/out', desc: 'Start or stop contractor timesheet' },
+    { shortcut: '/timesheet', label: 'Timesheet', desc: 'Open full timesheet editor' },
+    { shortcut: '/spaces', label: 'Spaces', desc: 'Open your spaces' },
+    { shortcut: '/w', label: 'I\'m doing something', desc: 'Start ambient activity' },
+    { shortcut: '/a', label: 'AI task', desc: 'Create with AI assistance' },
+    ...(enableWorkOS ? [
+      { shortcut: '/w proj', label: 'Work project', desc: 'Start a work project' },
+      { shortcut: '/w deliver', label: 'Deliverable', desc: 'Add a work deliverable' },
+      { shortcut: '/w task', label: 'Work task', desc: 'Add a work task' },
+      { shortcut: '/w tasks', label: 'Work task', desc: 'Add a work task (alias)' },
+      { shortcut: '/w meet', label: 'Schedule meeting', desc: 'Schedule a meeting' },
+    ] : []),
+    ...(enableStudyAbroad ? [
+      { shortcut: '/sa', label: 'Study Abroad', desc: 'Open Study Abroad' },
+      { shortcut: '/sa country', label: 'Country', desc: 'Add a country path' },
+      { shortcut: '/sa uni', label: 'University', desc: 'Add a university' },
+      { shortcut: '/sa prog', label: 'Program', desc: 'Add a program' },
+      { shortcut: '/sa app', label: 'Application', desc: 'Start an application' },
+      { shortcut: '/sa fund', label: 'Scholarship', desc: 'Add funding / scholarship' },
+      { shortcut: '/sa note', label: 'Note', desc: 'Add study-abroad knowledge' },
+      { shortcut: '/sa task', label: 'SA task', desc: 'Add a study-abroad task' },
+    ] : []),
+    ...(enableMasterOS ? [
+      { shortcut: '/mos', label: 'Mastery', desc: 'Open teaching workspace (web / iPad)' },
+    ] : []),
+  ];
+  const captureQuery = captureInput.startsWith('/') ? captureInput.trim().toLowerCase() : '';
+  const showCommandHelp = showCaptureCommands && captureFocused && (!captureInput || captureInput.startsWith('/'));
+  const filtered = captureQuery
+    ? commands.filter(c => c.shortcut.startsWith(captureQuery) || c.shortcut.includes(captureQuery) || c.label.toLowerCase().includes(captureQuery.slice(1)))
+    : (showCommandHelp ? commands : []);
+  const showSuggestions = filtered.length > 0 && (captureFocused || Boolean(captureQuery));
+  const runInstantCommand = (raw: string) => {
+    const val = raw.trim().toLowerCase();
+    if (val === '/w') { onStartAmbient(); return true; }
+    if (val === '/break') { onBreak(); return true; }
+    if (val === '/clock') {
+      const active = getActiveEntry(timeTracking);
+      if (active) {
+        onTimeTrackingChange(clockOut(timeTracking));
+        flash("Clocked out");
+      } else {
+        onTimeTrackingChange(clockIn(timeTracking, {
+          clientName: timeTracking.defaultClientName,
+          title: current?.title || "Work session",
+        }));
+        flash("Clocked in");
+      }
+      return true;
+    }
+    if (val === '/timesheet') { onOpenTimesheet(); return true; }
+    if (val === '/a') { onSmartCapture(); return true; }
+    if (val === '/focus') {
+      const target = current ?? recommendations[0];
+      if (target) onFocus(target.id);
+      return true;
+    }
+    if (val === '/spaces') { onGo('Spaces'); return true; }
+    if (val === '/guide' || val === '/guided' || val === '/executive' || val === '/unfreeze') { onOpenGuided(); return true; }
+    if (enableStudyAbroad && (val === '/sa' || val === '/study abroad')) { onGo('Study Abroad'); return true; }
+    if (enableMasterOS && (val === '/mos' || val === '/masteros')) { onGo('Mastery'); return true; }
+    return false;
+  };
+  const handleCaptureFocus = () => {
+    if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current);
+    setCaptureFocused(true);
+  };
+  const handleCaptureBlur = () => {
+    captureBlurTimer.current = window.setTimeout(() => setCaptureFocused(false), 160);
+  };
+  /** After a command runs, clear + unfocus so the help list does not pop back open. */
+  const finishCaptureCommand = () => {
+    if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current);
+    setCaptureInput("");
+    setSuggestedCommandIndex(-1);
+    setCaptureFocused(false);
+    captureInputRef.current?.blur();
+  };
+  const handleCaptureKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSuggestedCommandIndex(Math.min(suggestedCommandIndex + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSuggestedCommandIndex(Math.max(suggestedCommandIndex - 1, -1));
+    } else if (e.key === 'Escape') {
+      setCaptureFocused(false);
+      e.currentTarget.blur();
+    } else if (e.key === 'Enter') {
+      const val = e.currentTarget.value.trim();
+      if (suggestedCommandIndex >= 0) {
+        const cmd = filtered[suggestedCommandIndex];
+        if (['/w', '/break', '/a', '/focus', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
+          runInstantCommand(cmd.shortcut);
+          finishCaptureCommand();
+        } else {
+          setCaptureInput(cmd.shortcut + ' ');
+          setSuggestedCommandIndex(-1);
+        }
+      } else if (val) {
+        if (runInstantCommand(val)) {
+          finishCaptureCommand();
+        } else if (val.startsWith('/t ')) {
+          const taskTitle = val.slice(3).trim();
+          if (taskTitle) {
+            const id = onAddTask(taskTitle);
+            if (id) {
+              if (nowTaskId) onEnqueue(id);
+              else onChoose(id);
+            }
+          }
+          finishCaptureCommand();
+        } else if (val.startsWith('/tm ')) {
+          const taskTitle = val.slice(4).trim();
+          if (taskTitle) {
+            const id = onAddTask(taskTitle, {
+              energy: 'Low',
+              priority: 'Low',
+              focusMinutes: 5,
+              flashLabel: 'Minor task added',
+            });
+            if (id) {
+              if (nowTaskId) onEnqueue(id);
+              else onChoose(id);
+            }
+          }
+          finishCaptureCommand();
+        } else if (val.startsWith('/proj ')) {
+          const projectName = val.slice(6).trim();
+          if (projectName) onAddProject(projectName);
+          finishCaptureCommand();
+        } else if (val.startsWith('/asg ')) {
+          const assignmentTitle = val.slice(5).trim();
+          if (assignmentTitle) onAddAssignment(assignmentTitle);
+          finishCaptureCommand();
+        } else if (val.startsWith('/note ')) {
+          const noteTitle = val.slice(6).trim();
+          if (noteTitle) onAddNote(noteTitle);
+          finishCaptureCommand();
+        } else if (enableWorkOS && val.startsWith('/w proj ')) {
+          const projName = val.slice(8).trim() || 'New Project';
+          const newProj: WorkProject = { id: `proj-${Date.now()}`, name: projName, color: '#625af6', status: 'active', createdAt: new Date().toISOString() };
+          onSetWorkHub((current: WorkHubState) => ({ ...current, projects: [...current.projects, newProj] }));
+          finishCaptureCommand();
+        } else if (enableWorkOS && val.startsWith('/w deliver ')) {
+          const title = val.slice(11).trim() || 'New deliverable';
+          onSetWorkHub((current: WorkHubState) => {
+            const project = current.projects.find(item => item.status === 'active');
+            if (!project) return current;
+            const deliverable: WorkDeliverable = { id: `del-${Date.now()}`, projectId: project.id, title, type: 'document', status: 'planned', priority: 'medium', dueDate: toDateKey(new Date()), createdAt: new Date().toISOString() };
+            return { ...current, deliverables: [...current.deliverables, deliverable] };
+          });
+          finishCaptureCommand();
+        } else if (enableWorkOS && (val.startsWith('/w task ') || val.startsWith('/w tasks '))) {
+          const title = val.startsWith('/w tasks ') ? val.slice(9).trim() : val.slice(8).trim();
+          onSetWorkHub((current: WorkHubState) => captureAddWorkTask(current, title || "New task"));
+          flash(title ? `Work task added: ${title}` : "Work task added");
+          finishCaptureCommand();
+        } else if (!enableWorkOS && (val.startsWith('/w task ') || val.startsWith('/w tasks ') || val.startsWith('/w proj ') || val.startsWith('/w deliver ') || val.startsWith('/w meet '))) {
+          flash("Enable WorkOS in Settings to use /w work commands");
+          finishCaptureCommand();
+        } else if (enableWorkOS && val.startsWith('/w meet ')) {
+          const meetTitle = val.slice(8).trim() || 'New Meeting';
+          const newMeet: WorkMeeting = { id: `meet-${Date.now()}`, title: meetTitle, start: new Date().toISOString(), type: 'other', createdAt: new Date().toISOString() };
+          onSetWorkHub((current: WorkHubState) => ({ ...current, meetings: [...current.meetings, newMeet] }));
+          finishCaptureCommand();
+        } else if (enableStudyAbroad && val.startsWith('/sa country ')) {
+          const name = val.slice(12).trim();
+          if (name) {
+            const stamp = nowIso();
+            onSetStudyAbroadHub(current => appendHistory({
+              ...current,
+              countries: [...current.countries, { id: newId('country'), name, createdAt: stamp, updatedAt: stamp }],
+            }, 'Added country', name, 'country'));
+            flash(`Country added: ${name}`);
+          }
+          finishCaptureCommand();
+        } else if (enableStudyAbroad && val.startsWith('/sa uni ')) {
+          const name = val.slice(8).trim();
+          if (name) {
+            const country = studyAbroadHub.countries[0];
+            if (!country) flash('Add a country first with /sa country');
+            else {
+              const stamp = nowIso();
+              onSetStudyAbroadHub(current => appendHistory({
+                ...current,
+                universities: [...current.universities, { id: newId('uni'), name, countryId: country.id, createdAt: stamp, updatedAt: stamp }],
+              }, 'Added university', name, 'university'));
+              flash(`University added: ${name}`);
+            }
+          }
+          finishCaptureCommand();
+        } else if (enableStudyAbroad && val.startsWith('/sa prog ')) {
+          const name = val.slice(9).trim();
+          if (name) {
+            const university = studyAbroadHub.universities[0];
+            if (!university) flash('Add a university first with /sa uni');
+            else {
+              const stamp = nowIso();
+              onSetStudyAbroadHub(current => appendHistory({
+                ...current,
+                programs: [...current.programs, { id: newId('prog'), name, universityId: university.id, status: 'discovering', shortlisted: false, createdAt: stamp, updatedAt: stamp }],
+              }, 'Added program', name, 'program'));
+              flash(`Program added: ${name}`);
+            }
+          }
+          finishCaptureCommand();
+        } else if (enableStudyAbroad && val.startsWith('/sa app ')) {
+          const name = val.slice(8).trim();
+          const program = name
+            ? studyAbroadHub.programs.find(item => item.name.toLowerCase() === name.toLowerCase()) || studyAbroadHub.programs[0]
+            : studyAbroadHub.programs[0];
+          if (!program) flash('Add a program first with /sa prog');
+          else {
+            const stamp = nowIso();
+            onSetStudyAbroadHub(current => appendHistory({
+              ...current,
+              applications: [...current.applications, { id: newId('app'), programId: program.id, stage: 'preparing', createdAt: stamp, updatedAt: stamp }],
+              programs: current.programs.map(item => item.id === program.id ? { ...item, status: 'preparing', shortlisted: true, updatedAt: stamp } : item),
+            }, 'Started application', program.name, 'application'));
+            flash(`Application started: ${program.name}`);
+          }
+          finishCaptureCommand();
+        } else if (enableStudyAbroad && (val.startsWith('/sa fund ') || val.startsWith('/sa scholarship '))) {
+          const name = val.startsWith('/sa scholarship ') ? val.slice(16).trim() : val.slice(9).trim();
+          if (name) {
+            const stamp = nowIso();
+            onSetStudyAbroadHub(current => appendHistory({
+              ...current,
+              funding: [...current.funding, { id: newId('fund'), name, kind: 'scholarship', countryId: current.countries[0]?.id, status: 'researching', createdAt: stamp, updatedAt: stamp }],
+            }, 'Added funding', name, 'funding'));
+            flash(`Scholarship added: ${name}`);
+          }
+          finishCaptureCommand();
+        } else if (enableStudyAbroad && val.startsWith('/sa task ')) {
+          const title = val.slice(9).trim();
+          if (title) {
+            const parentProgramId = studyAbroadHub.sessionMemory?.lastProgramId || studyAbroadHub.programs[0]?.id;
+            const parentCountryId = studyAbroadHub.countries[0]?.id;
+            if (!parentProgramId && !parentCountryId) flash('Add a country or program first');
+            else {
+              const stamp = nowIso();
+              const parentType = parentProgramId ? 'program' as const : 'country' as const;
+              const parentId = parentProgramId || parentCountryId!;
+              onSetStudyAbroadHub(current => appendHistory({
+                ...current,
+                tasks: [...current.tasks, { id: newId('task'), title, parentType, parentId, createdAt: stamp, updatedAt: stamp }],
+              }, 'Added study-abroad task', title, parentType, parentId));
+              flash(`Study Abroad task: ${title}`);
+            }
+          }
+          finishCaptureCommand();
+        } else if (enableStudyAbroad && val.startsWith('/sa note ')) {
+          const title = val.slice(9).trim();
+          if (title) {
+            const stamp = nowIso();
+            onSetStudyAbroadHub(current => appendHistory({
+              ...current,
+              knowledge: [...current.knowledge, { id: newId('know'), title, contextType: 'general', createdAt: stamp, updatedAt: stamp }],
+              sessionMemory: { ...current.sessionMemory, lastNote: title, updatedAt: stamp },
+            }, 'Added knowledge note', title, 'general'));
+            flash(`Study Abroad note: ${title}`);
+          }
+          finishCaptureCommand();
+        } else if (!val.startsWith('/')) {
+          onStartAmbient();
+          finishCaptureCommand();
+        }
+      }
+    }
+  };
+  return <div className="now-view">
+    {showOnboarding && (
+      <div className="ob-overlay" role="dialog" aria-modal="true" aria-labelledby="postauth-onboarding-title">
+        <div className="ob-card">
+          <button type="button" className="ob-close" onClick={closeOnboarding} aria-label="Close onboarding"><X size={18} /></button>
+          <div className="ob-visual" aria-hidden>
+            <svg className="ob-illus" viewBox="0 0 280 280" fill="none">
+              <circle cx="140" cy="150" r="78" stroke="currentColor" strokeWidth="3" />
+              <path d="M96 168c12-28 28-42 44-42s32 14 44 42" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              <circle cx="140" cy="112" r="22" stroke="currentColor" strokeWidth="3" />
+              <path d="M70 214h140" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              <rect x="88" y="190" width="104" height="14" rx="4" stroke="currentColor" strokeWidth="3" />
+            </svg>
+          </div>
+          <div className="ob-panel">
+            <div className="ob-brand">LifeOS</div>
+            <p className="ob-eyebrow">You&apos;re in</p>
+            <h2 id="postauth-onboarding-title" className="ob-title">Ready to start your week?</h2>
+            <p className="ob-body">A few habits that keep Now clear — capture fast, focus on one thing, let Copilot suggest the next move.</p>
+            <div className="ob-tips">
+              <div className="ob-tip"><span className="ob-tip-icon"><Command size={16} /></span><div><strong>Capture commands</strong><p>Type <code>/t</code> for tasks, <code>/proj</code> for projects, <code>/asg</code> for assignments.</p></div></div>
+              <div className="ob-tip"><span className="ob-tip-icon"><Focus size={16} /></span><div><strong>Current task</strong><p>Click any task to focus on it. Your active work shows here with focus tools.</p></div></div>
+              <div className="ob-tip"><span className="ob-tip-icon"><Sparkles size={16} /></span><div><strong>LifeOS Copilot</strong><p>Suggestions based on your priorities and context — you decide what runs.</p></div></div>
+            </div>
+            <div className="ob-actions">
+              <button type="button" className="ob-primary" onClick={closeOnboarding}>Continue</button>
+              <button type="button" className="ob-skip" onClick={closeOnboarding}>Skip</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    {(() => {
+      const dateObj = new Date(now);
+      const greetingRaw = getGreeting(dateObj, workspaceName);
+      const nameNeedle = workspaceName.trim();
+      const greetingNode = (!nameNeedle || nameNeedle === "there" || greetingRaw.lastIndexOf(nameNeedle) < 0)
+        ? greetingRaw
+        : (() => {
+            const idx = greetingRaw.lastIndexOf(nameNeedle);
+            return <>{greetingRaw.slice(0, idx)}<span className="atelier-name">{nameNeedle}</span>{greetingRaw.slice(idx + nameNeedle.length)}</>;
+          })();
+      const totalFocusSec = (current?.focusMinutes ?? 0) * 60;
+      const focusPct = current && totalFocusSec > 0 && typeof current.focusRemainingSeconds === "number" && current.focusSessionStarted
+        ? Math.max(0, Math.min(100, Math.round(100 * (1 - current.focusRemainingSeconds / totalFocusSec))))
+        : null;
+      const ringR = 54;
+      const ringC = 2 * Math.PI * ringR;
+      const schoolOpen = active.filter((task) => Boolean(task.classId)).length;
+      const lifeOpen = active.filter((task) => !task.classId).length;
+      return (
+    <>
+    <div className="atelier-now">
+      <header className="atelier-now-hero">
+        <div className="atelier-now-hero-copy">
+          <h1 className="atelier-greeting">{greetingNode}</h1>
+          <p className="atelier-hero-copy">A clear mind builds a better tomorrow.</p>
+          <p className="atelier-hero-date">{dateObj.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }).toUpperCase()}</p>
+        </div>
+        <div className="atelier-now-hero-widgets">
+          <NowWeatherWidget />
+          <div className="atelier-glass-card atelier-quote-widget">
+            <p>“Progress, not perfection.”</p>
+            <ArrowRight size={16} aria-hidden />
+          </div>
+        </div>
+      </header>
+
+      {ambientActivity ? (
+        <section className="ambient-active-strip">
+          <div><span className="section-icon orange"><TimerReset size={14} /></span><div><p>YOU’RE ALREADY DOING IT</p><strong>{ambientActivity.title}</strong><small>{formatAmbientDuration(now - new Date(ambientActivity.startedAt).getTime())} so far · no planning required</small></div></div>
+          <button onClick={onWrapAmbient}>Finish & sort later <ArrowRight size={15} /></button>
+        </section>
+      ) : null}
+
+      <div className="atelier-now-main">
+        <section className="card atelier-today-panel" aria-label="Today">
+          <div className="card-head"><div><h2>Today</h2></div></div>
+          <div className={`now-today-list${todayEvents.length ? " now-today-timeline" : ""}`}>
+            {todayEvents.length ? todayEvents.map((event, index) => {
+              const start = new Date(event.start);
+              const time = Number.isNaN(start.getTime()) ? "—" : start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+              return (
+                <div key={event.id} className="now-today-row">
+                  <time dateTime={event.start}>{time}</time>
+                  <div className="now-today-track" aria-hidden>
+                    <i style={{ background: event.color || "var(--accent)" }} />
+                    {index < todayEvents.length - 1 ? <span className="now-today-rail" /> : null}
+                  </div>
+                  <div className="now-today-body">
+                    <strong>{event.title}</strong>
+                    <span>{event.source}{event.location ? ` · ${event.location}` : ""}</span>
+                  </div>
+                </div>
+              );
+            }) : <div className="now-today-empty">No events on the calendar for today. Protect a block when you’re ready.</div>}
+          </div>
+          <div className="now-today-footer"><button type="button" onClick={() => onGo("Today")}>View full day</button></div>
+        </section>
+
+        <div className="atelier-now-mid">
+          <section className="card atelier-focus-panel" title="Your focused task">
+            <div className="atelier-focus-ring-wrap" aria-hidden={focusPct == null}>
+              <svg className="atelier-focus-ring" viewBox="0 0 140 140">
+                <circle cx="70" cy="70" r={ringR} pathLength="100" />
+                <circle
+                  cx="70"
+                  cy="70"
+                  r={ringR}
+                  pathLength="100"
+                  style={{
+                    strokeDasharray: `${focusPct ?? 0} 100`,
+                  }}
+                />
+              </svg>
+              <div className="atelier-focus-ring-label">
+                {focusPct != null ? <strong>{focusPct}%</strong> : <Focus size={22} />}
+                <span>{focusPct != null ? "Focus" : "Ready"}</span>
+              </div>
+            </div>
+            {current ? (
+              <div className="atelier-focus-copy">
+                <p className="eyebrow">{activeSpace || "Focus"}</p>
+                <h2>{current.title}</h2>
+                <p>{current.focusMinutes} min · {current.energy} energy</p>
+                <div className="now-current-actions">
+                  <button className="primary" type="button" onClick={() => onFocus(current.id)}><Focus size={16} /> Start focus</button>
+                  <button type="button" onClick={() => onOpenTask(current.id)}>Open</button>
+                  <button type="button" onClick={() => onComplete(current.id)}><Check size={16} /></button>
+                </div>
+                <div className="atelier-focus-tools">
+                  <button type="button" className="text-button" onClick={() => setQueueOpen((value) => !value)}>{queueOpen ? "Hide queue" : "Open Queue"}</button>
+                  <button type="button" className="text-button" onClick={() => onChoose(null)}>Clear</button>
+                </div>
+              </div>
+            ) : (
+              <div className="atelier-focus-copy">
+                <p className="eyebrow">Focus</p>
+                <h2>Nothing claiming attention</h2>
+                <p>Choose a next move when you’re ready.</p>
+                <div className="now-current-actions">
+                  <button type="button" className="primary" onClick={onSmartCapture}><Sparkles size={16} /> Make a task</button>
+                  <button type="button" onClick={() => setQueueOpen((value) => !value)}>Open Queue</button>
+                </div>
+              </div>
+            )}
+            {queueOpen && (
+              <div className="now-queue-panel">
+                <div className="now-queue-head"><strong>Up next</strong><span>Drag to reorder · first 5</span></div>
+                {queueTasks.length ? queueTasks.map((task, index) => (
+                  <div
+                    key={task.id}
+                    className={`now-queue-row ${dragQueueId === task.id ? "dragging" : ""}`}
+                    draggable
+                    onDragStart={() => setDragQueueId(task.id)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => { if (dragQueueId != null) moveQueueItem(dragQueueId, task.id); setDragQueueId(null); }}
+                    onDragEnd={() => setDragQueueId(null)}
+                  >
+                    <GripVertical size={14} className="now-queue-grip" />
+                    <em>{index + 1}</em>
+                    <button type="button" className="now-queue-main" onClick={() => switchTo(task)}>
+                      <i style={{ background: task.color }} />
+                      <span><strong>{task.title}</strong><small>{task.classId ? classes.find((item) => item.id === task.classId)?.code : task.project} · {formatDueDate(task.due)}</small></span>
+                    </button>
+                    <button type="button" className="text-button" onClick={() => switchTo(task)}>Make current</button>
+                  </div>
+                )) : <div className="now-queue-empty">Nothing queued yet. Add tasks with <code>/t</code>.</div>}
+              </div>
+            )}
+          </section>
+
+          <div className="atelier-hub-tiles" aria-label="Spaces">
+            <button type="button" className="atelier-hub-tile tile-career" onClick={() => onGo("Career")}>
+              <Target size={18} /><strong>Career</strong><span>Pipeline</span>
+            </button>
+            <button type="button" className="atelier-hub-tile tile-life" onClick={() => onGo("Life")}>
+              <Home size={18} /><strong>Life</strong><span>{lifeOpen} open</span>
+            </button>
+            <button type="button" className="atelier-hub-tile tile-school" onClick={() => onGo("School")}>
+              <GraduationCap size={18} /><strong>School</strong><span>{schoolOpen} open</span>
+            </button>
+            <button type="button" className="atelier-hub-tile tile-tasks" onClick={() => onGo("Tasks")}>
+              <CheckCircle2 size={18} /><strong>Tasks</strong><span>{active.length} open</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="atelier-now-bottom">
+        <section className="card atelier-capture-panel">
+          <div className="card-head"><div><h2>Quick capture</h2></div></div>
+          <div className="atelier-capture-body">
+            <input
+              ref={captureInputRef}
+              type="text"
+              placeholder="Drop a thought, task, or idea…"
+              value={captureInput}
+              onChange={(e) => { setCaptureInput(e.currentTarget.value); setSuggestedCommandIndex(-1); }}
+              onFocus={handleCaptureFocus}
+              onClick={handleCaptureFocus}
+              onBlur={handleCaptureBlur}
+              onKeyDown={handleCaptureKeyDown}
+            />
+            <button type="button" className="atelier-capture-add" onClick={onCapture} aria-label="Capture"><Plus size={18} /></button>
+          </div>
+          {showSuggestions ? (
+            <div className="capture-suggestions" onMouseDown={(e) => e.preventDefault()}>
+              <div className="capture-suggestions-list">
+                {filtered.map((cmd, idx) => (
+                  <button
+                    key={cmd.shortcut}
+                    type="button"
+                    className={idx === suggestedCommandIndex ? "suggested" : ""}
+                    onClick={() => {
+                      if (['/w', '/break', '/a', '/focus', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
+                        runInstantCommand(cmd.shortcut);
+                        finishCaptureCommand();
+                      } else {
+                        setCaptureInput(cmd.shortcut + " ");
+                        setSuggestedCommandIndex(-1);
+                        captureInputRef.current?.focus();
+                      }
+                    }}
+                  >
+                    <strong>{cmd.shortcut}</strong>
+                    <span>{cmd.desc}</span>
+                  </button>
+                ))}
+              </div>
+              {showCaptureCommands ? (
+                <div className="capture-suggestions-footer">
+                  <button type="button" className="capture-dismiss" onClick={() => { onDismissCaptureCommands(); setCaptureFocused(false); }}>
+                    Don&apos;t show again
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="atelier-capture-hint">/t · /tm · /break · /focus · /clock{enableMasterOS ? " · /mos" : ""}</p>
+          )}
+        </section>
+        <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} studyAbroadContext={enableStudyAbroad ? buildStudyAbroadCopilotContext(studyAbroadHub) : null} />
+      </div>
+
+      <div className="atelier-now-utility">
+        <div className="atelier-utility-actions">
+          <button type="button" className="atelier-chip" onClick={onDailyReset}>Daily reset</button>
+          <button type="button" className="atelier-chip" onClick={onWeeklyReview}>Weekly review</button>
+          <button type="button" className="atelier-chip primary" onClick={() => onGo("Today")}><CalendarDays size={15} /> Plan today</button>
+        </div>
+        <ExecutiveActiveStrip hub={guidedHub} onChange={onGuidedChange} flash={flash} onOpen={onOpenGuided} />
+        <TimesheetNowStrip
+          timeTracking={timeTracking}
+          onChange={onTimeTrackingChange}
+          onOpenTimesheet={onOpenTimesheet}
+          nowMs={now}
+          workTitle={current?.title}
+          onFlash={flash}
+        />
+      </div>
+    </div>
+    </>
+      );
+    })()}
+    <section className="card week-brainstorm">
+      <div className="card-head">
+        <div><span className="section-icon blue"><Brain size={14} /></span><h2>Plan the week</h2></div>
+      </div>
+      {(() => {
+        const today = new Date();
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const weekDays = Array.from({ length: 7 }, (_, i) => {
+          const date = new Date(today);
+          date.setDate(date.getDate() + i);
+          return { date, dayOfWeek: date.getDay(), label: dayNames[date.getDay()], dayNum: date.getDate() };
+        });
+        const updatePlan = (dayOfWeek: number, items: WeeklyPlanItem[]) => {
+          const updated = { ...weeklyPlan };
+          if (items.length === 0) {
+            delete updated[dayOfWeek];
+          } else {
+            updated[dayOfWeek] = items;
+          }
+          setWeeklyPlan(updated);
+        };
+        const addPlanItem = (dayOfWeek: number, text: string) => {
+          if (!text.trim()) return;
+          const items = weeklyPlan[dayOfWeek] ?? [];
+          updatePlan(dayOfWeek, [...items, { id: String(Date.now()) + '-' + Math.random().toString(36).slice(2), text: text.trim() }]);
+        };
+        const removePlanItem = (dayOfWeek: number, id: string) => {
+          const items = (weeklyPlan[dayOfWeek] ?? []).filter(item => item.id !== id);
+          updatePlan(dayOfWeek, items);
+        };
+        return (
+          <div className="week-plan-grid">
+            {weekDays.map(({ date, dayOfWeek, label, dayNum }) => (
+              <div key={dayOfWeek} className="week-plan-day">
+                <div className="week-day-header">
+                  <strong>{label}</strong>
+                  <span className="week-day-num">{dayNum}</span>
+                </div>
+                <div className="week-day-items">
+                  {(weeklyPlan[dayOfWeek] ?? []).map(item => (
+                    <div key={item.id} className="week-plan-item">
+                      <span>{item.text}</span>
+                      <button className="week-item-remove" onClick={() => removePlanItem(dayOfWeek, item.id)} aria-label="Remove"><X size={12} /></button>
+                    </div>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  className="week-day-input"
+                  placeholder="Add something..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      addPlanItem(dayOfWeek, e.currentTarget.value);
+                      e.currentTarget.value = '';
+                    }
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+    </section>
+    <section className="card now-recommendations"><div className="card-head"><div><span className="section-icon orange"><Sparkles size={14} /></span><h2>Good next choices</h2></div><span className="count">Pick one — nothing starts automatically</span></div>
+      {recommendations.length ? <div className="now-choice-list">{recommendations.map(task => <button key={task.id} className="now-choice" onClick={() => switchTo(task)}><i style={{ background: task.color }} /><div><strong>{task.title}</strong><p>{task.classId ? classes.find(item => item.id === task.classId)?.code : task.project} · {formatDueDate(task.due)} · {task.focusMinutes}m · {task.energy} energy</p></div><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><ArrowRight size={16} /></button>)}</div> : <div className="priority-empty"><strong>You’re clear.</strong><p>Add a task or capture a thought when something new arrives.</p></div>}
+    </section>
+    {resurfacing.length > 0 && <section className="card resurface-card"><div className="card-head"><div><span className="section-icon blue"><RefreshCw size={14} /></span><h2>Worth resurfacing</h2></div><span className="count">Old doesn’t mean failed</span></div><div className="resurface-list">{resurfacing.map(task => <div key={task.id}><i style={{ background: task.color }} /><div><strong>{task.title}</strong><p>{getTaskStatus(task) === "Waiting" ? `Follow up ${formatDueDate(task.followUpDate ?? task.due)}` : `Due ${formatDueDate(task.due)}`}</p></div><button onClick={() => switchTo(task)}>Make current</button><button className="resurface-done" aria-label={`Mark ${task.title} done`} onClick={() => onComplete(task.id)}><Check size={15} /></button></div>)}</div></section>}
+    <div className="now-bottom-grid"><DashboardGmailCard user={user} onSettings={() => onGo("Settings")} /><section className="card now-space-card"><div className="card-head"><div><span className="section-icon blue"><Sparkles size={14} /></span><h2>Momentum</h2></div><span className="count">Last 7 days</span></div><div className="agenda-list">{(momentumLog ?? []).slice(0, 4).map(entry => <div key={entry.id} className="agenda-item compact"><i /><div><strong>{entry.title}</strong><p>{entry.type === "done" ? "Completed" : "Focus started"} · {new Date(entry.at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p></div></div>)}{!(momentumLog?.length) && <div className="priority-empty"><strong>Momentum starts small.</strong><p>Focus or finish one thing and it will show here.</p></div>}</div></section></div>
+  </div>;
+}
+
+function DailyResetModal({ tasks, close, choose, complete }: { tasks: Task[]; close: () => void; choose: (id: number | null) => void; complete: (id: number) => void }) {
+  const today = toDateKey(new Date());
+  const active = tasks.filter(task => !task.done && !task.canceled);
+  const needsAttention = active.filter(task => task.due <= today).slice(0, 3);
+  return <motion.div className="modal-layer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.section className="review-modal" initial={{ y: 14, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}><button className="modal-close" aria-label="Close daily reset" onClick={close}><X size={18} /></button><p className="eyebrow">A calm reset</p><h2>What would make today feel lighter?</h2><p>Pick one thing. The rest can wait without disappearing.</p><div className="review-stats"><div><strong>{active.length}</strong><span>open tasks</span></div><div><strong>{needsAttention.length}</strong><span>need attention</span></div><div><strong>{active.filter(task => task.due === today).length}</strong><span>due today</span></div></div><div className="review-task-list">{needsAttention.length ? needsAttention.map(task => <div key={task.id}><i style={{ background: task.color }} /><div><strong>{task.title}</strong><small>{task.project} · {formatDueDate(task.due)}</small></div><button onClick={() => { choose(task.id); close(); }}>Choose</button><button className="review-check" aria-label={`Complete ${task.title}`} onClick={() => complete(task.id)}><Check size={15} /></button></div>) : <div className="review-empty">Nothing urgent. Protect your breathing room.</div>}</div><button className="review-finish" onClick={close}>I’m clear on my next move</button></motion.section></motion.div>;
+}
+
+function WeeklyReviewModal({ tasks, projects, classes, close, onOpenTask, onGoSpaces }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; close: () => void; onOpenTask: (id: number) => void; onGoSpaces: () => void }) {
+  const active = tasks.filter(task => !task.done && !task.canceled);
+  const stale = active.filter(task => /^\d{4}-\d{2}-\d{2}/.test(task.due) && task.due < toDateKey(new Date())).slice(0, 4);
+  const spaces = [...projects.map(project => ({ label: project.name, count: active.filter(task => task.project === project.name).length, color: project.color })), ...classes.filter(item => !item.archived).map(item => ({ label: item.code, count: active.filter(task => task.classId === item.id).length, color: item.color }))].filter(item => item.count > 0).slice(0, 6);
+  return <motion.div className="modal-layer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.section className="review-modal weekly-review" initial={{ y: 14, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}><button className="modal-close" aria-label="Close weekly review" onClick={close}><X size={18} /></button><p className="eyebrow">Weekly review</p><h2>Get your worlds back in view.</h2><p>No giant productivity audit. Just notice what is active, stale, or ready to let go.</p><div className="space-review-list">{spaces.map(space => <div key={space.label}><i style={{ background: space.color }} /><strong>{space.label}</strong><span>{space.count} open</span></div>)}{!spaces.length && <div className="review-empty">You have no active work right now.</div>}</div>{stale.length > 0 && <div className="review-task-list"><p>Worth deciding on</p>{stale.map(task => <div key={task.id}><i style={{ background: task.color }} /><div><strong>{task.title}</strong><small>Due {formatDueDate(task.due)}</small></div><button onClick={() => { onOpenTask(task.id); close(); }}>Review</button></div>)}</div>}<button className="review-finish" onClick={onGoSpaces}>Open my spaces</button></motion.section></motion.div>;
+}
+
+function LifeOSCopilot({ tasks, classes, events, current, recommendations, onChoose, onFocus, onComplete, onPlan, studyAbroadContext }: { tasks: Task[]; classes: ClassRecord[]; events: CalendarEvent[]; current?: Task; recommendations: Task[]; onChoose: (task: Task) => void; onFocus: (id: number) => void; onComplete: (id: number) => void; onPlan: () => void; studyAbroadContext?: ReturnType<typeof buildStudyAbroadCopilotContext> | null }) {
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState(current ? "You’ve got something on the plate. Want help making the next step smaller, or just a nudge to start?" : "Nothing’s locked in right now. Ask me what’s worth doing, or pick one good next move.");
+  const [suggestion, setSuggestion] = useState<{ task?: Task; action: "focus" | "choose" | "plan" | "complete" | "none" }>({ action: current ? "focus" : "none", task: current });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const firstTask = current || recommendations[0] || tasks[0];
+  const fallback = (prompt: string) => {
+    const lower = prompt.toLowerCase();
+    const completionWords = /\b(done|finished|completed|complete|wrapped up)\b/.test(lower);
+    const namedTask = tasks.find(task => lower.includes(task.title.toLowerCase()));
+    if (completionWords && (namedTask || current)) return { answer: "Marked " + (namedTask || current)!.title + " as done. Nice work.", action: "complete" as const, task: namedTask || current };
+    if (lower.includes("plan")) return { answer: events.length ? "You’ve got " + events.length + " thing" + (events.length === 1 ? "" : "s") + " on the calendar today. Protect those first, then drop one task into the open space." : "Calendar looks open. Stick one realistic task in Today and leave the rest alone.", action: "plan" as const, task: firstTask };
+    if (lower.includes("urgent") || lower.includes("catch") || lower.includes("abroad") || lower.includes("study")) {
+      if (studyAbroadContext?.whatMattersNow && (lower.includes("abroad") || lower.includes("study") || lower.includes("catch"))) {
+        return { answer: studyAbroadContext.whatMattersNow.title + " — " + studyAbroadContext.whatMattersNow.detail, action: "none" as const, task: firstTask };
+      }
+      return { answer: firstTask ? "Honestly? " + firstTask.title + " looks like the clearest next move. Want me to make it current?" : "You’re clear. When something lands, we’ll sort it.", action: "choose" as const, task: firstTask };
+    }
+    return { answer: firstTask ? "How about " + firstTask.title + (firstTask.focusMinutes <= 30 ? "? It’s small enough to start now." : " as your current task — you can bail anytime.") : "What’s the next tiny thing on your mind? Type it and I’ll help shape it.", action: firstTask ? "focus" as const : "none" as const, task: firstTask };
+  };
+  const ask = async (prompt: string) => {
+    const clean = prompt.trim();
+    if (!clean || busy) return;
+    setBusy(true); setError(""); setQuestion("");
+    const context = {
+      currentTaskId: current?.id || null,
+      tasks: tasks.slice(0, 12).map(task => ({ id: task.id, title: task.title, due: task.due, priority: task.priority, focusMinutes: task.focusMinutes, energy: task.energy, space: task.classId ? classes.find(item => item.id === task.classId)?.code : task.project })),
+      events: events.map(event => ({ title: event.title, start: event.start })),
+      studyAbroad: studyAbroadContext || undefined,
+    };
+    try {
+      const response = await fetch("/api/ai", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "copilot", question: clean, context }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "LifeOS Copilot could not answer right now.");
+      const task = tasks.find(item => item.id === data.suggestedTaskId);
+      if (data.suggestedAction === "complete" && task) {
+        onComplete(task.id);
+        setAnswer("Marked " + task.title + " as done. Nice work.");
+        setSuggestion({ action: "none" });
+      } else {
+        setAnswer(data.answer); setSuggestion({ task, action: data.suggestedAction || "none" });
+      }
+    } catch {
+      const local = fallback(clean);
+      if (local.action === "complete" && local.task) {
+        onComplete(local.task.id);
+        setAnswer(local.answer); setSuggestion({ action: "none" });
+      } else {
+        setAnswer(local.answer); setSuggestion({ task: local.task, action: local.action });
+      }
+      setError("Using your LifeOS context while AI is unavailable.");
+    } finally { setBusy(false); }
+  };
+  const act = () => {
+    if (suggestion.action === "plan") return onPlan();
+    if (!suggestion.task) return;
+    if (suggestion.action === "complete") return onComplete(suggestion.task.id);
+    if (suggestion.action === "focus") { onChoose(suggestion.task); onFocus(suggestion.task.id); return; }
+    if (suggestion.action === "choose") onChoose(suggestion.task);
+  };
+  const actionLabel = suggestion.action === "focus" ? "Start this focus" : suggestion.action === "choose" ? "Make this current" : suggestion.action === "plan" ? "Open Today" : suggestion.action === "complete" ? "Mark as done" : "";
+  return <aside className="card copilot-card" aria-label="LifeOS Copilot"><div className="card-head"><div><span className="section-icon violet"><Sparkles size={14} /></span><h2>LifeOS Copilot</h2></div><span className="copilot-status"><i /> Here if you need me</span></div><div className="copilot-body"><p className="copilot-kicker">ASK ANYTHING ABOUT YOUR DAY</p><div className="copilot-orb"><Sparkles size={19} /></div><div className="copilot-answer" aria-live="polite">{busy ? <><span className="copilot-thinking"><i /><i /><i /></span><strong>Thinking with your context…</strong></> : <><strong>{answer}</strong>{error && <small>{error}</small>}</>}</div>{suggestion.task && !busy && <div className="copilot-suggestion"><i style={{ background: suggestion.task.color }} /><div><span>Suggested next move</span><strong>{suggestion.task.title}</strong><small>{suggestion.task.focusMinutes} min · {suggestion.task.energy} energy</small></div></div>}{actionLabel && !busy && <button className="copilot-action" onClick={act}>{suggestion.action === "focus" ? <Focus size={15} /> : suggestion.action === "plan" ? <CalendarDays size={15} /> : <CheckCircle2 size={15} />}{actionLabel}</button>}<div className="copilot-prompts"><button onClick={() => void ask("What is the most urgent thing I should do next?")} disabled={busy}>What’s urgent?</button><button onClick={() => void ask("Help me start with the smallest possible first step.")} disabled={busy}>Help me start</button><button onClick={() => void ask("Plan my day around my calendar and open tasks.")} disabled={busy}>Plan my day</button><button onClick={() => void ask("Catch me up on what matters across my work.")} disabled={busy}>Catch me up</button></div><form className="copilot-input" onSubmit={event => { event.preventDefault(); void ask(question); }}><label htmlFor="copilot-question">Ask LifeOS</label><div><input id="copilot-question" value={question} onChange={event => setQuestion(event.target.value)} placeholder="What’s on your mind?" disabled={busy} /><button aria-label="Ask LifeOS" disabled={!question.trim() || busy}><ArrowRight size={16} /></button></div></form></div></aside>;
+}
+
+function LibraryView({ notes, classes, projects, resources, selectedNoteId, onSelectNote, onCreateNote, onUpdateNote, onDeleteNote, onImportNotes, onCreateTask, onUpload, onDeleteResource, onReplaceResource, onDownload }: { notes: Note[]; classes: ClassRecord[]; projects: Project[]; resources: Resource[]; selectedNoteId: string | null; onSelectNote: (id: string | null) => void; onCreateNote: () => void; onUpdateNote: (id: string, updates: Partial<Note>) => void; onDeleteNote: (id: string) => void; onImportNotes: (notes: Note[]) => void; onCreateTask: (note: Note) => void; onUpload: (file: File) => void | Promise<void>; onDeleteResource: (id: string) => void; onReplaceResource: (id: string, file: File) => void; onDownload: (resource: Resource) => void | Promise<void> }) {
+  const [tab, setTab] = useState<"notes" | "resources">("notes");
+  return <><div className="page-title"><div><p className="eyebrow">Keep & organize</p><h1>Library</h1><p>Your notes and files.</p></div><div className="calendar-mode-tabs"><button className={tab === "notes" ? "selected" : ""} onClick={() => setTab("notes")}><NotebookPen size={14} /> Notes</button><button className={tab === "resources" ? "selected" : ""} onClick={() => setTab("resources")}><Archive size={14} /> Resources</button></div></div>{tab === "notes" ? <NotesView notes={notes} classes={classes} projects={projects} selectedNoteId={selectedNoteId} onSelect={onSelectNote} onCreate={onCreateNote} onUpdate={onUpdateNote} onDelete={onDeleteNote} onImport={onImportNotes} onCreateTask={onCreateTask} /> : <ResourcesView resources={resources} classes={classes} onUpload={onUpload} onDelete={onDeleteResource} onReplace={onReplaceResource} onDownload={onDownload} />}</>;
+}
+
+function Dashboard({ tasks, projects, classes, brainCount, user, onComplete, onFocus, onOpenTask, onCapture, onGo, onNewTask, onTaskMenu, events, onOpenProject, weeklyPlan, setWeeklyPlan }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; brainCount: number; user?: any; onComplete: (id: number) => void; onFocus: (id?: number) => void; onOpenTask: (id: number) => void; onCapture: () => void; onGo: (view: View) => void; onNewTask: () => void; onTaskMenu: (id: number) => void; events: CalendarEvent[]; onOpenProject: (name: string) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const tick = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(tick);
+  }, []);
+  const activeTasks = tasks.filter(task => !task.done && !task.canceled);
+  const readyPriorities = activeTasks.slice(0, 3).length;
+  const nextTask = activeTasks.find(task => true);
+  const todayKey = toDateKey(now);
+  const todayEvents = events.filter(event => event.start.slice(0, 10) === todayKey).sort((a, b) => a.start.localeCompare(b.start));
+  const todayTasksDue = activeTasks.filter(task => task.due === toDateKey(new Date()) && !activeTasks.slice(0, 3).includes(task));
+  const taskSpaceLabel = (task: Task) => classes.find(item => item.id === task.classId)?.code ?? task.project;
+  const dashboardSpaces = [
+    ...classes.map(item => ({ key: `class-${item.id}`, name: item.code, detail: item.name, kind: "Class", color: item.color, progress: 100, icon: GraduationCap, projectName: null as string | null })),
+    ...projects.map(item => ({ key: `project-${item.name}`, name: item.name, detail: item.desc, kind: item.kind === "maintenance" ? "Maintenance" : "Project", color: item.color, progress: item.progress, icon: item.icon, projectName: item.name })),
+  ].slice(0, 3);
+  return <>
+    <section className="welcome">
+      <div><p className="eyebrow">{now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p><h1>{getGreeting(now, user?.displayName || "there")}</h1><p>Here’s what deserves your attention today.</p></div>
+      <div className="day-score"><span>Today</span>{readyPriorities === 0 && activeTasks.length === 0 ? <><strong>All Done</strong><small style={{ textTransform: "none" }}>for Today</small></> : <><strong>{readyPriorities}<span>/{activeTasks.length}</span></strong><small>priorities ready</small></>}</div>
+    </section>
+    <div className="dashboard-grid">
+      <section className="card priorities">
+        <div className="card-head"><div><span className="section-icon violet"><Zap size={14} /></span><h2>Today’s priorities</h2></div><button onClick={() => onGo("Tasks")}>Plan day <ArrowRight size={14} /></button></div>
+        <div className="task-list">{activeTasks.length ? activeTasks.slice(0, 3).map((task, i) => <div className={`task-row`} key={task.id}><button className="check" onClick={() => onComplete(task.id)}><span>{i + 1}</span></button><button className="task-open" onClick={() => onOpenTask(task.id)}><strong>{task.title}</strong><p><i style={{ background: task.color }} />{taskSpaceLabel(task)} <span>·</span> {formatDueDate(task.due)} <span>·</span> {task.focusMinutes} min <span>·</span> {task.energy} energy</p></button><button className="quick-focus" aria-label={`Focus on ${task.title}`} title="Focus on this task" onClick={() => onFocus(task.id)}><Focus size={15} /></button><button className="more" aria-label={`Actions for ${task.title}`} onClick={() => onTaskMenu(task.id)}><MoreHorizontal size={17} /></button></div>) : <div className="priority-empty"><strong>No priorities right now.</strong><p>Clean slate. Add one when your brain hands you the next thing.</p></div>}</div>
+        {todayTasksDue.length > 0 && <><div style={{ borderTop: "1px solid var(--line)", margin: "8px 0", paddingTop: "12px" }}><p style={{ fontSize: "9px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".08em", margin: "0 0 8px 0", fontWeight: 700, paddingLeft: "15px" }}>Today’s other tasks</p><div className="task-list" style={{ margin: 0 }}>{todayTasksDue.slice(0, 2).map(task => <div className={`task-row ${task.done ? "done" : ""} ${task.canceled ? "canceled" : ""}`} key={task.id} style={{ opacity: .7, fontSize: "13px" }}><button className="check" disabled={task.canceled} onClick={() => onComplete(task.id)}>{task.done ? <Check size={12} /> : task.canceled ? <X size={11} /> : <span style={{ fontSize: "10px" }}>•</span>}</button><button className="task-open" onClick={() => onOpenTask(task.id)}><strong>{task.title}</strong><p><i style={{ background: task.color }} />{taskSpaceLabel(task)} <span>·</span> {task.canceled ? "Canceled" : formatDueDate(task.due)} <span>·</span> {task.energy} energy</p></button><button className="more" aria-label={`Actions for ${task.title}`} onClick={() => onTaskMenu(task.id)}><MoreHorizontal size={15} /></button></div>)}</div>{todayTasksDue.length > 2 && <div style={{ padding: "4px 15px", fontSize: "9px", color: "var(--muted)" }}>+{todayTasksDue.length - 2} more</div>}</div></>}
+        <button className="add-row" onClick={onNewTask}><Plus size={15} /> Add priority</button>
+      </section>
+      <section className="focus-card">
+        <div className="focus-glow" />
+        <div className="card-head"><div><span className="section-icon dark-icon"><Focus size={14} /></span><h2>Next focus</h2></div><span className="ready"><i /> {nextTask ? "Ready" : "Clear"}</span></div>
+        <div className="focus-content"><p>{nextTask ? taskSpaceLabel(nextTask) : "You're all caught up"}</p><h3>{nextTask?.title ?? "What should we work on next?"}</h3><div className="focus-meta">{nextTask && <><span><Clock3 size={14} /> {nextTask.focusMinutes} min</span><span><Flame size={14} /> {nextTask.energy} energy</span></>}</div></div>
+        <button className="start-focus" onClick={() => nextTask ? onFocus(nextTask.id) : onNewTask()}><Focus size={16} /> {nextTask ? "Start focus session" : "Add priority"}</button>
+      </section>
+      <section className="card schedule">
+        <div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>Today’s schedule</h2></div><button onClick={() => onGo("Calendar")}>View calendar</button></div>
+        {todayEvents.length ? todayEvents.map((event, i) => {
+          const start = new Date(event.start);
+          const end = event.end ? new Date(event.end) : new Date(start.getTime() + 45 * 60_000);
+          const startTime = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
+          const endTime = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
+          const place = eventPlaceLabel(event.location);
+          const meeting = resolveEventMeeting(event);
+          const notes = eventNotesLabel(event.notes);
+          const subtitle = place || notes || (event.source === "LifeOS" ? "Focus block" : event.source);
+          return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong>{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : <span>{subtitle}</span>}</div></div>;
+        }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p><p style={{ marginTop: 6 }}>Import a calendar or add an event to fill this view.</p></div>}
+      </section>
+      <DashboardGmailCard user={user} onSettings={() => onGo("Settings")} />
+      <section className="card projects-card">
+        <div className="card-head"><div><span className="section-icon orange"><LayoutGrid size={14} /></span><h2>Active spaces</h2></div><button onClick={() => onGo("Spaces")}>All spaces <ArrowRight size={14} /></button></div>
+        {dashboardSpaces.map(space => <div className="project-row" key={space.key} onClick={() => space.projectName ? onOpenProject(space.projectName) : onGo("Spaces")} style={{ cursor: "pointer" }}><div className="project-glyph" style={{ color: space.color, background: `${space.color}16` }}><space.icon size={17} /></div><div><strong>{space.name}</strong><small className="project-kind">{space.kind}</small><div className="progress"><i style={{ width: `${space.progress}%`, background: space.color }} /></div></div><span>{space.kind === "Maintenance" ? "∞" : space.kind === "Class" ? "↗" : `${space.progress}%`}</span></div>)}
+      </section>
+      <section className="card inbox-card">
+        <div className="card-head"><div><span className="section-icon green"><Brain size={14} /></span><h2>Brain inbox</h2></div><span className="count">{brainCount} uncategorized</span></div>
+        <button className="capture-zone" onClick={onCapture}><Plus size={18} /><div><strong>Capture what’s on your mind</strong><span>Idea, thought, link, anything…</span></div></button>
+      </section>
+    </div>
+    <p className="quote">“The main thing is to keep the main thing the main thing.” <span>— Stephen Covey</span></p>
+  </>;
+}
+
+function Projects({ projects, tasks, onNew, onAction, onOpen }: { projects: Project[]; tasks: Task[]; onNew: () => void; onAction: (name: string) => void; onOpen: (name: string) => void }) {
+  const maintenance = projects.filter(project => project.kind === "maintenance").length;
+  const finishable = projects.length - maintenance;
+  return <><div className="page-title"><div><p className="eyebrow">Your worlds</p><h1>Projects</h1><p>Some things are gardens. Some things are missions. Label them correctly.</p></div><button className="primary" onClick={onNew}><Plus size={16} /> New project</button></div><div className="project-type-summary"><span><Sparkles size={14} /> {maintenance} maintenance systems</span><span><CheckCircle2 size={14} /> {finishable} finishable projects</span></div><div className="projects-grid">{projects.map((p, i) => {
+    const projectTasks = tasks.filter(task => task.project === p.name);
+    const activeTasks = projectTasks.filter(task => !task.done && !task.canceled);
+    const completedTasks = projectTasks.filter(task => task.done && !task.canceled).length;
+    const totalTasks = projectTasks.length;
+    const calculatedProgress = p.kind === "maintenance" ? 100 : totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    const topTask = [...activeTasks].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority])[0];
+    const nextDue = [...activeTasks].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0];
+    const nextDueCountdown = nextDue ? getCountdownText(nextDue.due) : null;
+    return <motion.article role="button" tabIndex={0} className={`project-card ${p.kind}`} key={p.name} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * .04 }} onClick={() => onOpen(p.name)} onKeyDown={event => { if (event.key === "Enter") onOpen(p.name); }}><div className="project-top"><div className="big-glyph" style={{ color: p.color, background: `${p.color}16` }}><p.icon size={22} /></div><button aria-label={`Actions for ${p.name}`} onClick={(event) => { event.stopPropagation(); onAction(p.name); }}><MoreHorizontal size={18} /></button></div><div className="project-title-line"><h3>{p.name}</h3><span className={`project-kind ${p.kind}`}>{p.kind === "maintenance" ? "Maintenance" : "Finishable"}</span></div><p>{p.desc}</p><div className="project-intel"><div><span>Next due</span><strong style={{ color: nextDueCountdown ? getUrgencyColor(nextDueCountdown.urgency) : undefined }}>{nextDueCountdown ? nextDueCountdown.text : "Nothing due"}</strong></div><div><span>Priority</span><strong>{topTask?.priority ?? "Clear"}</strong></div></div><div className="project-task-preview">{activeTasks.slice(0, 2).map(task => <div key={task.id}><i style={{ background: task.color }} /><span>{task.title}</span><em className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</em></div>)}{!activeTasks.length && <div><i style={{ background: p.color }} /><span>No open tasks linked yet</span><em>Clear</em></div>}</div><div className="project-stats"><span>{activeTasks.length} open task{activeTasks.length !== 1 ? "s" : ""}</span><strong>{p.kind === "maintenance" ? "Ongoing" : `${calculatedProgress}%`}</strong></div><div className="progress large"><i style={{ width: `${p.kind === "maintenance" ? 100 : calculatedProgress}%`, background: p.color }} /></div></motion.article>;
+  })}</div></>;
+}
+
+function SpacesView({ projects, classes, tasks, notes, resources, selectedProjectName, selectedClassId, onBack, onNew, onActionProject, onActionClass, onOpenProject, onOpenClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource, linkTask, initialFilter = "All", onFilterChange }: { projects: Project[]; classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedProjectName: string | null; selectedClassId: string | null; onBack: () => void; onNew: () => void; onActionProject: (name: string) => void; onActionClass: (id: string) => void; onOpenProject: (name: string) => void; onOpenClass: (id: string) => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string, projectName?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void>; linkTask: (id: number, project: Project) => void; initialFilter?: "All" | "Classes" | "Projects" | "Maintenance" | "Archived"; onFilterChange?: (filter: "All" | "Classes" | "Projects" | "Maintenance" | "Archived") => void }) {
+  const [filter, setFilter] = useState<"All" | "Classes" | "Projects" | "Maintenance" | "Archived">(initialFilter);
+  const [semester, setSemester] = useState("All semesters");
+  const [sortBy, setSortBy] = useState<"due" | "priority" | "open" | "name">("due");
+  const selectedClass = classes.find(item => item.id === selectedClassId);
+  const selectedProject = projects.find(item => item.name === selectedProjectName);
+
+  if (selectedClass) {
+    return <ClassesView classes={classes} tasks={tasks} notes={notes} resources={resources} selectedClassId={selectedClass.id} onSelectClass={() => onBack()} onNewClass={onNew} onNewAcademicItem={onNewAcademicItem} onNewNote={classId => onNewNote(classId)} onOpenTask={onOpenTask} onOpenNote={onOpenNote} onEditClass={onEditClass} onDeleteClass={onDeleteClass} onUploadResource={onUploadResource} onDeleteResource={onDeleteResource} onReplaceResource={onReplaceResource} onDownloadResource={onDownloadResource} />;
+  }
+
+  if (selectedProject) {
+    const linkedTasks = tasks.filter(task => task.project === selectedProject.name);
+    const activeTasks = linkedTasks.filter(task => !task.done && !task.canceled);
+    const completedTasks = linkedTasks.filter(task => task.done || task.canceled);
+    const availableTasks = tasks.filter(task => task.project !== selectedProject.name && !task.done && !task.canceled);
+    const projectNotes = notes.filter(note => note.projectName === selectedProject.name);
+    const topTask = [...activeTasks].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority])[0];
+    const nextDue = [...activeTasks].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0];
+    return <section className="space-detail-view" style={{ "--space-color": selectedProject.color } as React.CSSProperties}>
+      <button className="class-back" onClick={onBack}><ArrowRight size={14} /> All spaces</button>
+      <div className="space-detail-hero">
+        <div className="space-hero-icon"><selectedProject.icon size={25} /></div>
+        <div><p className="eyebrow">{selectedProject.kind === "maintenance" ? "Maintenance · ongoing" : "Project · finishable"}</p><h1>{selectedProject.name}</h1><p>{selectedProject.desc}</p></div>
+        <div className="class-hero-actions"><button onClick={() => onNewNote(undefined, selectedProject.name)}><NotebookPen size={15} /> New note</button><button className="primary" onClick={() => onActionProject(selectedProject.name)}><SlidersHorizontal size={15} /> Space settings</button></div>
+      </div>
+      <div className="class-meta-strip">
+        <div><span>Next due</span><strong>{nextDue ? formatDueDate(nextDue.due) : "Nothing due"}</strong></div>
+        <div><span>Highest priority</span><strong>{topTask?.priority ?? "Clear"}</strong></div>
+        <div><span>Energy load</span><strong>{topTask ? `${topTask.energy} · ${topTask.focusMinutes}m` : "Clear"}</strong></div>
+        <div><span>Open work</span><strong>{activeTasks.length}</strong></div>
+      </div>
+      <div className="class-content-grid">
+        <section className="card class-coursework">
+          <div className="class-section-title"><div><h2>Tasks</h2><p>Everything actively moving inside this space.</p></div></div>
+          {activeTasks.length ? <div className="coursework-list">{activeTasks.map(task => <button key={task.id} onClick={() => onOpenTask(task.id)}><span className="coursework-type" style={{ color: selectedProject.color, background: `${selectedProject.color}14` }}>Task</span><span className="coursework-name"><strong>{task.title}</strong><small>{formatDueDate(task.due)} · {task.focusMinutes}m · {task.energy}</small></span><em className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</em><ArrowRight size={14} /></button>)}</div> : <div className="class-empty"><CheckCircle2 size={22} /><strong>No active tasks.</strong><span>Link an existing task below when this space needs attention.</span></div>}
+          {completedTasks.length > 0 && <details className="completed-coursework"><summary>{completedTasks.length} completed / canceled</summary><div>{completedTasks.map(task => <button key={task.id} onClick={() => onOpenTask(task.id)}><CheckCircle2 size={14} /><span>{task.title}</span><small>{task.canceled ? "Canceled" : "Done"}</small></button>)}</div></details>}
+        </section>
+        <section className="card class-notes-card">
+          <div className="class-section-title"><div><h2>Notes</h2><p>Context, decisions, research, and loose thinking.</p></div><button onClick={() => onNewNote(undefined, selectedProject.name)}><Plus size={14} /></button></div>
+          {projectNotes.length ? <div className="class-note-list">{projectNotes.map(note => <button key={note.id} onClick={() => onOpenNote(note.id)}><NotebookPen size={15} /><span><strong>{note.title || "Untitled note"}</strong><small>{new Date(note.updatedAt).toLocaleDateString()}</small></span><ArrowRight size={13} /></button>)}</div> : <div className="class-empty compact"><NotebookPen size={21} /><strong>No notes yet.</strong><button onClick={() => onNewNote(undefined, selectedProject.name)}>Start a space note</button></div>}
+        </section>
+      </div>
+      {availableTasks.length > 0 && <section className="card space-link-panel"><div className="class-section-title"><div><h2>Link existing tasks</h2><p>Move loose work into {selectedProject.name}.</p></div></div><div className="space-link-list">{availableTasks.slice(0, 8).map(task => <button key={task.id} onClick={() => linkTask(task.id, selectedProject)}><span><strong>{task.title}</strong><small>{task.project} · {formatDueDate(task.due)}</small></span><Plus size={15} /></button>)}</div></section>}
+    </section>;
+  }
+
+  const semesterOptions = [...new Set(classes.map(item => item.term.trim()).filter(Boolean))].sort((a, b) => b.localeCompare(a));
+  const classesForView = classes.filter(item => {
+    const archived = isClassArchived(item);
+    if (filter === "Archived") return archived;
+    if (archived) return false;
+    return semester === "All semesters" || item.term === semester;
+  });
+  const spaces = [
+    ...classesForView.map(item => ({ id: `class:${item.id}`, kind: "class" as SpaceKind, title: item.code, description: item.name, meta: item.term || "Current term", color: item.color, icon: GraduationCap, open: tasks.filter(task => task.classId === item.id && !task.done && !task.canceled).length, nextDue: [...tasks.filter(task => task.classId === item.id && !task.done && !task.canceled)].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0], classId: item.id, projectName: null as string | null, archived: isClassArchived(item) })),
+    ...projects.map(item => ({ id: `project:${item.name}`, kind: (item.kind === "maintenance" ? "maintenance" : "project") as SpaceKind, title: item.name, description: item.desc, meta: item.kind === "maintenance" ? "Ongoing system" : "Finishable project", color: item.color, icon: item.icon, open: tasks.filter(task => task.project === item.name && !task.done && !task.canceled).length, nextDue: [...tasks.filter(task => task.project === item.name && !task.done && !task.canceled)].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0], classId: null as string | null, projectName: item.name, archived: false })),
+  ];
+  const visibleSpaces = spaces.filter(space => filter === "All" || (filter === "Classes" && space.kind === "class") || (filter === "Projects" && (space.kind === "project" || space.kind === "maintenance")) || (filter === "Maintenance" && space.kind === "maintenance") || (filter === "Archived" && space.kind === "class" && space.archived));
+  const highestPriorityRank = (space: typeof spaces[number]) => {
+    const linkedTasks = tasks.filter(task => !task.done && !task.canceled && (space.classId ? task.classId === space.classId : task.project === space.projectName));
+    return linkedTasks.length ? Math.min(...linkedTasks.map(task => priorityRank[task.priority])) : Number.MAX_SAFE_INTEGER;
+  };
+  const sortedSpaces = [...visibleSpaces].sort((left, right) => {
+    if (sortBy === "name") return left.title.localeCompare(right.title);
+    if (sortBy === "open") return right.open - left.open || left.title.localeCompare(right.title);
+    if (sortBy === "priority") return highestPriorityRank(left) - highestPriorityRank(right) || dueRank(left.nextDue?.due ?? "") - dueRank(right.nextDue?.due ?? "") || left.title.localeCompare(right.title);
+    return dueRank(left.nextDue?.due ?? "") - dueRank(right.nextDue?.due ?? "") || highestPriorityRank(left) - highestPriorityRank(right) || left.title.localeCompare(right.title);
+  });
+  const counts = { Classes: classes.filter(item => !isClassArchived(item)).length, Projects: projects.length, Maintenance: projects.filter(item => item.kind === "maintenance").length, Archived: classes.filter(item => isClassArchived(item)).length };
+
+  return <>
+    <div className="page-title"><div><p className="eyebrow">Everything has one home</p><h1>Spaces</h1><p>Classes, finishable projects, and ongoing areas—together, without the taxonomy headache.</p></div><button className="primary" onClick={onNew}><Plus size={16} /> New space</button></div>
+    <div className="spaces-filter" role="tablist" aria-label="Filter spaces">{(["All", "Classes", "Projects", "Maintenance", "Archived"] as const).map(value => <button key={value} role="tab" aria-selected={filter === value} className={filter === value ? "selected" : ""} onClick={() => { setFilter(value); onFilterChange?.(value); }}>{value}<span>{value === "All" ? spaces.length : counts[value]}</span></button>)}</div>
+    <div className="spaces-toolbar">
+      {(filter === "Classes" || filter === "Archived") && semesterOptions.length > 0 && <label className="semester-sort"><span>Semester</span><select value={semester} onChange={event => setSemester(event.target.value)}><option>All semesters</option>{semesterOptions.map(value => <option key={value}>{value}</option>)}</select></label>}
+      <label className="semester-sort space-sort"><span>Sort by</span><select value={sortBy} onChange={event => setSortBy(event.target.value as "due" | "priority" | "open" | "name")} aria-label="Sort spaces"><option value="due">Due soon</option><option value="priority">Highest priority</option><option value="open">Most open work</option><option value="name">A–Z</option></select></label>
+    </div>
+    {sortedSpaces.length ? <div className="spaces-grid">{sortedSpaces.map((space, index) => <motion.article role="button" tabIndex={0} className={`space-card ${space.kind}`} key={space.id} style={{ "--space-color": space.color } as React.CSSProperties} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .035 }} onClick={() => space.classId ? onOpenClass(space.classId) : onOpenProject(space.projectName!)} onKeyDown={event => { if (event.key === "Enter") space.classId ? onOpenClass(space.classId) : onOpenProject(space.projectName!); }}>
+      <div className="space-card-top"><span className="space-card-icon"><space.icon size={21} /></span><button aria-label={`Actions for ${space.title}`} onClick={event => { event.stopPropagation(); if (space.classId) onActionClass(space.classId); else onActionProject(space.projectName!); }}><MoreHorizontal size={18} /></button></div>
+      <span className="space-type">{space.archived ? "Archived class" : space.kind === "class" ? "Class" : space.kind === "maintenance" ? "Maintenance" : "Project"}</span><h2>{space.title}</h2><p>{space.description}</p>
+      <div className="space-card-footer"><span>{space.open} open</span><strong>{space.nextDue ? `Next: ${formatDueDate(space.nextDue.due)}` : "Nothing due"}</strong></div><div className="space-card-line"><i /></div>
+    </motion.article>)}</div> : <div className="classes-empty"><div><LayoutGrid size={28} /></div><h2>No {filter.toLowerCase()} yet.</h2><p>Create the space your brain is looking for.</p><button className="primary" onClick={onNew}><Plus size={15} /> New space</button></div>}
+  </>;
+}
+
+function SpaceModal({ initialKind, close, addProject, addClass }: { initialKind: SpaceKind; close: () => void; addProject: (name: string, kind: ProjectKind, description: string, color: string, icon: ProjectIcon) => void; addClass: (value: Omit<ClassRecord, "id">) => void }) {
+  const [kind, setKind] = useState<SpaceKind>(initialKind);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [code, setCode] = useState("");
+  const [term, setTerm] = useState("");
+  const [instructor, setInstructor] = useState("");
+  const [location, setLocation] = useState("");
+  const [credits, setCredits] = useState("3");
+  const [semesterStart, setSemesterStart] = useState("");
+  const [semesterEnd, setSemesterEnd] = useState("");
+  const [color, setColor] = useState("#625af6");
+  const [icon, setIcon] = useState<ProjectIcon>("FolderKanban");
+  const valid = kind === "class" ? Boolean(code.trim() && name.trim()) : Boolean(name.trim());
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!valid) return;
+    if (kind === "class") {
+      addClass({ code: code.trim().toUpperCase(), name: name.trim(), term: term.trim(), instructor: instructor.trim(), location: location.trim(), credits: Number(credits) || undefined, semesterStart: semesterStart || undefined, semesterEnd: semesterEnd || undefined, color });
+      return;
+    }
+    addProject(name.trim(), kind === "maintenance" ? "maintenance" : "finishable", description.trim(), color, icon);
+  };
+  return <motion.div className="modal-layer space-modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.form className="create-modal space-modal" onMouseDown={event => event.stopPropagation()} onSubmit={submit} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}>
+    <div className="capture-head"><div className="brain-dot"><LayoutGrid size={16} /></div><div><strong>{kind === "class" ? "Create a class" : "Create a space"}</strong><span>{kind === "class" ? "Add the course that holds your schoolwork." : "Pick the shape. You can change your mind later."}</span></div><button type="button" onClick={close} aria-label="Close"><X size={18} /></button></div>
+    <div className="space-modal-body">
+      <div className="space-kind-picker">{([{ value: "project", label: "Project", hint: "Has a finish line", icon: CheckCircle2 }, { value: "maintenance", label: "Maintenance", hint: "Keeps going", icon: Sparkles }, { value: "class", label: "Class", hint: "Coursework + notes", icon: GraduationCap }] as const).map(option => <button type="button" key={option.value} className={kind === option.value ? "selected" : ""} onClick={() => setKind(option.value)}><option.icon size={18} /><span><strong>{option.label}</strong><small>{option.hint}</small></span></button>)}</div>
+      {kind === "class" ? <div className="class-form-grid"><label>Course code<input autoFocus value={code} onChange={event => setCode(event.target.value)} placeholder="BIO 101" /></label><label>Class name<input value={name} onChange={event => setName(event.target.value)} placeholder="General Biology" /></label><label>Semester<input value={term} onChange={event => setTerm(event.target.value)} placeholder="Fall 2026" /></label><label>When semester starts<input type="date" value={semesterStart} onChange={event => setSemesterStart(event.target.value)} /></label><label>Semester ends<input type="date" value={semesterEnd} onChange={event => setSemesterEnd(event.target.value)} /></label><small className="class-form-hint">LifeOS archives this class after the end date.</small><label>Instructor<input value={instructor} onChange={event => setInstructor(event.target.value)} placeholder="Dr. Rivera" /></label><label>Location<input value={location} onChange={event => setLocation(event.target.value)} placeholder="Science 204 / Zoom" /></label><label>Credits<input type="number" min={0} max={12} value={credits} onChange={event => setCredits(event.target.value)} /></label></div> : <><label htmlFor="space-name">Space name</label><input id="space-name" autoFocus value={name} onChange={event => setName(event.target.value)} placeholder={kind === "maintenance" ? "Health, Photography, Finances…" : "Portfolio launch, Move apartments…"} /><label htmlFor="space-description">Description</label><textarea id="space-description" value={description} onChange={event => setDescription(event.target.value)} placeholder="What belongs here?" /><label>Icon</label><div className="project-icon-picker" role="group" aria-label="Choose a project icon">{projectIconOptions.map(option => <button key={option.value} type="button" className={icon === option.value ? "selected" : ""} aria-label={`Use ${option.label} icon`} aria-pressed={icon === option.value} title={option.label} onClick={() => setIcon(option.value)}><option.icon size={18} /><span>{option.label}</span></button>)}</div></>}
+      <ColorSwatches value={color} onChange={setColor} />
+    </div>
+    <div className="create-actions"><button type="button" onClick={close}>Cancel</button><button className="primary" type="submit" disabled={!valid}>Create {kind === "class" ? "class" : "space"}</button></div>
+  </motion.form></motion.div>;
+}
+
+function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDeleteMany }: { tasks: Task[]; classes: ClassRecord[]; onComplete: (id: number) => void; onNew: () => void; onTaskMenu: (id: number) => void; onOpenTask: (id: number) => void; onDeleteMany: (ids: number[]) => void }) {
+  const [selected, setSelected] = useState<number[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const taskIds = tasks.map((task) => task.id);
+  const visibleSelected = selected.filter((id) => taskIds.includes(id));
+  const allSelected = tasks.length > 0 && visibleSelected.length === tasks.length;
+  const someSelected = visibleSelected.length > 0 && !allSelected;
+
+  useEffect(() => {
+    setSelected((current) => {
+      const next = current.filter((id) => taskIds.includes(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [taskIds.join(",")]);
+
+  useEffect(() => {
+    if (!visibleSelected.length) setConfirmDelete(false);
+  }, [visibleSelected.length]);
+
+  const toggleOne = (id: number) => {
+    setConfirmDelete(false);
+    setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  };
+  const toggleAll = () => {
+    setConfirmDelete(false);
+    setSelected(allSelected ? [] : taskIds);
+  };
+  const clearSelection = () => {
+    setConfirmDelete(false);
+    setSelected([]);
+  };
+  const requestDelete = () => {
+    if (!visibleSelected.length) return;
+    setConfirmDelete(true);
+  };
+  const confirmDeleteSelected = () => {
+    if (!visibleSelected.length) return;
+    onDeleteMany(visibleSelected);
+    setSelected([]);
+    setConfirmDelete(false);
+  };
+
+  return (
+    <>
+      <div className="page-title">
+        <div>
+          <p className="eyebrow">Make it happen</p>
+          <h1>Tasks</h1>
+          <p>A clear list of what needs your attention.</p>
+        </div>
+        <div className="page-title-actions">
+          {visibleSelected.length > 0 ? (
+            confirmDelete ? (
+              <>
+                <span className="batch-delete-prompt" data-testid="tasks-batch-delete-prompt">
+                  Delete {visibleSelected.length} permanently?
+                </span>
+                <button type="button" className="ghost" onClick={() => setConfirmDelete(false)}>Cancel</button>
+                <button type="button" className="danger" data-testid="tasks-batch-delete-confirm" onClick={confirmDeleteSelected}>
+                  <Trash2 size={16} /> Confirm delete
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="ghost" onClick={clearSelection}>Clear ({visibleSelected.length})</button>
+                <button type="button" className="danger" data-testid="tasks-batch-delete" onClick={requestDelete}>
+                  <Trash2 size={16} /> Delete {visibleSelected.length}
+                </button>
+              </>
+            )
+          ) : null}
+          <button className="primary" onClick={onNew}><Plus size={16} /> New task</button>
+        </div>
+      </div>
+      <section className="card task-table" data-testid="tasks-table">
+        <div className="table-view-label">List view{visibleSelected.length ? ` · ${visibleSelected.length} selected` : ""}</div>
+        <div className="table-head table-head-selectable">
+          <button
+            type="button"
+            className={`select-check ${allSelected ? "is-on" : ""} ${someSelected ? "is-partial" : ""}`}
+            aria-label={allSelected ? "Deselect all tasks" : "Select all tasks"}
+            data-testid="tasks-select-all"
+            onClick={toggleAll}
+          >
+            {allSelected ? <Check size={12} /> : someSelected ? <span className="select-dash" /> : null}
+          </button>
+          <span>Task</span>
+          <span>Space</span>
+          <span>Due</span>
+          <span>Priority</span>
+          <span>Focus</span>
+        </div>
+        {tasks.map((t) => {
+          const isSelected = selected.includes(t.id);
+          return (
+            <div className={`table-row table-row-selectable ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""} ${isSelected ? "is-selected" : ""}`} key={t.id}>
+              <button
+                type="button"
+                className={`select-check ${isSelected ? "is-on" : ""}`}
+                aria-label={isSelected ? `Deselect ${t.title}` : `Select ${t.title}`}
+                aria-pressed={isSelected}
+                data-testid={`task-select-${t.id}`}
+                onClick={() => toggleOne(t.id)}
+              >
+                {isSelected ? <Check size={12} /> : null}
+              </button>
+              <button className="round-check" disabled={t.canceled} onClick={() => onComplete(t.id)} aria-label={t.done ? `Reopen ${t.title}` : `Complete ${t.title}`}>
+                {t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}
+              </button>
+              <button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button>
+              <span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span>
+              <span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span>
+              <span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span>
+              <span>{t.focusMinutes}m · {t.energy}</span>
+              <button aria-label={`Actions for ${t.title}`} onClick={() => onTaskMenu(t.id)}><MoreHorizontal size={17} /></button>
+            </div>
+          );
+        })}
+      </section>
+    </>
+  );
+}
+
+function ClassesView({ classes, tasks, notes, resources, selectedClassId, onSelectClass, onNewClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource }: { classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedClassId: string | null; onSelectClass: (id: string | null) => void; onNewClass: () => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void> }) {
+  const selected = classes.find(item => item.id === selectedClassId);
+  if (selected) {
+    const classTasks = tasks.filter(task => task.classId === selected.id);
+    const active = classTasks.filter(task => !task.done && !task.canceled).sort((a, b) => dueRank(a.due) - dueRank(b.due));
+    const completed = classTasks.filter(task => task.done || task.canceled);
+    const classNotes = notes.filter(note => note.classId === selected.id);
+    const classResources = resources.filter(resource => resource.classId === selected.id);
+    return <section className="class-detail-view">
+      <button className="class-back" onClick={() => onSelectClass(null)}><ArrowRight size={14} /> All spaces</button>
+      <div className="class-detail-hero" style={{ "--class-color": selected.color } as React.CSSProperties}>
+        <div className="class-hero-icon"><GraduationCap size={25} /></div>
+        <div><p className="eyebrow">{selected.term || "Current term"}</p><h1>{selected.code}</h1><p>{selected.name}</p></div>
+        <div className="class-hero-actions"><button onClick={() => onEditClass(selected.id)}><Pencil size={15} /> Edit class</button><button onClick={() => onNewNote(selected.id)}><NotebookPen size={15} /> New note</button><button className="primary" onClick={() => onNewAcademicItem(selected.id)}><Plus size={15} /> Add coursework</button></div>
+      </div>
+      <div className="class-meta-strip">
+        <div><span>Instructor</span><strong>{selected.instructor || "Not added"}</strong></div>
+        <div><span>Location</span><strong>{selected.location || "Not added"}</strong></div>
+        <div><span>Credits</span><strong>{selected.credits ? `${selected.credits} credits` : "Not added"}</strong></div>
+        <div><span>Semester</span><strong>{selected.semesterStart || selected.semesterEnd ? `${selected.semesterStart ? formatDueDate(selected.semesterStart) : "—"} → ${selected.semesterEnd ? formatDueDate(selected.semesterEnd) : "—"}` : (selected.term || "Not added")}</strong></div>
+        <div><span>Open work</span><strong>{active.length}</strong></div>
+      </div>
+      <div className="class-content-grid">
+        <section className="card class-coursework">
+          <div className="class-section-title"><div><h2>Upcoming coursework</h2><p>Assignments, exams, labs, and everything between.</p></div><button onClick={() => onNewAcademicItem(selected.id)}><Plus size={14} /> Add</button></div>
+          {active.length ? <div className="coursework-list">{active.map(task => <button key={task.id} onClick={() => onOpenTask(task.id)}><span className="coursework-type" style={{ color: selected.color, background: `${selected.color}14` }}>{task.academicType ?? "Task"}</span><span className="coursework-name"><strong>{task.title}</strong><small>{formatDueDate(task.due)}{task.gradeWeight !== undefined ? ` · ${task.gradeWeight}% of grade` : ""}{task.pointsPossible !== undefined ? ` · ${task.pointsEarned !== undefined ? `${task.pointsEarned}/${task.pointsPossible}` : task.pointsPossible} pts` : ""}</small></span><em className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</em><ArrowRight size={14} /></button>)}</div> : <div className="class-empty"><CheckCircle2 size={22} /><strong>Nothing due right now.</strong><span>Add the next assignment when it lands.</span></div>}
+          {completed.length > 0 && <details className="completed-coursework"><summary>{completed.length} completed / canceled</summary><div>{completed.map(task => <button key={task.id} onClick={() => onOpenTask(task.id)}><CheckCircle2 size={14} /><span>{task.title}</span><small>{task.canceled ? "Canceled" : "Done"}</small></button>)}</div></details>}
+        </section>
+        <section className="card class-notes-card">
+          <div className="class-section-title"><div><h2>Class notes</h2><p>Lecture notes and study material.</p></div><button onClick={() => onNewNote(selected.id)}><Plus size={14} /></button></div>
+          {classNotes.length ? <div className="class-note-list">{classNotes.map(note => <button key={note.id} onClick={() => onOpenNote(note.id)}><NotebookPen size={15} /><span><strong>{note.title || "Untitled note"}</strong><small>{new Date(note.updatedAt).toLocaleDateString()}</small></span><ArrowRight size={13} /></button>)}</div> : <div className="class-empty compact"><NotebookPen size={21} /><strong>No notes yet.</strong><button onClick={() => onNewNote(selected.id)}>Start a class note</button></div>}
+        </section>
+        <ClassResourcesCard classRecord={selected} resources={classResources} onUpload={onUploadResource} onDelete={onDeleteResource} onReplace={onReplaceResource} onDownload={onDownloadResource} />
+      </div>
+      <button className="delete-class-button" onClick={() => onDeleteClass(selected.id)}><Trash2 size={14} /> Delete class space</button>
+    </section>;
+  }
+
+  return <><div className="page-title"><div><p className="eyebrow">Your semester, under control</p><h1>Classes</h1><p>Course folders for assignments, exams, projects, and notes.</p></div><button className="primary" onClick={onNewClass}><Plus size={16} /> New class</button></div>{classes.length ? <div className="classes-grid">{classes.map((item, index) => {
+    const classTasks = tasks.filter(task => task.classId === item.id);
+    const active = classTasks.filter(task => !task.done && !task.canceled);
+    const nextDue = [...active].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0];
+    return <motion.button className="class-card" key={item.id} onClick={() => onSelectClass(item.id)} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .04 }} style={{ "--class-color": item.color } as React.CSSProperties}><span className="class-card-icon"><GraduationCap size={21} /></span><span className="class-card-term">{item.term || "Current term"}</span><strong>{item.code}</strong><em>{item.name}</em><span className="class-card-stats"><span>{active.length} open</span><span>{nextDue ? `Next: ${formatDueDate(nextDue.due)}` : "Nothing due"}</span></span><span className="class-card-line"><i /></span></motion.button>;
+  })}</div> : <div className="classes-empty"><div><GraduationCap size={28} /></div><h2>Create your first class.</h2><p>Try BIO 101, CHEM 202, or whatever is actually on your schedule.</p><button className="primary" onClick={onNewClass}><Plus size={15} /> Create a class</button></div>}</>;
+}
+
+function formatResourceSize(bytes: number) {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${Math.round((bytes / Math.pow(1024, unit)) * 10) / 10} ${units[unit]}`;
+}
+
+function ClassResourcesCard({ classRecord, resources, onUpload, onDelete, onReplace, onDownload }: { classRecord: ClassRecord; resources: Resource[]; onUpload: (file: File, classId?: string) => Promise<void>; onDelete: (resource: Resource) => Promise<void>; onReplace: (resource: Resource, file: File) => Promise<void>; onDownload: (resource: Resource) => Promise<void> }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const chooseFile = (resource?: Resource) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.md,.pages,.key,.numbers,image/*,audio/*,video/*";
+    input.onchange = async event => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const operation = resource?.id ?? "upload";
+      setBusy(operation);
+      try {
+        if (resource) await onReplace(resource, file);
+        else await onUpload(file, classRecord.id);
+      } catch {
+        // The parent already shows a useful toast. Swallow the rejected promise
+        // here so the picker always returns to an interactive state.
+      } finally {
+        setBusy(null);
+      }
+    };
+    input.click();
+  };
+  const remove = async (resource: Resource) => {
+    if (!window.confirm(`Delete ${resource.name}? This removes the file permanently.`)) return;
+    setBusy(resource.id);
+    try {
+      await onDelete(resource);
+    } finally {
+      setBusy(null);
+    }
+  };
+  return <section className="card class-resources-card">
+    <div className="class-section-title"><div><h2>Class resources</h2><p>Syllabi, slides, readings, study guides, recordings, and reference files.</p></div><button onClick={() => chooseFile()} disabled={busy === "upload"}><Upload size={14} /> {busy === "upload" ? "Uploading…" : "Upload"}</button></div>
+    {resources.length ? <div className="class-resource-list">{resources.map(resource => <article key={resource.id}>
+      <div className="class-resource-icon"><FileText size={17} /></div>
+      <button className="class-resource-name" onClick={() => void onDownload(resource)}><strong>{resource.name}</strong><small>{formatResourceSize(resource.size)} · {new Date(resource.uploadedAt).toLocaleDateString()} · {resource.storage === "local" ? "This device" : "Cloud"}</small></button>
+      <div className="class-resource-actions">
+        <button onClick={() => void onDownload(resource)} title={`Download ${resource.name}`} aria-label={`Download ${resource.name}`}><Download size={14} /></button>
+        <button onClick={() => chooseFile(resource)} disabled={busy === resource.id} title={`Replace ${resource.name}`} aria-label={`Replace ${resource.name}`}><RefreshCw size={14} /></button>
+        <button className="danger" onClick={() => void remove(resource)} disabled={busy === resource.id} title={`Delete ${resource.name}`} aria-label={`Delete ${resource.name}`}><Trash2 size={14} /></button>
+      </div>
+    </article>)}</div> : <div className="class-resource-empty"><Upload size={23} /><strong>No class files yet.</strong><p>Upload your syllabus or the next reading. Files can be up to 25 MB.</p><button onClick={() => chooseFile()}><Plus size={14} /> Upload the first file</button></div>}
+  </section>;
+}
+
+function NotesView({ notes, classes, projects, selectedNoteId, onSelect, onCreate, onUpdate, onDelete, onImport, onCreateTask }: { notes: Note[]; classes: ClassRecord[]; projects: Project[]; selectedNoteId: string | null; onSelect: (id: string | null) => void; onCreate: () => void; onUpdate: (id: string, updates: Partial<Note>) => void; onDelete: (id: string) => void; onImport: (notes: Note[]) => void; onCreateTask: (note: Note) => void }) {
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title" | "space">("newest");
+  const editorRef = useRef<HTMLDivElement>(null);
+  const importRef = useRef<HTMLInputElement>(null);
+  const filtered = notes.filter(note => `${note.title} ${note.body}`.toLowerCase().includes(search.toLowerCase()));
+  const visible = [...filtered].sort((a, b) => {
+    switch (sortBy) {
+      case "newest": return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      case "oldest": return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+      case "title": return (a.title || "Untitled").localeCompare(b.title || "Untitled");
+      case "space": {
+        const getSpace = (n: Note) => classes.find(c => c.id === n.classId)?.code ?? projects.find(p => p.name === n.projectName)?.name ?? "Personal";
+        return getSpace(a).localeCompare(getSpace(b));
+      }
+      default: return 0;
+    }
+  });
+  const selected = notes.find(note => note.id === selectedNoteId) ?? notes[0];
+  const selectedSpaceValue = selected?.classId ? `class:${selected.classId}` : selected?.projectName ? `project:${selected.projectName}` : "";
+  const changeSpace = (value: string) => {
+    if (!selected) return;
+    if (value.startsWith("class:")) onUpdate(selected.id, { classId: value.slice(6), projectName: undefined });
+    else if (value.startsWith("project:")) onUpdate(selected.id, { classId: undefined, projectName: value.slice(8) });
+    else onUpdate(selected.id, { classId: undefined, projectName: undefined });
+  };
+  const textOnly = (value: string) => value.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+  const noteHtml = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value) ? value : value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+  const asCornell = (body: string) => {
+    const current = noteHtml(body);
+    if (current.includes("cornell-entry")) return current;
+    return `<div class="cornell-layout" contenteditable="false"><section><strong contenteditable="false">Cues &amp; questions</strong><div class="cornell-entry" contenteditable="true" data-placeholder="Key terms, prompts, questions…"></div></section><section><strong contenteditable="false">Notes</strong><div class="cornell-entry" contenteditable="true" data-placeholder="Capture the main ideas here…">${current}</div></section><footer><strong contenteditable="false">Summary</strong><div class="cornell-entry" contenteditable="true" data-placeholder="What matters most?"></div></footer></div>`;
+  };
+  const fromCornell = (body: string) => {
+    if (!body.includes("cornell-entry")) return body;
+    const doc = new DOMParser().parseFromString(body, "text/html");
+    const labels = ["Cues &amp; questions", "Notes", "Summary"];
+    return Array.from(doc.querySelectorAll<HTMLElement>(".cornell-entry"))
+      .map((entry, index) => entry.innerHTML.trim() ? `<h3>${labels[index]}</h3>${entry.innerHTML}` : "")
+      .join("");
+  };
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !selected) return;
+    // Never replace the editor DOM while the user is typing. Replacing it on
+    // every saved keystroke resets the browser selection, which is why Enter
+    // was jumping back to the top of lined notes.
+    if (document.activeElement === editor) return;
+    const html = noteHtml(selected.body);
+    if (editor.innerHTML !== html) editor.innerHTML = html;
+  }, [selected]);
+  const command = (name: string, value?: string) => { editorRef.current?.focus(); document.execCommand(name, false, value); if (selected && editorRef.current) onUpdate(selected.id, { body: editorRef.current.innerHTML }); };
+  const applyTemplate = (template: NonNullable<Note["template"]>) => {
+    if (!selected) return;
+    const currentTemplate = selected.template ?? "blank";
+    if (template === currentTemplate) return;
+    const body = template === "cornell" ? asCornell(selected.body) : currentTemplate === "cornell" ? fromCornell(selected.body) : selected.body;
+    onUpdate(selected.id, { template, body });
+    if (editorRef.current) editorRef.current.innerHTML = noteHtml(body);
+  };
+  const exportNotes = () => {
+    const payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), notes }, null, 2);
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = `lifeos-notes-${toDateKey(new Date())}.json`; link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+  const importFile = (file?: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(String(reader.result));
+        const incoming = Array.isArray(data) ? data : data?.notes;
+        if (!Array.isArray(incoming)) throw new Error("Invalid notes file");
+        onImport(incoming as Note[]);
+      } catch { window.alert("That file is not a valid LifeOS notes export."); }
+    };
+    reader.readAsText(file);
+  };
+  const exportNotePdf = () => {
+    if (!selected) return;
+    const popup = window.open("", "_blank", "width=900,height=1100");
+    if (!popup) { window.alert("Allow pop-ups for LifeOS, then try Export PDF again."); return; }
+    const title = selected.title.replace(/[<>]/g, "") || "Untitled note";
+    const space = classes.find(item => item.id === selected.classId)?.code ?? projects.find(item => item.name === selected.projectName)?.name ?? "Personal note";
+    const paperKind = selected.template === "lined" ? "lined" : selected.template === "dotted" ? "dotted" : null;
+    const paper = paperKind ? `<div class="paper-art ${paperKind}" aria-hidden="true"><svg viewBox="0 0 1000 2200" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="lifeos-paper-rule" width="1000" height="34" patternUnits="userSpaceOnUse"><line x1="0" y1="33" x2="1000" y2="33" stroke="#dbe7ff" stroke-width="1" /></pattern><pattern id="lifeos-paper-dot" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1.15" fill="#cbd6e9" /></pattern></defs><rect width="1000" height="2200" fill="url(#lifeos-paper-${paperKind === "lined" ? "rule" : "dot"})" />${paperKind === "lined" ? '<line x1="32" y1="0" x2="32" y2="2200" stroke="#ef9f9c" stroke-width="1.5" />' : ""}</svg></div>` : "";
+    popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>@page{size:letter;margin:0.72in}*{box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1f2430;line-height:1.65;font-size:11pt}header{border-bottom:2px solid #625af6;padding-bottom:18px;margin-bottom:28px}h1{font-family:Georgia,serif;font-size:30pt;line-height:1.1;margin:0 0 10px}.meta{font-size:9pt;color:#687084;text-transform:uppercase;letter-spacing:.08em}.content h2{font-family:Georgia,serif;font-size:20pt;margin:24px 0 8px}.content h3{font-size:13pt;margin:20px 0 6px}.content p{margin:0 0 13px}.content ul{padding-left:24px}.cornell-layout{display:grid;grid-template-columns:34% 66%;border:1px solid #cfd5df;border-radius:8px;overflow:hidden}.cornell-layout section{min-height:420px;padding:18px;border-bottom:1px solid #cfd5df}.cornell-layout section:first-child{border-right:1px solid #cfd5df;background:#f6f5ff}.cornell-layout footer{grid-column:1/-1;padding:18px;background:#f8fafc}.cornell-layout strong{display:block;margin-bottom:8px}.note-paper{position:relative;min-height:620px;padding:8px 16px 12px 52px;overflow:hidden}.paper-art{position:absolute;inset:0;z-index:0}.paper-art svg{display:block;width:100%;height:100%}.note-paper>*:not(.paper-art){position:relative;z-index:1}</style></head><body><header><h1>${title}</h1><div class="meta">${space} · Exported from LifeOS · ${new Date().toLocaleDateString()}</div></header><main class="content ${paperKind ? "note-paper" : ""}">${paper}${noteHtml(selected.body)}</main><script>window.onload=()=>window.print()<\/script></body></html>`);
+    popup.document.close();
+  };
+  return <section className="notes-view">
+    <div className="notes-sidebar-panel"><div className="notes-panel-head"><div><p className="eyebrow">Write it down</p><h1>Notes</h1></div><button onClick={onCreate} aria-label="New note"><Plus size={17} /></button></div><div className="notes-transfer"><button onClick={exportNotes}><Download size={13} /> Export</button><button onClick={() => importRef.current?.click()}><Upload size={13} /> Import</button><input ref={importRef} type="file" accept="application/json,.json" onChange={event => { importFile(event.target.files?.[0]); event.currentTarget.value = ""; }} /></div><label className="notes-search"><Search size={14} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Find notes…" /></label><div className="notes-sort"><select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title" | "space")}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="title">A–Z</option><option value="space">By space</option></select></div><div className="notes-list">{visible.map(note => { const linkedClass = classes.find(item => item.id === note.classId); const linkedProject = projects.find(item => item.name === note.projectName); const hasInk = Boolean(note.ink?.data || note.ink?.pencilKitData || note.ink?.strokes?.length); return <button key={note.id} className={selected?.id === note.id ? "active" : ""} onClick={() => onSelect(note.id)}><strong>{note.title || "Untitled note"}</strong><span>{linkedClass?.code ?? linkedProject?.name ?? "Personal note"} · {new Date(note.updatedAt).toLocaleDateString()}{hasInk ? " · Handwriting" : ""}</span><p>{textOnly(note.body).slice(0, 90) || (hasInk ? "Handwritten note (open on iPad to view)" : "Empty note")}</p></button>; })}{!visible.length && <div className="notes-list-empty">No notes here yet.</div>}</div></div>
+    {selected ? <article className={`note-editor note-template-${selected.template ?? "blank"}`}><div className="note-editor-top"><select aria-label="Linked space" value={selectedSpaceValue} onChange={event => changeSpace(event.target.value)}><option value="">Personal note</option>{classes.length > 0 && <optgroup label="Classes">{classes.map(item => <option key={item.id} value={`class:${item.id}`}>{item.code} — {item.name}</option>)}</optgroup>}{projects.length > 0 && <optgroup label="Projects & maintenance">{projects.map(item => <option key={item.name} value={`project:${item.name}`}>{item.name}</option>)}</optgroup>}</select><select className="note-template-picker" aria-label="Page template" value={selected.template ?? "blank"} onChange={event => applyTemplate(event.target.value as NonNullable<Note["template"]>)}><option value="blank">Blank page</option><option value="lined">Lined notes</option><option value="dotted">Dotted notes</option><option value="cornell">Cornell notes</option><option value="meeting">Meeting notes</option></select><span>Saved {new Date(selected.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span><button className="note-pdf-button" onClick={() => onCreateTask(selected)}><ListTodo size={14} /> Create task</button><button className="note-pdf-button" onClick={exportNotePdf}><Download size={14} /> PDF</button><button onClick={() => onDelete(selected.id)}><Trash2 size={14} /> Delete</button></div><input className="note-title-input" value={selected.title} onChange={event => onUpdate(selected.id, { title: event.target.value })} placeholder="Untitled note" /><div className="note-format-bar" role="toolbar" aria-label="Text formatting"><button aria-label="Bold" onMouseDown={event => event.preventDefault()} onClick={() => command("bold")}><Bold size={15} /></button><button aria-label="Italic" onMouseDown={event => event.preventDefault()} onClick={() => command("italic")}><Italic size={15} /></button><button aria-label="Heading" onMouseDown={event => event.preventDefault()} onClick={() => command("formatBlock", "h2")}><Heading1 size={15} /></button><button aria-label="Bullet list" onMouseDown={event => event.preventDefault()} onClick={() => command("insertUnorderedList")}><List size={15} /></button><label title="Text color"><Palette size={14} /><input aria-label="Text color" type="color" defaultValue="#625af6" onChange={event => command("foreColor", event.target.value)} /></label><label title="Highlight color"><Highlighter size={14} /><input aria-label="Highlight color" type="color" defaultValue="#fff09d" onChange={event => command("hiliteColor", event.target.value)} /></label></div><div ref={editorRef} className="note-body-input rich-note-body" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" data-placeholder="Start writing. Lecture notes, ideas, study guides, random thoughts — all fair game." onInput={event => onUpdate(selected.id, { body: event.currentTarget.innerHTML })} /></article> : <div className="note-editor-empty"><NotebookPen size={28} /><h2>Take a note without making a task.</h2><p>Wild concept, right? Notes can just be notes.</p><button className="primary" onClick={onCreate}><Plus size={15} /> New note</button></div>}
+  </section>;
+}
+
+function EditClassModal({ classRecord, close, save }: { classRecord: ClassRecord; close: () => void; save: (value: Omit<ClassRecord, "id">) => void }) {
+  const [code, setCode] = useState(classRecord.code);
+  const [name, setName] = useState(classRecord.name);
+  const [term, setTerm] = useState(classRecord.term);
+  const [instructor, setInstructor] = useState(classRecord.instructor);
+  const [location, setLocation] = useState(classRecord.location ?? "");
+  const [credits, setCredits] = useState(classRecord.credits?.toString() ?? "");
+  const [semesterStart, setSemesterStart] = useState(classRecord.semesterStart ?? "");
+  const [semesterEnd, setSemesterEnd] = useState(classRecord.semesterEnd ?? "");
+  const [archived, setArchived] = useState(Boolean(classRecord.archived));
+  const [color, setColor] = useState(classRecord.color);
+  const archivedByDate = Boolean(semesterEnd && semesterEnd < toDateKey(new Date()));
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.form className="create-modal class-modal" onMouseDown={event => event.stopPropagation()} onSubmit={event => { event.preventDefault(); if (code.trim() && name.trim()) save({ code: code.trim().toUpperCase(), name: name.trim(), term: term.trim(), instructor: instructor.trim(), location: location.trim(), credits: Number(credits) || undefined, semesterStart: semesterStart || undefined, semesterEnd: semesterEnd || undefined, archived, color }); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><GraduationCap size={16} /></div><div><strong>Edit {classRecord.code}</strong><span>Change details, move it to another semester, or archive it.</span></div><button type="button" onClick={close} aria-label="Close"><X size={18} /></button></div><div className="class-form-grid"><label>Course code<input autoFocus value={code} onChange={event => setCode(event.target.value)} /></label><label>Class name<input value={name} onChange={event => setName(event.target.value)} /></label><label>Semester<input value={term} onChange={event => setTerm(event.target.value)} placeholder="Fall 2026" /></label><label>When semester starts<input type="date" value={semesterStart} onChange={event => setSemesterStart(event.target.value)} /></label><label>Semester ends<input type="date" value={semesterEnd} onChange={event => setSemesterEnd(event.target.value)} /></label><small className="class-form-hint">Past end dates archive it automatically.</small><label>Instructor<input value={instructor} onChange={event => setInstructor(event.target.value)} /></label><label>Location<input value={location} onChange={event => setLocation(event.target.value)} /></label><label>Credits<input type="number" min={0} max={12} value={credits} onChange={event => setCredits(event.target.value)} /></label><label>Class status<select value={archived || archivedByDate ? "Archived" : "Active"} onChange={event => setArchived(event.target.value === "Archived")}><option>Active</option><option>Archived</option></select></label></div><ColorSwatches value={color} onChange={setColor} label="Class color" /><div className="create-actions"><button type="button" onClick={close}>Cancel</button><button className="primary" type="submit" disabled={!code.trim() || !name.trim()}>Save class</button></div></motion.form></motion.div>;
+}
+
+function AcademicItemModal({ classRecord, close, add, defaults }: { classRecord: ClassRecord; close: () => void; add: (task: Pick<Task, "title" | "due" | "startTime" | "priority" | "focusMinutes" | "energy" | "academicType" | "gradeWeight" | "pointsEarned" | "pointsPossible" | "submission">) => void; defaults: { focusMinutes: number; energy: EnergyLevel } }) {
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState<AcademicItemType>("Assignment");
+  const [due, setDue] = useState(toDateKey(new Date()));
+  const [startTime, setStartTime] = useState("");
+  const [priority, setPriority] = useState<Task["priority"]>("Medium");
+  const [focusMinutes, setFocusMinutes] = useState(String(defaults.focusMinutes));
+  const [energy, setEnergy] = useState<EnergyLevel>(defaults.energy);
+  const [gradeWeight, setGradeWeight] = useState("");
+  const [pointsPossible, setPointsPossible] = useState("");
+  const [pointsEarned, setPointsEarned] = useState("");
+  const [submission, setSubmission] = useState("");
+  const [titleError, setTitleError] = useState("");
+  const [pointsError, setPointsError] = useState("");
+  const isAssessment = true; // points optional on any coursework for grades tracking
+  const possiblePoints = Number(pointsPossible);
+  const earnedPoints = Number(pointsEarned);
+  const useCurrentTime = () => {
+    const current = new Date();
+    setStartTime(`${String(current.getHours()).padStart(2, "0")}:${String(current.getMinutes()).padStart(2, "0")}`);
+  };
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!title.trim()) { setTitleError(`Give this ${type.toLowerCase()} a name first.`); return; }
+    const hasPoints = pointsPossible !== "" || pointsEarned !== "";
+    if (isAssessment && hasPoints && (!Number.isFinite(possiblePoints) || possiblePoints <= 0 || (pointsEarned !== "" && (!Number.isFinite(earnedPoints) || earnedPoints < 0 || earnedPoints > possiblePoints)))) {
+      setPointsError("Add total points first, then enter a score between 0 and that total.");
+      return;
+    }
+    add({ title: title.trim(), due, startTime: startTime || undefined, priority, focusMinutes: Math.max(5, Math.min(240, Number(focusMinutes) || defaults.focusMinutes)), energy, academicType: type, gradeWeight: gradeWeight === "" ? undefined : Number(gradeWeight), pointsPossible: isAssessment && pointsPossible !== "" ? possiblePoints : undefined, pointsEarned: isAssessment && pointsEarned !== "" ? earnedPoints : undefined, submission });
+  };
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.form className="create-modal academic-modal" onMouseDown={event => event.stopPropagation()} onSubmit={submit} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot" style={{ color: classRecord.color, background: `${classRecord.color}16` }}><BookOpen size={16} /></div><div><strong>Add coursework to {classRecord.code}</strong><span>Capture the deadline and the grade impact now.</span></div><button type="button" onClick={close} aria-label="Close"><X size={18} /></button></div><label className="academic-title-field" htmlFor="academic-title">{type} title <em>Required</em><input id="academic-title" autoFocus value={title} aria-invalid={Boolean(titleError)} aria-describedby={titleError ? "academic-title-error" : undefined} onChange={event => { setTitle(event.target.value); if (titleError) setTitleError(""); }} placeholder={type === "Quiz" ? "e.g. Module 2 quiz" : "e.g. Midterm exam"} /></label>{titleError && <p id="academic-title-error" className="academic-title-error" role="alert">{titleError}</p>}<div className="academic-form-grid"><label>Type<select value={type} onChange={event => { setType(event.target.value as AcademicItemType); setPointsError(""); }}>{(["Assignment", "Project", "Exam", "Quiz", "Lab", "Reading", "Discussion"] as AcademicItemType[]).map(value => <option key={value}>{value}</option>)}</select></label><label>Due date<input type="date" value={due} onChange={event => setDue(event.target.value)} /></label><label>Start time<div className="time-input-with-now"><input type="time" value={startTime} onChange={event => setStartTime(event.target.value)} /><button type="button" onClick={useCurrentTime}>Now</button></div></label><label>Priority<select value={priority} onChange={event => setPriority(event.target.value as Task["priority"])}><option>High</option><option>Medium</option><option>Low</option></select></label><label>Focus estimate<input type="number" min={5} max={240} step={5} value={focusMinutes} onChange={event => setFocusMinutes(event.target.value)} /></label><label>Energy<select value={energy} onChange={event => setEnergy(event.target.value as EnergyLevel)}><option>Low</option><option>Medium</option><option>High</option></select></label><label>Grade weight (%)<input type="number" min={0} max={100} step={0.5} value={gradeWeight} onChange={event => setGradeWeight(event.target.value)} placeholder="15" /></label><label>Submission / LMS<input value={submission} onChange={event => setSubmission(event.target.value)} placeholder="Canvas, Blackboard, room…" /></label>{isAssessment && <div className="assessment-points"><div className="assessment-points-head"><strong>Points</strong><span>Optional until it’s graded</span></div><div className="assessment-points-grid"><label>Total points<input type="number" min={1} step={0.5} value={pointsPossible} onChange={event => { setPointsPossible(event.target.value); setPointsError(""); }} placeholder="100" /></label><label>Points earned<input type="number" min={0} max={pointsPossible || undefined} step={0.5} value={pointsEarned} onChange={event => { setPointsEarned(event.target.value); setPointsError(""); }} placeholder="Leave blank for now" /></label></div>{pointsPossible !== "" && possiblePoints > 0 && <p>{pointsEarned === "" ? `${possiblePoints} points possible` : `${earnedPoints}/${possiblePoints} points · ${((earnedPoints / possiblePoints) * 100).toFixed(1)}%`}</p>}{pointsError && <p className="assessment-points-error" role="alert">{pointsError}</p>}</div>}</div><div className="create-actions"><button type="button" onClick={close}>Cancel</button><button className="primary" type="submit">Add {type.toLowerCase()} to {classRecord.code}</button></div></motion.form></motion.div>;
+}
+
+const tasksToCalendarEvents = (tasks: Task[]): CalendarEvent[] => {
+  return tasks
+    .filter(task => !task.done && !task.canceled && task.due && !task.calendarEventId && Boolean(task.startTime?.trim()))
+    .map(task => {
+      const dueKey = /^\d{4}-\d{2}-\d{2}/.test(task.due) ? task.due.slice(0, 10) : task.due;
+      const match = task.startTime!.trim().match(/^(\d{1,2}):(\d{2})$/);
+      const hours = match ? Math.min(23, Math.max(0, Number(match[1]))) : 9;
+      const minutes = match ? Math.min(59, Math.max(0, Number(match[2]))) : 0;
+      const time = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+      const endMinutes = hours * 60 + minutes + Math.max(15, task.focusMinutes || 30);
+      const endHours = Math.min(23, Math.floor(endMinutes / 60));
+      const endMins = endMinutes >= 24 * 60 ? 59 : endMinutes % 60;
+      const end = `${dueKey}T${String(endHours).padStart(2, "0")}:${String(endMins).padStart(2, "0")}`;
+      return {
+        id: `task-${task.id}`,
+        title: task.title,
+        start: `${dueKey}T${time}`,
+        end,
+        color: task.color,
+        source: "LifeOS" as const,
+        notes: `${task.project} · ${task.focusMinutes}m · ${task.energy}`,
+      };
+    });
+};
+
+const workMeetingsToCalendarEvents = (meetings: WorkMeeting[], projects: WorkProject[]): CalendarEvent[] => {
+  return meetings.map(meeting => {
+    const project = projects.find(item => item.id === meeting.projectId);
+    const where = formatWorkMeetingWhere(meeting);
+    const notes = [where, project ? `Work · ${project.name}` : "Work", meeting.notes || meeting.description]
+      .filter(Boolean)
+      .join(" · ");
+    return {
+      id: `work-meet-${meeting.id}`,
+      title: meeting.title,
+      start: meeting.start.length <= 10 ? `${meeting.start}T09:00` : meeting.start,
+      end: meeting.end,
+      color: project?.color ?? "#625af6",
+      source: "Work" as const,
+      location: meeting.location,
+      notes: notes || undefined,
+    };
+  });
+};
+
+
+function LegacyCalendarView({ events, weekStartsMonday, onNew, onImport, onEdit }: { events: CalendarEvent[]; weekStartsMonday: boolean; onNew: (date: string) => void; onImport: () => void; onEdit: (id: string) => void }) {
+  const [cursor, setCursor] = useState(() => new Date());
+  const [selected, setSelected] = useState(() => toDateKey(new Date()));
+  const [mode, setMode] = useState<"month" | "day">("month");
+  const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const gridStart = new Date(monthStart);
+  const firstDayOffset = weekStartsMonday ? (monthStart.getDay() + 6) % 7 : monthStart.getDay();
+  const weekDays = weekStartsMonday ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  gridStart.setDate(monthStart.getDate() - firstDayOffset);
+  const days = Array.from({ length: 42 }, (_, index) => {
+    const day = new Date(gridStart);
+    day.setDate(gridStart.getDate() + index);
+    return day;
+  });
+  const monthSegments = buildMonthEventSegments(events, days);
+  const selectedEvents = events.filter(event => eventOccursOnDate(event, selected)).sort((a, b) => a.start.localeCompare(b.start));
+  const todayEvents = events.filter(event => eventOccursOnDate(event, toDateKey(new Date()))).sort((a, b) => a.start.localeCompare(b.start));
+  const changeMonth = (offset: number) => setCursor(value => new Date(value.getFullYear(), value.getMonth() + offset, 1));
+  const selectedDate = new Date(selected + "T12:00");
+  const selectedLabel = selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+  const hours = Array.from({ length: 24 }, (_, hour) => hour);
+  const changeDay = (offset: number) => {
+    const next = new Date(selected + "T12:00");
+    next.setDate(next.getDate() + offset);
+    setSelected(toDateKey(next));
+    setCursor(new Date(next.getFullYear(), next.getMonth(), 1));
+  };
+  const selectDay = (key: string) => {
+    setSelected(key);
+    setMode("day");
+  };
+  const now = new Date();
+  const selectedIsToday = selected === toDateKey(now);
+  const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 1440) * 100;
+  const eventBlockStyle = (event: CalendarEvent) => {
+    const { startMinutes, endMinutes } = getEventDayBlockMinutes(event, selected);
+    const durationMinutes = Math.max(5, endMinutes - startMinutes);
+    return {
+      top: `${(startMinutes / 1440) * 100}%`,
+      minHeight: 12,
+      height: `${(durationMinutes / 1440) * 100}%`,
+      borderColor: event.color,
+      background: `linear-gradient(135deg, ${event.color}22, var(--panel))`,
+    } as React.CSSProperties;
+  };
+  return <><div className="page-title"><div><p className="eyebrow">Protect your time</p><h1>Calendar</h1><p>Manual planning plus iCal imports from Apple Calendar, school, work, or anything that exports `.ics`.</p></div><div className="calendar-actions"><div className="calendar-mode-tabs"><button className={mode === "month" ? "selected" : ""} onClick={() => setMode("month")}><CalendarDays size={14} /> Month</button><button className={mode === "day" ? "selected" : ""} onClick={() => setMode("day")}><Clock3 size={14} /> Day</button></div><button onClick={onImport}><Link2 size={16} /> Import iCal</button><button className="primary" onClick={() => onNew(selected)}><Plus size={16} /> Add event</button></div></div><div className="calendar-layout"><section className="card calendar-card">{mode === "month" ? <><div className="calendar-toolbar"><button onClick={() => changeMonth(-1)}>←</button><strong>{cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</strong><button onClick={() => changeMonth(1)}>→</button></div><div className="calendar-weekdays">{weekDays.map(day => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{days.map(day => { const key = toDateKey(day); const dayEvents = events.filter(event => event.start.slice(0, 10) === key); return <button key={key} className={`${day.getMonth() !== cursor.getMonth() ? "muted" : ""} ${key === selected ? "selected" : ""} ${key === toDateKey(new Date()) ? "today" : ""}`} onClick={() => selectDay(key)}><span>{day.getDate()}</span><div>{dayEvents.slice(0, 3).map(event => <i key={event.id} style={{ background: event.color }} title={event.title} />)}</div>{dayEvents.length > 3 && <small>+{dayEvents.length - 3}</small>}</button>; })}</div></> : <><div className="calendar-toolbar day-toolbar"><button onClick={() => changeDay(-1)}>←</button><div><strong>{selectedLabel}</strong><span>{selectedEvents.length ? `${selectedEvents.length} scheduled event${selectedEvents.length === 1 ? "" : "s"}` : "Open day"}</span></div><button onClick={() => changeDay(1)}>→</button></div><div className="day-jump-row"><button onClick={() => changeDay(-1)}>Yesterday</button><button onClick={() => { const today = new Date(); setSelected(toDateKey(today)); setCursor(new Date(today.getFullYear(), today.getMonth(), 1)); }}>Today</button><button onClick={() => changeDay(1)}>Tomorrow</button></div><div className="day-timeline"><div className="day-hours">{hours.map(hour => <div key={hour} className="day-hour"><span>{new Date(`${selected}T${String(hour).padStart(2, "0")}:00`).toLocaleTimeString("en-US", { hour: "numeric" })}</span></div>)}</div><div className="day-events-layer">{selectedIsToday && <div className="now-line" style={{ top: `${nowTop}%` }}><span>Now</span></div>}{selectedEvents.map(event => <button key={event.id} className="day-event-block" style={eventBlockStyle(event)} onClick={() => onEdit(event.id)}><strong>{event.title}</strong><span>{formatEventTime(event.start)}{event.end ? ` – ${formatEventTime(event.end)}` : ""}</span>{event.notes && <small>{event.notes}</small>}</button>)}</div></div></>}</section><aside className="calendar-side"><section className="card agenda-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>{selectedLabel}</h2></div><span className="count">{selectedEvents.length} events</span></div><div className="agenda-list">{selectedEvents.length ? selectedEvents.map(event => <button className="agenda-item editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventTime(event.start)}{event.end ? ` – ${formatEventTime(event.end)}` : ""} · {event.source}</p>{event.notes && <small>{event.notes}</small>}</div><Pencil size={14} /></button>) : <div className="priority-empty"><strong>Nothing scheduled.</strong><p>That white space is not a bug. Protect it.</p></div>}</div></section><section className="card agenda-card"><div className="card-head"><div><span className="section-icon violet"><Clock3 size={14} /></span><h2>Today</h2></div><span className="count">{todayEvents.length}</span></div><div className="agenda-list">{todayEvents.slice(0, 4).map(event => <button className="agenda-item compact editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventTime(event.start)}</p></div><Pencil size={14} /></button>)}</div></section></aside></div></>;
+}
+
+function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming", onNew, onImport, onEdit, onPlanTask }: { events: CalendarEvent[]; tasks: Task[]; weekStartsMonday: boolean; defaultView?: CalendarDefaultView; onNew: (date: string) => void; onImport: () => void; onEdit: (id: string) => void; onPlanTask: (id: number) => void }) {
+  const [cursor, setCursor] = useState(() => new Date());
+  const [selected, setSelected] = useState(() => toDateKey(new Date()));
+  const [mode, setMode] = useState<CalendarDefaultView>(() => normalizeCalendarDefaultView(defaultView));
+  useEffect(() => {
+    setMode(normalizeCalendarDefaultView(defaultView));
+  }, [defaultView]);
+  const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const gridStart = new Date(monthStart);
+  const firstDayOffset = weekStartsMonday ? (monthStart.getDay() + 6) % 7 : monthStart.getDay();
+  const weekDays = weekStartsMonday ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  gridStart.setDate(monthStart.getDate() - firstDayOffset);
+  const days = Array.from({ length: 42 }, (_, index) => {
+    const day = new Date(gridStart);
+    day.setDate(gridStart.getDate() + index);
+    return day;
+  });
+  const monthSegments = buildMonthEventSegments(events, days);
+  const selectedEvents = events.filter(event => eventOccursOnDate(event, selected)).sort((a, b) => a.start.localeCompare(b.start));
+  const todayKey = toDateKey(new Date());
+  const todayEvents = events.filter(event => eventOccursOnDate(event, todayKey)).sort((a, b) => a.start.localeCompare(b.start));
+  const selectedDate = new Date(`${selected}T12:00`);
+  const selectedLabel = selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+  type UpcomingItem = { id: string; kind: "event" | "task"; title: string; date: string; color: string; meta: string };
+  const upcomingItems: UpcomingItem[] = [
+    ...events
+      .filter(event => !event.id.startsWith("task-") && (event.end ?? event.start).slice(0, 10) >= todayKey)
+      .map(event => ({ id: event.id, kind: "event" as const, title: event.title, date: event.start, color: event.color, meta: `${formatEventRange(event)} · ${event.source}` })),
+    ...tasks
+      .filter(task => !task.done && !task.canceled && /^\d{4}-\d{2}-\d{2}$/.test(task.due) && task.due >= todayKey && !task.calendarEventId)
+      .map(task => ({ id: String(task.id), kind: "task" as const, title: task.title, date: `${task.due}T${task.startTime || "09:00"}`, color: task.color, meta: `Task · due ${task.due === todayKey ? "today" : task.due} · ${task.focusMinutes}m` })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+  const hours = Array.from({ length: 24 }, (_, hour) => hour);
+  const changeMonth = (offset: number) => setCursor(value => new Date(value.getFullYear(), value.getMonth() + offset, 1));
+  const changeDay = (offset: number) => {
+    const next = new Date(`${selected}T12:00`);
+    next.setDate(next.getDate() + offset);
+    setSelected(toDateKey(next));
+    setCursor(new Date(next.getFullYear(), next.getMonth(), 1));
+  };
+  const selectDay = (key: string) => {
+    setSelected(key);
+    setMode("day");
+  };
+  const now = new Date();
+  const selectedIsToday = selected === todayKey;
+  const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 1440) * 100;
+  const eventBlockStyle = (event: CalendarEvent) => {
+    const { startMinutes, endMinutes } = getEventDayBlockMinutes(event, selected);
+    const durationMinutes = Math.max(5, endMinutes - startMinutes);
+    return {
+      top: `${(startMinutes / 1440) * 100}%`,
+      minHeight: 12,
+      height: `${(durationMinutes / 1440) * 100}%`,
+      borderColor: event.color,
+      background: `linear-gradient(135deg, ${event.color}22, var(--panel))`,
+    } as React.CSSProperties;
+  };
+
+  return <>
+    <div className="page-title">
+      <div><p className="eyebrow">Protect your time</p><h1>Today</h1><p>Your timeline, calendar, and ready work in one calm planning layer.</p></div>
+      <div className="calendar-actions">
+        <div className="calendar-mode-tabs"><button className={mode === "upcoming" ? "selected" : ""} onClick={() => setMode("upcoming")}><ListTodo size={14} /> Upcoming</button><button className={mode === "month" ? "selected" : ""} onClick={() => setMode("month")}><CalendarDays size={14} /> Month</button><button className={mode === "day" ? "selected" : ""} onClick={() => setMode("day")}><Clock3 size={14} /> Day</button></div>
+        <button onClick={onImport}><Link2 size={16} /> Import iCal</button>
+        <button className="primary" onClick={() => onNew(selected)}><Plus size={16} /> Add event</button>
+      </div>
+    </div>
+    <div className="calendar-layout">
+      <section className="card calendar-card">
+        {mode === "upcoming" ? <>
+          <div className="calendar-toolbar upcoming-toolbar"><div><strong>What’s coming up</strong><span>Events and dated tasks, in order.</span></div><span className="count">{upcomingItems.length} upcoming</span></div>
+          <div className="upcoming-list">
+            {upcomingItems.length ? upcomingItems.slice(0, 5).map(item => {
+              const itemDate = new Date(`${item.date.slice(0, 10)}T12:00`);
+              return <button key={`${item.kind}-${item.id}`} className="upcoming-item" onClick={() => item.kind === "event" ? onEdit(item.id) : onPlanTask(Number(item.id))}>
+                <time dateTime={item.date}><strong>{itemDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</strong><span>{itemDate.toLocaleDateString("en-US", { weekday: "short" })}</span></time>
+                <i style={{ background: item.color }} />
+                <div><span className="upcoming-kind">{item.kind === "event" ? "Calendar event" : "Task"}</span><strong>{item.title}</strong><small>{item.meta}</small></div>
+                <ArrowRight size={16} />
+              </button>;
+            }) : <div className="priority-empty"><strong>Nothing upcoming yet.</strong><p>Add an event, import a calendar, or give a task a due date.</p></div>}
+          </div>
+        </> : mode === "month" ? <>
+          <div className="calendar-toolbar"><button onClick={() => changeMonth(-1)}>←</button><strong>{cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</strong><button onClick={() => changeMonth(1)}>→</button></div>
+          <div className="calendar-weekdays">{weekDays.map(day => <span key={day}>{day}</span>)}</div>
+          <div className="calendar-grid month-grid">
+            {days.map((day, index) => {
+              const key = toDateKey(day);
+              const dayEvents = events.filter(event => eventOccursOnDate(event, key));
+              return <button
+                aria-label={day.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                key={key}
+                style={{ gridColumn: index % 7 + 1, gridRow: Math.floor(index / 7) + 1 }}
+                className={`calendar-day-cell ${day.getMonth() !== cursor.getMonth() ? "muted" : ""} ${key === selected ? "selected" : ""} ${key === todayKey ? "today" : ""}`}
+                onClick={() => selectDay(key)}
+              ><span>{day.getDate()}</span>{dayEvents.length > 3 && <small>+{dayEvents.length - 3} more</small>}</button>;
+            })}
+            {monthSegments.filter(segment => segment.lane < 3).map(segment => <button
+              key={`${segment.event.id}-${segment.week}`}
+              className={`calendar-span-event ${segment.startsEvent ? "starts-event" : "continues-left"} ${segment.endsEvent ? "ends-event" : "continues-right"}`}
+              style={{ gridColumn: `${segment.startColumn} / ${segment.endColumn + 1}`, gridRow: segment.week + 1, "--event-color": segment.event.color, "--event-lane": segment.lane } as React.CSSProperties}
+              onClick={clickEvent => { clickEvent.stopPropagation(); onEdit(segment.event.id); }}
+              title={`${segment.event.title} · ${formatEventRange(segment.event)}`}
+            ><i /><strong>{segment.event.title}</strong>{segment.endsEvent && <span>{formatEventTime(segment.event.end ?? segment.event.start)}</span>}</button>)}
+          </div>
+        </> : <>
+          <div className="calendar-toolbar day-toolbar"><button onClick={() => changeDay(-1)}>←</button><div><strong>{selectedLabel}</strong><span>{selectedEvents.length ? `${selectedEvents.length} scheduled event${selectedEvents.length === 1 ? "" : "s"}` : "Open day"}</span></div><button onClick={() => changeDay(1)}>→</button></div>
+          <div className="day-jump-row"><button onClick={() => changeDay(-1)}>Yesterday</button><button onClick={() => { const today = new Date(); setSelected(toDateKey(today)); setCursor(new Date(today.getFullYear(), today.getMonth(), 1)); }}>Today</button><button onClick={() => changeDay(1)}>Tomorrow</button></div>
+          <div className="day-timeline">
+            <div className="day-hours">{hours.map(hour => <div key={hour} className="day-hour"><span>{new Date(`${selected}T${String(hour).padStart(2, "0")}:00`).toLocaleTimeString("en-US", { hour: "numeric" })}</span></div>)}</div>
+            <div className="day-events-layer">{selectedIsToday && <div className="now-line" style={{ top: `${nowTop}%` }}><span>Now</span></div>}{selectedEvents.map(event => {
+              const place = eventPlaceLabel(event.location);
+              const meeting = resolveEventMeeting(event);
+              const notes = eventNotesLabel(event.notes);
+              const detail = place || notes;
+              return <div key={event.id} className="day-event-block" style={eventBlockStyle(event)} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><strong>{event.title}</strong><span>{formatEventRange(event)}</span>{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : null}{detail ? <small>{detail}</small> : null}</div>;
+            })}</div>
+          </div>
+        </>}
+      </section>
+      <aside className="calendar-side">
+        <section className="card agenda-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>{selectedLabel}</h2></div><span className="count">{selectedEvents.length} events</span></div><div className="agenda-list">{selectedEvents.length ? selectedEvents.map(event => {
+          const place = eventPlaceLabel(event.location);
+          const meeting = resolveEventMeeting(event);
+          const notes = eventNotesLabel(event.notes);
+          return <div className="agenda-item editable" key={event.id} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)} · {event.source}</p>{place ? <small className="event-place"><MapPin size={11} /> {place}</small> : null}{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : null}{notes ? <small>{notes}</small> : null}</div><Pencil size={14} /></div>;
+        }) : <div className="priority-empty"><strong>Nothing scheduled.</strong><p>That white space is not a bug. Protect it.</p></div>}</div></section>
+        <section className="card agenda-card"><div className="card-head"><div><span className="section-icon violet"><Clock3 size={14} /></span><h2>Today</h2></div><span className="count">{todayEvents.length}</span></div><div className="agenda-list">{todayEvents.slice(0, 4).map(event => {
+          const meeting = resolveEventMeeting(event);
+          return <div className="agenda-item compact editable" key={event.id} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)}</p>{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : null}</div><Pencil size={14} /></div>;
+        })}</div></section>
+        <section className="card agenda-card"><div className="card-head"><div><span className="section-icon orange"><ListTodo size={14} /></span><h2>Ready to place</h2></div><span className="count">{tasks.filter(task => !task.startTime || task.due !== selected).length}</span></div><div className="agenda-list">{tasks.filter(task => !task.startTime || task.due !== selected).slice(0, 4).map(task => <button className="agenda-item compact editable" key={task.id} onClick={() => onPlanTask(task.id)}><i style={{ background: task.color }} /><div><strong>{task.title}</strong><p>{task.focusMinutes}m · {task.energy} energy</p></div><Plus size={14} /></button>)}{!tasks.filter(task => !task.startTime || task.due !== selected).length && <div className="priority-empty"><strong>Everything has a place.</strong><p>Leave the rest unscheduled on purpose.</p></div>}</div></section>
+      </aside>
+    </div>
+  </>;
+}
+
+function ToggleRow({ title, desc, checked, onChange }: { title: string; desc: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return <div className="setting-row"><div><strong>{title}</strong><p>{desc}</p></div><button className={`toggle ${checked ? "on" : ""}`} onClick={() => onChange(!checked)} aria-pressed={checked}><span /></button></div>;
+}
+
+type GmailMessage = { id: string; subject: string; from: string; date: string; snippet: string };
+
+function GmailIntegration({ user, flash }: { user?: any; flash: (message: string) => void }) {
+  const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [error, setError] = useState("");
+
+  const token = useCallback(async () => {
+    if (!user?.getIdToken) throw new Error("Sign in to LifeOS before connecting Gmail.");
+    return user.getIdToken();
+  }, [user]);
+  const load = useCallback(async () => {
+    try {
+      setLoading(true); setError("");
+      const idToken = await token();
+      const response = await fetch("/api/gmail", { headers: { authorization: `Bearer ${idToken}` }, cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load Gmail.");
+      setConnected(Boolean(data.connected));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load Gmail."); }
+    finally { setLoading(false); }
+  }, [token]);
+  useEffect(() => { void load(); }, [load]);
+  const connect = async () => {
+    try {
+      setConnecting(true); setError("");
+      const idToken = await token();
+      const response = await fetch("/api/gmail/connect", { headers: { authorization: `Bearer ${idToken}` } });
+      const data = await response.json();
+      if (!response.ok || !data.url) throw new Error(data.error || "Could not start Gmail connection.");
+      window.location.assign(data.url);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not connect Gmail."); setConnecting(false); }
+  };
+  const disconnect = async () => {
+    if (!window.confirm("Disconnect Gmail? LifeOS will delete its encrypted connection record.")) return;
+    try {
+      setDisconnecting(true); const idToken = await token();
+      const response = await fetch("/api/gmail", { method: "DELETE", headers: { authorization: `Bearer ${idToken}` } });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not disconnect Gmail.");
+      setConnected(false); flash("Gmail disconnected");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not disconnect Gmail."); }
+    finally { setDisconnecting(false); }
+  };
+  return <section className="card settings-card gmail-card"><div className="card-head"><div><span className="section-icon red"><Mail size={14} /></span><h2>Gmail connection</h2></div></div><div className="settings-body"><div className="gmail-intro"><div><strong>{connected ? "Gmail is connected" : "Connect Gmail"}</strong><p>Your three most recent Primary emails appear on the dashboard. Promotions and social mail stay out.</p></div>{connected ? <button className="gmail-disconnect" onClick={() => void disconnect()} disabled={disconnecting}>{disconnecting ? "Disconnecting…" : "Disconnect"}</button> : <button className="primary gmail-connect" onClick={() => void connect()} disabled={connecting || loading}><Mail size={15} /> {connecting ? "Opening Google…" : "Connect Gmail"}</button>}</div>{error && <p className="gmail-error" role="alert">{error}</p>}{loading && <p className="settings-note">Checking your Gmail connection…</p>}<p className="settings-note">Read-only access. You can disconnect it anytime.</p></div></section>;
+}
+
+function DashboardGmailCard({ user, onSettings }: { user?: any; onSettings: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [connected, setConnected] = useState(false);
+  const [messages, setMessages] = useState<GmailMessage[]>([]);
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    try {
+      if (!user?.getIdToken) throw new Error("Sign in to load Gmail.");
+      setLoading(true); setError("");
+      const idToken = await user.getIdToken();
+      const response = await fetch("/api/gmail", { headers: { authorization: `Bearer ${idToken}` }, cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load Gmail.");
+      setConnected(Boolean(data.connected)); setMessages(Array.isArray(data.messages) ? data.messages.slice(0, 3) : []);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load Gmail."); }
+    finally { setLoading(false); }
+  }, [user]);
+  useEffect(() => { void load(); }, [load]);
+  return <section className="card dashboard-gmail-card"><div className="card-head"><div><span className="section-icon red"><Mail size={14} /></span><h2>Recent email</h2></div>{connected && <button onClick={() => void load()} disabled={loading}>Refresh</button>}</div>{loading ? <p className="dashboard-gmail-status">Loading recent email…</p> : !connected ? <div className="dashboard-gmail-status"><strong>Gmail is not connected.</strong><button onClick={onSettings}>Connect Gmail</button></div> : error ? <div className="dashboard-gmail-status"><strong>Couldn’t load email.</strong><p>{error}</p><button onClick={() => void load()}>Try again</button></div> : messages.length ? <div className="dashboard-gmail-list">{messages.map(message => <article key={message.id}><div><strong>{message.subject}</strong><span>{message.from}</span></div><a href={`https://mail.google.com/mail/u/0/#inbox/${message.id}`} target="_blank" rel="noreferrer">Reply in Gmail <ExternalLink size={12} /></a></article>)}</div> : <div className="dashboard-gmail-status"><strong>No Primary inbox mail right now.</strong><p>Promotions and social mail are hidden.</p></div>}</section>;
+}
+
+type ICloudCalendarChoice = { url: string; name: string; color?: string };
+type GoogleCalendarChoice = { id: string; name: string; color?: string; primary?: boolean };
+function GoogleCalendarAutoSync({ user }: { user: any }) {
+  useEffect(() => {
+    let cancelled = false;
+    const sync = async () => {
+      try {
+        const idToken = await user.getIdToken();
+        const response = await fetch("/api/gmail/calendar/sync", { method: "POST", headers: { authorization: "Bearer " + idToken } });
+        const data = await response.json();
+        if (!response.ok || cancelled || !Array.isArray(data.events)) return;
+        window.dispatchEvent(new CustomEvent("lifeos:google-calendar-events", { detail: data.events }));
+      } catch {
+        // Calendar connection remains optional; settings exposes the clear recovery path.
+      }
+    };
+    const firstSync = window.setTimeout(sync, 250);
+    const interval = window.setInterval(sync, 5 * 60 * 1000);
+    return () => { cancelled = true; window.clearTimeout(firstSync); window.clearInterval(interval); };
+  }, [user]);
+  return null;
+}
+function CalendarConnections({ user, flash }: { user?: any; flash: (message: string) => void }) {
+  const [provider, setProvider] = useState<"apple" | "google">("apple");
+  const choices = [
+    { id: "apple" as const, number: "1", name: "Apple", detail: "iCloud Calendar" },
+    { id: "google" as const, number: "2", name: "Google", detail: "Google Calendar" },
+  ];
+  return <section className="card settings-card calendar-hub"><div className="card-head"><div><span className="section-icon violet"><CalendarDays size={14} /></span><h2>Calendar connections</h2></div><span className="calendar-hub-note">Read-only imports</span></div><div className="calendar-auto-refresh"><span><CheckCircle2 size={14} /> Automatic refresh is on</span><small>Connected calendars update every 5 minutes while LifeOS is open.</small></div><div className="calendar-provider-tabs" role="tablist" aria-label="Calendar providers">{choices.map(choice => <button key={choice.id} role="tab" aria-selected={provider === choice.id} className={provider === choice.id ? "selected" : ""} onClick={() => setProvider(choice.id)}><b>{choice.number}</b><span>{choice.name}<small>{choice.detail}</small></span></button>)}</div><div className="calendar-provider-content">{provider === "apple" && <ICloudCalendarIntegration user={user} flash={flash} />}{provider === "google" && <GoogleCalendarIntegration user={user} flash={flash} />}</div></section>;
+}
+
+function GoogleCalendarIntegration({ user, flash }: { user?: any; flash: (message: string) => void }) {
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [needsReconnect, setNeedsReconnect] = useState(false);
+  const [calendars, setCalendars] = useState<GoogleCalendarChoice[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [error, setError] = useState("");
+  const token = useCallback(async () => {
+    if (!user?.getIdToken) throw new Error("Sign in to LifeOS before connecting Google Calendar.");
+    return user.getIdToken();
+  }, [user]);
+  const load = useCallback(async () => {
+    try {
+      setLoading(true); setError("");
+      const response = await fetch("/api/gmail/calendar", { headers: { authorization: "Bearer " + await token() }, cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load Google Calendar.");
+      setConnected(Boolean(data.connected)); setNeedsReconnect(Boolean(data.needsReconnect));
+      setCalendars(Array.isArray(data.calendars) ? data.calendars : []); setSelected(Array.isArray(data.selectedGoogleCalendarIds) ? data.selectedGoogleCalendarIds : []);
+      if (data.error) setError(data.error);
+    } catch (reason) { setConnected(false); setError(reason instanceof Error ? reason.message : "Could not load Google Calendar."); }
+    finally { setLoading(false); }
+  }, [token]);
+  useEffect(() => { void load(); }, [load]);
+  const connect = async () => {
+    try {
+      setBusy(true); setError("");
+      const response = await fetch("/api/gmail/connect", { headers: { authorization: "Bearer " + await token() } });
+      const data = await response.json(); if (!response.ok || !data.url) throw new Error(data.error || "Could not start Google Calendar connection.");
+      window.location.assign(data.url);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not connect Google Calendar."); setBusy(false); }
+  };
+  const saveSelection = async (next: string[]) => {
+    setSelected(next);
+    try {
+      const response = await fetch("/api/gmail/calendar", { method: "PUT", headers: { authorization: "Bearer " + await token(), "content-type": "application/json" }, body: JSON.stringify({ selectedGoogleCalendarIds: next }) });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not save calendar choices.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save Google Calendar choices."); }
+  };
+  const sync = async () => {
+    try {
+      setBusy(true); setError("");
+      const response = await fetch("/api/gmail/calendar/sync", { method: "POST", headers: { authorization: "Bearer " + await token() } });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not sync Google Calendar.");
+      window.dispatchEvent(new CustomEvent("lifeos:google-calendar-events", { detail: Array.isArray(data.events) ? data.events : [] }));
+      flash((data.events?.length || 0) + " Google Calendar events synced");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not sync Google Calendar."); }
+    finally { setBusy(false); }
+  };
+  return <section className="card settings-card calendar-connection-card"><div className="card-head"><div><span className="section-icon google-calendar-icon"><CalendarDays size={14} /></span><h2>Google Calendar</h2></div>{connected && !needsReconnect && <button onClick={() => void sync()} disabled={busy}><RefreshCw size={14} /> {busy ? "Syncing…" : "Sync now"}</button>}</div><div className="settings-body">{loading ? <p className="settings-note">Checking Google Calendar…</p> : !connected ? <div className="integration-empty"><strong>Connect your Google Calendar.</strong><p>Choose the calendars LifeOS can read. Your Gmail preview stays read-only too.</p><button className="primary" onClick={() => void connect()} disabled={busy}><CalendarDays size={15} /> {busy ? "Opening Google…" : "Connect Google Calendar"}</button></div> : needsReconnect ? <div className="integration-empty"><strong>One quick permission update.</strong><p>Reconnect your Google account and approve Calendar access. Your existing Gmail connection and data stay safe.</p><button className="primary" onClick={() => void connect()} disabled={busy}>{busy ? "Opening Google…" : "Reconnect Google"}</button></div> : <><div className="icloud-status"><span><CheckCircle2 size={15} /> Connected securely</span><button onClick={() => void connect()} disabled={busy}>Reconnect</button></div><p className="settings-note">Choose which Google calendars LifeOS should import. Sync is read-only, so it never changes Google Calendar.</p>{calendars.length ? <div className="icloud-calendar-list">{calendars.map(calendar => <label key={calendar.id} className="google-calendar-option"><input type="checkbox" checked={selected.includes(calendar.id)} onChange={event => void saveSelection(event.target.checked ? [...selected, calendar.id] : selected.filter(id => id !== calendar.id))} /><i style={{ background: calendar.color || "#4285f4" }} /><span>{calendar.name}{calendar.primary ? " · Primary" : ""}</span></label>)}</div> : <div className="integration-empty"><strong>No calendars found yet.</strong><p>Reconnect Google to grant Calendar access, then come back here.</p><button onClick={() => void connect()} disabled={busy}>Reconnect Google</button></div>}</>}{error && <p className="gmail-error" role="alert">{error}</p>}</div></section>;
+}
+function OutlookCalendarAutoSync({ user }: { user: any }) {
+  useEffect(() => {
+    let cancelled = false;
+    const sync = async () => { try { const idToken = await user.getIdToken(); const response = await fetch("/api/outlook/calendar/sync", { method: "POST", headers: { authorization: "Bearer " + idToken } }); const data = await response.json(); if (response.ok && !cancelled && Array.isArray(data.events)) window.dispatchEvent(new CustomEvent("lifeos:outlook-calendar-events", { detail: data.events })); } catch { /* connection is optional */ } };
+    const first = window.setTimeout(sync, 500); const interval = window.setInterval(sync, 5 * 60 * 1000);
+    return () => { cancelled = true; window.clearTimeout(first); window.clearInterval(interval); };
+  }, [user]);
+  return null;
+}
+function OutlookCalendarIntegration({ user, flash }: { user?: any; flash: (message: string) => void }) {
+  const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [connected, setConnected] = useState(false); const [calendars, setCalendars] = useState<GoogleCalendarChoice[]>([]); const [selected, setSelected] = useState<string[]>([]); const [error, setError] = useState("");
+  const token = useCallback(async () => { if (!user?.getIdToken) throw new Error("Sign in to LifeOS before connecting Outlook Calendar."); return user.getIdToken(); }, [user]);
+  const load = useCallback(async () => { try { setLoading(true); setError(""); const response = await fetch("/api/outlook/calendar", { headers: { authorization: "Bearer " + await token() }, cache: "no-store" }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not load Outlook Calendar."); setConnected(Boolean(data.connected)); setCalendars(Array.isArray(data.calendars) ? data.calendars : []); setSelected(Array.isArray(data.selectedCalendarIds) ? data.selectedCalendarIds : []); } catch (reason) { setConnected(false); setError(reason instanceof Error ? reason.message : "Could not load Outlook Calendar."); } finally { setLoading(false); } }, [token]);
+  useEffect(() => { void load(); }, [load]);
+  const connect = async () => { try { setBusy(true); setError(""); const response = await fetch("/api/outlook/connect", { headers: { authorization: "Bearer " + await token() } }); const data = await response.json(); if (!response.ok || !data.url) throw new Error(data.error || "Could not start Outlook connection."); window.location.assign(data.url); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not connect Outlook Calendar."); setBusy(false); } };
+  const save = async (next: string[]) => { setSelected(next); try { const response = await fetch("/api/outlook/calendar", { method: "PUT", headers: { authorization: "Bearer " + await token(), "content-type": "application/json" }, body: JSON.stringify({ selectedCalendarIds: next }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not save calendar choices."); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save Outlook calendar choices."); } };
+  const sync = async () => { try { setBusy(true); setError(""); const response = await fetch("/api/outlook/calendar/sync", { method: "POST", headers: { authorization: "Bearer " + await token() } }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not sync Outlook Calendar."); window.dispatchEvent(new CustomEvent("lifeos:outlook-calendar-events", { detail: Array.isArray(data.events) ? data.events : [] })); flash((data.events?.length || 0) + " Outlook events synced"); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not sync Outlook Calendar."); } finally { setBusy(false); } };
+  const disconnect = async () => { if (!window.confirm("Disconnect Outlook Calendar? LifeOS will remove its encrypted connection record.")) return; try { setBusy(true); const response = await fetch("/api/outlook/calendar", { method: "DELETE", headers: { authorization: "Bearer " + await token() } }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not disconnect Outlook."); setConnected(false); setCalendars([]); setSelected([]); flash("Outlook Calendar disconnected"); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not disconnect Outlook Calendar."); } finally { setBusy(false); } };
+  return <section className="card settings-card calendar-connection-card"><div className="card-head"><div><span className="section-icon outlook-calendar-icon"><CalendarDays size={14} /></span><h2>Outlook Calendar</h2></div>{connected && <button onClick={() => void sync()} disabled={busy}><RefreshCw size={14} /> {busy ? "Syncing…" : "Sync now"}</button>}</div><div className="settings-body">{loading ? <p className="settings-note">Checking Outlook Calendar…</p> : !connected ? <div className="integration-empty"><strong>Connect Outlook Calendar.</strong><p>Choose the Microsoft calendars LifeOS can read. Sync is read-only: LifeOS never changes events in Outlook.</p><ol className="integration-steps"><li>Press <b>Connect Outlook Calendar</b> and sign in to Microsoft.</li><li>Approve read-only calendar access.</li><li>Back in LifeOS, check the calendars you want and press <b>Sync now</b>.</li></ol><details className="integration-help"><summary>First-time Microsoft setup (only if Connect does not open)</summary><p>In Microsoft Entra, add <code>https://YOUR_HOST/api/outlook/callback</code> as a Web redirect URL. Then add <code>MICROSOFT_OUTLOOK_CLIENT_ID</code> and <code>MICROSOFT_OUTLOOK_CLIENT_SECRET</code> to Vercel, and grant Microsoft Graph delegated <code>Calendars.Read</code>.</p></details><button className="primary" onClick={() => void connect()} disabled={busy}><CalendarDays size={15} /> {busy ? "Opening Microsoft…" : "Connect Outlook Calendar"}</button></div> : <><div className="icloud-status"><span><CheckCircle2 size={15} /> Connected securely</span><button onClick={() => void disconnect()} disabled={busy}>Disconnect</button></div><p className="settings-note">Choose the Outlook calendars LifeOS should import.</p>{calendars.length ? <div className="icloud-calendar-list">{calendars.map(calendar => <label key={calendar.id} className="outlook-calendar-option"><input type="checkbox" checked={selected.includes(calendar.id)} onChange={event => void save(event.target.checked ? [...selected, calendar.id] : selected.filter(id => id !== calendar.id))} /><i style={{ background: calendar.color || "#0078d4" }} /><span>{calendar.name}{calendar.primary ? " · Default" : ""}</span></label>)}</div> : <div className="integration-empty"><strong>No Outlook calendars found.</strong><p>Try reconnecting your Microsoft account.</p><button onClick={() => void connect()} disabled={busy}>Reconnect Outlook</button></div>}</>}{error && <p className="gmail-error" role="alert">{error}</p>}</div></section>;
+}
+function ICloudCalendarAutoSync({ user }: { user: any }) {
+  useEffect(() => {
+    let cancelled = false;
+    const sync = async () => {
+      try {
+        const idToken = await user.getIdToken();
+        const connection = await fetch("/api/icloud", { headers: { authorization: "Bearer " + idToken }, cache: "no-store" });
+        const status = await connection.json();
+        if (!connection.ok || !status.configured || !status.connected) return;
+        await fetch("/api/icloud", { method: "POST", headers: { authorization: "Bearer " + idToken, "content-type": "application/json" }, body: JSON.stringify({ action: "refresh" }) });
+        const response = await fetch("/api/icloud/sync", { method: "POST", headers: { authorization: "Bearer " + idToken } });
+        const data = await response.json();
+        if (!response.ok || cancelled || !Array.isArray(data.events)) return;
+        localStorage.setItem("lifeos-icloud-last-sync", new Date().toISOString());
+        window.dispatchEvent(new CustomEvent("lifeos:icloud-events", { detail: data.events }));
+      } catch {
+        // Settings still offers a manual sync if a background refresh cannot run.
+      }
+    };
+    const firstSync = window.setTimeout(sync, 0);
+    const interval = window.setInterval(sync, 5 * 60 * 1000);
+    return () => { cancelled = true; window.clearTimeout(firstSync); window.clearInterval(interval); };
+  }, [user]);
+  return null;
+}
+function ICloudCalendarIntegration({ user, flash }: { user?: any; flash: (message: string) => void }) {
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [configured, setConfigured] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [appleId, setAppleId] = useState("");
+  const [appPassword, setAppPassword] = useState("");
+  const [calendars, setCalendars] = useState<ICloudCalendarChoice[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [error, setError] = useState("");
+  const token = useCallback(async () => {
+    if (!user?.getIdToken) throw new Error("Sign in to LifeOS before connecting iCloud Calendar.");
+    return user.getIdToken();
+  }, [user]);
+  const load = useCallback(async () => {
+    try {
+      setLoading(true); setError("");
+      const response = await fetch("/api/icloud", { headers: { authorization: "Bearer " + await token() }, cache: "no-store" });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not load iCloud Calendar.");
+      setConfigured(Boolean(data.configured)); setConnected(Boolean(data.connected)); setCalendars(Array.isArray(data.calendars) ? data.calendars : []); setSelected(Array.isArray(data.selectedCalendarUrls) ? data.selectedCalendarUrls : []);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load iCloud Calendar."); }
+    finally { setLoading(false); }
+  }, [token]);
+  useEffect(() => { void load(); }, [load]);
+  const connect = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      setBusy(true); setError("");
+      const response = await fetch("/api/icloud", { method: "POST", headers: { authorization: "Bearer " + await token(), "content-type": "application/json" }, body: JSON.stringify({ appleId, appPassword }) });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not connect iCloud Calendar.");
+      setConnected(true); setCalendars(data.calendars || []); setSelected(data.selectedCalendarUrls || []); setAppPassword(""); flash("iCloud Calendar connected");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not connect iCloud Calendar."); }
+    finally { setBusy(false); }
+  };
+  const saveSelection = async (next: string[]) => {
+    setSelected(next);
+    try {
+      const response = await fetch("/api/icloud", { method: "PUT", headers: { authorization: "Bearer " + await token(), "content-type": "application/json" }, body: JSON.stringify({ selectedCalendarUrls: next }) });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not save choices.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save calendar choices."); }
+  };
+  const sync = async () => {
+    try {
+      setBusy(true); setError("");
+      const response = await fetch("/api/icloud/sync", { method: "POST", headers: { authorization: "Bearer " + await token() } });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not sync iCloud Calendar.");
+      window.dispatchEvent(new CustomEvent("lifeos:icloud-events", { detail: Array.isArray(data.events) ? data.events : [] }));
+      flash((data.events?.length || 0) + " iCloud events synced");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not sync iCloud Calendar."); }
+    finally { setBusy(false); }
+  };
+  const refreshCalendars = async () => {
+    try {
+      setBusy(true); setError("");
+      const response = await fetch("/api/icloud", { method: "POST", headers: { authorization: "Bearer " + await token(), "content-type": "application/json" }, body: JSON.stringify({ action: "refresh" }) });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not refresh calendars.");
+      setCalendars(Array.isArray(data.calendars) ? data.calendars : []); setSelected(Array.isArray(data.selectedCalendarUrls) ? data.selectedCalendarUrls : []); flash("iCloud calendars refreshed");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not refresh calendars."); }
+    finally { setBusy(false); }
+  };
+  const disconnect = async () => {
+    if (!window.confirm("Disconnect iCloud Calendar? LifeOS will delete its encrypted connection record.")) return;
+    try { setBusy(true); const response = await fetch("/api/icloud", { method: "DELETE", headers: { authorization: "Bearer " + await token() } }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not disconnect."); setConnected(false); setCalendars([]); setSelected([]); flash("iCloud Calendar disconnected"); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not disconnect iCloud Calendar."); }
+    finally { setBusy(false); }
+  };
+  return <section className="card settings-card icloud-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>iCloud Calendar</h2></div>{connected && <button onClick={() => void sync()} disabled={busy}><RefreshCw size={14} /> {busy ? "Syncing…" : "Sync now"}</button>}</div><div className="settings-body">{loading ? <p className="settings-note">Checking iCloud Calendar…</p> : !configured ? <div className="integration-empty"><strong>One setup step left.</strong><p>Add <code>ICLOUD_CONNECTION_SECRET</code> in Vercel to turn on encrypted iCloud Calendar connections.</p></div> : !connected ? <form className="icloud-connect-form" onSubmit={connect}><p className="settings-note">Use an Apple app-specific password — never your normal Apple Account password. LifeOS encrypts it server-side.</p><label>Apple ID<input type="email" required autoComplete="username" value={appleId} onChange={event => setAppleId(event.target.value)} placeholder="you@icloud.com" /></label><label>App-specific password<input type="password" required autoComplete="new-password" value={appPassword} onChange={event => setAppPassword(event.target.value)} placeholder="xxxx-xxxx-xxxx-xxxx" /></label><button className="primary" disabled={busy}>{busy ? "Connecting…" : "Connect iCloud Calendar"}</button></form> : <><div className="icloud-status"><span><CheckCircle2 size={15} /> Connected securely</span><button onClick={() => void disconnect()} disabled={busy}>Disconnect</button></div><p className="settings-note">Choose the calendars LifeOS should import. Sync is read-only for now, so it won’t alter Apple Calendar.</p>{calendars.length ? <div className="icloud-calendar-list">{calendars.map(calendar => <label key={calendar.url}><input type="checkbox" checked={selected.includes(calendar.url)} onChange={event => void saveSelection(event.target.checked ? [...selected, calendar.url] : selected.filter(url => url !== calendar.url))} /><i style={{ background: calendar.color || "#8b7cff" }} /><span>{calendar.name}</span></label>)}</div> : <div className="integration-empty"><strong>Calendars need a refresh.</strong><p>Your connection is safe. Refreshing re-reads the available iCloud calendars.</p><button onClick={() => void refreshCalendars()} disabled={busy}>Refresh calendars</button></div>}</>}{error && <p className="gmail-error" role="alert">{error}</p>}</div></section>;
+}
+
+function WorkspaceHubsEditor({
+  settings,
+  update,
+  onRequestPaywall,
+}: {
+  settings: SettingsState;
+  update: (updates: Partial<SettingsState>) => void;
+  onRequestPaywall?: (hub: View) => void;
+}) {
+  const [editingKey, setEditingKey] = useState<WorkspaceColorKey | null>(null);
+  const hubsUnlocked = canAccessPaidHubs(settings.entitlement);
+
+  return (
+    <div className="workspace-hubs">
+      <div className="workspace-hubs-head">
+        <span className="settings-field-label">Hubs</span>
+        <p className="settings-note">Home, School, and Career are free. Work, Study Abroad, Treasury, and Mastery need Pro.</p>
+      </div>
+      {WORKSPACE_COLOR_OPTIONS.map(({ key, label, enableKey, navName }) => {
+        const current = workspaceColorFor(settings, key);
+        const editing = editingKey === key;
+        const paid = isPaidHub(navName);
+        const enabled = paid ? hubsUnlocked && settings[enableKey] !== false : settings[enableKey] !== false;
+        return (
+          <div key={key} className={`workspace-hub-row${editing ? " editing" : ""}`}>
+            <div className="workspace-hub-summary">
+              <button
+                type="button"
+                className="workspace-color-swatch"
+                style={{ background: current }}
+                aria-label={`${label} color`}
+                aria-expanded={editing}
+                onClick={() => setEditingKey(open => (open === key ? null : key))}
+              />
+              <strong>{label}{paid && !hubsUnlocked ? " · Pro" : ""}</strong>
+              <button
+                type="button"
+                className={`toggle ${enabled ? "on" : ""}`}
+                onClick={() => {
+                  if (paid && !hubsUnlocked && !enabled) {
+                    onRequestPaywall?.(navName as View);
+                    return;
+                  }
+                  update({ [enableKey]: !enabled });
+                }}
+                aria-label={`${enabled ? "Hide" : "Show"} ${label}`}
+                aria-pressed={enabled}
+              >
+                <span />
+              </button>
+            </div>
+            {editing ? (
+              <div className="accent-picker workspace-hub-picker">
+                {SPACE_COLORS.map(color => (
+                  <button
+                    key={`${key}-${color}`}
+                    type="button"
+                    className={current.toLowerCase() === color.toLowerCase() ? "selected" : ""}
+                    style={{ background: color }}
+                    onClick={() => {
+                      update({
+                        workspaceColors: {
+                          ...DEFAULT_WORKSPACE_COLORS,
+                          ...settings.workspaceColors,
+                          [key]: color,
+                        },
+                      });
+                      setEditingKey(null);
+                    }}
+                    aria-label={`Set ${label} color ${color}`}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SettingsView({ dark, setDark, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport, user, userId, onLogout, onOpenTask, onRestoreTask, onRequestPaywall }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; userId?: string | null; onLogout?: () => void; onOpenTask?: (id: number) => void; onRestoreTask?: (id: number) => void; onRequestPaywall?: (hub: View) => void }) {
+  const archivedTasks = tasks.filter((task) => task.done || task.canceled || task.status === "Done" || task.status === "Canceled");
+  const [archivesOpen, setArchivesOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<SettingsBentoSection | "account" | null>(null);
+  const requestNotifications = async () => {
+    if (!("Notification" in window)) {
+      flash("Notifications are not supported here");
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    flash(permission === "granted" ? "Browser notifications enabled" : "Notifications not enabled");
+  };
+  const sectionMeta: Record<SettingsBentoSection | "account", { title: string; blurb: string }> = {
+    appearance: { title: "Appearance", blurb: "Theme, accent, density, and capture shortcuts." },
+    hubs: { title: "Hubs", blurb: "Choose which spaces show in the sidebar." },
+    connections: { title: "Connections", blurb: "Gmail, calendars, assistant access, and calendar defaults." },
+    focus: { title: "Focus", blurb: "Default session length and energy." },
+    privacy: { title: "Privacy & data", blurb: "Export, sync, archives, subscription, and session replay." },
+    notifications: { title: "Notifications", blurb: "Digest, focus nudges, and calendar alerts." },
+    account: { title: "Account", blurb: "Profile and sign out." },
+  };
+  const panel = activeSection ? sectionMeta[activeSection] : null;
+
+  return (
+    <>
+      <div className="page-title">
+        <div>
+          <p className="eyebrow">Make it yours</p>
+          <h1>Settings</h1>
+          <p>{panel ? panel.blurb : "Appearance, hubs, notifications, connections, and account — in one place."}</p>
+        </div>
+        <div className="settings-title-actions">
+          {activeSection ? (
+            <button type="button" onClick={() => setActiveSection(null)}>← All settings</button>
+          ) : (
+            <button type="button" onClick={() => setActiveSection("account")}>Account</button>
+          )}
+          <button className="primary" type="button" onClick={onExport}><Download size={16} /> Export data</button>
+        </div>
+      </div>
+
+      {!activeSection ? (
+        <SettingsBentoGrid reduceMotion={settings.reduceMotion} onSelect={setActiveSection} />
+      ) : (
+        <div className="settings-bento-panel">
+          <header className="settings-bento-panel-head">
+            <button type="button" className="settings-bento-back" onClick={() => setActiveSection(null)}>← Back</button>
+            <h2>{panel?.title}</h2>
+          </header>
+
+          {activeSection === "appearance" && (
+            <section className="card settings-card">
+              <div className="settings-body settings-body-dense">
+                <div className="theme-options">
+                  <button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button>
+                  <button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button>
+                </div>
+                <div className="accent-picker">
+                  {SPACE_COLORS.map(color => (
+                    <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />
+                  ))}
+                </div>
+                <p className="settings-note">Default accent for Now, Tasks, and the rest of LifeOS.</p>
+                <div className="settings-toggle-pair">
+                  <ToggleRow title="Compact" desc="Tighter spacing." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} />
+                  <ToggleRow title="Reduce motion" desc="Calmer transitions." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} />
+                </div>
+                {settings.enableMasterOS !== false && <p className="settings-note">Mastery · type <code>/mos</code> on Now.</p>}
+                <div className="settings-panel-divider" />
+                <ToggleRow title="Show capture commands" desc="When you open Search anything (⌘K), show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} />
+                <div className="shortcut-list" style={{ marginTop: 12 }}>
+                  <div><kbd>⌘ K</kbd><span>Command bar / search</span></div>
+                  <div><kbd>/t</kbd><span>Add task</span></div>
+                  <div><kbd>/break</kbd><span>Take a break</span></div>
+                  <div><kbd>/focus</kbd><span>Start focus</span></div>
+                  <div><kbd>/w</kbd><span>Start ambient activity</span></div>
+                  <div><kbd>/a</kbd><span>AI task</span></div>
+                  <div><kbd>/spaces</kbd><span>Open Spaces</span></div>
+                  <div><kbd>/mos</kbd><span>Open Mastery (web / iPad)</span></div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {activeSection === "hubs" && (
+            <section className="card settings-card">
+              <div className="settings-body">
+                <WorkspaceHubsEditor settings={settings} update={update} onRequestPaywall={onRequestPaywall} />
+              </div>
+            </section>
+          )}
+
+          {activeSection === "notifications" && (
+            <section className="card settings-card">
+              <div className="card-head"><div /><button type="button" onClick={requestNotifications}>Enable browser</button></div>
+              <div className="settings-body">
+                <ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} />
+                <ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} />
+                <ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} />
+                <ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} />
+              </div>
+            </section>
+          )}
+
+          {activeSection === "focus" && (
+            <section className="card settings-card">
+              <div className="settings-body">
+                <div className="settings-grid-fields">
+                  <label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label>
+                  <label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label>
+                </div>
+                <p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p>
+              </div>
+            </section>
+          )}
+
+          {activeSection === "connections" && (
+            <div className="settings-bento-stack">
+              <section className="card settings-card">
+                <div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div>
+                <div className="settings-body">
+                  <ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} />
+                  <div className="settings-calendar-default">
+                    <span className="settings-field-label">Default view</span>
+                    <p className="settings-note" style={{ margin: "4px 0 10px" }}>Opens Calendar on this tab first.</p>
+                    <div className="calendar-mode-tabs" role="group" aria-label="Default calendar view">
+                      {(["upcoming", "month", "day"] as CalendarDefaultView[]).map(option => (
+                        <button key={option} type="button" className={normalizeCalendarDefaultView(settings.defaultCalendarView) === option ? "selected" : ""} onClick={() => update({ defaultCalendarView: option })}>
+                          {option === "upcoming" ? "Upcoming" : option === "month" ? "Month" : "Day"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p>
+                </div>
+              </section>
+              <GmailIntegration user={user} flash={flash} />
+              <CalendarConnections user={user} flash={flash} />
+              <AssistantAccessPanel user={user} userId={userId} flash={flash} />
+            </div>
+          )}
+
+          {activeSection === "privacy" && (
+            <div className="settings-bento-stack">
+              <section className="card settings-card">
+                <div className="settings-body">
+                  <div className="data-stats">
+                    <span>{tasks.length}<small>priorities</small></span>
+                    <span>{projects.length}<small>projects</small></span>
+                    <span>{brainItems.length}<small>brain</small></span>
+                  </div>
+                  <SessionReplaySettingsRow />
+                  <div className="settings-actions">
+                    {onSync && <button type="button" onClick={onSync}><Download size={15} /> Sync from cloud</button>}
+                    <button type="button" onClick={onExport}><Download size={15} /> Export JSON</button>
+                    <button type="button" onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button>
+                    <button type="button" className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button>
+                  </div>
+                  <p className="settings-note">All your data syncs to the cloud. Session replay stays off unless you opt in; inputs are always masked.</p>
+                </div>
+              </section>
+              <SubscriptionCheckoutCard
+                entitlement={settings.entitlement}
+                onEntitlementChange={(entitlement) => {
+                  update({ entitlement });
+                  flash(!entitlement.expiresAt ? "LifeOS Pro unlocked for life." : entitlement.status === "promo" ? "Paid hubs unlocked for one year." : "LifeOS Pro unlocked for paid hubs.");
+                }}
+                onSubscribe={(offerId) => {
+                  const label = offerId === "pro-lifetime" ? "lifetime" : offerId === "pro-yearly" ? "annual" : "monthly";
+                  flash(`Selected ${label} plan — finish store checkout when available, or redeem a promo code.`);
+                }}
+              />
+              <section className="card settings-card settings-archives-card">
+                <div className="card-head">
+                  <button type="button" className="settings-archives-toggle" aria-expanded={archivesOpen} onClick={() => setArchivesOpen(open => !open)}>
+                    <div><span className="section-icon orange"><Archive size={14} /></span><h2>Archives</h2><ChevronDown size={16} className={`settings-archives-caret${archivesOpen ? " open" : ""}`} aria-hidden /></div>
+                    <span className="count">{archivedTasks.length}</span>
+                  </button>
+                </div>
+                {archivesOpen ? (
+                  <div className="settings-body">
+                    <p className="settings-note">Done and canceled tasks live here so your active lists stay clear.</p>
+                    <div className="agenda-list">
+                      {archivedTasks.length ? archivedTasks.slice(0, 40).map((task) => (
+                        <div key={task.id} className="agenda-item compact archived-task-row">
+                          <i style={{ background: task.color || "var(--accent)" }} />
+                          <button type="button" className="archived-task-open" onClick={() => onOpenTask?.(task.id)}>
+                            <strong>{task.title}</strong>
+                            <p>{task.canceled || task.status === "Canceled" ? "Canceled" : "Done"}{task.project ? ` · ${task.project}` : ""}{task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</p>
+                          </button>
+                          <button type="button" className="archived-task-restore" onClick={() => onRestoreTask?.(task.id)}>Restore</button>
+                        </div>
+                      )) : (
+                        <div className="priority-empty"><strong>No archived tasks yet.</strong><p>When you mark something done or canceled, it shows up here.</p></div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            </div>
+          )}
+
+          {activeSection === "account" && (
+            <section className="card settings-card workspace-settings">
+              <div className="settings-body">
+                <div className="workspace-profile">
+                  <div className="avatar">{user?.email?.charAt(0).toUpperCase() || "U"}</div>
+                  <div><strong>{user?.displayName || "User"}</strong><p>{user?.email}</p></div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  style={{ marginTop: "16px", width: "100%", padding: "8px 12px", background: "rgba(255,107,107,0.1)", color: "#ff6b6b", border: "1px solid rgba(255,107,107,0.3)", borderRadius: "6px", fontSize: "13px", cursor: "pointer" }}
+                >
+                  Sign out
+                </button>
+                <p className="settings-note" style={{ marginTop: "16px" }}>Your data is securely stored in the cloud and synced across all your devices.</p>
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function BrainView({ items, onCapture, onArchive, onConvertToTask }: { items: string[]; onCapture: () => void; onArchive: (index: number) => void; onConvertToTask: (index: number, text: string) => void }) {
+  const [newest, setNewest] = useState(true);
+  const visibleItems = (newest ? items : [...items].reverse()).map((item, index) => ({ item, sourceIndex: newest ? index : items.length - 1 - index }));
+  return <><div className="page-title"><div><p className="eyebrow">Capture first. Organize later.</p><h1>Brain inbox</h1><p>A safe place for everything on your mind.</p></div><button className="primary" onClick={onCapture}><Plus size={16} /> Capture thought</button></div><div className="brain-layout"><section className="card brain-list"><div className="brain-filter"><strong>{items.length} thoughts</strong><button onClick={() => setNewest(value => !value)}>{newest ? "Newest" : "Oldest"} first <ChevronDown size={14} /></button></div>{visibleItems.map(({ item, sourceIndex }) => <div className="brain-row" key={`${item}-${sourceIndex}`}><div className="brain-dot"><Sparkles size={15} /></div><div><strong>{item}</strong><p>Captured {sourceIndex === 0 ? "just now" : `${sourceIndex + 1} hours ago`} · Unsorted</p></div><button aria-label={`Create task from ${item}`} title="Create task" onClick={() => onConvertToTask(sourceIndex, item)}><ListTodo size={15} /></button><button aria-label={`Delete ${item}`} title="Delete thought" onClick={() => onArchive(sourceIndex)}><Trash2 size={15} /></button></div>)}</section><aside className="brain-aside"><div className="soft-card"><Inbox size={20} /><strong>Inbox zero is not the goal.</strong><p>Your brain is for having ideas, not holding them. Capture freely; sort when you’re ready.</p></div></aside></div></>;
+}
+
+function ResourcesView({ resources, classes, onUpload, onDelete, onReplace, onDownload }: { resources: Resource[]; classes: ClassRecord[]; onUpload: (file: File) => void | Promise<void>; onDelete: (id: string) => void; onReplace: (id: string, file: File) => void; onDownload: (resource: Resource) => void | Promise<void> }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleUpload = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.onchange = async (e: any) => {
+      if (e.target.files[0]) {
+        setIsUploading(true);
+        try {
+          await onUpload(e.target.files[0]);
+        } catch {
+          // uploadResource owns the error message; this keeps the button usable.
+        } finally {
+          setIsUploading(false);
+        }
+      }
+    };
+    input.click();
+  };
+
+  const handleReplace = (id: string) => {
+    setSelectedId(id);
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.onchange = async (e: any) => {
+      if (e.target.files[0]) {
+        try {
+          await onReplace(id, e.target.files[0]);
+        } catch {
+          // replaceResource owns the error message; this clears the busy state.
+        } finally {
+          setSelectedId(null);
+        }
+      }
+    };
+    input.click();
+  };
+
+  return <>
+    <div className="page-title">
+      <div style={{ flex: 1 }}>
+        <p className="eyebrow">Keep & organize</p>
+        <h1>Resources</h1>
+        <p>Download, replace, or remove files and assets.</p>
+      </div>
+      <button onClick={handleUpload} disabled={isUploading} style={{ padding: '8px 16px', fontSize: '14px', background: '#625af6', color: '#fff', border: 'none', borderRadius: '6px', cursor: isUploading ? 'not-allowed' : 'pointer', opacity: isUploading ? 0.6 : 1, whiteSpace: 'nowrap', flexShrink: 0, marginTop: '2px' }}>
+        {isUploading ? 'Uploading...' : '+ Upload file'}
+      </button>
+    </div>
+    <div className="brain-layout">
+      <section className="card brain-list">
+        {resources.length ? (
+          resources.map(resource => (
+            <div className="brain-row" key={resource.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between' }}>
+              <div style={{ flex: 1 }}>
+                <strong>{resource.name}</strong>
+                <p>{classes.find(item => item.id === resource.classId)?.code ?? "Unfiled"} · {resource.type} · {formatResourceSize(resource.size)} · {new Date(resource.uploadedAt).toLocaleDateString()}</p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => onDownload(resource)} title="Download" style={{ padding: '6px 12px', fontSize: '12px', background: '#625af6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Download</button>
+                <button onClick={() => handleReplace(resource.id)} title="Replace" disabled={selectedId === resource.id} style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(200, 200, 200, 0.2)', border: '1px solid rgba(200, 200, 200, 0.4)', borderRadius: '4px', cursor: 'pointer' }}>Replace</button>
+                <button onClick={() => onDelete(resource.id)} title="Delete" style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(255, 107, 107, 0.2)', color: '#ff6b6b', border: '1px solid rgba(255, 107, 107, 0.3)', borderRadius: '4px', cursor: 'pointer' }}>Delete</button>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="priority-empty">
+            <strong>No resources yet.</strong>
+            <p>Upload files and keep them organized in one place.</p>
+          </div>
+        )}
+      </section>
+    </div>
+  </>;
+}
+
+function AuthEntry({ onLoginSuccess }: { onLoginSuccess: () => void }) {
+  const [showLogin, setShowLogin] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setShowLogin(hasCompletedPreAuthOnboarding());
+  }, []);
+
+  if (showLogin === null) {
+    return (
+      <div className="ob-shell" aria-busy="true">
+        <div className="ob-card" style={{ gridTemplateColumns: "1fr", maxWidth: 420 }}>
+          <div className="ob-panel">
+            <div className="ob-brand">LifeOS</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!showLogin) {
+    return (
+      <PreAuthOnboarding
+        onFinished={() => {
+          markPreAuthOnboardingComplete();
+          setShowLogin(true);
+        }}
+      />
+    );
+  }
+
+  return <LoginPage onLoginSuccess={onLoginSuccess} />;
+}
+
+function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [ageBlocked, setAgeBlocked] = useState(false);
+
+  const requireAge = () => {
+    if (ageConfirmed) {
+      setAgeBlocked(false);
+      return true;
+    }
+    setAgeBlocked(true);
+    setError(AGE_GATE_BLOCKED_MESSAGE);
+    return false;
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (!requireAge()) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      await signInWithGoogle();
+    } catch (err: any) {
+      const code = typeof err?.code === "string" ? err.code : "";
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+        setError("Google sign-in was closed before it finished.");
+      } else if (code === "auth/popup-blocked") {
+        setError("Your browser blocked the Google sign-in window. Allow popups for LifeOS, then try again.");
+      } else if (code === "auth/unauthorized-domain") {
+        setError("This LifeOS website is not authorized in Firebase yet.");
+      } else if (typeof err?.message === "string" && /timed out|iPhone app shell|warming up|Add EXPO_PUBLIC_GOOGLE/i.test(err.message)) {
+        setError(err.message);
+      } else {
+        setError(err?.message || "Google sign-in failed. Please try again.");
+      }
+      setIsLoading(false);
+    }
+  };
+
+  const handleTestLogin = () => {
+    if (!requireAge()) return;
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(STORAGE_KEYS.USER_ID, TEST_USER.ID);
+      logger.debug('Test login initiated');
+    }
+    onLoginSuccess();
+  };
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '100vh',
+      background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%)',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      color: '#fff',
+      padding: '20px'
+    }}>
+      <div style={{
+        textAlign: 'center',
+        maxWidth: '400px',
+        width: '100%'
+      }}>
+        <div style={{
+          fontSize: '48px',
+          marginBottom: '12px',
+          fontWeight: '600'
+        }}>LifeOS</div>
+
+        <p style={{
+          fontSize: '14px',
+          opacity: 0.7,
+          marginBottom: '40px',
+          lineHeight: '1.6'
+        }}>
+          Your personal operating system for priorities, focus, and growth
+        </p>
+
+        <AgeGateCheckbox
+          tone="dark"
+          onChange={(confirmed) => {
+            setAgeConfirmed(confirmed);
+            if (confirmed) {
+              setAgeBlocked(false);
+              setError(null);
+            }
+          }}
+        />
+        {ageBlocked ? <p role="alert" style={ageGateBlockedStyle("dark")}>{AGE_GATE_BLOCKED_MESSAGE}</p> : null}
+
+        <div style={{ marginBottom: '32px' }}>
+          <div style={{
+            fontSize: '12px',
+            opacity: 0.6,
+            marginBottom: '12px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px'
+          }}>New here?</div>
+          <button
+            onClick={handleGoogleSignIn}
+            disabled={isLoading || !ageConfirmed}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              background: '#625af6',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: isLoading || !ageConfirmed ? 'not-allowed' : 'pointer',
+              opacity: isLoading || !ageConfirmed ? 0.6 : 1,
+              transition: 'all 0.2s',
+              marginBottom: '16px'
+            }}
+            onMouseEnter={(e) => !isLoading && ageConfirmed && (e.currentTarget.style.background = '#7c6fff')}
+            onMouseLeave={(e) => !isLoading && ageConfirmed && (e.currentTarget.style.background = '#625af6')}
+          >
+            {isLoading ? 'Creating account...' : 'Create Account with Google'}
+          </button>
+        </div>
+
+        <div style={{ marginBottom: '24px', opacity: 0.5 }}>
+          <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+        </div>
+
+        <div style={{
+          fontSize: '12px',
+          opacity: 0.6,
+          marginBottom: '12px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px'
+        }}>Returning user?</div>
+        <button
+          onClick={handleGoogleSignIn}
+          disabled={isLoading || !ageConfirmed}
+          style={{
+            width: '100%',
+            padding: '12px 16px',
+            background: 'transparent',
+            color: '#625af6',
+            border: '1px solid #625af6',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '500',
+            cursor: isLoading || !ageConfirmed ? 'not-allowed' : 'pointer',
+            opacity: isLoading || !ageConfirmed ? 0.6 : 1,
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => !isLoading && ageConfirmed && (e.currentTarget.style.background = 'rgba(98, 90, 246, 0.1)')}
+          onMouseLeave={(e) => !isLoading && ageConfirmed && (e.currentTarget.style.background = 'transparent')}
+        >
+          {isLoading ? 'Signing in...' : 'Sign in with Google'}
+        </button>
+
+        {error && (
+          <p style={{
+            fontSize: '12px',
+            color: '#ff6b6b',
+            marginTop: '12px'
+          }}>
+            {error}
+          </p>
+        )}
+
+        {typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname) && (
+          <button
+            onClick={handleTestLogin}
+            disabled={!ageConfirmed}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              color: '#fff',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: '500',
+              cursor: ageConfirmed ? 'pointer' : 'not-allowed',
+              opacity: ageConfirmed ? 1 : 0.6,
+              transition: 'all 0.2s',
+              marginTop: '12px'
+            }}
+            onMouseEnter={(e) => ageConfirmed && (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)')}
+            onMouseLeave={(e) => ageConfirmed && (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
+          >
+            Dev: Test Login
+          </button>
+        )}
+
+        <p style={{
+          fontSize: '12px',
+          opacity: 0.5,
+          marginTop: '24px'
+        }}>
+          Your data stays private and syncs across all your devices.{" "}
+          <a href="/legal/dmca" style={{ color: '#938cff' }}>DMCA</a>
+          {" · "}
+          <a href="/unsubscribe" style={{ color: '#938cff' }}>Email preferences</a>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ComingSoon({ view, onFocus }: { view: View; onFocus: () => void }) {
+  const Icon = view === "Calendar" ? CalendarDays : view === "Knowledge" ? Library : view === "Resources" ? Archive : Settings;
+  return <div className="empty-state"><div><Icon size={28} /></div><p className="eyebrow">Part of your LifeOS</p><h1>{view}</h1><p>This space is ready for the next layer of your system. For now, the cockpit keeps you centered on what matters today.</p><button className="primary" onClick={onFocus}><Focus size={16} /> Return to focus</button></div>;
+}
+
+function EmptyFocus({ onExit, onNewTask }: { onExit: () => void; onNewTask: () => void }) {
+  return <div className="focus-mode empty-focus"><header><div className="brand"><div className="brand-mark light"><span /><span /><span /></div><span>LifeOS</span></div><button onClick={onExit}><X size={16} /> Exit focus <kbd>Esc</kbd></button></header><main><section className="empty-state"><div><Focus size={28} /></div><p className="eyebrow">Nothing to focus on</p><h1>Your priorities are clear.</h1><p>You deleted every priority, and LifeOS respected it. Add a new one when you’re ready to choose the next lane.</p><button className="primary" onClick={onNewTask}><Plus size={16} /> Add priority</button></section></main></div>;
+}
+
+function TaskWorkspace({ task, tasks, projects, classes, onExit, onSwitch, onUpdate, onFocus, onMarkDone, onDelete }: { task: Task; tasks: Task[]; projects: Project[]; classes: ClassRecord[]; onExit: () => void; onSwitch: (id: number) => void; onUpdate: (updates: Partial<Task>) => void; onFocus: () => void; onMarkDone: () => void; onDelete: () => void }) {
+  const [taskFilter, setTaskFilter] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const { createBreakdown, loading: breakdownLoading, error: breakdownError } = useTaskBreakdown();
+  const checklist = task.checklist ?? [];
+  const checklistProgress = checklist.map((_, index) => task.checklistProgress?.[index] ?? false);
+  const customProperties = task.customProperties ?? [];
+  const status = getTaskStatus(task);
+  const dateValue = /^\d{4}-\d{2}-\d{2}$/.test(task.due) ? task.due : "";
+  const visibleTasks = tasks.filter(item => `${item.title} ${item.project}`.toLowerCase().includes(taskFilter.toLowerCase()));
+  const spaceValue = task.classId ? `class:${task.classId}` : task.project !== "Inbox" ? `project:${task.project}` : "";
+
+  const updateSpace = (value: string) => {
+    if (value.startsWith("class:")) {
+      const classId = value.slice(6);
+      const nextClass = classes.find(item => item.id === classId);
+      onUpdate({ classId, project: "Inbox", color: nextClass?.color ?? task.color, academicType: task.academicType ?? "Assignment" });
+      return;
+    }
+    if (value.startsWith("project:")) {
+      const projectName = value.slice(8);
+      const project = projects.find(item => item.name === projectName);
+      onUpdate({ classId: undefined, project: projectName, color: project?.color ?? "#625af6" });
+      return;
+    }
+    onUpdate({ classId: undefined, project: "Inbox", color: "#625af6" });
+  };
+  const updateChecklistItem = (index: number, value: string) => {
+    onUpdate({ checklist: checklist.map((item, itemIndex) => itemIndex === index ? value : item) });
+  };
+  const toggleChecklistItem = (index: number) => {
+    onUpdate({ checklistProgress: checklistProgress.map((value, itemIndex) => itemIndex === index ? !value : value) });
+  };
+  const removeChecklistItem = (index: number) => {
+    onUpdate({
+      checklist: checklist.filter((_, itemIndex) => itemIndex !== index),
+      checklistProgress: checklistProgress.filter((_, itemIndex) => itemIndex !== index),
+    });
+  };
+  const moveChecklistItem = (index: number, direction: -1 | 1) => {
+    const destination = index + direction;
+    if (destination < 0 || destination >= checklist.length) return;
+    const nextChecklist = [...checklist];
+    const nextProgress = [...checklistProgress];
+    [nextChecklist[index], nextChecklist[destination]] = [nextChecklist[destination], nextChecklist[index]];
+    [nextProgress[index], nextProgress[destination]] = [nextProgress[destination], nextProgress[index]];
+    onUpdate({ checklist: nextChecklist, checklistProgress: nextProgress });
+  };
+  const updateCustomProperty = (id: string, updates: Partial<TaskProperty>) => {
+    onUpdate({ customProperties: customProperties.map(property => property.id === id ? { ...property, ...updates } : property) });
+  };
+  const addAiChecklist = async () => {
+    const steps = await createBreakdown({ title: task.title, notes: task.notes, focusMinutes: task.focusMinutes, energy: task.energy });
+    if (!steps) return;
+    onUpdate({ checklist: [...checklist, ...steps], checklistProgress: [...checklistProgress, ...steps.map(() => false)] });
+  };
+
+  return <motion.div className="task-workspace" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+    <header className="task-page-topbar">
+      <button className="task-page-back" onClick={onExit}><ArrowRight size={15} /> Back to LifeOS</button>
+      <div className="task-page-save"><i /> Autosave on</div>
+      {status !== "Done" && status !== "Canceled" && <button className="task-page-done" onClick={onMarkDone}><CheckCircle2 size={15} /> Mark as done</button>}
+      {(status === "Done" || status === "Canceled") && <button className="task-page-done" onClick={() => onUpdate({ status: "Not started", done: false, canceled: false, completedAt: undefined })}><RefreshCw size={15} /> Restore to active</button>}
+      <button className="task-page-focus" onClick={onFocus} disabled={status === "Canceled" || status === "Done"}><Focus size={15} /> Start focus</button>
+      <button className="task-page-close" onClick={onExit} aria-label="Close task page"><X size={18} /></button>
+    </header>
+    <main className="task-page-shell">
+      <section className="task-page-main">
+        <div className="task-page-icon" style={{ color: task.color, background: `${task.color}16` }}><CheckCircle2 size={27} /></div>
+        <textarea className="task-page-title" aria-label="Task name" value={task.title} onChange={event => onUpdate({ title: event.target.value })} rows={1} placeholder="Untitled task" />
+        <p className="task-page-hint">Everything here belongs to this task and syncs with your LifeOS.</p>
+
+        <section className="task-properties">
+          <h2>Properties</h2>
+          <div className="task-property-grid">
+            <label><span><Circle size={14} /> Status</span><select value={status} onChange={event => onUpdate({ status: event.target.value as TaskStatus })}>{(["Not started", "In progress", "Waiting", "Blocked", "Done", "Canceled"] as TaskStatus[]).map(value => <option key={value}>{value}</option>)}</select></label>
+            <label><span><LayoutGrid size={14} /> Space</span><select value={spaceValue} onChange={event => updateSpace(event.target.value)}><option value="">Inbox / no space</option>{classes.length > 0 && <optgroup label="Classes">{classes.map(item => <option key={item.id} value={`class:${item.id}`}>{item.code} — {item.name}</option>)}</optgroup>}{projects.length > 0 && <optgroup label="Projects & maintenance">{projects.map(project => <option key={project.name} value={`project:${project.name}`}>{project.name}</option>)}</optgroup>}</select></label>
+            <label><span><CalendarDays size={14} /> Due date</span><input type="date" value={dateValue} onChange={event => onUpdate({ due: event.target.value })} /></label>
+            <label><span><Clock3 size={14} /> Start time</span><input type="time" value={task.startTime ?? ""} onChange={event => onUpdate({ startTime: event.target.value || undefined })} /></label>
+            <label><span><Flame size={14} /> Priority</span><select value={task.priority} onChange={event => onUpdate({ priority: event.target.value as Task["priority"] })}><option>High</option><option>Medium</option><option>Low</option></select></label>
+            <label><span><TimerReset size={14} /> Focus estimate</span><div className="task-number-field"><input type="number" min={5} max={240} step={5} value={task.focusMinutes} onChange={event => onUpdate({ focusMinutes: Math.max(5, Math.min(240, Number(event.target.value) || 5)) })} /><em>minutes</em></div></label>
+            <label><span><Zap size={14} /> Energy</span><select value={task.energy} onChange={event => onUpdate({ energy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label>
+            <label><span><RefreshCw size={14} /> Repeat</span><select value={task.recurringDays ?? 0} onChange={event => onUpdate({ recurringDays: Number(event.target.value) || undefined })}><option value={0}>Does not repeat</option><option value={7}>Every week</option><option value={14}>Every 2 weeks</option><option value={30}>Every month</option></select></label>
+            <label><span><Bell size={14} /> Follow up</span><input type="date" value={task.followUpDate ?? ""} onChange={event => onUpdate({ followUpDate: event.target.value || undefined, status: event.target.value ? "Waiting" : task.status })} /></label>
+          </div>
+        </section>
+
+        <section className="task-next-action"><div className="task-section-heading"><div><h2>Next visible step</h2><p>Make returning to this task frictionless.</p></div><Focus size={18} /></div><input value={task.nextAction ?? ""} onChange={event => onUpdate({ nextAction: event.target.value, handoffNote: event.target.value })} placeholder="Open the course page and finish lesson 2…" /></section>
+
+        {task.classId && <section className="task-academic-properties">
+          <div className="task-section-heading"><div><h2>University details</h2><p>The stuff that actually matters when deadlines start stacking up.</p></div><GraduationCap size={18} /></div>
+          <div className="task-property-grid">
+            <label><span><BookOpen size={14} /> Work type</span><select value={task.academicType ?? "Assignment"} onChange={event => onUpdate({ academicType: event.target.value as AcademicItemType })}>{(["Assignment", "Project", "Exam", "Quiz", "Lab", "Reading", "Discussion"] as AcademicItemType[]).map(value => <option key={value}>{value}</option>)}</select></label>
+            <label><span><Flame size={14} /> Grade weight</span><div className="task-number-field"><input type="number" min={0} max={100} step={0.5} value={task.gradeWeight ?? ""} placeholder="0" onChange={event => onUpdate({ gradeWeight: event.target.value === "" ? undefined : Math.max(0, Math.min(100, Number(event.target.value))) })} /><em>%</em></div></label>
+            {(task.academicType === "Quiz" || task.academicType === "Exam") && <><label><span><BookOpen size={14} /> Total points</span><input type="number" min={1} step={0.5} value={task.pointsPossible ?? ""} placeholder="100" onChange={event => onUpdate({ pointsPossible: event.target.value === "" ? undefined : Math.max(0, Number(event.target.value)) })} /></label><label><span><CheckCircle2 size={14} /> Points earned</span><input type="number" min={0} max={task.pointsPossible} step={0.5} value={task.pointsEarned ?? ""} placeholder="Add after grading" onChange={event => onUpdate({ pointsEarned: event.target.value === "" ? undefined : Math.max(0, Math.min(task.pointsPossible ?? Infinity, Number(event.target.value))) })} /></label>{task.pointsPossible && <div className="academic-points-summary">{task.pointsEarned === undefined ? `${task.pointsPossible} points possible` : `${task.pointsEarned}/${task.pointsPossible} points · ${((task.pointsEarned / task.pointsPossible) * 100).toFixed(1)}%`}</div>}</>}
+            <label className="academic-submission-field"><span><ExternalLink size={14} /> Submission / LMS</span><input value={task.submission ?? ""} onChange={event => onUpdate({ submission: event.target.value })} placeholder="Canvas link, room, professor email…" /></label>
+          </div>
+        </section>}
+
+        <section className="task-custom-properties">
+          <div className="task-section-heading"><div><h2>Custom properties</h2><p>Add whatever this task needs: owner, link, context, location, outcome — your call.</p></div><button onClick={() => onUpdate({ customProperties: [...customProperties, { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, name: "New property", value: "" }] })}><Plus size={14} /> Add property</button></div>
+          {customProperties.length ? <div className="custom-property-list">{customProperties.map(property => <div key={property.id}><input aria-label="Property name" value={property.name} onChange={event => updateCustomProperty(property.id, { name: event.target.value })} /><input aria-label={`${property.name} value`} value={property.value} onChange={event => updateCustomProperty(property.id, { value: event.target.value })} placeholder="Empty" /><button aria-label={`Delete ${property.name}`} onClick={() => onUpdate({ customProperties: customProperties.filter(item => item.id !== property.id) })}><Trash2 size={14} /></button></div>)}</div> : <div className="task-inline-empty">No custom properties yet.</div>}
+        </section>
+
+        <section className="task-notes-section">
+          <div className="task-section-heading"><div><h2>Notes</h2><p>Brain dump, links, decisions, rough drafts, or the exact next move.</p></div><FileText size={18} /></div>
+          <textarea value={task.notes ?? ""} onChange={event => onUpdate({ notes: event.target.value })} placeholder="Start writing…" aria-label="Task notes" />
+        </section>
+
+        <section className="task-page-checklist">
+          <div className="task-section-heading"><div><h2>Checklist</h2><p>These steps also appear inside the focus session.</p></div><div style={{ display: "flex", gap: "8px" }}><button onClick={addAiChecklist} disabled={breakdownLoading}><Sparkles size={14} /> {breakdownLoading ? "Making steps…" : "Break into steps"}</button><button onClick={() => onUpdate({ checklist: [...checklist, "New step"], checklistProgress: [...checklistProgress, false] })}><Plus size={14} /> Add step</button></div></div>
+          {breakdownError && <p style={{ color: "#cf625a", fontSize: "12px", margin: "0 0 12px" }}>{breakdownError}</p>}
+          {checklist.length ? <div className="task-page-checklist-list">{checklist.map((item, index) => <div className={checklistProgress[index] ? "checked" : ""} key={`${index}-${item}`}>
+            <button className="task-page-check" aria-label={checklistProgress[index] ? "Mark incomplete" : "Mark complete"} onClick={() => toggleChecklistItem(index)}>{checklistProgress[index] && <Check size={13} />}</button>
+            <input value={item} onChange={event => updateChecklistItem(index, event.target.value)} aria-label={`Checklist step ${index + 1}`} />
+            <div className="task-step-order"><button disabled={index === 0} onClick={() => moveChecklistItem(index, -1)} aria-label="Move step up">↑</button><button disabled={index === checklist.length - 1} onClick={() => moveChecklistItem(index, 1)} aria-label="Move step down">↓</button></div>
+            <button className="task-step-delete" onClick={() => removeChecklistItem(index)} aria-label={`Delete ${item}`}><Trash2 size={14} /></button>
+          </div>)}</div> : <div className="task-inline-empty">No steps yet. Add one when the next move becomes clear.</div>}
+        </section>
+
+        <section className="task-danger-zone">
+          {!confirmDelete ? <button onClick={() => setConfirmDelete(true)}><Trash2 size={14} /> Delete task</button> : <div><span>This permanently deletes the task.</span><button onClick={() => setConfirmDelete(false)}>Keep it</button><button className="confirm-delete" onClick={onDelete}>Yes, delete</button></div>}
+        </section>
+      </section>
+
+      <aside className="task-page-switcher">
+        <div><p>SWITCH TASK</p><strong>{tasks.length} tasks</strong></div>
+        <div className="task-switch-search"><Search size={14} /><input value={taskFilter} onChange={event => setTaskFilter(event.target.value)} placeholder="Find a task…" /></div>
+        <div className="task-switch-list">{visibleTasks.map(item => <button key={item.id} className={item.id === task.id ? "active" : ""} onClick={() => { setConfirmDelete(false); onSwitch(item.id); }}><i style={{ background: item.color }} /><span><strong>{item.title || "Untitled task"}</strong><small>{item.project} · {getTaskStatus(item)}</small></span>{item.id === task.id && <Check size={14} />}</button>)}</div>
+      </aside>
+    </main>
+  </motion.div>;
+}
+
+function FullscreenProject({ project, tasks, onExit, linkTask, onOpenTask }: { project: Project; tasks: Task[]; onExit: () => void; linkTask: (id: number, project: Project) => void; onOpenTask: (id: number) => void }) {
+  const linkedTasks = tasks.filter(task => task.project === project.name);
+  const activeTasks = linkedTasks.filter(task => !task.done && !task.canceled);
+  const availableTasks = tasks.filter(task => task.project !== project.name && !task.done && !task.canceled);
+  const topTask = [...activeTasks].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority])[0];
+  const nextDue = [...activeTasks].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0];
+  return <div style={{ minHeight: "100vh", background: "var(--canvas)", display: "flex", flexDirection: "column" }}>
+    <div style={{ height: "65px", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", padding: "0 38px", gap: "16px" }}>
+      <button onClick={onExit} style={{ border: "1px solid var(--line)", background: "var(--panel)", cursor: "pointer", borderRadius: "8px", padding: "8px 12px", fontSize: "11px", display: "flex", alignItems: "center", gap: "6px" }}><ArrowRight size={14} style={{ transform: "rotate(180deg)" }} /> Back</button>
+      <h1 style={{ margin: 0, fontSize: "24px", flex: 1 }}>{project.name}</h1>
+      <span style={{ fontSize: "12px", color: "var(--muted)" }}>{project.kind === "maintenance" ? "Maintenance system" : "Finishable project"}</span>
+    </div>
+    <div style={{ flex: 1, overflow: "auto", padding: "32px 48px" }}>
+      <div style={{ maxWidth: "1000px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "32px" }}>
+          <div style={{ border: "1px solid var(--line)", borderRadius: "12px", padding: "16px", background: "var(--panel)" }}>
+            <span style={{ display: "block", color: "var(--muted)", fontSize: "9px", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: "8px" }}>Next due</span>
+            <strong style={{ fontSize: "14px" }}>{nextDue?.due ?? "Nothing due"}</strong>
+          </div>
+          <div style={{ border: "1px solid var(--line)", borderRadius: "12px", padding: "16px", background: "var(--panel)" }}>
+            <span style={{ display: "block", color: "var(--muted)", fontSize: "9px", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: "8px" }}>Highest priority</span>
+            <strong style={{ fontSize: "14px" }}>{topTask?.priority ?? "Clear"}</strong>
+          </div>
+          <div style={{ border: "1px solid var(--line)", borderRadius: "12px", padding: "16px", background: "var(--panel)" }}>
+            <span style={{ display: "block", color: "var(--muted)", fontSize: "9px", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: "8px" }}>Energy load</span>
+            <strong style={{ fontSize: "14px" }}>{topTask ? `${topTask.energy} · ${topTask.focusMinutes}m` : "Clear"}</strong>
+          </div>
+        </div>
+        <div style={{ border: "1px solid var(--line)", borderRadius: "12px", overflow: "hidden", marginBottom: "32px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 80px 105px", gap: "10px", alignItems: "center", background: "var(--canvas)", padding: "10px 12px", color: "var(--muted)", fontSize: "8px", textTransform: "uppercase", letterSpacing: ".08em", borderBottom: "1px solid var(--line)" }}>
+            <span>Task</span><span>Due</span><span>Priority</span><span>Focus</span>
+          </div>
+          {linkedTasks.length ? linkedTasks.map(task => <div key={task.id} style={{ display: "grid", gridTemplateColumns: "1fr 90px 80px 105px", gap: "10px", alignItems: "center", padding: "12px", borderTop: "1px solid var(--line)", opacity: task.done || task.canceled ? 0.5 : 1 }}>
+            <button onClick={() => onOpenTask(task.id)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left", fontWeight: 700, cursor: "pointer", textDecoration: task.done || task.canceled ? "line-through" : "none" }}>{task.title}</button>
+            <span style={{ color: "var(--muted)" }}>{task.canceled ? "Canceled" : task.done ? "Done" : formatDueDate(task.due)}</span>
+            <em style={{ fontStyle: "normal", fontSize: "8px", padding: "3px 7px", borderRadius: "10px", width: "max-content", background: task.priority === "High" ? "#cf625a15" : task.priority === "Medium" ? "#cc8a2515" : "#4f8bc415", color: task.priority === "High" ? "#cf625a" : task.priority === "Medium" ? "#cc8a25" : "#4f8bc4" }}>{task.priority}</em>
+            <span style={{ color: "var(--muted)" }}>{task.focusMinutes}m · {task.energy}</span>
+          </div>) : <div style={{ padding: "24px", textAlign: "center", color: "var(--muted)" }}>No tasks linked yet</div>}
+        </div>
+        {availableTasks.length > 0 && <div style={{ border: "1px solid var(--line)", borderRadius: "12px", padding: "16px", background: "var(--panel)" }}>
+          <div style={{ marginBottom: "16px" }}>
+            <strong style={{ display: "block", fontSize: "11px", marginBottom: "4px" }}>Link existing tasks</strong>
+            <span style={{ color: "var(--muted)", fontSize: "9px", display: "block" }}>Pull loose tasks into {project.name}</span>
+          </div>
+          <div style={{ display: "grid", gap: "8px" }}>
+            {availableTasks.slice(0, 10).map(task => <button key={task.id} onClick={() => linkTask(task.id, project)} style={{ border: "1px solid var(--line)", background: "var(--canvas)", borderRadius: "8px", padding: "10px", display: "grid", gridTemplateColumns: "1fr auto", gap: "10px", alignItems: "center", cursor: "pointer", textAlign: "left", fontSize: "10px" }}>
+              <div>
+                <strong style={{ display: "block" }}>{task.title}</strong>
+                <small style={{ color: "var(--muted)", display: "block", marginTop: "4px" }}>{task.project} · {formatDueDate(task.due)} · {task.focusMinutes}m</small>
+              </div>
+              <em style={{ fontStyle: "normal", fontSize: "8px", padding: "3px 7px", borderRadius: "10px", background: task.priority === "High" ? "#cf625a15" : task.priority === "Medium" ? "#cc8a2515" : "#4f8bc415", color: task.priority === "High" ? "#cf625a" : task.priority === "Medium" ? "#cc8a25" : "#4f8bc4" }}>{task.priority}</em>
+            </button>)}
+          </div>
+        </div>}
+      </div>
+    </div>
+  </div>;
+}
+
+function FloatingFocusDock({ task, onResume, onUpdateSession, onEnd }: { task: Task; onResume: (session: FocusSessionUpdate) => void; onUpdateSession: (session: FocusSessionUpdate) => void; onEnd: () => void }) {
+  const [seconds, setSeconds] = useState(() => getTaskFocusSeconds(task));
+  const [running, setRunning] = useState(Boolean(task.focusSessionRunning));
+  const secondsRef = useRef(seconds);
+  useEffect(() => { const next = getTaskFocusSeconds(task); setSeconds(next); secondsRef.current = next; }, [task]);
+  useEffect(() => { setRunning(Boolean(task.focusSessionRunning)); }, [task.focusSessionRunning, task.id]);
+  useEffect(() => { secondsRef.current = seconds; }, [seconds]);
+  useEffect(() => {
+    if (!running || seconds <= 0) return;
+    const id = window.setInterval(() => setSeconds(value => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(id);
+  }, [running, seconds]);
+  useEffect(() => {
+    if (seconds <= 0 && running) {
+      setRunning(false);
+      onUpdateSession({ remainingSeconds: 0, hasStarted: true, isRunning: false, halfwayPrompted: Boolean(task.focusHalfwayPrompted) });
+      return;
+    }
+    if (running && task.focusSessionRunning && seconds > 0 && seconds % 15 === 0) onUpdateSession({ remainingSeconds: seconds, hasStarted: true, isRunning: true, halfwayPrompted: Boolean(task.focusHalfwayPrompted), checkpoint: true });
+  }, [onUpdateSession, running, seconds, task.focusHalfwayPrompted, task.focusSessionRunning]);
+  const toggleRunning = () => {
+    const next = !running;
+    setRunning(next);
+    onUpdateSession({ remainingSeconds: secondsRef.current, hasStarted: true, isRunning: next, halfwayPrompted: Boolean(task.focusHalfwayPrompted) });
+  };
+  return <motion.aside className="floating-focus-dock" aria-label={running ? "Focus session continues" : "Focus session paused"} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 18 }} transition={{ duration: .2 }}><span className="floating-focus-orb"><Focus size={16} /></span><div className="floating-focus-copy"><small>{running ? "FOCUS CONTINUES" : "FOCUS PAUSED"}</small><strong>{task.title}</strong><span>{formatFocusTime(seconds)} left · your notes are safe</span></div><button className="floating-focus-resume" onClick={() => onResume({ remainingSeconds: secondsRef.current, hasStarted: true, isRunning: running, halfwayPrompted: Boolean(task.focusHalfwayPrompted) })}><Focus size={15} /> Open focus</button><button className="floating-focus-toggle" aria-label={running ? "Pause focus session" : "Continue focus session"} onClick={toggleRunning}>{running ? <Circle size={15} fill="currentColor" /> : <Focus size={15} />}</button><button className="floating-focus-end" aria-label="End this focus session" onClick={onEnd}><X size={17} /></button></motion.aside>;
+}
+
+function playFocusCue(frequency: number, duration = 0.12, volume = 0.04) {
+  if (typeof window === "undefined") return;
+  try {
+    const ctx = new AudioContext();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = frequency;
+    gain.gain.value = volume;
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + duration);
+    window.setTimeout(() => { void ctx.close(); }, (duration + 0.1) * 1000);
+  } catch {
+    /* optional audio */
+  }
+}
+
+function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, onUpdateChecklist, onUpdateChecklistProgress, onUpdateFocusSession, onComplete, onExit }: { task: Task; tasks: Task[]; soundEffectsEnabled: boolean; onUpdateNotes: (id: number, notes: string) => void; onSwitch: (id: number) => void; onUpdateChecklist: (id: number, checklist: string[]) => void; onUpdateChecklistProgress: (id: number, progress: boolean[]) => void; onUpdateFocusSession: (id: number, session: FocusSessionUpdate) => void; onComplete: (id: number) => void; onExit: (destination?: View) => void }) {
+  const totalSeconds = task.focusMinutes * 60;
+  const savedSeconds = getTaskFocusSeconds(task);
+  const [seconds, setSeconds] = useState(savedSeconds);
+  const [running, setRunning] = useState(Boolean(task.focusSessionRunning));
+  const [hasStarted, setHasStarted] = useState(Boolean(task.focusSessionStarted) || savedSeconds < totalSeconds);
+  const [halfwayPrompted, setHalfwayPrompted] = useState(Boolean(task.focusHalfwayPrompted));
+  const [breakStage, setBreakStage] = useState<"hidden" | "suggested" | "running">("hidden");
+  const [breakSeconds, setBreakSeconds] = useState(5 * 60);
+  const [checklist, setChecklist] = useState<string[]>(task.checklist ?? []);
+  const nextChecklist = task.checklist ?? [];
+  const [checks, setChecks] = useState<boolean[]>(() => task.checklistProgress?.length === nextChecklist.length ? task.checklistProgress : nextChecklist.map(() => false));
+  const [focusNotes, setFocusNotes] = useState(task.notes ?? "");
+  const [sounds, setSounds] = useState(false);
+  const noiseRef = useRef<{ context: AudioContext | null; source: AudioBufferSourceNode | null; gain: GainNode | null }>({ context: null, source: null, gain: null });
+  const secondsRef = useRef(seconds);
+  const hasStartedRef = useRef(hasStarted);
+  const runningRef = useRef(running);
+  const halfwayPromptedRef = useRef(halfwayPrompted);
+  const remoteRunningRef = useRef(Boolean(task.focusSessionRunning));
+  remoteRunningRef.current = Boolean(task.focusSessionRunning);
+  useEffect(() => { secondsRef.current = seconds; }, [seconds]);
+  useEffect(() => { hasStartedRef.current = hasStarted; }, [hasStarted]);
+  useEffect(() => { runningRef.current = running; }, [running]);
+  useEffect(() => { halfwayPromptedRef.current = halfwayPrompted; }, [halfwayPrompted]);
+  useEffect(() => {
+    const nextRunning = Boolean(task.focusSessionRunning);
+    const nextSeconds = getTaskFocusSeconds(task);
+    const nextStarted = Boolean(task.focusSessionStarted) || nextSeconds < totalSeconds;
+    setRunning(nextRunning);
+    runningRef.current = nextRunning;
+    setSeconds(nextSeconds);
+    secondsRef.current = nextSeconds;
+    setHasStarted(nextStarted);
+    hasStartedRef.current = nextStarted;
+    setHalfwayPrompted(Boolean(task.focusHalfwayPrompted));
+    if (nextRunning) setBreakStage("hidden");
+  }, [task.focusHalfwayPrompted, task.focusRemainingSeconds, task.focusSessionRunning, task.focusSessionStarted, task.focusUpdatedAt, task.id, totalSeconds]);
+  const saveFocusSession = useCallback((remainingSeconds = seconds, started = hasStarted, prompted = halfwayPrompted, isRunning = running) => {
+    onUpdateFocusSession(task.id, { remainingSeconds, hasStarted: started, isRunning, halfwayPrompted: prompted });
+  }, [hasStarted, halfwayPrompted, onUpdateFocusSession, running, seconds, task.id]);
+  useEffect(() => () => {
+    onUpdateFocusSession(task.id, {
+      remainingSeconds: secondsRef.current,
+      hasStarted: hasStartedRef.current,
+      isRunning: runningRef.current && remoteRunningRef.current,
+      halfwayPrompted: halfwayPromptedRef.current,
+    });
+  }, [onUpdateFocusSession, task.id]);
+  useEffect(() => {
+    if (!running) return;
+    const id = window.setInterval(() => setSeconds(value => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(id);
+  }, [running]);
+  useEffect(() => {
+    if (!running || !task.focusSessionRunning || seconds <= 0 || seconds % 15 !== 0) return;
+    onUpdateFocusSession(task.id, { remainingSeconds: seconds, hasStarted: true, isRunning: true, halfwayPrompted, checkpoint: true });
+  }, [halfwayPrompted, onUpdateFocusSession, running, seconds, task.focusSessionRunning, task.id]);
+  useEffect(() => {
+    if (seconds !== 0 || !hasStarted) return;
+    setRunning(false);
+    saveFocusSession(0, true, halfwayPrompted, false);
+  }, [halfwayPrompted, hasStarted, saveFocusSession, seconds]);
+  useEffect(() => {
+    const breakEligible = task.focusMinutes >= 30 && task.focusMinutes <= 40;
+    if (!breakEligible || halfwayPrompted || !running || seconds > Math.floor(totalSeconds / 2) || seconds <= 0) return;
+    setRunning(false);
+    setHalfwayPrompted(true);
+    saveFocusSession(seconds, true, true, false);
+    setBreakStage("suggested");
+  }, [halfwayPrompted, running, saveFocusSession, seconds, task.focusMinutes, totalSeconds]);
+  useEffect(() => {
+    if (breakStage !== "running" || breakSeconds <= 0) return;
+    const id = window.setInterval(() => setBreakSeconds(value => value - 1), 1000);
+    return () => window.clearInterval(id);
+  }, [breakStage, breakSeconds]);
+  useEffect(() => {
+    if (breakStage !== "running" || breakSeconds !== 0) return;
+    setBreakStage("hidden");
+    setRunning(true);
+  }, [breakStage, breakSeconds]);
+  useEffect(() => { onUpdateChecklistProgress(task.id, checks); }, [checks, task.id, onUpdateChecklistProgress]);
+  useEffect(() => { setFocusNotes(task.notes ?? ""); }, [task.id, task.notes]);
+  useEffect(() => {
+    if (!sounds || !soundEffectsEnabled) {
+      noiseRef.current.source?.stop();
+      noiseRef.current.source?.disconnect();
+      noiseRef.current.gain?.disconnect();
+      noiseRef.current.source = null;
+      noiseRef.current.gain = null;
+      return;
+    }
+    const context = noiseRef.current.context ?? new AudioContext();
+    noiseRef.current.context = context;
+    const bufferSize = 2 * context.sampleRate;
+    const buffer = context.createBuffer(1, bufferSize, context.sampleRate);
+    const data = buffer.getChannelData(0);
+    let last = 0;
+    for (let index = 0; index < bufferSize; index += 1) {
+      const white = Math.random() * 2 - 1;
+      last = (last + 0.02 * white) / 1.02;
+      data[index] = last * 3.5;
+    }
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    const gain = context.createGain();
+    gain.gain.value = 0.06;
+    source.connect(gain);
+    gain.connect(context.destination);
+    source.start();
+    noiseRef.current.source = source;
+    noiseRef.current.gain = gain;
+    return () => {
+      source.stop();
+      source.disconnect();
+      gain.disconnect();
+      noiseRef.current.source = null;
+      noiseRef.current.gain = null;
+    };
+  }, [soundEffectsEnabled, sounds]);
+  useEffect(() => () => {
+    noiseRef.current.source?.stop();
+    void noiseRef.current.context?.close();
+  }, []);
+  const saveChecklist = (next: string[]) => {
+    setChecklist(next);
+    setChecks(current => next.map((_, index) => current[index] ?? false));
+    onUpdateChecklist(task.id, next);
+  };
+  const switchChecklist = (templateName: string) => {
+    const template = focusChecklistTemplates.find(item => item.name === templateName);
+    if (!template) return;
+    setChecklist(template.items);
+    setChecks(template.items.map(() => false));
+    onUpdateChecklist(task.id, template.items);
+  };
+  const activeTemplateName = focusChecklistTemplates.find(template => template.items.length === checklist.length && template.items.every((item, index) => item === checklist[index]))?.name ?? "Custom";
+  const updateChecklistItem = (index: number, value: string) => saveChecklist(checklist.map((item, itemIndex) => itemIndex === index ? value : item));
+  const addChecklistItem = () => saveChecklist([...checklist, ""]);
+  const deleteChecklistItem = (index: number) => saveChecklist(checklist.filter((_, itemIndex) => itemIndex !== index));
+  const switchTask = useCallback((id: number) => {
+    if (id === task.id) return;
+    saveFocusSession(secondsRef.current, hasStartedRef.current, halfwayPromptedRef.current, runningRef.current);
+    setRunning(false);
+    setBreakStage("hidden");
+    onSwitch(id);
+  }, [onSwitch, saveFocusSession, task.id]);
+  const switchBy = useCallback((offset: number) => {
+    const current = tasks.findIndex(item => item.id === task.id);
+    const next = (current + offset + tasks.length) % tasks.length;
+    switchTask(tasks[next].id);
+  }, [switchTask, task.id, tasks]);
+  const time = formatFocusTime(seconds);
+  const breakTime = `${String(Math.floor(breakSeconds / 60)).padStart(2, "0")}:${String(breakSeconds % 60).padStart(2, "0")}`;
+  useEffect(() => {
+    if (hasStarted) document.title = `${time} · ${task.title}`;
+    return () => { document.title = "LifeOS"; };
+  }, [hasStarted, task.title, time]);
+  const completedSteps = checks.filter(Boolean).length;
+  const totalSteps = Math.max(1, checklist.length);
+  const resumeFocus = () => {
+    setBreakStage("hidden");
+    setRunning(true);
+    saveFocusSession(secondsRef.current, true, halfwayPromptedRef.current, true);
+  };
+  const toggleTimer = () => {
+    if (running) {
+      setRunning(false);
+      saveFocusSession(seconds, true, halfwayPrompted, false);
+      return;
+    }
+    setHasStarted(true);
+    hasStartedRef.current = true;
+    setRunning(true);
+    saveFocusSession(seconds, true, halfwayPrompted, true);
+    if (soundEffectsEnabled) playFocusCue(440);
+  };
+  const resetTimer = () => {
+    setSeconds(totalSeconds);
+    secondsRef.current = totalSeconds;
+    setRunning(false);
+    setHasStarted(false);
+    hasStartedRef.current = false;
+    setHalfwayPrompted(false);
+    halfwayPromptedRef.current = false;
+    setBreakStage("hidden");
+    setBreakSeconds(5 * 60);
+    saveFocusSession(totalSeconds, false, false, false);
+  };
+  const addTime = (minutes: number) => {
+    const nextFocusMinutes = Math.min(240, task.focusMinutes + minutes);
+    const addedSeconds = (nextFocusMinutes - task.focusMinutes) * 60;
+    if (addedSeconds <= 0) return;
+    const nextSeconds = seconds + addedSeconds;
+    setSeconds(nextSeconds);
+    secondsRef.current = nextSeconds;
+    onUpdateFocusSession(task.id, {
+      remainingSeconds: nextSeconds,
+      hasStarted,
+      isRunning: running,
+      halfwayPrompted,
+      focusMinutes: nextFocusMinutes,
+    });
+  };
+  const exitFocus = (destination?: View) => {
+    saveFocusSession();
+    onExit(destination);
+  };
+  return <motion.div className={`focus-mode focus-studio ${hasStarted ? "session-active" : ""}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+    <AnimatePresence>{breakStage !== "hidden" && <motion.div className="focus-break-layer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="focus-break-card" initial={{ scale: .96, y: 12 }} animate={{ scale: 1, y: 0 }}>
+      {breakStage === "suggested" ? <><div className="focus-break-icon"><Coffee size={22} /></div><p className="eyebrow">HALFWAY CHECK-IN</p><h2>You’ve earned a quick reset.</h2><p>You’re halfway through this {formatFocusMinutesShort(task.focusMinutes)} focus. Take five minutes to stand up, drink water, stretch, or take meds if they’re due.</p><div className="focus-break-actions"><button onClick={resumeFocus}>Keep going</button><button className="take-break" onClick={() => { setBreakSeconds(5 * 60); setBreakStage("running"); }}><Coffee size={15} /> Take a 5-minute break</button></div></> : <><div className="focus-break-countdown"><strong>{breakTime}</strong><span>5-minute reset</span></div><p className="eyebrow">BREAK IN PROGRESS</p><h2>Step away. LifeOS has the time.</h2><p>Your focus timer is paused. When this reaches zero, your session resumes automatically.</p><div className="focus-break-actions"><button onClick={resumeFocus}>Return to focus early</button></div></>}
+    </motion.div></motion.div>}</AnimatePresence>
+    <header><div className="brand"><div className="brand-mark light"><span /><span /><span /></div><span>LifeOS</span></div><span className="focus-label"><i /> {running ? "In a focus session" : hasStarted ? "Paused — your time is saved" : "Ready when you are"}</span><div className="focus-top-actions"><button className="focus-note-link" onClick={() => exitFocus("Library")}><NotebookPen size={15} /> Take notes</button><button onClick={() => exitFocus()}><X size={16} /> Exit <kbd>Esc</kbd></button></div></header>
+    <main>
+      <section className="focus-main"><div className="focus-hero"><p className="focus-project"><i style={{ background: task.color }} />{task.project} <span>·</span> {formatFocusMinutesShort(task.focusMinutes)} <span>·</span> {task.energy} energy</p><h1>{task.title}</h1><p className="focus-sub">{running ? "One gentle pass. You don’t need to do the whole thing at once." : "Choose a tiny next step, then press start when you’re ready."}</p></div>
+        <div className="checklist"><div className="checklist-head"><span>SESSION CHECKLIST</span><div><label htmlFor="checklist-template">Switch checklist</label><select id="checklist-template" value={activeTemplateName} onChange={event => switchChecklist(event.target.value)}><option value="Custom" disabled>Custom checklist</option>{focusChecklistTemplates.map(template => <option key={template.name} value={template.name}>{template.name}</option>)}</select><button type="button" onClick={addChecklistItem}><Plus size={13} /> Add step</button></div></div>{checklist.length ? checklist.map((item, i) => <div className={`checklist-row ${checks[i] ? "checked" : ""}`} key={`${task.id}-${i}`}><button type="button" className="check-toggle" aria-label={`Toggle ${item}`} onClick={() => setChecks(current => current.map((value, index) => index === i ? !value : value))}>{checks[i] && <Check size={14} />}</button><input autoFocus={i === checklist.length - 1} value={item} placeholder="Write the next tiny step…" onChange={event => updateChecklistItem(i, event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); addChecklistItem(); } }} /><button type="button" className="delete-step" aria-label={`Delete ${item || "step"}`} onClick={() => deleteChecklistItem(i)}><Trash2 size={13} /></button></div>) : <div className="empty-checklist"><strong>No steps yet.</strong><button type="button" onClick={addChecklistItem}><Plus size={13} /> Add the first step</button></div>}</div>
+        <div className="notes"><span>NOTES</span><textarea value={focusNotes} onChange={event => setFocusNotes(event.target.value)} onBlur={() => onUpdateNotes(task.id, focusNotes.trim())} placeholder="Keep any thoughts here while you work…" /></div>
+      </section>
+      <aside className={`timer-panel ${hasStarted ? "running" : ""}`}><span>{running ? "FOCUS IN PROGRESS" : hasStarted ? "FOCUS PAUSED" : "YOUR TIME"}</span><div className="timer-ring" style={{ "--progress": `${(seconds / totalSeconds) * 360}deg` } as React.CSSProperties}><div><strong>{time}</strong><span>{running ? "Stay with this one thing" : formatFocusSessionLabel(task.focusMinutes)}</span></div></div><button className="timer-button" onClick={toggleTimer}>{running ? <><Circle size={15} fill="currentColor" /> Pause & save</> : <><Focus size={16} /> {hasStarted ? "Resume focus" : "Start focus"}</>}</button><div className="focus-add-time" role="group" aria-label="Add more time"><button type="button" onClick={() => addTime(5)} disabled={task.focusMinutes >= 240}>+5 min</button><button type="button" onClick={() => addTime(10)} disabled={task.focusMinutes >= 240}>+10 min</button></div><button className="reset" onClick={resetTimer}><TimerReset size={15} /> Reset to {formatFocusTime(task.focusMinutes * 60)}</button>
+        <div className="focus-switcher"><div><span>SWITCH TASK</span></div><div className="switch-list">{tasks.filter(item => !item.done && !item.canceled).map(item => { const remaining = getTaskFocusSeconds(item); const hasProgress = Boolean(item.focusSessionStarted) || remaining < item.focusMinutes * 60; return <button key={item.id} className={item.id === task.id ? "active" : ""} onClick={() => switchTask(item.id)}><i style={{ background: item.color }} /><span><strong>{item.title}</strong>{hasProgress && <small>{formatFocusTime(remaining)} left</small>}</span>{item.id === task.id && <Check size={13} />}</button>; })}</div><div className="switch-arrows"><button onClick={() => switchBy(-1)}>← Previous</button><button onClick={() => switchBy(1)}>Next →</button></div></div>
+        <div className="music"><Music2 size={17} /><div><strong>Focus sounds</strong><span>{!soundEffectsEnabled ? "Enable sound effects in Settings" : sounds ? "Brown noise on" : "Sounds are off"}</span></div><button aria-label="Toggle focus sounds" disabled={!soundEffectsEnabled} onClick={() => setSounds(value => !value)}>{sounds ? <Check size={15} /> : <Plus size={15} />}</button></div>
+        <button className="mark-done-button" onClick={() => { if (soundEffectsEnabled) playFocusCue(660, 0.16); onComplete(task.id); setTimeout(() => onExit(), 300); }}><CheckCircle2 size={16} /> Mark as done</button>
+      </aside>
+    </main>
+    <footer><span>Session progress</span><div><i style={{ width: `${completedSteps / totalSteps * 100}%` }} /></div><strong>{completedSteps} of {checklist.length} complete</strong></footer>
+  </motion.div>;
+}
+
+function CommandPalette({ query, setQuery, results, close, go, onFocus, onCapture, onNewTask, onResult }: { query: string; setQuery: (s: string) => void; results: string[]; close: () => void; go: (v: View) => void; onFocus: () => void; onCapture: () => void; onNewTask: () => void; onResult: (result: string) => void }) {
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="command-modal" onMouseDown={e => e.stopPropagation()} initial={{ scale: .98, y: -10 }} animate={{ scale: 1, y: 0 }}><div className="command-input"><Search size={20} /><input autoFocus placeholder="Find anything in LifeOS…" value={query} onChange={e => setQuery(e.target.value)} /><kbd>ESC</kbd></div><div className="command-results">{!query && <><p>QUICK ACTIONS</p><button onClick={onFocus}><span className="command-icon"><Focus size={16} /></span><span>Start focus session</span></button><button onClick={onCapture}><span className="command-icon"><Brain size={16} /></span><span>Capture a thought</span></button><button onClick={onNewTask}><span className="command-icon"><Plus size={16} /></span><span>Create new task</span></button></>}{query && <p>RESULTS</p>}{results.slice(0, 7).map(result => <button key={result} onClick={() => { onResult(result); close(); }}><span className="command-icon">{nav.some(n => n.name === result) ? <Command size={16} /> : <Search size={16} />}</span><span>{result}</span><ArrowRight size={14} /></button>)}</div><footer><span><kbd>⌘ K</kbd> Find</span><span><kbd>↵</kbd> Open</span><span>LifeOS Search</span></footer></motion.div></motion.div>;
+}
+
+function AmbientStartModal({ close, start, spaces, draft }: { close: () => void; start: (title: string, space?: { name: string; color: string }) => void; spaces: { name: string; color: string }[]; draft: AmbientDraft }) {
+  const [title, setTitle] = useState(draft?.title || "");
+  const [spaceName, setSpaceName] = useState<string | null>(draft?.spaceName || null);
+  const visibleSpaces = [...spaces].sort((a, b) => (a.name === "Career" ? -1 : b.name === "Career" ? 1 : a.name.localeCompare(b.name))).slice(0, 6);
+  const selectedSpace = visibleSpaces.find(space => space.name === spaceName);
+  const pick = (nextTitle: string, space?: { name: string; color: string }) => {
+    setTitle(nextTitle);
+    setSpaceName(space?.name ?? null);
+  };
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.form className="capture-modal ambient-modal" onMouseDown={event => event.stopPropagation()} onSubmit={event => { event.preventDefault(); start(title, selectedSpace); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><TimerReset size={16} /></div><div><strong>{draft ? "LifeOS noticed " + draft.sourceLabel : "What are you doing?"}</strong><span>{draft ? "Want to start a Career activity? Nothing is saved until you say so." : "Start the work first. LifeOS can sort it later."}</span></div><button type="button" onClick={close} aria-label="Close"><X size={18} /></button></div><div className="ambient-quick-start"><span>QUICK START</span><div><button type="button" className={title === "Job application" ? "selected" : ""} onClick={() => pick("Job application", visibleSpaces.find(space => space.name === "Career"))}><UserRound size={14} />Job application</button><button type="button" className={title === "Replying to email" ? "selected" : ""} onClick={() => pick("Replying to email")}><Mail size={14} />Reply to email</button><button type="button" className={title === "Research" ? "selected" : ""} onClick={() => pick("Research")}><Search size={14} />Research</button></div></div>{visibleSpaces.length > 0 && <div className="ambient-space-picker"><span>WHERE DOES THIS BELONG? <em>OPTIONAL</em></span><div>{visibleSpaces.map(space => <button type="button" key={space.name} className={spaceName === space.name ? "selected" : ""} onClick={() => setSpaceName(current => current === space.name ? null : space.name)}><i style={{ background: space.color }} />{space.name}</button>)}</div></div>}<label htmlFor="ambient-title">Or type a few words</label><input id="ambient-title" autoFocus value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g. fixing the Synapse login" /><div className="ambient-modal-actions"><button type="button" onClick={() => start("", selectedSpace)}>Start without naming it</button><button className="primary">Start doing it <ArrowRight size={15} /></button></div><p>Nothing becomes a task until you decide it should.</p></motion.form></motion.div>;
+}
+
+function AmbientWrapupModal({ activity, close, finish }: { activity: AmbientActivity; close: () => void; finish: (outcome: "task" | "note" | "dismiss", note: string) => void }) {
+  const [note, setNote] = useState("");
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }}><motion.div className="capture-modal ambient-modal" onMouseDown={event => event.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><CheckCircle2 size={16} /></div><div><strong>Nice. What should happen with this?</strong><span>{activity.title} · {formatAmbientDuration(Date.now() - new Date(activity.startedAt).getTime())}</span></div><button onClick={close} aria-label="Close"><X size={18} /></button></div><label htmlFor="ambient-note">A tiny note, if useful</label><textarea id="ambient-note" value={note} onChange={event => setNote(event.target.value)} placeholder="What did you do, or what is the next step?" /><div className="ambient-outcomes"><button onClick={() => finish("task", note)}><ListTodo size={16} /><span>Save as task</span><small>Put it in Inbox</small></button><button onClick={() => finish("note", note)}><NotebookPen size={16} /><span>Save as note</span><small>Keep the context</small></button><button onClick={() => finish("dismiss", note)}><X size={16} /><span>Let it go</span><small>Don’t save anything</small></button></div></motion.div></motion.div>;
+}
+
+function WelcomeNameModal({ suggestedName, save }: { suggestedName?: string | null; save: (name: string) => void }) {
+  const [name, setName] = useState(suggestedName?.trim() || "");
+  const trimmedName = name.trim();
+  return (
+    <motion.div className="modal-layer welcome-name-layer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="presentation">
+      <motion.form
+        className="welcome-name-modal ob-welcome"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="welcome-name-title"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (trimmedName) save(trimmedName);
+        }}
+        initial={{ scale: 0.98, y: 8 }}
+        animate={{ scale: 1, y: 0 }}
+      >
+        <div className="ob-card">
+          <div className="ob-visual" aria-hidden>
+            <svg className="ob-illus" viewBox="0 0 280 280" fill="none">
+              <circle cx="140" cy="132" r="36" stroke="currentColor" strokeWidth="3" />
+              <path d="M86 208c18-36 40-54 54-54s36 18 54 54" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              <rect x="72" y="64" width="136" height="18" rx="6" stroke="currentColor" strokeWidth="3" />
+              <path d="M96 96h88" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          </div>
+          <div className="ob-panel">
+            <div className="ob-brand">LifeOS</div>
+            <p className="ob-eyebrow">Personal workspace</p>
+            <h2 id="welcome-name-title" className="ob-title">What should we call you?</h2>
+            <p className="ob-body">Use the name that feels right inside your LifeOS. It stays private to your workspace.</p>
+            <div className="ob-field">
+              <label htmlFor="preferred-name">Your name</label>
+              <input
+                id="preferred-name"
+                autoFocus
+                autoComplete="name"
+                maxLength={40}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Your name"
+              />
+            </div>
+            <div className="ob-actions">
+              <button type="submit" className="ob-primary" disabled={!trimmedName}>
+                Continue <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </motion.form>
+    </motion.div>
+  );
+}
+
+function CaptureModal({ close, add }: { close: () => void; add: (s: string) => void }) {
+  const [text, setText] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        recognitionRef.current = new SpeechRecognition();
+      }
+    }
+  }, []);
+
+  const handleVoiceCapture = () => {
+    if (!recognitionRef.current) {
+      alert("Voice capture is not supported in your browser");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+      return;
+    }
+
+    recognitionRef.current.continuous = true;
+    recognitionRef.current.interimResults = true;
+    recognitionRef.current.onstart = () => setIsListening(true);
+    recognitionRef.current.onend = () => setIsListening(false);
+    recognitionRef.current.onresult = (event: any) => {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          setText(prev => prev + (prev ? " " : "") + transcript);
+        }
+      }
+    };
+    recognitionRef.current.onerror = () => setIsListening(false);
+    recognitionRef.current.start();
+  };
+
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="capture-modal" onMouseDown={e => e.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><Brain size={16} /></div><div><strong>Quick capture</strong><span>Send it to your Brain inbox</span></div><button onClick={close}><X size={18} /></button></div><div style={{ display: "flex", gap: "10px", alignItems: "flex-end", padding: "0 18px", marginBottom: "10px" }}><textarea autoFocus placeholder="What’s on your mind?" value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && text.trim()) add(text.trim()); }} style={{ flex: 1, margin: 0, minHeight: "120px" }} /><button onClick={handleVoiceCapture} style={{ border: `1px solid ${isListening ? "var(--accent)" : "var(--line)"}`, background: isListening ? "var(--accent)" : "var(--canvas)", color: isListening ? "white" : "var(--muted)", cursor: "pointer", borderRadius: "8px", width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .2s" }} title="Voice capture"><Mic size={20} /></button></div><div className="capture-footer"><span>Organize it later. Just get it out.</span><button disabled={!text.trim()} onClick={() => text.trim() && add(text.trim())}>Capture <kbd>⌘ ↵</kbd></button></div></motion.div></motion.div>;
+}
+
+function BreakModal({ close, done }: { close: () => void; done: () => void }) {
+  const [minutes, setMinutes] = useState(5);
+  const [remaining, setRemaining] = useState(5 * 60);
+  const [running, setRunning] = useState(false);
+  const clamped = Math.min(20, Math.max(1, minutes));
+  useEffect(() => {
+    if (!running || remaining <= 0) return;
+    const id = window.setInterval(() => setRemaining(value => value - 1), 1000);
+    return () => window.clearInterval(id);
+  }, [running, remaining]);
+  useEffect(() => {
+    if (running || remaining > 0) return;
+    done();
+  }, [done, remaining, running]);
+  const setBreakLength = (value: number) => {
+    const next = Math.min(20, Math.max(1, value));
+    setMinutes(next);
+    setRemaining(next * 60);
+    setRunning(false);
+  };
+  const time = `${String(Math.floor(remaining / 60)).padStart(2, "0")}:${String(remaining % 60).padStart(2, "0")}`;
+  return <motion.div className="modal-layer break-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="break-modal" onMouseDown={event => event.stopPropagation()} initial={{ scale: .98, y: 10 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><Coffee size={16} /></div><div><strong>I need a break rn</strong><span>Pick 1–20 minutes. No guilt, just a controlled reset.</span></div><button onClick={close} aria-label="Close"><X size={18} /></button></div><div className="break-timer"><strong>{time}</strong><span>{running ? "Break in progress" : "Ready when you are"}</span></div><div className="break-presets">{[1, 3, 5, 10, 15, 20].map(value => <button key={value} className={clamped === value ? "selected" : ""} onClick={() => setBreakLength(value)}>{value}m</button>)}</div><label htmlFor="break-length">Custom break length</label><input id="break-length" type="range" min={1} max={20} value={clamped} onChange={event => setBreakLength(Number(event.target.value))} /><div className="break-actions"><button onClick={() => setBreakLength(clamped)}><TimerReset size={15} /> Reset</button><button className="break-start" onClick={() => setRunning(value => !value)}>{running ? "Pause break" : "Start break"}</button><button onClick={done}>End now</button></div><p>Suggested: stand up, water, meds if due, bathroom, stretch, then return gently.</p></motion.div></motion.div>;
+}
+
+function LegacyCalendarEventModal({ close, add, event, remove, defaultDate }: { close: () => void; add: (event: CalendarEvent) => void; event?: CalendarEvent; remove?: (id: string) => void; defaultDate?: string | null }) {
+  const now = new Date();
+  const eventDay = event?.start.slice(0, 10) ?? defaultDate ?? toDateKey(now);
+  const [title, setTitle] = useState(event?.title ?? "");
+  const [day, setDay] = useState(eventDay);
+  const [start, setStart] = useState(event?.start.slice(11, 16) ?? "09:00");
+  const [end, setEnd] = useState(event?.end?.slice(11, 16) ?? "10:00");
+  const [notes, setNotes] = useState(event?.notes ?? "");
+  const [color, setColor] = useState(event?.color ?? "#665df6");
+  const isEditing = Boolean(event);
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.form className="create-modal calendar-modal" onMouseDown={modalEvent => modalEvent.stopPropagation()} onSubmit={submitEvent => { submitEvent.preventDefault(); if (!title.trim()) return; add({ id: event?.id ?? `lifeos-${Date.now()}`, title: title.trim(), start: `${day}T${start}`, end: end ? `${day}T${end}` : undefined, source: event?.source ?? "LifeOS", color, notes: notes.trim() || undefined }); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot" style={{ color, background: `${color}16` }}><CalendarDays size={16} /></div><div><strong>{isEditing ? "Edit calendar event" : "Add calendar event"}</strong><span>{isEditing ? "Change time, notes, color, or delete it." : "Put time on the board so your day stops being abstract."}</span></div><button type="button" onClick={close} aria-label="Close"><X size={18} /></button></div><label htmlFor="event-title">Event title</label><input id="event-title" autoFocus placeholder="What’s happening?" value={title} onChange={event => setTitle(event.target.value)} /><div className="calendar-form-grid"><label>Date<input type="date" value={day} onChange={event => setDay(event.target.value)} /></label><label>Start<input type="time" value={start} onChange={event => setStart(event.target.value)} /></label><label>End<input type="time" value={end} onChange={event => setEnd(event.target.value)} /></label></div><label htmlFor="event-notes">Notes / location</label><textarea id="event-notes" className="event-notes" placeholder="Location, link, reminder, whatever helps…" value={notes} onChange={event => setNotes(event.target.value)} /><label>Color</label><div className="calendar-color-picker">{["#665df6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b", "#cf625a"].map(option => <button type="button" aria-label={`Use color ${option}`} className={color === option ? "selected" : ""} key={option} style={{ background: option }} onClick={() => setColor(option)} />)}</div><div className="create-actions split-actions">{isEditing && remove && <button type="button" className="danger-text" onClick={() => remove(event!.id)}><Trash2 size={14} /> Delete</button>}<button type="button" onClick={close}>Cancel</button><button className="primary" disabled={!title.trim()} type="submit">{isEditing ? "Save event" : "Add event"}</button></div></motion.form></motion.div>;
+}
+
+function CalendarEventModal({ close, add, event, remove, defaultDate, tasks = [], linkedTaskId, onOpenLinkedTask, onRouteToTask }: { close: () => void; add: (event: CalendarEvent) => void; event?: CalendarEvent; remove?: (id: string) => void; defaultDate?: string | null; tasks?: Task[]; linkedTaskId?: number; onOpenLinkedTask?: (event: CalendarEvent) => void; onRouteToTask?: (event: CalendarEvent, taskId: number) => void }) {
+  const now = new Date();
+  const eventDay = event?.start.slice(0, 10) ?? defaultDate ?? toDateKey(now);
+  const initialEndDay = event?.end?.slice(0, 10) ?? eventDay;
+  const [title, setTitle] = useState(event?.title ?? "");
+  const [day, setDay] = useState(eventDay);
+  const [endDay, setEndDay] = useState(initialEndDay < eventDay ? eventDay : initialEndDay);
+  const [start, setStart] = useState(event?.start.slice(11, 16) ?? "09:00");
+  const [end, setEnd] = useState(event?.end?.slice(11, 16) ?? "10:00");
+  const [notes, setNotes] = useState(event?.notes ?? "");
+  const [location, setLocation] = useState(eventPlaceLabel(event?.location) || event?.location || "");
+  const [link, setLink] = useState(
+    event?.url || extractMeetingUrl(event?.location) || extractMeetingUrl(event?.notes) || "",
+  );
+  const [color, setColor] = useState(event?.color ?? "#665df6");
+  const [weekdaysOnly, setWeekdaysOnly] = useState(Boolean(event?.weekdaysOnly));
+  const [pickingTask, setPickingTask] = useState(false);
+  const [taskQuery, setTaskQuery] = useState("");
+  const isEditing = Boolean(event);
+  const datesValid = endDay >= day;
+  const timesValid = endDay > day || !end || end > start;
+  const rangeValid = datesValid && timesValid;
+  const detectedProvider = detectMeetingProvider(link);
+  const detectedJoinUrl = extractMeetingUrl(link) || (/^https?:\/\//i.test(link.trim()) ? link.trim() : "");
+  const detectedJoin = detectedProvider && detectedJoinUrl ? meetingJoinLabel(detectedProvider) : null;
+  const routeCandidates = tasks
+    .filter(task => !task.done && !task.canceled)
+    .filter(task => {
+      if (!taskQuery.trim()) return true;
+      const q = taskQuery.trim().toLowerCase();
+      return task.title.toLowerCase().includes(q) || task.project.toLowerCase().includes(q);
+    })
+    .slice(0, 12);
+  const changeStartDay = (value: string) => {
+    setDay(value);
+    if (endDay < value) setEndDay(value);
+  };
+  const submit = (submitEvent: React.FormEvent) => {
+    submitEvent.preventDefault();
+    if (!title.trim() || !rangeValid) return;
+    add({
+      id: event?.id ?? `lifeos-${Date.now()}`,
+      title: title.trim(),
+      start: `${day}T${start}`,
+      end: end ? `${endDay}T${end}` : `${endDay}T23:59`,
+      source: event?.source ?? "LifeOS",
+      color,
+      notes: notes.trim() || undefined,
+      location: eventPlaceLabel(location) || undefined,
+      url: coalesceEventMeetingUrl({
+        url: extractMeetingUrl(link) || link.trim() || undefined,
+        location,
+        notes,
+      }),
+      weekdaysOnly: weekdaysOnly || undefined,
+    });
+  };
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+    <motion.form className="create-modal calendar-modal" onMouseDown={modalEvent => modalEvent.stopPropagation()} onSubmit={submit} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}>
+      <div className="capture-head"><div className="brain-dot" style={{ color, background: `${color}16` }}><CalendarDays size={16} /></div><div><strong>{isEditing ? "Edit calendar event" : "Add calendar event"}</strong><span>{isEditing ? "Change the date range, time, notes, or color." : "One event can run across multiple days."}</span></div><button type="button" onClick={close} aria-label="Close"><X size={18} /></button></div>
+      <label htmlFor="event-title">Event title</label>
+      <input id="event-title" autoFocus placeholder="What’s happening?" value={title} onChange={inputEvent => setTitle(inputEvent.target.value)} />
+      <div className="calendar-date-range-grid">
+        <label>Starts on<input aria-label="Start date" type="date" value={day} onChange={inputEvent => changeStartDay(inputEvent.target.value)} /></label>
+        <label>Ends on<input aria-label="End date" type="date" min={day} value={endDay} onChange={inputEvent => setEndDay(inputEvent.target.value)} /></label>
+      </div>
+      <div className="calendar-time-range-grid">
+        <label>Start time<input aria-label="Start time" type="time" value={start} onChange={inputEvent => setStart(inputEvent.target.value)} /></label>
+        <label>End time<input aria-label="End time" type="time" value={end} onChange={inputEvent => setEnd(inputEvent.target.value)} /></label>
+      </div>
+      {!rangeValid && <p className="calendar-range-error">The event needs to end after it starts.</p>}
+      <label className="calendar-weekdays-only">
+        <input type="checkbox" checked={weekdaysOnly} onChange={(inputEvent) => setWeekdaysOnly(inputEvent.target.checked)} />
+        <span>Weekdays only (Mon–Fri)</span>
+      </label>
+      <p className="calendar-weekdays-hint">Use this for work blocks that run until a date but skip weekends.</p>
+      <label htmlFor="event-location">Location</label>
+      <input id="event-location" placeholder="Room, campus, address…" value={location} onChange={inputEvent => setLocation(inputEvent.target.value)} />
+      <label htmlFor="event-link">Link</label>
+      <input id="event-link" placeholder="Zoom, Teams, or Webex link" value={link} onChange={inputEvent => setLink(inputEvent.target.value)} />
+      {detectedJoin && detectedJoinUrl ? <a className="event-join-link" href={detectedJoinUrl} target="_blank" rel="noopener noreferrer">{detectedJoin}</a> : null}
+      <label htmlFor="event-notes">Notes</label>
+      <textarea id="event-notes" className="event-notes" placeholder="Optional details…" value={notes} onChange={inputEvent => setNotes(inputEvent.target.value)} />
+      <ColorSwatches value={color} onChange={setColor} />
+      {isEditing && event && pickingTask && onRouteToTask && (
+        <div className="event-task-picker" role="listbox" aria-label="Route to an existing task">
+          <div className="event-task-picker-head">
+            <strong>Route under an existing task</strong>
+            <button type="button" className="text-button" onClick={() => setPickingTask(false)}>Close</button>
+          </div>
+          <input
+            aria-label="Search tasks"
+            placeholder="Search tasks…"
+            value={taskQuery}
+            onChange={inputEvent => setTaskQuery(inputEvent.target.value)}
+          />
+          <div className="event-task-picker-list">
+            {routeCandidates.length ? routeCandidates.map(task => (
+              <button
+                type="button"
+                key={task.id}
+                role="option"
+                onClick={() => onRouteToTask(event, task.id)}
+              >
+                <i style={{ background: task.color }} />
+                <span>
+                  <strong>{task.title}</strong>
+                  <small>{task.project} · {formatDueDate(task.due)}</small>
+                </span>
+              </button>
+            )) : <p className="event-task-picker-empty">No open tasks match.</p>}
+          </div>
+        </div>
+      )}
+      <div className="event-form-actions">
+        <div className="event-danger-action">
+          {isEditing && remove && <button type="button" className="danger-text" onClick={() => remove(event!.id)}><Trash2 size={14} /> Delete event</button>}
+        </div>
+        <div className="event-main-actions">
+          {isEditing && event && linkedTaskId != null && onOpenLinkedTask && (
+            <button type="button" className="event-task-action" onClick={() => onOpenLinkedTask(event)}><ListTodo size={14} /> Open task</button>
+          )}
+          {isEditing && event && linkedTaskId == null && onRouteToTask && (
+            <button type="button" className="event-task-action" onClick={() => setPickingTask(value => !value)}><ListTodo size={14} /> Route to Task</button>
+          )}
+          <span className="event-action-divider" aria-hidden="true" />
+          <button type="button" className="event-cancel-action" onClick={close}>Cancel</button>
+          <button className="primary" disabled={!title.trim() || !rangeValid} type="submit">{isEditing ? "Save event" : "Add event"}</button>
+        </div>
+      </div>
+    </motion.form>
+  </motion.div>;
+}
+
+function CalendarImportModal({ close, add }: { close: () => void; add: (events: CalendarEvent[]) => void }) {
+  const [url, setUrl] = useState("");
+  const [ics, setIcs] = useState("");
+  const [status, setStatus] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+  const importText = (text: string) => {
+    const events = parseIcsEvents(text);
+    if (!events.length) {
+      setStatus("No events found. Make sure this is real .ics/iCal text.");
+      return;
+    }
+    add(events);
+    setStatus(`${events.length} event${events.length === 1 ? "" : "s"} imported.`);
+    window.setTimeout(close, 650);
+  };
+  const importUrl = async () => {
+    if (!url.trim()) return;
+    setIsImporting(true);
+    setStatus("Importing the calendar…");
+    try {
+      const response = await fetch("/api/ical", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || typeof payload.ics !== "string") throw new Error(typeof payload.error === "string" ? payload.error : "LifeOS could not import that calendar link.");
+      importText(payload.ics);
+    } catch (error) {
+      setStatus(error instanceof Error ? `${error.message} Try copying the subscription link again, or paste an exported .ics file below.` : "LifeOS could not import that link. Try again or paste an exported .ics file below.");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="capture-modal import-modal" onMouseDown={event => event.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><Link2 size={16} /></div><div><strong>Import a calendar</strong><span>Paste a Coursera `webcal://` link, an `.ics` link, or exported calendar text.</span></div><button onClick={close} aria-label="Close"><X size={18} /></button></div><label htmlFor="ical-url">Calendar subscription link</label><div className="import-url-row"><input id="ical-url" inputMode="url" placeholder="webcal://… or https://…" value={url} onChange={event => setUrl(event.target.value)} /><button disabled={!url.trim() || isImporting} onClick={importUrl}>{isImporting ? "Importing…" : "Import link"}</button></div><label htmlFor="ical-text">Or paste .ics text</label><textarea id="ical-text" placeholder={"BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:Example\nDTSTART:20260709T090000Z\nEND:VEVENT\nEND:VCALENDAR"} value={ics} onChange={event => setIcs(event.target.value)} /><div className="capture-footer"><span role="status">{status || "Coursera links starting with webcal:// work here. The import uses LifeOS, not your browser."}</span><button disabled={!ics.trim() || isImporting} onClick={() => importText(ics)}>Import pasted iCal</button></div></motion.div></motion.div>;
+}
+
+function TaskActionsModal({ task, close, open, edit, toggleCanceled, remove }: { task: Task; close: () => void; open: () => void; edit: () => void; toggleCanceled: () => void; remove: () => void }) {
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="task-actions-modal" onMouseDown={event => event.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><ListTodo size={16} /></div><div><strong>{task.title}</strong><span>{task.project} · {formatDueDate(task.due)} · {task.focusMinutes}m · {task.energy} energy</span></div><button onClick={close} aria-label="Close"><X size={18} /></button></div><div className="task-action-list"><button onClick={open}><FileText size={16} /><span><strong>Open task page</strong><small>Notes, properties, checklist, and full context</small></span></button><button onClick={edit}><Pencil size={16} /><span><strong>Quick edit</strong><small>Change name, focus time, and energy</small></span></button><button onClick={toggleCanceled}><Ban size={16} /><span><strong>{task.canceled ? "Restore priority" : "Mark as canceled"}</strong><small>{task.canceled ? "Put it back into your active list" : "Keep it visible without treating it as active"}</small></span></button><button className="danger" onClick={remove}><Trash2 size={16} /><span><strong>Delete priority</strong><small>Remove it permanently</small></span></button></div><button className="action-cancel" onClick={close}>Cancel</button></motion.div></motion.div>;
+}
+
+function EditProjectModal({ project, close, save }: { project: Project; close: () => void; save: (name: string, desc: string, color: string, icon: ProjectIcon) => void }) {
+  const [name, setName] = useState(project.name);
+  const [desc, setDesc] = useState(project.desc);
+  const [color, setColor] = useState(project.color);
+  const [icon, setIcon] = useState<ProjectIcon>(project.iconName);
+  return (
+    <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.form className="create-modal space-modal" onMouseDown={event => event.stopPropagation()} onSubmit={event => { event.preventDefault(); if (name.trim()) save(name.trim(), desc.trim() || project.desc, color, icon); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}>
+        <div className="capture-head">
+          <div className="brain-dot" style={{ color, background: `${color}16` }}>{(() => { const Icon = projectIcons[icon] ?? Pencil; return <Icon size={16} />; })()}</div>
+          <div><strong>Edit {project.kind === "maintenance" ? "maintenance" : "project"}</strong><span>Update name, description, icon, and color.</span></div>
+          <button type="button" onClick={close} aria-label="Close"><X size={18} /></button>
+        </div>
+        <div className="space-modal-body">
+          <label htmlFor="project-name">Project name</label>
+          <input id="project-name" autoFocus value={name} onChange={event => setName(event.target.value)} />
+          <label htmlFor="project-desc">Description</label>
+          <textarea id="project-desc" value={desc} onChange={event => setDesc(event.target.value)} placeholder="What belongs here?" />
+          <label>Icon</label>
+          <div className="project-icon-picker" role="group" aria-label="Choose a project icon">
+            {projectIconOptions.map(option => <button key={option.value} type="button" className={icon === option.value ? "selected" : ""} aria-label={`Use ${option.label} icon`} aria-pressed={icon === option.value} title={option.label} onClick={() => setIcon(option.value)}><option.icon size={18} /><span>{option.label}</span></button>)}
+          </div>
+          <ColorSwatches value={color} onChange={setColor} />
+        </div>
+        <div className="create-actions"><button type="button" onClick={close}>Cancel</button><button className="primary" disabled={!name.trim()} type="submit">Save changes</button></div>
+      </motion.form>
+    </motion.div>
+  );
+}
+
+function ClassActionsModal({ classRecord, close, edit, remove }: { classRecord: ClassRecord; close: () => void; edit: () => void; remove: () => void }) {
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="task-actions-modal" onMouseDown={event => event.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot" style={{ color: classRecord.color, background: `${classRecord.color}16` }}><GraduationCap size={16} /></div><div><strong>{classRecord.code}</strong><span>{classRecord.name}{classRecord.term ? ` · ${classRecord.term}` : ""}</span></div><button onClick={close} aria-label="Close"><X size={18} /></button></div><div className="task-action-list"><button onClick={edit}><Pencil size={16} /><span><strong>Edit class</strong><small>Update the course details, semester, and color.</small></span></button><button className="danger" onClick={remove}><Trash2 size={16} /><span><strong>Delete class</strong><small>Remove this class and keep its tasks, notes, and files unlinked.</small></span></button></div><button className="action-cancel" onClick={close}>Cancel</button></motion.div></motion.div>;
+}
+
+function ProjectActionsModal({ project, close, setKind, onDelete, onEdit }: { project: Project; close: () => void; setKind: (kind: ProjectKind) => void; onDelete?: () => void; onEdit?: () => void }) {
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="task-actions-modal" onMouseDown={event => event.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot" style={{ color: project.color, background: `${project.color}16` }}><project.icon size={16} /></div><div><strong>{project.name}</strong><span>{project.kind === "maintenance" ? "Maintenance system" : "Finishable project"}</span></div><button onClick={close} aria-label="Close"><X size={18} /></button></div><div className="task-action-list">{onEdit && <button onClick={onEdit}><Pencil size={16} /><span><strong>Edit project</strong><small>Change name, description, icon, and color</small></span></button>}<button onClick={() => setKind("maintenance")}><Sparkles size={16} /><span><strong>Make it maintenance</strong><small>For ongoing areas like health, business ops, learning, habits.</small></span>{project.kind === "maintenance" && <Check size={15} />}</button><button onClick={() => setKind("finishable")}><CheckCircle2 size={16} /><span><strong>Make it finishable</strong><small>For projects that should end, ship, submit, or launch.</small></span>{project.kind === "finishable" && <Check size={15} />}</button>{onDelete && <button className="danger" onClick={onDelete}><Trash2 size={16} /><span><strong>Delete project</strong><small>Remove this project and move tasks to Inbox</small></span></button>}</div><button className="action-cancel" onClick={close}>Cancel</button></motion.div></motion.div>;
+}
+
+function ProjectDetailModal({ project, tasks, close, linkTask, onOpenTask, onFullscreen }: { project: Project; tasks: Task[]; close: () => void; linkTask: (id: number, project: Project) => void; onOpenTask: (id: number) => void; onFullscreen?: () => void }) {
+  const linkedTasks = tasks.filter(task => task.project === project.name);
+  const activeTasks = linkedTasks.filter(task => !task.done && !task.canceled);
+  const availableTasks = tasks.filter(task => task.project !== project.name && !task.done && !task.canceled);
+  const topTask = [...activeTasks].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority])[0];
+  const nextDue = [...activeTasks].sort((a, b) => dueRank(a.due) - dueRank(b.due))[0];
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="project-detail-modal" onMouseDown={event => event.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot" style={{ color: project.color, background: `${project.color}16` }}><project.icon size={16} /></div><div><strong>{project.name}</strong><span>{project.kind === "maintenance" ? "Maintenance / ongoing" : "Finishable project"} · {activeTasks.length} active tasks</span></div><div style={{ display: "flex", gap: "8px" }}>{onFullscreen && <button onClick={onFullscreen} aria-label="Open fullscreen" title="Open fullscreen"><Maximize size={18} style={{ color: "var(--muted)" }} /></button>}<button onClick={close} aria-label="Close"><X size={18} /></button></div></div><div className="project-detail-summary"><div><span>Next due</span><strong>{nextDue ? formatDueDate(nextDue.due) : "Nothing due"}</strong></div><div><span>Highest priority</span><strong>{topTask?.priority ?? "Clear"}</strong></div><div><span>Energy load</span><strong>{topTask ? `${topTask.energy} · ${topTask.focusMinutes}m` : "Clear"}</strong></div></div><div className="project-detail-list"><div className="project-detail-head"><span>Task</span><span>Due</span><span>Priority</span><span>Focus</span></div>{linkedTasks.length ? linkedTasks.map(task => <div className={`project-detail-row ${task.done ? "done" : ""} ${task.canceled ? "canceled" : ""}`} key={task.id}><button className="project-task-link" onClick={() => onOpenTask(task.id)}>{task.title}</button><span>{task.canceled ? "Canceled" : task.done ? "Done" : formatDueDate(task.due)}</span><em className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</em><span>{task.focusMinutes}m · {task.energy}</span></div>) : <div className="priority-empty"><strong>No tasks linked yet.</strong><p>Link an existing task below, or choose this project when creating a new task.</p></div>}</div><div className="link-task-panel"><div><strong>Link existing tasks</strong><span>Pull loose tasks into {project.name} so this project view is actually useful.</span></div>{availableTasks.length ? <div className="link-task-list">{availableTasks.slice(0, 6).map(task => <button key={task.id} type="button" onClick={() => linkTask(task.id, project)}><span><strong>{task.title}</strong><small>{task.project} · {formatDueDate(task.due)} · {task.focusMinutes}m</small></span><em className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</em><Plus size={15} /></button>)}</div> : <p>No loose active tasks to link right now.</p>}</div></motion.div></motion.div>;
+}
+
+function EditTaskModal({ task, projects, classes, tasks, close, save }: { task: Task; projects: Project[]; classes: ClassRecord[]; tasks: Task[]; close: () => void; save: (updates: Pick<Task, "title" | "focusMinutes" | "energy" | "project" | "classId" | "academicType" | "color" | "due" | "startTime">) => void }) {
+  const [title, setTitle] = useState(task.title);
+  const [spaceValue, setSpaceValue] = useState(task.classId ? `class:${task.classId}` : task.project !== "Inbox" ? `project:${task.project}` : "");
+  const [focusMinutes, setFocusMinutes] = useState(String(task.focusMinutes));
+  const [energy, setEnergy] = useState<EnergyLevel>(task.energy);
+  const [dueDate, setDueDate] = useState(task.due);
+  const [startTime, setStartTime] = useState(task.startTime ?? "");
+  const parsedMinutes = Math.max(5, Math.min(240, Number(focusMinutes) || 45));
+  const linkedClass = spaceValue.startsWith("class:") ? classes.find(item => item.id === spaceValue.slice(6)) : undefined;
+  const linkedProject = spaceValue.startsWith("project:") ? projects.find(project => project.name === spaceValue.slice(8)) : undefined;
+  const doubleBooked = checkDoubleBooking(tasks, task.id, dueDate, startTime, parsedMinutes);
+  return (
+    <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.form className="create-modal" onMouseDown={event => event.stopPropagation()} onSubmit={event => { event.preventDefault(); if (title.trim()) save({ title: title.trim(), project: linkedProject?.name ?? "Inbox", classId: linkedClass?.id, academicType: linkedClass ? (task.academicType ?? "Assignment") : task.academicType, color: linkedClass?.color ?? linkedProject?.color ?? "#625af6", focusMinutes: parsedMinutes, energy, due: dueDate, startTime: startTime || undefined }); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}>
+        <div className="capture-head">
+          <div className="brain-dot"><Pencil size={16} /></div>
+          <div><strong>Edit priority</strong><span>Update the space, focus length, energy cost, and schedule.</span></div>
+          <button type="button" onClick={close} aria-label="Close"><X size={18} /></button>
+        </div>
+        <label htmlFor="edit-task-name">Priority name</label>
+        <input id="edit-task-name" autoFocus value={title} onChange={event => setTitle(event.target.value)} />
+        <label htmlFor="edit-task-project">Linked space</label>
+        <select id="edit-task-project" value={spaceValue} onChange={event => setSpaceValue(event.target.value)}>
+          <option value="">Inbox / no space</option>
+          {classes.length > 0 && <optgroup label="Classes">{classes.map(item => <option key={item.id} value={`class:${item.id}`}>{item.code} — {item.name}</option>)}</optgroup>}
+          {projects.length > 0 && <optgroup label="Projects & maintenance">{projects.map(project => <option key={project.name} value={`project:${project.name}`}>{project.name}</option>)}</optgroup>}
+        </select>
+        <label htmlFor="edit-task-due">Schedule for</label>
+        <input id="edit-task-due" type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} />
+        <label htmlFor="edit-task-time">Start time (optional)</label>
+        <input id="edit-task-time" type="time" value={startTime} onChange={event => setStartTime(event.target.value)} />
+        {doubleBooked.length > 0 && (
+          <div style={{ background: "rgba(255, 107, 107, 0.1)", border: "1px solid rgba(255, 107, 107, 0.3)", borderRadius: "6px", padding: "12px", marginTop: "8px", fontSize: "12px", color: "#ff6b6b" }}>
+            <strong>⚠️ Time conflict detected</strong>
+            <p style={{ margin: "4px 0 0 0" }}>{doubleBooked.map(t => t.title).join(", ")} scheduled at overlapping times</p>
+          </div>
+        )}
+        <div className="focus-edit-grid">
+          <label htmlFor="edit-focus-minutes">Focus time<input id="edit-focus-minutes" type="number" min={5} max={240} step={5} value={focusMinutes} onChange={event => setFocusMinutes(event.target.value)} /></label>
+          <label>Energy needed<div className="energy-picker">{(["Low", "Medium", "High"] as EnergyLevel[]).map(level => <button key={level} type="button" className={energy === level ? "selected" : ""} onClick={() => setEnergy(level)}>{level}</button>)}</div></label>
+        </div>
+        <div className="create-actions">
+          <button type="button" onClick={close}>Cancel</button>
+          <button className="primary" disabled={!title.trim()} type="submit">Save changes</button>
+        </div>
+      </motion.form>
+    </motion.div>
+  );
+}
+
+function CreateModal({ kind, projects, classes, close, submit }: { kind: "task" | "project"; projects: Project[]; classes: ClassRecord[]; close: () => void; submit: (value: string, projectKind?: ProjectKind, taskProject?: string, icon?: ProjectIcon) => void }) {
+  const [value, setValue] = useState("");
+  const [projectKind, setProjectKind] = useState<ProjectKind>("finishable");
+  const [taskProject, setTaskProject] = useState("");
+  const [selectedIcon, setSelectedIcon] = useState<ProjectIcon>("Zap");
+  const label = kind === "task" ? "Task" : "Project";
+  const availableIcons: ProjectIcon[] = ["Zap", "Aperture", "Sparkles", "FileText", "UserRound", "FolderKanban"];
+  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.form className="create-modal" onMouseDown={e => e.stopPropagation()} onSubmit={e => { e.preventDefault(); if (value.trim()) submit(value.trim(), projectKind, taskProject, selectedIcon); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot">{kind === "task" ? <CheckCircle2 size={16} /> : <FolderKanban size={16} />}</div><div><strong>New {kind}</strong><span>{kind === "project" ? "Choose if this is a garden or a mission." : "Give it a clear name and park it in the right space."}</span></div><button type="button" onClick={close} aria-label="Close"><X size={18} /></button></div><label htmlFor="create-name">{label} name</label><input id="create-name" autoFocus placeholder={kind === "task" ? "What needs to get done?" : "What are you building?"} value={value} onChange={e => setValue(e.target.value)} />{kind === "task" && <><label htmlFor="create-task-project">Linked space</label><select id="create-task-project" value={taskProject} onChange={event => setTaskProject(event.target.value)}><option value="">Inbox / no space</option>{classes.length > 0 && <optgroup label="Classes">{classes.map(item => <option key={item.id} value={`class:${item.id}`}>{item.code} — {item.name}</option>)}</optgroup>}{projects.length > 0 && <optgroup label="Projects & maintenance">{projects.map(project => <option key={project.name} value={`project:${project.name}`}>{project.name}</option>)}</optgroup>}</select></>}{kind === "project" && <><div className="project-kind-picker"><button type="button" className={projectKind === "finishable" ? "selected" : ""} onClick={() => setProjectKind("finishable")}><CheckCircle2 size={16} /><span><strong>Finishable project</strong><small>Has a launch, deadline, deliverable, or done state.</small></span></button><button type="button" className={projectKind === "maintenance" ? "selected" : ""} onClick={() => setProjectKind("maintenance")}><Sparkles size={16} /><span><strong>Maintenance / ongoing</strong><small>A garden you keep alive: business, health, habits, creative practice.</small></span></button></div><label>Project icon</label><div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "8px" }}>{availableIcons.map(icon => {const IconComponent = projectIcons[icon]; return <button key={icon} type="button" className={`icon-option ${selectedIcon === icon ? "selected" : ""}`} onClick={() => setSelectedIcon(icon)} style={{ padding: "12px", borderRadius: "8px", border: selectedIcon === icon ? "2px solid var(--accent)" : "1px solid var(--line)", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{IconComponent && <IconComponent size={20} />}</button>;})}</div></>}<div className="create-actions"><button type="button" onClick={close}>Cancel</button><button className="primary" disabled={!value.trim()} type="submit">Create {kind}</button></div></motion.form></motion.div>;
+}
