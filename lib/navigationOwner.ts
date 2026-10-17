@@ -1,7 +1,7 @@
 /** Owner-only gate for the Navigation (Executive Function) page. */
 
 export const NAVIGATION_OWNER_EMAILS = [
-  "mohammedsaruwar@icloud.com",
+  "mohammedshafkatsaruwar@gmail.com",
 ] as const;
 
 export function isNavigationOwner(email: string | null | undefined): boolean {

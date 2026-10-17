@@ -2,13 +2,14 @@ import { isNavigationOwner, NAVIGATION_OWNER_EMAILS } from "../lib/navigationOwn
 
 describe("isNavigationOwner", () => {
   it("allows the LifeOS owner email (case-insensitive, trimmed)", () => {
-    expect(NAVIGATION_OWNER_EMAILS).toContain("mohammedsaruwar@icloud.com");
-    expect(isNavigationOwner("mohammedsaruwar@icloud.com")).toBe(true);
-    expect(isNavigationOwner("MohammedSaruwar@iCloud.com")).toBe(true);
-    expect(isNavigationOwner("  mohammedsaruwar@icloud.com  ")).toBe(true);
+    expect(NAVIGATION_OWNER_EMAILS).toContain("mohammedshafkatsaruwar@gmail.com");
+    expect(isNavigationOwner("mohammedshafkatsaruwar@gmail.com")).toBe(true);
+    expect(isNavigationOwner("MohammedShafkatSaruwar@Gmail.com")).toBe(true);
+    expect(isNavigationOwner("  mohammedshafkatsaruwar@gmail.com  ")).toBe(true);
   });
 
   it("rejects other emails and empty values", () => {
+    expect(isNavigationOwner("mohammedsaruwar@icloud.com")).toBe(false);
     expect(isNavigationOwner("test@localhost")).toBe(false);
     expect(isNavigationOwner("someone@example.com")).toBe(false);
     expect(isNavigationOwner("")).toBe(false);
