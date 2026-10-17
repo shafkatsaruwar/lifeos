@@ -98,6 +98,7 @@ describe("entitlement / promo", () => {
       enableMasterOS: true,
     };
     expect(isHubVisibleInNav("Life", legacyOn, now)).toBe(true);
+    expect(isHubVisibleInNav("Home", legacyOn, now)).toBe(true);
     expect(isHubVisibleInNav("School", legacyOn, now)).toBe(true);
     expect(isHubVisibleInNav("Career", legacyOn, now)).toBe(true);
     expect(isHubVisibleInNav("Work", legacyOn, now)).toBe(false);
