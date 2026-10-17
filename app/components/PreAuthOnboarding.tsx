@@ -45,7 +45,7 @@ const STEPS: Array<{
 ];
 
 const SPACE_CHIPS = [
-  { id: "life", label: "Life", icon: Home },
+  { id: "life", label: "Home", icon: Home },
   { id: "school", label: "School", icon: GraduationCap },
   { id: "work", label: "Work", icon: Briefcase },
   { id: "career", label: "Career", icon: Target },
