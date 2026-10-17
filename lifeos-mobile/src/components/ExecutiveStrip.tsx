@@ -4,12 +4,17 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useLifeOS } from "../lib/LifeOSContext";
 import {
+  acknowledgeRun,
   activeRuns,
   COPY,
   emptyExecutiveHub,
   findRoutine,
+  isEngineError,
   modeLabel,
   resolveCurrentStep,
+  restoreExecutiveNotifications,
+  resumeRun,
+  saveExecutiveHub,
   subscribeExecutiveHub,
   type ExecutiveHub,
 } from "../lib/executive";
@@ -27,6 +32,13 @@ export function ExecutiveStrip() {
 
   const run = activeRuns(hub)[0];
   const open = () => navigation.navigate("ExecutiveHome");
+
+  const persist = async (next: ExecutiveHub) => {
+    setHub(next);
+    if (!user?.uid) return;
+    await saveExecutiveHub(user.uid, next);
+    await restoreExecutiveNotifications(next);
+  };
 
   if (!run) {
     return (
@@ -61,14 +73,30 @@ export function ExecutiveStrip() {
         ? step.prompt
         : COPY.previousOpen(label);
 
+  const primaryLabel =
+    run.state === "paused" ? "Resume" : run.state === "in_progress" && step ? (step.kind === "yes_no" ? "Yes" : "Completed") : "Starting now";
+
+  const onPrimary = async () => {
+    if (run.state === "paused") {
+      const result = resumeRun(hub, run.id);
+      if (!isEngineError(result)) await persist(result);
+      return;
+    }
+    if (run.state === "in_progress") {
+      open();
+      return;
+    }
+    const result = acknowledgeRun(hub, run.id, "start");
+    if (!isEngineError(result)) await persist(result);
+  };
+
+  const onCancel = async () => {
+    const result = acknowledgeRun(hub, run.id, "decline");
+    if (!isEngineError(result)) await persist(result);
+  };
+
   return (
-    <Pressable
-      onPress={open}
-      style={({ pressed }) => [
-        styles.active,
-        { borderColor: theme.border, backgroundColor: theme.surface, opacity: pressed ? 0.85 : 1 },
-      ]}
-    >
+    <View style={[styles.active, { borderColor: theme.border, backgroundColor: theme.surface }]}>
       <View style={{ flex: 1, gap: 4 }}>
         <Text style={[styles.chip, { color: theme.accent }]}>
           {modeLabel(run.mode)} · {label}
@@ -77,10 +105,27 @@ export function ExecutiveStrip() {
           {prompt}
         </Text>
       </View>
-      <View style={[styles.cta, { backgroundColor: theme.text }]}>
-        <Text style={{ color: theme.surface, fontWeight: "700", fontSize: 12 }}>Open</Text>
+      <View style={styles.actions}>
+        <Pressable
+          onPress={() => void onPrimary()}
+          style={({ pressed }) => [styles.cta, { backgroundColor: theme.text, opacity: pressed ? 0.8 : 1 }]}
+        >
+          <Text style={{ color: theme.surface, fontWeight: "700", fontSize: 12 }}>{primaryLabel}</Text>
+        </Pressable>
+        <Pressable
+          onPress={open}
+          style={({ pressed }) => [styles.quiet, { borderColor: theme.border, opacity: pressed ? 0.8 : 1 }]}
+        >
+          <Text style={{ color: theme.text, fontWeight: "700", fontSize: 12 }}>Open</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => void onCancel()}
+          style={({ pressed }) => [styles.quiet, { borderColor: theme.border, opacity: pressed ? 0.8 : 1 }]}
+        >
+          <Text style={{ color: theme.muted, fontWeight: "700", fontSize: 12 }}>Cancel</Text>
+        </Pressable>
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -102,5 +147,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   chip: { fontSize: 10, fontWeight: "800", letterSpacing: 0.3, textTransform: "uppercase" },
-  cta: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  actions: { gap: 6, alignItems: "stretch" },
+  cta: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, alignItems: "center" },
+  quiet: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: "center",
+    borderWidth: 1,
+  },
 });
