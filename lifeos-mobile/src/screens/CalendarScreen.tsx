@@ -19,7 +19,7 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { ActionButton, Card, Empty, Eyebrow, IconButton, Page, SegmentedControl, Subtitle, Title } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
@@ -33,6 +33,7 @@ import {
   normalizeCalendars,
 } from "../lib/calendars";
 import {
+  clearTaskLinksToEvent,
   parseTaskCalendarEventId,
   taskDueDateKey,
   tasksReadyToPlaceOnDay,
@@ -117,6 +118,7 @@ export function CalendarScreen() {
   const tabBarPad = useFloatingTabBarContentPadding(28);
   const { theme, workspace, updateCalendar, updateCalendars, updateTasks, updateSettings } = useLifeOS();
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const colorScheme = useColorScheme();
   const pickerTheme = colorScheme === "dark" ? "dark" : "light";
   const defaultView = normalizeCalendarDefaultView(workspace.settings.defaultCalendarView);
@@ -124,6 +126,7 @@ export function CalendarScreen() {
   const [cursor, setCursor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => toDateKey(new Date()));
   const [importOpen, setImportOpen] = useState(false);
+  const openEventIdParam = typeof route.params?.openEventId === "string" ? route.params.openEventId : undefined;
   const [icalUrl, setIcalUrl] = useState("");
   const [icalName, setIcalName] = useState("");
   const [icalColor, setIcalColor] = useState(SPACE_COLORS[3] || "#47a47b");
@@ -357,6 +360,18 @@ export function CalendarScreen() {
     setComposerOpen(true);
   };
 
+  useEffect(() => {
+    if (!openEventIdParam) return;
+    const target =
+      workspace.calendar.find((event) => event.id === openEventIdParam) ||
+      events.find((event) => event.id === openEventIdParam);
+    if (!target) return;
+    openComposer(target);
+    navigation.setParams?.({ openEventId: undefined });
+    // Deep-link open from task sessions — run once per param value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openEventIdParam]);
+
   const pickRepeat = () => {
     Alert.alert(
       "Repeat",
@@ -486,7 +501,9 @@ export function CalendarScreen() {
       Alert.alert("Work meeting", "Remove this meeting from WorkOS.");
       return;
     }
+    // Deleting a calendar event never deletes the task — only clears orphan links.
     await updateCalendar(workspace.calendar.filter((event) => event.id !== editingId));
+    await updateTasks(clearTaskLinksToEvent(workspace.tasks, editingId));
     setComposerOpen(false);
   };
 

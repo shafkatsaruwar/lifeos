@@ -43,6 +43,8 @@ import { isNavigationOwner } from "@/lib/navigationOwner";
 import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
 import { buildMonthEventSegments, eventOccursOnDate, getEventDateRange, getEventDayBlockMinutes, usesDailyTimeWindow, type MonthEventSegment } from "@/lib/calendarEvents";
 import {
+  applyCompleteTaskSessionChoice,
+  applyDeleteTaskEventChoice,
   applyRouteEventToTask,
   buildScheduledSessionEvent,
   buildTaskCalendarOverlay,
@@ -62,6 +64,8 @@ import {
   suggestedSessionEnd,
   unlinkTaskFromEvent,
   type CalendarLayerVisibility,
+  type CompleteTaskSessionChoice,
+  type DeleteTaskEventChoice,
 } from "@/lib/taskCalendar";
 import { coalesceEventMeetingUrl, detectMeetingProvider, eventNotesLabel, eventPlaceLabel, extractMeetingUrl, meetingJoinLabel, resolveEventMeeting } from "@/lib/meetingLinks";
 import { formatFocusMinutesShort, formatFocusSessionLabel, formatFocusTime } from "@/lib/focusTime";
@@ -749,6 +753,13 @@ export default function LifeOS() {
   const [actionTaskId, setActionTaskId] = useState<number | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [taskPageId, setTaskPageId] = useState<number | null>(null);
+  const [taskCalendarPrompt, setTaskCalendarPrompt] = useState<null | {
+    kind: "complete" | "delete";
+    taskId: number;
+    title: string;
+    count: number;
+    onKeep?: () => void;
+  }>(null);
   const [actionProjectName, setActionProjectName] = useState<string | null>(null);
   const [actionClassId, setActionClassId] = useState<string | null>(null);
   const [selectedProjectName, setSelectedProjectName] = useState<string | null>(null);
@@ -1914,31 +1925,13 @@ export default function LifeOS() {
     return () => stopListeningToFirebaseChanges('resources');
   }, [cloudUserId, resourcesHydrated]);
 
-  const complete = (id: number) => {
-    const completedTask = tasks.find(task => task.id === id);
+  const applyCompleteToggle = (id: number, startingTasks: Task[] = tasks) => {
+    const completedTask = startingTasks.find(task => task.id === id);
     const isCompleting = Boolean(completedTask && !completedTask.done);
-    if (isCompleting && completedTask) {
-      const todayKey = toDateKey(new Date());
-      const upcoming = futureLinkedSessions(completedTask, calendarEvents, todayKey);
-      if (upcoming.length) {
-        const removeFuture = window.confirm(
-          `“${completedTask.title}” has ${upcoming.length} future calendar session${upcoming.length === 1 ? "" : "s"}.\n\nOK = remove future sessions · Cancel = keep them (recommended). Past sessions always stay.`,
-        );
-        if (removeFuture) {
-          const removeIds = new Set(upcoming.map(event => event.id));
-          setCalendarEvents(items => items.filter(event => !removeIds.has(event.id)));
-          setTasks(items => items.map(task => (
-            task.id === id && task.calendarEventId && removeIds.has(task.calendarEventId)
-              ? { ...task, calendarEventId: undefined }
-              : task
-          )));
-        }
-      }
-    }
-    setTasks(items => {
-      const target = items.find(task => task.id === id);
-      if (!target) return items;
-      const next: Task[] = items.map(t => t.id === id ? { ...t, done: !t.done, canceled: false, status: (!t.done ? "Done" : "Not started") as TaskStatus, completedAt: !t.done ? new Date().toISOString() : undefined } : t);
+    setTasks(() => {
+      const target = startingTasks.find(task => task.id === id);
+      if (!target) return startingTasks;
+      const next: Task[] = startingTasks.map(t => t.id === id ? { ...t, done: !t.done, canceled: false, status: (!t.done ? "Done" : "Not started") as TaskStatus, completedAt: !t.done ? new Date().toISOString() : undefined } : t);
       if (!target.done && target.recurringDays) {
         const nextDue = new Date();
         nextDue.setDate(nextDue.getDate() + target.recurringDays);
@@ -1948,6 +1941,40 @@ export default function LifeOS() {
     });
     if (isCompleting && completedTask) setSettingsState(current => ({ ...current, momentumLog: [{ id: String(Date.now()), at: new Date().toISOString(), type: "done" as const, title: completedTask.title }, ...(current.momentumLog ?? [])].slice(0, 40) }));
     setSettingsState(current => current.nowTaskId === id ? { ...current, nowTaskId: null } : current);
+  };
+
+  const resolveCompleteSessions = (id: number, choice: CompleteTaskSessionChoice) => {
+    const todayKey = toDateKey(new Date());
+    const applied = applyCompleteTaskSessionChoice({
+      tasks,
+      events: calendarEvents,
+      taskId: id,
+      todayKey,
+      choice,
+    });
+    if (choice === "removeFuture") setCalendarEvents(applied.events);
+    applyCompleteToggle(id, applied.tasks);
+  };
+
+  const complete = (id: number, onAfter?: () => void) => {
+    const completedTask = tasks.find(task => task.id === id);
+    const isCompleting = Boolean(completedTask && !completedTask.done);
+    if (isCompleting && completedTask) {
+      const todayKey = toDateKey(new Date());
+      const upcoming = futureLinkedSessions(completedTask, calendarEvents, todayKey);
+      if (upcoming.length) {
+        setTaskCalendarPrompt({
+          kind: "complete",
+          taskId: id,
+          title: completedTask.title,
+          count: upcoming.length,
+          onKeep: onAfter,
+        });
+        return;
+      }
+    }
+    applyCompleteToggle(id);
+    onAfter?.();
   };
   const flash = useCallback((message: string) => {
     setNotice(message);
@@ -2388,32 +2415,36 @@ export default function LifeOS() {
     setActionTaskId(null);
     flash("Priority status updated");
   };
-  const deleteTask = (id: number) => {
-    const target = tasks.find(task => task.id === id);
-    const linked = target ? eventsLinkedToTask(target, calendarEvents) : [];
-    if (linked.length) {
-      const removeEvents = window.confirm(
-        `Delete “${target?.title ?? "task"}”?\n\nOK = also delete ${linked.length} linked calendar event${linked.length === 1 ? "" : "s"} · Cancel = keep events (unlink only, recommended).`,
-      );
-      if (removeEvents) {
-        const removeIds = new Set(linked.map(event => event.id));
-        setCalendarEvents(items => items.filter(event => !removeIds.has(event.id)));
-      } else {
-        setCalendarEvents(items => items.map(event => (
-          event.linkedTaskId === id ? { ...event, linkedTaskId: undefined } : event
-        )));
-      }
-    }
-    setTasks(items => {
-      const next = items.filter(task => task.id !== id);
-      if (activeTaskId === id) setActiveTaskId(next[0]?.id ?? 0);
-      return next;
+  const finishDeleteTask = (id: number, choice: DeleteTaskEventChoice = "keep") => {
+    const applied = applyDeleteTaskEventChoice({
+      tasks,
+      events: calendarEvents,
+      taskId: id,
+      choice,
     });
+    setCalendarEvents(applied.events);
+    if (activeTaskId === id) setActiveTaskId(applied.tasks[0]?.id ?? 0);
+    setTasks(applied.tasks);
     setActionTaskId(null);
     setEditingTaskId(null);
     setTaskPageId(current => current === id ? null : current);
     setSettingsState(current => current.nowTaskId === id ? { ...current, nowTaskId: null } : current);
     flash("Priority deleted");
+  };
+
+  const deleteTask = (id: number) => {
+    const target = tasks.find(task => task.id === id);
+    const linked = target ? eventsLinkedToTask(target, calendarEvents) : [];
+    if (linked.length) {
+      setTaskCalendarPrompt({
+        kind: "delete",
+        taskId: id,
+        title: target?.title ?? "task",
+        count: linked.length,
+      });
+      return;
+    }
+    finishDeleteTask(id, "keep");
   };
   const deleteTasks = (ids: number[]) => {
     if (!ids.length) return;
@@ -2803,6 +2834,36 @@ export default function LifeOS() {
     />
   );
 
+  const taskCalendarChoiceLayer = taskCalendarPrompt ? (
+    <TaskCalendarChoiceModal
+      key={`task-cal-choice-${taskCalendarPrompt.kind}-${taskCalendarPrompt.taskId}`}
+      prompt={taskCalendarPrompt}
+      close={() => setTaskCalendarPrompt(null)}
+      onCompleteKeep={() => {
+        const prompt = taskCalendarPrompt;
+        setTaskCalendarPrompt(null);
+        resolveCompleteSessions(prompt.taskId, "keep");
+        prompt.onKeep?.();
+      }}
+      onCompleteRemove={() => {
+        const prompt = taskCalendarPrompt;
+        setTaskCalendarPrompt(null);
+        resolveCompleteSessions(prompt.taskId, "removeFuture");
+        prompt.onKeep?.();
+      }}
+      onDeleteKeep={() => {
+        const prompt = taskCalendarPrompt;
+        setTaskCalendarPrompt(null);
+        finishDeleteTask(prompt.taskId, "keep");
+      }}
+      onDeleteLinked={() => {
+        const prompt = taskCalendarPrompt;
+        setTaskCalendarPrompt(null);
+        finishDeleteTask(prompt.taskId, "deleteLinked");
+      }}
+    />
+  ) : null;
+
   if (taskPageTask) {
     return <>
       {notificationShell}
@@ -2816,7 +2877,13 @@ export default function LifeOS() {
       onSwitch={setTaskPageId}
       onUpdate={updates => updateTaskDetails(taskPageTask.id, updates)}
       onFocus={() => { chooseNowTask(taskPageTask.id); rememberSpaceTask(taskPageTask); setTaskPageId(null); setFocus(true); }}
-      onMarkDone={() => { complete(taskPageTask.id); chooseNowTask(settingsState.nowTaskId === taskPageTask.id ? null : settingsState.nowTaskId ?? null); setTaskPageId(null); flash("Done. Cleared from active views."); }}
+      onMarkDone={() => {
+        complete(taskPageTask.id, () => {
+          chooseNowTask(settingsState.nowTaskId === taskPageTask.id ? null : settingsState.nowTaskId ?? null);
+          setTaskPageId(null);
+          flash("Done. Cleared from active views.");
+        });
+      }}
       onDelete={() => deleteTask(taskPageTask.id)}
       onOpenCalendarEvent={(eventId) => { setTaskPageId(null); setEditingCalendarEventId(eventId); go("Calendar"); }}
       onUnlinkSession={(eventId) => {
@@ -2825,16 +2892,19 @@ export default function LifeOS() {
       }}
       onScheduleSession={(day, start, end) => scheduleTaskSession(taskPageTask.id, day, start, end)}
     />
+      {taskCalendarChoiceLayer}
     </>;
   }
   if (focus) {
     if (!activeTask) return <>
       {notificationShell}
       <EmptyFocus onExit={() => { setFocus(false); setView("Now"); }} onNewTask={() => { setFocus(false); setComposer("task"); }} />
+      {taskCalendarChoiceLayer}
     </>;
     return <>
       {notificationShell}
       <FocusMode key={activeTask.id} task={activeTask} tasks={activeTasks} soundEffectsEnabled={settingsState.soundEffects} onUpdateNotes={(id, notes) => updateTaskDetails(id, { notes })} onSwitch={(id) => { setActiveTaskId(id); chooseNowTask(id); const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); }} onUpdateChecklist={updateTaskChecklist} onUpdateChecklistProgress={updateTaskChecklistProgress} onUpdateFocusSession={updateFocusSession} onComplete={complete} onExit={(destination) => { setFocus(false); setView(destination ?? "Now"); }} />
+      {taskCalendarChoiceLayer}
     </>;
   }
 
@@ -3138,6 +3208,7 @@ export default function LifeOS() {
         )}
         {breakOpen && <BreakModal key="break-modal" close={() => setBreakOpen(false)} done={() => { setBreakOpen(false); flash("Break complete — ease back in"); }} />}
         {actionTaskId !== null && tasks.find(task => task.id === actionTaskId) && <TaskActionsModal key={`task-actions-${actionTaskId}`} task={tasks.find(task => task.id === actionTaskId)!} close={() => setActionTaskId(null)} open={() => { openTaskPage(actionTaskId); setActionTaskId(null); }} edit={() => { setEditingTaskId(actionTaskId); setActionTaskId(null); }} toggleCanceled={() => toggleCanceled(actionTaskId)} remove={() => deleteTask(actionTaskId)} />}
+        {taskCalendarChoiceLayer}
         {actionClassId && classes.find(item => item.id === actionClassId) && <ClassActionsModal key={`class-actions-${actionClassId}`} classRecord={classes.find(item => item.id === actionClassId)!} close={() => setActionClassId(null)} edit={() => { setEditingClassId(actionClassId); setActionClassId(null); }} remove={() => { deleteClass(actionClassId); setActionClassId(null); }} />}
         {editingTaskId !== null && tasks.find(task => task.id === editingTaskId) && <EditTaskModal key={`edit-task-${editingTaskId}`} task={tasks.find(task => task.id === editingTaskId)!} tasks={tasks} projects={projectItems} classes={classes} close={() => setEditingTaskId(null)} save={(updates) => updateTask(editingTaskId, updates)} />}
         {editingProjectName && projectItems.find(project => project.name === editingProjectName) && <EditProjectModal key={`edit-project-${editingProjectName}`} project={projectItems.find(project => project.name === editingProjectName)!} close={() => setEditingProjectName(null)} save={(name, desc, color, icon) => updateProject(editingProjectName, name, desc, color, icon)} />}
@@ -5801,8 +5872,6 @@ function TaskWorkspace({ task, tasks, projects, classes, calendarEvents = [], on
               onSubmit={event => {
                 event.preventDefault();
                 if (!scheduleDay || !scheduleStart || !scheduleEnd || scheduleEnd <= scheduleStart) return;
-                const ok = window.confirm(`Schedule “${task.title}” on ${scheduleDay} from ${scheduleStart} to ${scheduleEnd}?`);
-                if (!ok) return;
                 onScheduleSession(scheduleDay, scheduleStart, scheduleEnd);
                 setScheduling(false);
               }}
@@ -5810,7 +5879,7 @@ function TaskWorkspace({ task, tasks, projects, classes, calendarEvents = [], on
               <label>Date<input type="date" value={scheduleDay} onChange={event => setScheduleDay(event.target.value)} /></label>
               <label>Start<input type="time" value={scheduleStart} onChange={event => { setScheduleStart(event.target.value); setScheduleEnd(suggestedSessionEnd(event.target.value, task.focusMinutes)); }} /></label>
               <label>End<input type="time" value={scheduleEnd} onChange={event => setScheduleEnd(event.target.value)} /></label>
-              <p className="task-schedule-hint">Suggested length from focus estimate: {task.focusMinutes}m</p>
+              <p className="task-schedule-hint">Creates a LifeOS work session titled “{task.title}”. Suggested length from focus estimate: {task.focusMinutes}m</p>
               <div className="create-actions">
                 <button type="button" onClick={() => setScheduling(false)}>Cancel</button>
                 <button className="primary" type="submit" disabled={!scheduleDay || scheduleEnd <= scheduleStart}>Confirm schedule</button>
@@ -5820,7 +5889,7 @@ function TaskWorkspace({ task, tasks, projects, classes, calendarEvents = [], on
         </section>
 
         <section className="task-danger-zone">
-          {!confirmDelete ? <button onClick={() => setConfirmDelete(true)}><Trash2 size={14} /> Delete task</button> : <div><span>This permanently deletes the task. Linked calendar events stay unless you choose otherwise.</span><button onClick={() => setConfirmDelete(false)}>Keep it</button><button className="confirm-delete" onClick={onDelete}>Yes, delete</button></div>}
+          {!confirmDelete ? <button onClick={() => setConfirmDelete(true)}><Trash2 size={14} /> Delete task</button> : <div><span>This permanently deletes the task. You’ll choose whether linked calendar sessions stay or go.</span><button onClick={() => setConfirmDelete(false)}>Keep it</button><button className="confirm-delete" onClick={onDelete}>Continue…</button></div>}
         </section>
       </section>
 
@@ -6739,6 +6808,56 @@ function EditProjectModal({ project, close, save }: { project: Project; close: (
         </div>
         <div className="create-actions"><button type="button" onClick={close}>Cancel</button><button className="primary" disabled={!name.trim()} type="submit">Save changes</button></div>
       </motion.form>
+    </motion.div>
+  );
+}
+
+function TaskCalendarChoiceModal({
+  prompt,
+  close,
+  onCompleteKeep,
+  onCompleteRemove,
+  onDeleteKeep,
+  onDeleteLinked,
+}: {
+  prompt: { kind: "complete" | "delete"; title: string; count: number };
+  close: () => void;
+  onCompleteKeep: () => void;
+  onCompleteRemove: () => void;
+  onDeleteKeep: () => void;
+  onDeleteLinked: () => void;
+}) {
+  const isComplete = prompt.kind === "complete";
+  return (
+    <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.div className="create-modal task-calendar-choice-modal" onMouseDown={event => event.stopPropagation()} initial={{ scale: 0.98, y: 8 }} animate={{ scale: 1, y: 0 }}>
+        <div className="capture-head">
+          <div className="brain-dot"><CalendarDays size={16} /></div>
+          <div>
+            <strong>{isComplete ? "Future calendar sessions" : "Linked calendar events"}</strong>
+            <span>
+              {isComplete
+                ? `“${prompt.title}” has ${prompt.count} future session${prompt.count === 1 ? "" : "s"}. Past sessions always stay.`
+                : `Delete “${prompt.title}”? It has ${prompt.count} linked calendar event${prompt.count === 1 ? "" : "s"}.`}
+            </span>
+          </div>
+          <button type="button" onClick={close} aria-label="Close"><X size={18} /></button>
+        </div>
+        <p className="task-calendar-choice-copy">
+          {isComplete
+            ? "Choose whether to keep upcoming work blocks on the calendar or remove them. Nothing is removed silently."
+            : "Deleting the task never silently deletes calendar events. Pick Keep events (unlink only) or delete LifeOS sessions linked to this task."}
+        </p>
+        <div className="task-calendar-choice-actions">
+          <button type="button" className="primary" onClick={isComplete ? onCompleteKeep : onDeleteKeep}>
+            {isComplete ? "Keep sessions" : "Keep events"}
+          </button>
+          <button type="button" className="danger-choice" onClick={isComplete ? onCompleteRemove : onDeleteLinked}>
+            {isComplete ? "Remove future sessions" : "Delete linked sessions"}
+          </button>
+          <button type="button" onClick={close}>Cancel</button>
+        </div>
+      </motion.div>
     </motion.div>
   );
 }

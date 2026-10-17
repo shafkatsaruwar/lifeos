@@ -1,4 +1,6 @@
 import {
+  applyCompleteTaskSessionChoice,
+  applyDeleteTaskEventChoice,
   applyRouteEventToTask,
   buildScheduledSessionEvent,
   buildTaskCalendarOverlay,
@@ -164,5 +166,47 @@ describe("taskCalendar layers", () => {
       { id: "b", title: "Future", start: "2026-10-30T09:00", source: "LifeOS" as const, color: "#1", linkedTaskId: 1 },
     ];
     expect(futureLinkedSessions(t, events, "2026-10-17").map((e) => e.id)).toEqual(["b"]);
+  });
+
+  it("keeps historical sessions when completing with removeFuture", () => {
+    const tasks = [task({ id: 1, title: "A", calendarEventId: "future" })];
+    const events = [
+      { id: "past", title: "Past", start: "2026-10-01T09:00", source: "LifeOS" as const, color: "#1", linkedTaskId: 1 },
+      { id: "future", title: "Future", start: "2026-10-30T09:00", source: "LifeOS" as const, color: "#1", linkedTaskId: 1 },
+    ];
+    const kept = applyCompleteTaskSessionChoice({
+      tasks,
+      events,
+      taskId: 1,
+      todayKey: "2026-10-17",
+      choice: "keep",
+    });
+    expect(kept.events.map((e) => e.id)).toEqual(["past", "future"]);
+
+    const removed = applyCompleteTaskSessionChoice({
+      tasks,
+      events,
+      taskId: 1,
+      todayKey: "2026-10-17",
+      choice: "removeFuture",
+    });
+    expect(removed.events.map((e) => e.id)).toEqual(["past"]);
+    expect(removed.tasks[0].calendarEventId).toBeUndefined();
+  });
+
+  it("deletes or unlinks linked events when deleting a task", () => {
+    const tasks = [task({ id: 1, title: "A", calendarEventId: "a" }), task({ id: 2, title: "B" })];
+    const events = [
+      { id: "a", title: "A", start: "2026-10-20T09:00", source: "LifeOS" as const, color: "#1", linkedTaskId: 1 },
+      { id: "b", title: "Extra", start: "2026-10-21T09:00", source: "LifeOS" as const, color: "#1", linkedTaskId: 1 },
+    ];
+    const keep = applyDeleteTaskEventChoice({ tasks, events, taskId: 1, choice: "keep" });
+    expect(keep.tasks.map((t) => t.id)).toEqual([2]);
+    expect(keep.events).toHaveLength(2);
+    expect(keep.events.every((e) => e.linkedTaskId === undefined)).toBe(true);
+
+    const del = applyDeleteTaskEventChoice({ tasks, events, taskId: 1, choice: "deleteLinked" });
+    expect(del.tasks.map((t) => t.id)).toEqual([2]);
+    expect(del.events).toHaveLength(0);
   });
 });

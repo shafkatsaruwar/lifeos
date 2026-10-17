@@ -17,9 +17,20 @@ import { ActionButton, Card, Page, SegmentedControl } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { FocusModal } from "../components/FocusModal";
 import { useLifeOS } from "../lib/LifeOSContext";
-import { parseTaskRouteId } from "../lib/helpers";
+import {
+  applyCompleteTaskSessionChoice,
+  applyDeleteTaskEventChoice,
+  buildScheduledSessionEvent,
+  eventsLinkedToTask,
+  formatSessionRange,
+  futureLinkedSessions,
+  suggestedSessionEnd,
+  unlinkTaskFromEvent,
+  type CalendarEventRef,
+} from "../lib/calendarTasks";
+import { parseTaskRouteId, toDateKey } from "../lib/helpers";
 import { PRIORITY_COLOR } from "../lib/theme";
-import type { EnergyLevel, Priority, Task, TaskStatus } from "../types";
+import type { CalendarEvent, EnergyLevel, Priority, Task, TaskStatus } from "../types";
 
 function parseDueDate(due?: string): Date {
   if (due && /^\d{4}-\d{2}-\d{2}$/.test(due)) {
@@ -70,8 +81,12 @@ function spaceKeyForTask(task: Task) {
   return `project:${task.project}`;
 }
 
+function asEventRef(event: CalendarEvent): CalendarEventRef {
+  return event;
+}
+
 export function TaskDetailScreen() {
-  const { workspace, theme, updateTasks, updateSettings } = useLifeOS();
+  const { workspace, theme, updateTasks, updateCalendar, updateSettings } = useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const tabBarPad = useFloatingTabBarContentPadding(28);
@@ -80,8 +95,23 @@ export function TaskDetailScreen() {
   const [focusOpen, setFocusOpen] = useState(false);
   const [showDuePicker, setShowDuePicker] = useState(false);
   const [showStartPicker, setShowStartPicker] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
+  const [scheduleDay, setScheduleDay] = useState(() => toDateKey(new Date()));
+  const [scheduleStart, setScheduleStart] = useState("09:00");
+  const [scheduleEnd, setScheduleEnd] = useState("09:45");
+  const [showScheduleDayPicker, setShowScheduleDayPicker] = useState(false);
+  const [showScheduleStartPicker, setShowScheduleStartPicker] = useState(false);
+  const [showScheduleEndPicker, setShowScheduleEndPicker] = useState(false);
   const colorScheme = useColorScheme();
   const pickerTheme = colorScheme === "dark" ? "dark" : "light";
+  const calendarRefs = useMemo(
+    () => workspace.calendar.map(asEventRef),
+    [workspace.calendar],
+  );
+  const linkedSessions = useMemo(
+    () => (task ? eventsLinkedToTask(task, calendarRefs) : []),
+    [task, calendarRefs],
+  );
 
   const spaces = useMemo<SpaceOption[]>(() => {
     const projectSpaces = workspace.projects.map((project) => ({
@@ -147,24 +177,186 @@ export function TaskDetailScreen() {
     persist({ project: space.project, classId: space.classId, color: space.color });
   };
 
-  const deleteTask = () => {
-    Alert.alert("Delete task", `Delete "${task.title}"? This can't be undone.`, [
+  const beginSchedule = () => {
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(task.due ?? "") ? task.due! : toDateKey(new Date());
+    const start = task.startTime || "09:00";
+    setScheduleDay(day);
+    setScheduleStart(start);
+    setScheduleEnd(suggestedSessionEnd(start, task.focusMinutes));
+    setScheduling(true);
+  };
+
+  const confirmSchedule = () => {
+    if (!scheduleDay || !scheduleStart || !scheduleEnd || scheduleEnd <= scheduleStart) {
+      Alert.alert("Check times", "End time must be after start time.");
+      return;
+    }
+    Alert.alert(
+      "Schedule session?",
+      `Schedule “${task.title}” on ${scheduleDay} from ${scheduleStart} to ${scheduleEnd}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm",
+          onPress: () => {
+            const session = buildScheduledSessionEvent({
+              task,
+              day: scheduleDay,
+              start: scheduleStart,
+              end: scheduleEnd,
+            });
+            const nextEvent: CalendarEvent = {
+              ...session,
+              color: session.color,
+              source: "LifeOS",
+            };
+            void updateCalendar([...workspace.calendar, nextEvent]);
+            if (!task.calendarEventId) {
+              void updateTasks(
+                workspace.tasks.map((item) =>
+                  item.id === taskId ? { ...item, calendarEventId: session.id } : item,
+                ),
+              );
+            }
+            setScheduling(false);
+          },
+        },
+      ],
+    );
+  };
+
+  const unlinkSession = (eventId: string) => {
+    Alert.alert("Unlink session?", "Keeps both the task and the calendar event.", [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Delete",
-        style: "destructive",
+        text: "Unlink",
         onPress: () => {
-          updateTasks(workspace.tasks.filter((t) => t.id !== taskId));
-          navigation.goBack();
+          void updateTasks(unlinkTaskFromEvent(workspace.tasks, taskId, eventId));
+            void updateCalendar(
+              workspace.calendar.map((event) =>
+                event.id === eventId ? { ...event, linkedTaskId: undefined } : event,
+              ),
+            );
         },
       },
     ]);
+  };
+
+  const openLinkedEvent = (eventId: string) => {
+    navigation.navigate("CalendarTab" as never, {
+      screen: "CalendarMain",
+      params: { openEventId: eventId },
+    } as never);
+  };
+
+  const markDoneWithSessionChoice = (patch: Partial<Task>) => {
+    const todayKey = toDateKey(new Date());
+    const upcoming = futureLinkedSessions(task, calendarRefs, todayKey);
+    if (!upcoming.length) {
+      persist(patch);
+      return;
+    }
+    Alert.alert(
+      "Future sessions",
+      `“${task.title}” has ${upcoming.length} future calendar session${upcoming.length === 1 ? "" : "s"}. Past sessions always stay.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Keep sessions",
+          onPress: () => {
+            persist(patch);
+          },
+        },
+        {
+          text: "Remove future",
+          style: "destructive",
+          onPress: () => {
+            const applied = applyCompleteTaskSessionChoice({
+              tasks: workspace.tasks,
+              events: workspace.calendar,
+              taskId,
+              todayKey,
+              choice: "removeFuture",
+            });
+            void updateCalendar(applied.events);
+            void updateTasks(
+              applied.tasks.map((item) => (item.id === taskId ? { ...item, ...patch } : item)),
+            );
+          },
+        },
+      ],
+    );
+  };
+
+  const setStatus = (status: TaskStatus) => {
+    const patch = { status, done: status === "Done", canceled: status === "Canceled" } as const;
+    if (status === "Done" && !task.done) {
+      markDoneWithSessionChoice(patch);
+      return;
+    }
+    persist(patch);
+  };
+
+  const deleteTask = () => {
+    const linked = linkedSessions;
+    if (!linked.length) {
+      Alert.alert("Delete task", `Delete “${task.title}”? This can't be undone.`, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void updateTasks(workspace.tasks.filter((t) => t.id !== taskId));
+            navigation.goBack();
+          },
+        },
+      ]);
+      return;
+    }
+    Alert.alert(
+      "Delete task?",
+      `“${task.title}” has ${linked.length} linked calendar event${linked.length === 1 ? "" : "s"}. Choose what happens to those events.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Keep events",
+          onPress: () => {
+            const applied = applyDeleteTaskEventChoice({
+              tasks: workspace.tasks,
+              events: workspace.calendar,
+              taskId,
+              choice: "keep",
+            });
+            void updateCalendar(applied.events);
+            void updateTasks(applied.tasks);
+            navigation.goBack();
+          },
+        },
+        {
+          text: "Delete sessions",
+          style: "destructive",
+          onPress: () => {
+            const applied = applyDeleteTaskEventChoice({
+              tasks: workspace.tasks,
+              events: workspace.calendar,
+              taskId,
+              choice: "deleteLinked",
+            });
+            void updateCalendar(applied.events);
+            void updateTasks(applied.tasks);
+            navigation.goBack();
+          },
+        },
+      ],
+    );
   };
 
   const toggleChecklistItem = (index: number) => {
     const progress = task.checklistProgress ?? (task.checklist ?? []).map(() => false);
     persist({ checklistProgress: progress.map((v, i) => (i === index ? !v : v)) });
   };
+
+  const statusDoneOrCanceled = task.status === "Done" || task.status === "Canceled" || task.done || task.canceled;
 
   return (
     <Page edges={["top", "bottom"]}>
@@ -253,7 +445,7 @@ export function TaskDetailScreen() {
             {STATUS_OPTIONS.map((status) => (
               <Pressable
                 key={status}
-                onPress={() => persist({ status, done: status === "Done", canceled: status === "Canceled" })}
+                onPress={() => setStatus(status)}
                 style={[styles.chip, { borderColor: task.status === status ? theme.accent : theme.border, backgroundColor: task.status === status ? theme.soft : "transparent" }]}
               >
                 <Text style={{ color: theme.text, fontSize: 12, fontWeight: "700" }}>{status}</Text>
@@ -413,6 +605,188 @@ export function TaskDetailScreen() {
 
         <Card>
           <View style={styles.cardHeadRow}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={[styles.cardLabel, { color: theme.text }]}>Scheduled Sessions</Text>
+              <Text style={[styles.spaceHint, { color: theme.muted }]}>
+                Calendar time blocks linked to this task. Multiple sessions are fine.
+              </Text>
+            </View>
+            {!statusDoneOrCanceled ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Schedule Time" onPress={beginSchedule}>
+                <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "800" }}>Schedule</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {linkedSessions.length ? (
+            <View style={styles.sessionList}>
+              {linkedSessions.map((session) => (
+                <View
+                  key={session.id}
+                  style={[styles.sessionRow, { borderColor: theme.border, backgroundColor: theme.surface }]}
+                >
+                  <View style={[styles.sessionDot, { backgroundColor: session.color || theme.accent }]} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={{ color: theme.text, fontSize: 14, fontWeight: "700" }} numberOfLines={1}>
+                      {session.title}
+                    </Text>
+                    <Text style={{ color: theme.muted, fontSize: 12, marginTop: 2 }}>
+                      {formatSessionRange(session)}
+                    </Text>
+                  </View>
+                  <View style={styles.sessionActions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Open calendar event"
+                      onPress={() => openLinkedEvent(session.id)}
+                      style={[styles.sessionBtn, { borderColor: theme.border }]}
+                    >
+                      <Text style={{ color: theme.text, fontSize: 11, fontWeight: "700" }}>Open</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Unlink session"
+                      onPress={() => unlinkSession(session.id)}
+                      style={[styles.sessionBtn, { borderColor: theme.border }]}
+                    >
+                      <Text style={{ color: theme.muted, fontSize: 11, fontWeight: "700" }}>Unlink</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={[styles.spaceHint, { color: theme.muted, marginBottom: 0 }]}>
+              No scheduled sessions yet. Use Schedule to put a work block on the calendar.
+            </Text>
+          )}
+          {scheduling && !statusDoneOrCanceled ? (
+            <View style={[styles.scheduleForm, { borderColor: theme.border, backgroundColor: theme.soft }]}>
+              <Text style={[styles.cardLabel, { color: theme.text }]}>Schedule Time</Text>
+              <Text style={[styles.spaceHint, { color: theme.muted }]}>
+                Title prefills from the task · suggested length {task.focusMinutes ?? 45}m
+              </Text>
+              {Platform.OS === "ios" ? (
+                <View style={styles.schedulePickers}>
+                  <View style={styles.scheduleField}>
+                    <Text style={[styles.fieldLabel, { color: theme.muted }]}>Date</Text>
+                    <DateTimePicker
+                      value={parseDueDate(scheduleDay)}
+                      mode="date"
+                      display="compact"
+                      themeVariant={pickerTheme}
+                      onChange={(_, date) => {
+                        if (date) setScheduleDay(formatDueDate(date));
+                      }}
+                    />
+                  </View>
+                  <View style={styles.scheduleField}>
+                    <Text style={[styles.fieldLabel, { color: theme.muted }]}>Start</Text>
+                    <DateTimePicker
+                      value={parseStartTime(scheduleStart)}
+                      mode="time"
+                      display="compact"
+                      minuteInterval={5}
+                      themeVariant={pickerTheme}
+                      onChange={(_, date) => {
+                        if (!date) return;
+                        const next = formatStartTime(date);
+                        setScheduleStart(next);
+                        setScheduleEnd(suggestedSessionEnd(next, task.focusMinutes));
+                      }}
+                    />
+                  </View>
+                  <View style={styles.scheduleField}>
+                    <Text style={[styles.fieldLabel, { color: theme.muted }]}>End</Text>
+                    <DateTimePicker
+                      value={parseStartTime(scheduleEnd)}
+                      mode="time"
+                      display="compact"
+                      minuteInterval={5}
+                      themeVariant={pickerTheme}
+                      onChange={(_, date) => {
+                        if (date) setScheduleEnd(formatStartTime(date));
+                      }}
+                    />
+                  </View>
+                </View>
+              ) : (
+                <View style={{ gap: 10 }}>
+                  <Pressable
+                    onPress={() => setShowScheduleDayPicker(true)}
+                    style={[styles.pickerButton, { borderColor: theme.border }]}
+                  >
+                    <Feather name="calendar" size={16} color={theme.accent} />
+                    <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>{scheduleDay}</Text>
+                  </Pressable>
+                  {showScheduleDayPicker ? (
+                    <DateTimePicker
+                      value={parseDueDate(scheduleDay)}
+                      mode="date"
+                      display="default"
+                      onChange={(event, date) => {
+                        setShowScheduleDayPicker(false);
+                        if (event.type !== "dismissed" && date) setScheduleDay(formatDueDate(date));
+                      }}
+                    />
+                  ) : null}
+                  <Pressable
+                    onPress={() => setShowScheduleStartPicker(true)}
+                    style={[styles.pickerButton, { borderColor: theme.border }]}
+                  >
+                    <Feather name="clock" size={16} color={theme.accent} />
+                    <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>Start {scheduleStart}</Text>
+                  </Pressable>
+                  {showScheduleStartPicker ? (
+                    <DateTimePicker
+                      value={parseStartTime(scheduleStart)}
+                      mode="time"
+                      display="default"
+                      minuteInterval={5}
+                      onChange={(event, date) => {
+                        setShowScheduleStartPicker(false);
+                        if (event.type !== "dismissed" && date) {
+                          const next = formatStartTime(date);
+                          setScheduleStart(next);
+                          setScheduleEnd(suggestedSessionEnd(next, task.focusMinutes));
+                        }
+                      }}
+                    />
+                  ) : null}
+                  <Pressable
+                    onPress={() => setShowScheduleEndPicker(true)}
+                    style={[styles.pickerButton, { borderColor: theme.border }]}
+                  >
+                    <Feather name="clock" size={16} color={theme.accent} />
+                    <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>End {scheduleEnd}</Text>
+                  </Pressable>
+                  {showScheduleEndPicker ? (
+                    <DateTimePicker
+                      value={parseStartTime(scheduleEnd)}
+                      mode="time"
+                      display="default"
+                      minuteInterval={5}
+                      onChange={(event, date) => {
+                        setShowScheduleEndPicker(false);
+                        if (event.type !== "dismissed" && date) setScheduleEnd(formatStartTime(date));
+                      }}
+                    />
+                  ) : null}
+                </View>
+              )}
+              <View style={styles.row}>
+                <ActionButton label="Cancel" quiet onPress={() => setScheduling(false)} />
+                <ActionButton
+                  label="Confirm schedule"
+                  icon="calendar"
+                  onPress={confirmSchedule}
+                />
+              </View>
+            </View>
+          ) : null}
+        </Card>
+
+        <Card>
+          <View style={styles.cardHeadRow}>
             <Text style={[styles.cardLabel, { color: theme.text }]}>Checklist</Text>
             <Pressable onPress={() => persist({ checklist: [...(task.checklist ?? []), ""], checklistProgress: [...(task.checklistProgress ?? []), false] })}>
               <Feather name="plus" size={18} color={theme.accent} />
@@ -484,4 +858,31 @@ const styles = StyleSheet.create({
   checkRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
   checkBox: { width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
   checkInput: { flex: 1, fontSize: 14, paddingVertical: 4 },
+  sessionList: { gap: 8, marginTop: 4 },
+  sessionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 10,
+  },
+  sessionDot: { width: 10, height: 10, borderRadius: 5 },
+  sessionActions: { flexDirection: "row", gap: 6 },
+  sessionBtn: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  scheduleForm: {
+    marginTop: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 12,
+    gap: 10,
+  },
+  schedulePickers: { gap: 8 },
+  scheduleField: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 36 },
+  fieldLabel: { fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
 });
