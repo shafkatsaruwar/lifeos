@@ -1,33 +1,79 @@
 # LifeOS design archive — pre-lock snapshot (2026-10)
 
-Frozen reference of how LifeOS looked **before** locking the Atelier / Now redesign.
-Keep this so we can restore or compare without guessing.
+Frozen reference of how LifeOS looked **before** locking further Atelier / Now chrome changes.
+Use this to restore or compare without guessing.
 
-## Brand mark (sidebar)
+## How to restore
 
-- **Previous (locked earlier this week):** black tile `#111`, white bars (heights 6 / 11 / 8).
-- **At the moment of this archive request:** same bar geometry; fill/background may flip to white tile + black bars per product request — see `app/globals.css` `.brand-mark`.
-- Markup: three `<span>` bars inside `.brand-mark` (see sidebar in `app/page.tsx`).
+| Goal | Git commit | Frozen files |
+|------|------------|--------------|
+| **Now as in the Arc screenshot** (chips-era strip Career → Life → School → Tasks, Quick Capture still present, classic dark mark) | `85c93e3` — *Atelier 2.0: Now skyline weather, quote, and Today timeline* | `snapshots/pre-cleanup-now/` |
+| **Main tip before Home / Navigation / SF Pro / black-on-white mark** | `e8dcd14` — *remove leftover merge conflict markers* | `snapshots/pre-branch-main/` |
 
-## Now surface (Atelier)
+Restore example (check out files onto a branch; do not force-push `main`):
 
-- Greeting + date, weather + quote, large Focus card, hub strip under Focus, Today calendar card, Copilot.
-- Hub strip order (current product rule): **Home → one enabled hub → Calendar → Tasks**; if no extra hubs, **Library** fills the last slot; Calendar/Tasks replace additional hubs.
-- Quick-capture chips (Daily reset / Weekly review / Plan today) and the large Quick Capture card were removed from Now before this archive.
+```bash
+git checkout -b restore/pre-cleanup-now
+git checkout 85c93e3 -- app/globals.css app/page.tsx public/favicon.svg
+```
 
-## Sidebar
+Or copy from the frozen tree:
 
-- Environments: Life (display **Home**), Work, Career, School, Study Abroad, Treasury, Mastery (gated by hub toggles / Pro).
-- Navigation: Tasks, **Navigation** (opens Executive Function panel), Calendar, Library.
-- Executive Function previously lived as a strip on Now (`ExecutiveActiveStrip`); moved into the sidebar as **Navigation**.
+```bash
+cp docs/design-archive/snapshots/pre-cleanup-now/globals.css app/globals.css
+cp docs/design-archive/snapshots/pre-cleanup-now/page.tsx app/page.tsx
+cp docs/design-archive/snapshots/pre-cleanup-now/favicon.svg public/favicon.svg
+```
 
-## Typography (at archive time)
+## Visual look (screenshot era)
 
-- Body: Inter (local woff2 in `app/fonts/`).
-- Display: Instrument Serif (Google).
-- Pending product request: sole font `SFProDisplay-Medium.ttf` across browsers (requires shipping the TTF; Apple system SF Pro is a Mac/iOS-only fallback).
+<img alt="Now / Atelier pre-lock" src="./assets/now-atelier-pre-lock.png" />
 
-## Key files
+What that frame shows:
+
+- **Sidebar:** LifeOS wordmark + dark equalizer mark, Search ⌘K, Environments (Now / Life / Career…), Navigation (Tasks / Calendar / Library), Settings + profile.
+- **Now hero:** “Good afternoon…”, date, Boston weather, quote, large Focus card.
+- **Hub strip under Focus (old order):** Career → Life → School → Tasks.
+- **Today** timeline card + **Quick Capture** + **LifeOS Copilot**.
+- **Executive Function** still lived as a utility strip on Now (not yet a sidebar “Navigation” item).
+
+## Brand mark (pre-lock)
+
+Canonical pre-lock mark (also in `design-system.md`):
+
+- Tile `#242428` / `#111111`, white bars heights **6 / 11 / 8**.
+- Do not treat the later white-tile / black-bar or accent-tinted atelier variants as the archive baseline.
+
+Frozen CSS excerpt lives at the top of `snapshots/pre-cleanup-now/globals.css` (and again later in that file where Atelier temporarily overrode the mark — prefer the early `#242428` block when restoring the classic look).
+
+## Tokens (pre-lock)
+
+From `snapshots/pre-cleanup-now/globals.css` / living `design-system.md`:
+
+| Token | Light |
+|-------|--------|
+| `--canvas` | `#F7F9FC` |
+| `--panel` | `#FFFFFF` |
+| `--ink` | `#111827` |
+| `--muted` | `#64748B` |
+| `--line` | `#E2E8F0` |
+| `--accent` | `#2563EB` (atelier) / older violet `#625af6` in places |
+| `--font-sans` | Inter + system |
+| `--font-display` | Instrument Serif |
+
+## What’s in this folder
+
+```
+docs/design-archive/
+  pre-lock-2026-10.md          ← this index
+  assets/now-atelier-pre-lock.png
+  snapshots/
+    pre-cleanup-now/           ← 85c93e3 globals + page + favicon
+    pre-branch-main/           ← e8dcd14 globals + favicon
+    design-system-living.md    ← copy of docs/design-system.md at archive time
+```
+
+## Key live paths (current tree)
 
 | Area | Path |
 |------|------|
@@ -36,9 +82,3 @@ Keep this so we can restore or compare without guessing.
 | Executive panel | `app/components/ExecutivePanel.tsx` |
 | Favicon | `public/favicon.svg` |
 | Design notes | `docs/design-system.md` |
-
-## Screenshot reference
-
-<img alt="Now / Atelier pre-lock" src="./assets/now-atelier-pre-lock.png" />
-
-User-provided Now screenshot (Arc, Mac): Focus card, hub strip, Today, Copilot.
