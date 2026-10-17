@@ -18,6 +18,8 @@ export type StoreConfig = FirebaseAuthConfig & {
   userId?: string;
   cwd?: string;
   home?: string;
+  /** When true, write tools may mutate live Firebase. Default off. */
+  allowWrites?: boolean;
 };
 
 export type LoadedStore = {
@@ -40,8 +42,15 @@ export function readStoreConfig(env: NodeJS.ProcessEnv = process.env, cwd = proc
     serviceAccountJson: (env.FIREBASE_SERVICE_ACCOUNT_JSON || "").trim() || undefined,
     googleApplicationCredentials: (env.GOOGLE_APPLICATION_CREDENTIALS || "").trim() || undefined,
     userId: (env.LIFEOS_USER_ID || "").trim() || undefined,
+    allowWrites: parseAllowWrites(env.LIFEOS_ALLOW_WRITES),
     cwd,
   };
+}
+
+/** Opt-in switch. Unset, empty, or any other value keeps the connector read-only. */
+export function parseAllowWrites(value: string | undefined): boolean {
+  const raw = (value || "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
 /**
