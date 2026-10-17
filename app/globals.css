@@ -831,13 +831,9 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .dark .tile-school svg{background:#4C1D9555;color:#C4B5FD}
 .dark .tile-tasks svg{background:#88133755;color:#FDA4AF}
 .atelier-now-bottom{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.15fr);gap:16px;align-items:stretch}
-.atelier-capture-panel{min-height:180px}
-.atelier-capture-body{display:flex;gap:10px;padding:4px 18px 8px;align-items:center}
-.atelier-capture-body input{flex:1;height:48px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2);padding:0 14px;font-size:14px;outline:0;color:var(--ink)}
-.atelier-capture-body input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
-.atelier-capture-add{width:48px;height:48px;border:0;border-radius:14px;background:var(--accent);color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 8px 18px color-mix(in srgb,var(--accent) 30%,transparent)}
-.atelier-capture-hint{margin:0 18px 16px;font-size:11px;color:var(--muted)}
+.atelier-now-bottom-solo{grid-template-columns:1fr}
 .atelier-now-bottom .copilot-card{min-height:180px;border-radius:20px;background:linear-gradient(160deg,color-mix(in srgb,var(--panel) 88%,var(--accent-2) 12%),var(--panel));border-color:color-mix(in srgb,var(--accent-2) 18%,var(--line))}
+.command-results>button.suggested{background:color-mix(in srgb,var(--accent) 10%,var(--canvas))}
 .atelier-now-utility{display:grid;gap:12px;margin-top:4px}
 .atelier-utility-actions{display:flex;flex-wrap:wrap;gap:8px}
 .now-today-list{padding:6px 0 10px}

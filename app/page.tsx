@@ -94,6 +94,13 @@ import {
 import { normalizeCareerHub } from "@/lib/careerHelpers";
 import { ExecutiveActiveStrip, ExecutivePanel } from "@/app/components/ExecutivePanel";
 import { NowWeatherWidget } from "@/app/components/NowWeatherWidget";
+import {
+  executeCaptureCommand,
+  filterCaptureCommands,
+  INSTANT_COMMANDS,
+  listCaptureCommands,
+  type CaptureCommand,
+} from "@/lib/captureCommands";
 import { emptyExecutiveHub, normalizeExecutiveHub } from "@/lib/executive/hub";
 import { tickExecutiveSchedules } from "@/lib/executive/engine";
 import type { ExecutiveHub } from "@/lib/executive/types";
@@ -2486,6 +2493,95 @@ export default function LifeOS() {
     if (view === "Study Abroad") return [...studyHits, ...base];
     return [...base, ...studyHits];
   }, [activeTasks, classes, notes, projectItems, query, settingsState.enableStudyAbroad, studyAbroadHub, view, visibleNav]);
+  const captureCommands = useMemo(
+    () =>
+      listCaptureCommands({
+        enableWorkOS: settingsState.enableWorkOS !== false,
+        enableStudyAbroad: settingsState.enableStudyAbroad !== false,
+        enableMasterOS: settingsState.enableMasterOS !== false,
+      }),
+    [settingsState.enableMasterOS, settingsState.enableStudyAbroad, settingsState.enableWorkOS],
+  );
+  const runCaptureCommand = useCallback(
+    (raw: string) => {
+      const activeNow = tasks.filter((task) => !task.done && !task.canceled);
+      const current = activeNow.find((task) => task.id === settingsState.nowTaskId);
+      const focusTarget =
+        current ??
+        [...activeNow].sort((a, b) => {
+          const rank = (task: Task) => (task.priority === "High" ? 0 : task.priority === "Medium" ? 1 : 2);
+          return rank(a) - rank(b);
+        })[0];
+      return executeCaptureCommand(raw, {
+        flags: {
+          enableWorkOS: settingsState.enableWorkOS !== false,
+          enableStudyAbroad: settingsState.enableStudyAbroad !== false,
+          enableMasterOS: settingsState.enableMasterOS !== false,
+        },
+        flash,
+        go: (view) => go(view as View),
+        openFocus,
+        openBreak: () => setBreakOpen(true),
+        openAmbient: () => setAmbientStartOpen(true),
+        openSmartCapture: () => setAiTaskComposer(true),
+        openGuided: () => setGuidedPanelOpen(true),
+        openTimesheet: () => {
+          setWorkView("timesheet");
+          go("Work");
+        },
+        addTask: (title, options) => addTask(title, undefined, "", options),
+        addProject: (name) => addProject(name),
+        addNote: (title) => createNote(undefined, undefined, title),
+        addAssignment: (title) => {
+          const activeClasses = classes.filter((item) => !isClassArchived(item));
+          if (!activeClasses.length) {
+            flash("Add a course first");
+            setSpaceComposer("class");
+            return;
+          }
+          addAcademicTask(activeClasses[0].id, {
+            title,
+            due: toDateKey(new Date()),
+            priority: "Medium",
+            focusMinutes: settingsState.defaultFocusMinutes,
+            energy: settingsState.defaultEnergy,
+            academicType: "Assignment",
+          });
+        },
+        nowTaskId: settingsState.nowTaskId ?? null,
+        enqueue: enqueueNowTask,
+        choose: chooseNowTask,
+        focusTargetId: focusTarget?.id ?? null,
+        timeTracking,
+        setTimeTracking,
+        setWorkHub,
+        studyAbroadHub,
+        setStudyAbroadHub,
+        currentTaskTitle: current?.title,
+      });
+    },
+    [
+      addAcademicTask,
+      addProject,
+      addTask,
+      chooseNowTask,
+      classes,
+      createNote,
+      enqueueNowTask,
+      flash,
+      go,
+      openFocus,
+      settingsState.defaultEnergy,
+      settingsState.defaultFocusMinutes,
+      settingsState.enableMasterOS,
+      settingsState.enableStudyAbroad,
+      settingsState.enableWorkOS,
+      settingsState.nowTaskId,
+      studyAbroadHub,
+      tasks,
+      timeTracking,
+    ],
+  );
   const calendarFeed = useMemo(
     () => [
       ...calendarEvents,
@@ -2767,7 +2863,7 @@ export default function LifeOS() {
       {!focus && floatingFocusTask && <FloatingFocusDock task={floatingFocusTask} onResume={(session) => { updateFocusSession(floatingFocusTask.id, session); setActiveTaskId(floatingFocusTask.id); chooseNowTask(floatingFocusTask.id); setFocus(true); }} onUpdateSession={(session) => updateFocusSession(floatingFocusTask.id, session)} onEnd={() => updateFocusSession(floatingFocusTask.id, { remainingSeconds: getTaskFocusSeconds(floatingFocusTask), hasStarted: false, isRunning: false, halfwayPrompted: Boolean(floatingFocusTask.focusHalfwayPrompted) })} />}
       <AnimatePresence>
         {needsWorkspaceName && <WelcomeNameModal key="welcome-name-modal" suggestedName={user?.displayName} save={(preferredName) => setSettingsState(current => ({ ...current, preferredName, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} />}
-        {palette && <CommandPalette key="command-palette" query={query} setQuery={setQuery} results={filtered} close={() => { setPalette(false); setQuery(""); }} go={go} onFocus={() => { setPalette(false); openFocus(); }} onCapture={() => { setPalette(false); setCapture(true); }} onNewTask={() => { setPalette(false); setComposer("task"); }} onResult={(result) => {
+        {palette && <CommandPalette key="command-palette" query={query} setQuery={setQuery} results={filtered} close={() => { setPalette(false); setQuery(""); }} captureCommands={captureCommands} onRunCaptureCommand={runCaptureCommand} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} onFocus={() => { setPalette(false); openFocus(); }} onCapture={() => { setPalette(false); setCapture(true); }} onNewTask={() => { setPalette(false); setComposer("task"); }} onResult={(result) => {
           const task = activeTasks.find(item => item.title === result);
           const project = projectItems.find(item => item.name === result);
           const classRecord = classes.find(item => item.code === result);
@@ -2847,13 +2943,8 @@ export default function LifeOS() {
 
 function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, timeTracking, onTimeTrackingChange, onOpenTimesheet, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableWorkOS, enableStudyAbroad, enableMasterOS, onboardingCompletedAt, onMarkOnboarded, flash, guidedHub, onGuidedChange, onOpenGuided}: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; timeTracking: TimeTrackingState; onTimeTrackingChange: (next: TimeTrackingState) => void; onOpenTimesheet: () => void; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableWorkOS: boolean; enableStudyAbroad: boolean; enableMasterOS: boolean; onboardingCompletedAt?: string; onMarkOnboarded: () => void; flash: (message: string) => void; guidedHub: ExecutiveHub; onGuidedChange: (hub: ExecutiveHub) => void; onOpenGuided: () => void }) {
   const [handoff, setHandoff] = useState("");
-  const [captureInput, setCaptureInput] = useState("");
-  const [captureFocused, setCaptureFocused] = useState(false);
-  const [suggestedCommandIndex, setSuggestedCommandIndex] = useState(-1);
   const [queueOpen, setQueueOpen] = useState(false);
   const [dragQueueId, setDragQueueId] = useState<number | null>(null);
-  const captureInputRef = useRef<HTMLInputElement | null>(null);
-  const captureBlurTimer = useRef<number | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false;
     if (onboardingCompletedAt) return false;
@@ -2865,7 +2956,6 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   }, [onboardingCompletedAt]);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
-  useEffect(() => () => { if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current); }, []);
   const today = toDateKey(new Date());
   const allActive = tasks.filter(task => !task.done && !task.canceled);
   const active = allActive.filter(task => getTaskStatus(task) !== "Waiting" || !task.followUpDate || task.followUpDate <= today);
@@ -2913,285 +3003,6 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     if (typeof window !== 'undefined') localStorage.setItem('lifeos-onboarding-seen', 'true');
     onMarkOnboarded();
   };
-  const commands = [
-    { shortcut: '/t', label: 'Add task', desc: 'Create a new task' },
-    { shortcut: '/tm', label: 'Minor task', desc: 'Low-energy errand — water, charge, quick chore' },
-    { shortcut: '/proj', label: 'Add project', desc: 'Start a new project' },
-    { shortcut: '/asg', label: 'Add assignment', desc: 'School mode only' },
-    { shortcut: '/note', label: 'Add note', desc: 'Capture a quick note' },
-    { shortcut: '/focus', label: 'Start focus', desc: 'Enter a focus session' },
-    { shortcut: '/break', label: 'Break', desc: 'I need a break' },
-    { shortcut: '/clock', label: 'Clock in/out', desc: 'Start or stop contractor timesheet' },
-    { shortcut: '/timesheet', label: 'Timesheet', desc: 'Open full timesheet editor' },
-    { shortcut: '/spaces', label: 'Spaces', desc: 'Open your spaces' },
-    { shortcut: '/w', label: 'I\'m doing something', desc: 'Start ambient activity' },
-    { shortcut: '/a', label: 'AI task', desc: 'Create with AI assistance' },
-    ...(enableWorkOS ? [
-      { shortcut: '/w proj', label: 'Work project', desc: 'Start a work project' },
-      { shortcut: '/w deliver', label: 'Deliverable', desc: 'Add a work deliverable' },
-      { shortcut: '/w task', label: 'Work task', desc: 'Add a work task' },
-      { shortcut: '/w tasks', label: 'Work task', desc: 'Add a work task (alias)' },
-      { shortcut: '/w meet', label: 'Schedule meeting', desc: 'Schedule a meeting' },
-    ] : []),
-    ...(enableStudyAbroad ? [
-      { shortcut: '/sa', label: 'Study Abroad', desc: 'Open Study Abroad' },
-      { shortcut: '/sa country', label: 'Country', desc: 'Add a country path' },
-      { shortcut: '/sa uni', label: 'University', desc: 'Add a university' },
-      { shortcut: '/sa prog', label: 'Program', desc: 'Add a program' },
-      { shortcut: '/sa app', label: 'Application', desc: 'Start an application' },
-      { shortcut: '/sa fund', label: 'Scholarship', desc: 'Add funding / scholarship' },
-      { shortcut: '/sa note', label: 'Note', desc: 'Add study-abroad knowledge' },
-      { shortcut: '/sa task', label: 'SA task', desc: 'Add a study-abroad task' },
-    ] : []),
-    ...(enableMasterOS ? [
-      { shortcut: '/mos', label: 'Mastery', desc: 'Open teaching workspace (web / iPad)' },
-    ] : []),
-  ];
-  const captureQuery = captureInput.startsWith('/') ? captureInput.trim().toLowerCase() : '';
-  const showCommandHelp = showCaptureCommands && captureFocused && (!captureInput || captureInput.startsWith('/'));
-  const filtered = captureQuery
-    ? commands.filter(c => c.shortcut.startsWith(captureQuery) || c.shortcut.includes(captureQuery) || c.label.toLowerCase().includes(captureQuery.slice(1)))
-    : (showCommandHelp ? commands : []);
-  const showSuggestions = filtered.length > 0 && (captureFocused || Boolean(captureQuery));
-  const runInstantCommand = (raw: string) => {
-    const val = raw.trim().toLowerCase();
-    if (val === '/w') { onStartAmbient(); return true; }
-    if (val === '/break') { onBreak(); return true; }
-    if (val === '/clock') {
-      const active = getActiveEntry(timeTracking);
-      if (active) {
-        onTimeTrackingChange(clockOut(timeTracking));
-        flash("Clocked out");
-      } else {
-        onTimeTrackingChange(clockIn(timeTracking, {
-          clientName: timeTracking.defaultClientName,
-          title: current?.title || "Work session",
-        }));
-        flash("Clocked in");
-      }
-      return true;
-    }
-    if (val === '/timesheet') { onOpenTimesheet(); return true; }
-    if (val === '/a') { onSmartCapture(); return true; }
-    if (val === '/focus') {
-      const target = current ?? recommendations[0];
-      if (target) onFocus(target.id);
-      return true;
-    }
-    if (val === '/spaces') { onGo('Spaces'); return true; }
-    if (val === '/guide' || val === '/guided' || val === '/executive' || val === '/unfreeze') { onOpenGuided(); return true; }
-    if (enableStudyAbroad && (val === '/sa' || val === '/study abroad')) { onGo('Study Abroad'); return true; }
-    if (enableMasterOS && (val === '/mos' || val === '/masteros')) { onGo('Mastery'); return true; }
-    return false;
-  };
-  const handleCaptureFocus = () => {
-    if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current);
-    setCaptureFocused(true);
-  };
-  const handleCaptureBlur = () => {
-    captureBlurTimer.current = window.setTimeout(() => setCaptureFocused(false), 160);
-  };
-  /** After a command runs, clear + unfocus so the help list does not pop back open. */
-  const finishCaptureCommand = () => {
-    if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current);
-    setCaptureInput("");
-    setSuggestedCommandIndex(-1);
-    setCaptureFocused(false);
-    captureInputRef.current?.blur();
-  };
-  const handleCaptureKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setSuggestedCommandIndex(Math.min(suggestedCommandIndex + 1, filtered.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSuggestedCommandIndex(Math.max(suggestedCommandIndex - 1, -1));
-    } else if (e.key === 'Escape') {
-      setCaptureFocused(false);
-      e.currentTarget.blur();
-    } else if (e.key === 'Enter') {
-      const val = e.currentTarget.value.trim();
-      if (suggestedCommandIndex >= 0) {
-        const cmd = filtered[suggestedCommandIndex];
-        if (['/w', '/break', '/a', '/focus', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
-          runInstantCommand(cmd.shortcut);
-          finishCaptureCommand();
-        } else {
-          setCaptureInput(cmd.shortcut + ' ');
-          setSuggestedCommandIndex(-1);
-        }
-      } else if (val) {
-        if (runInstantCommand(val)) {
-          finishCaptureCommand();
-        } else if (val.startsWith('/t ')) {
-          const taskTitle = val.slice(3).trim();
-          if (taskTitle) {
-            const id = onAddTask(taskTitle);
-            if (id) {
-              if (nowTaskId) onEnqueue(id);
-              else onChoose(id);
-            }
-          }
-          finishCaptureCommand();
-        } else if (val.startsWith('/tm ')) {
-          const taskTitle = val.slice(4).trim();
-          if (taskTitle) {
-            const id = onAddTask(taskTitle, {
-              energy: 'Low',
-              priority: 'Low',
-              focusMinutes: 5,
-              flashLabel: 'Minor task added',
-            });
-            if (id) {
-              if (nowTaskId) onEnqueue(id);
-              else onChoose(id);
-            }
-          }
-          finishCaptureCommand();
-        } else if (val.startsWith('/proj ')) {
-          const projectName = val.slice(6).trim();
-          if (projectName) onAddProject(projectName);
-          finishCaptureCommand();
-        } else if (val.startsWith('/asg ')) {
-          const assignmentTitle = val.slice(5).trim();
-          if (assignmentTitle) onAddAssignment(assignmentTitle);
-          finishCaptureCommand();
-        } else if (val.startsWith('/note ')) {
-          const noteTitle = val.slice(6).trim();
-          if (noteTitle) onAddNote(noteTitle);
-          finishCaptureCommand();
-        } else if (enableWorkOS && val.startsWith('/w proj ')) {
-          const projName = val.slice(8).trim() || 'New Project';
-          const newProj: WorkProject = { id: `proj-${Date.now()}`, name: projName, color: '#625af6', status: 'active', createdAt: new Date().toISOString() };
-          onSetWorkHub((current: WorkHubState) => ({ ...current, projects: [...current.projects, newProj] }));
-          finishCaptureCommand();
-        } else if (enableWorkOS && val.startsWith('/w deliver ')) {
-          const title = val.slice(11).trim() || 'New deliverable';
-          onSetWorkHub((current: WorkHubState) => {
-            const project = current.projects.find(item => item.status === 'active');
-            if (!project) return current;
-            const deliverable: WorkDeliverable = { id: `del-${Date.now()}`, projectId: project.id, title, type: 'document', status: 'planned', priority: 'medium', dueDate: toDateKey(new Date()), createdAt: new Date().toISOString() };
-            return { ...current, deliverables: [...current.deliverables, deliverable] };
-          });
-          finishCaptureCommand();
-        } else if (enableWorkOS && (val.startsWith('/w task ') || val.startsWith('/w tasks '))) {
-          const title = val.startsWith('/w tasks ') ? val.slice(9).trim() : val.slice(8).trim();
-          onSetWorkHub((current: WorkHubState) => captureAddWorkTask(current, title || "New task"));
-          flash(title ? `Work task added: ${title}` : "Work task added");
-          finishCaptureCommand();
-        } else if (!enableWorkOS && (val.startsWith('/w task ') || val.startsWith('/w tasks ') || val.startsWith('/w proj ') || val.startsWith('/w deliver ') || val.startsWith('/w meet '))) {
-          flash("Enable WorkOS in Settings to use /w work commands");
-          finishCaptureCommand();
-        } else if (enableWorkOS && val.startsWith('/w meet ')) {
-          const meetTitle = val.slice(8).trim() || 'New Meeting';
-          const newMeet: WorkMeeting = { id: `meet-${Date.now()}`, title: meetTitle, start: new Date().toISOString(), type: 'other', createdAt: new Date().toISOString() };
-          onSetWorkHub((current: WorkHubState) => ({ ...current, meetings: [...current.meetings, newMeet] }));
-          finishCaptureCommand();
-        } else if (enableStudyAbroad && val.startsWith('/sa country ')) {
-          const name = val.slice(12).trim();
-          if (name) {
-            const stamp = nowIso();
-            onSetStudyAbroadHub(current => appendHistory({
-              ...current,
-              countries: [...current.countries, { id: newId('country'), name, createdAt: stamp, updatedAt: stamp }],
-            }, 'Added country', name, 'country'));
-            flash(`Country added: ${name}`);
-          }
-          finishCaptureCommand();
-        } else if (enableStudyAbroad && val.startsWith('/sa uni ')) {
-          const name = val.slice(8).trim();
-          if (name) {
-            const country = studyAbroadHub.countries[0];
-            if (!country) flash('Add a country first with /sa country');
-            else {
-              const stamp = nowIso();
-              onSetStudyAbroadHub(current => appendHistory({
-                ...current,
-                universities: [...current.universities, { id: newId('uni'), name, countryId: country.id, createdAt: stamp, updatedAt: stamp }],
-              }, 'Added university', name, 'university'));
-              flash(`University added: ${name}`);
-            }
-          }
-          finishCaptureCommand();
-        } else if (enableStudyAbroad && val.startsWith('/sa prog ')) {
-          const name = val.slice(9).trim();
-          if (name) {
-            const university = studyAbroadHub.universities[0];
-            if (!university) flash('Add a university first with /sa uni');
-            else {
-              const stamp = nowIso();
-              onSetStudyAbroadHub(current => appendHistory({
-                ...current,
-                programs: [...current.programs, { id: newId('prog'), name, universityId: university.id, status: 'discovering', shortlisted: false, createdAt: stamp, updatedAt: stamp }],
-              }, 'Added program', name, 'program'));
-              flash(`Program added: ${name}`);
-            }
-          }
-          finishCaptureCommand();
-        } else if (enableStudyAbroad && val.startsWith('/sa app ')) {
-          const name = val.slice(8).trim();
-          const program = name
-            ? studyAbroadHub.programs.find(item => item.name.toLowerCase() === name.toLowerCase()) || studyAbroadHub.programs[0]
-            : studyAbroadHub.programs[0];
-          if (!program) flash('Add a program first with /sa prog');
-          else {
-            const stamp = nowIso();
-            onSetStudyAbroadHub(current => appendHistory({
-              ...current,
-              applications: [...current.applications, { id: newId('app'), programId: program.id, stage: 'preparing', createdAt: stamp, updatedAt: stamp }],
-              programs: current.programs.map(item => item.id === program.id ? { ...item, status: 'preparing', shortlisted: true, updatedAt: stamp } : item),
-            }, 'Started application', program.name, 'application'));
-            flash(`Application started: ${program.name}`);
-          }
-          finishCaptureCommand();
-        } else if (enableStudyAbroad && (val.startsWith('/sa fund ') || val.startsWith('/sa scholarship '))) {
-          const name = val.startsWith('/sa scholarship ') ? val.slice(16).trim() : val.slice(9).trim();
-          if (name) {
-            const stamp = nowIso();
-            onSetStudyAbroadHub(current => appendHistory({
-              ...current,
-              funding: [...current.funding, { id: newId('fund'), name, kind: 'scholarship', countryId: current.countries[0]?.id, status: 'researching', createdAt: stamp, updatedAt: stamp }],
-            }, 'Added funding', name, 'funding'));
-            flash(`Scholarship added: ${name}`);
-          }
-          finishCaptureCommand();
-        } else if (enableStudyAbroad && val.startsWith('/sa task ')) {
-          const title = val.slice(9).trim();
-          if (title) {
-            const parentProgramId = studyAbroadHub.sessionMemory?.lastProgramId || studyAbroadHub.programs[0]?.id;
-            const parentCountryId = studyAbroadHub.countries[0]?.id;
-            if (!parentProgramId && !parentCountryId) flash('Add a country or program first');
-            else {
-              const stamp = nowIso();
-              const parentType = parentProgramId ? 'program' as const : 'country' as const;
-              const parentId = parentProgramId || parentCountryId!;
-              onSetStudyAbroadHub(current => appendHistory({
-                ...current,
-                tasks: [...current.tasks, { id: newId('task'), title, parentType, parentId, createdAt: stamp, updatedAt: stamp }],
-              }, 'Added study-abroad task', title, parentType, parentId));
-              flash(`Study Abroad task: ${title}`);
-            }
-          }
-          finishCaptureCommand();
-        } else if (enableStudyAbroad && val.startsWith('/sa note ')) {
-          const title = val.slice(9).trim();
-          if (title) {
-            const stamp = nowIso();
-            onSetStudyAbroadHub(current => appendHistory({
-              ...current,
-              knowledge: [...current.knowledge, { id: newId('know'), title, contextType: 'general', createdAt: stamp, updatedAt: stamp }],
-              sessionMemory: { ...current.sessionMemory, lastNote: title, updatedAt: stamp },
-            }, 'Added knowledge note', title, 'general'));
-            flash(`Study Abroad note: ${title}`);
-          }
-          finishCaptureCommand();
-        } else if (!val.startsWith('/')) {
-          onStartAmbient();
-          finishCaptureCommand();
-        }
-      }
-    }
-  };
   return <div className="now-view">
     {showOnboarding && (
       <div className="ob-overlay" role="dialog" aria-modal="true" aria-labelledby="postauth-onboarding-title">
@@ -3212,7 +3023,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             <h2 id="postauth-onboarding-title" className="ob-title">Ready to start your week?</h2>
             <p className="ob-body">A few habits that keep Now clear — capture fast, focus on one thing, let Copilot suggest the next move.</p>
             <div className="ob-tips">
-              <div className="ob-tip"><span className="ob-tip-icon"><Command size={16} /></span><div><strong>Capture commands</strong><p>Type <code>/t</code> for tasks, <code>/proj</code> for projects, <code>/asg</code> for assignments.</p></div></div>
+              <div className="ob-tip"><span className="ob-tip-icon"><Command size={16} /></span><div><strong>Command bar</strong><p>Use <code>⌘ K</code> or Search anything — type <code>/t</code> for tasks, <code>/break</code>, <code>/focus</code>.</p></div></div>
               <div className="ob-tip"><span className="ob-tip-icon"><Focus size={16} /></span><div><strong>Current task</strong><p>Click any task to focus on it. Your active work shows here with focus tools.</p></div></div>
               <div className="ob-tip"><span className="ob-tip-icon"><Sparkles size={16} /></span><div><strong>LifeOS Copilot</strong><p>Suggestions based on your priorities and context — you decide what runs.</p></div></div>
             </div>
@@ -3381,59 +3192,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
         </div>
       </div>
 
-      <div className="atelier-now-bottom">
-        <section className="card atelier-capture-panel">
-          <div className="card-head"><div><h2>Quick capture</h2></div></div>
-          <div className="atelier-capture-body">
-            <input
-              ref={captureInputRef}
-              type="text"
-              placeholder="Drop a thought, task, or idea…"
-              value={captureInput}
-              onChange={(e) => { setCaptureInput(e.currentTarget.value); setSuggestedCommandIndex(-1); }}
-              onFocus={handleCaptureFocus}
-              onClick={handleCaptureFocus}
-              onBlur={handleCaptureBlur}
-              onKeyDown={handleCaptureKeyDown}
-            />
-            <button type="button" className="atelier-capture-add" onClick={onCapture} aria-label="Capture"><Plus size={18} /></button>
-          </div>
-          {showSuggestions ? (
-            <div className="capture-suggestions" onMouseDown={(e) => e.preventDefault()}>
-              <div className="capture-suggestions-list">
-                {filtered.map((cmd, idx) => (
-                  <button
-                    key={cmd.shortcut}
-                    type="button"
-                    className={idx === suggestedCommandIndex ? "suggested" : ""}
-                    onClick={() => {
-                      if (['/w', '/break', '/a', '/focus', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
-                        runInstantCommand(cmd.shortcut);
-                        finishCaptureCommand();
-                      } else {
-                        setCaptureInput(cmd.shortcut + " ");
-                        setSuggestedCommandIndex(-1);
-                        captureInputRef.current?.focus();
-                      }
-                    }}
-                  >
-                    <strong>{cmd.shortcut}</strong>
-                    <span>{cmd.desc}</span>
-                  </button>
-                ))}
-              </div>
-              {showCaptureCommands ? (
-                <div className="capture-suggestions-footer">
-                  <button type="button" className="capture-dismiss" onClick={() => { onDismissCaptureCommands(); setCaptureFocused(false); }}>
-                    Don&apos;t show again
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <p className="atelier-capture-hint">/t · /tm · /break · /focus · /clock{enableMasterOS ? " · /mos" : ""}</p>
-          )}
-        </section>
+      <div className="atelier-now-bottom atelier-now-bottom-solo">
         <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} studyAbroadContext={enableStudyAbroad ? buildStudyAbroadCopilotContext(studyAbroadHub) : null} />
       </div>
 
@@ -4825,7 +4584,7 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
     const permission = await Notification.requestPermission();
     flash(permission === "granted" ? "Browser notifications enabled" : "Notifications not enabled");
   };
-  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Workspace</h2></div></div><div className="settings-body settings-body-dense"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{SPACE_COLORS.map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><p className="settings-note">Default accent for Now, Tasks, and the rest of LifeOS.</p><WorkspaceHubsEditor settings={settings} update={update} onRequestPaywall={onRequestPaywall} /><div className="settings-toggle-pair"><ToggleRow title="Compact" desc="Tighter spacing." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div>{settings.enableMasterOS !== false && <p className="settings-note">Mastery · type <code>/mos</code> on Now.</p>}</div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><div className="settings-calendar-default"><span className="settings-field-label">Default view</span><p className="settings-note" style={{ margin: "4px 0 10px" }}>Opens Calendar on this tab first.</p><div className="calendar-mode-tabs" role="group" aria-label="Default calendar view">{(["upcoming", "month", "day"] as CalendarDefaultView[]).map(option => <button key={option} type="button" className={normalizeCalendarDefaultView(settings.defaultCalendarView) === option ? "selected" : ""} onClick={() => update({ defaultCalendarView: option })}>{option === "upcoming" ? "Upcoming" : option === "month" ? "Month" : "Day"}</button>)}</div></div><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card settings-archives-card"><div className="card-head"><button type="button" className="settings-archives-toggle" aria-expanded={archivesOpen} onClick={() => setArchivesOpen(open => !open)}><div><span className="section-icon orange"><Archive size={14} /></span><h2>Archives</h2><ChevronDown size={16} className={`settings-archives-caret${archivesOpen ? " open" : ""}`} aria-hidden /></div><span className="count">{archivedTasks.length}</span></button></div>{archivesOpen ? <div className="settings-body"><p className="settings-note">Done and canceled tasks live here so your active lists stay clear. Restore any of them to put it back on your active list.</p><div className="agenda-list">{archivedTasks.length ? archivedTasks.slice(0, 40).map((task) => <div key={task.id} className="agenda-item compact archived-task-row"><i style={{ background: task.color || "var(--accent)" }} /><button type="button" className="archived-task-open" onClick={() => onOpenTask?.(task.id)}><strong>{task.title}</strong><p>{task.canceled || task.status === "Canceled" ? "Canceled" : "Done"}{task.project ? ` · ${task.project}` : ""}{task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</p></button><button type="button" className="archived-task-restore" onClick={() => onRestoreTask?.(task.id)}>Restore</button></div>) : <div className="priority-empty"><strong>No archived tasks yet.</strong><p>When you mark something done or canceled, it shows up here.</p></div>}</div></div> : null}</section><SubscriptionCheckoutCard entitlement={settings.entitlement} onEntitlementChange={(entitlement) => { update({ entitlement }); flash(!entitlement.expiresAt ? "LifeOS Pro unlocked for life." : entitlement.status === "promo" ? "Paid hubs unlocked for one year." : "LifeOS Pro unlocked for paid hubs."); }} onSubscribe={(offerId) => { const label = offerId === "pro-lifetime" ? "lifetime" : offerId === "pro-yearly" ? "annual" : "monthly"; flash(`Selected ${label} plan — finish store checkout when available, or redeem a promo code.`); }} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><SessionReplaySettingsRow /><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again. Session replay stays off unless you opt in; inputs are always masked.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body"><ToggleRow title="Show capture commands" desc="When you click the Now capture bar, show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} /><div className="shortcut-list" style={{ marginTop: 12 }}><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>/t</kbd><span>Add task (Now capture bar)</span></div><div><kbd>/break</kbd><span>Take a break</span></div><div><kbd>/focus</kbd><span>Start focus</span></div><div><kbd>/w</kbd><span>Start ambient activity</span></div><div><kbd>/a</kbd><span>AI task</span></div><div><kbd>/spaces</kbd><span>Open Spaces</span></div><div><kbd>/mos</kbd><span>Open Mastery (web / iPad)</span></div></div><p className="settings-note">Capture commands live in the Now capture bar. Type / to filter after you hide the cheatsheet.</p></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
+  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Workspace</h2></div></div><div className="settings-body settings-body-dense"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{SPACE_COLORS.map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><p className="settings-note">Default accent for Now, Tasks, and the rest of LifeOS.</p><WorkspaceHubsEditor settings={settings} update={update} onRequestPaywall={onRequestPaywall} /><div className="settings-toggle-pair"><ToggleRow title="Compact" desc="Tighter spacing." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div>{settings.enableMasterOS !== false && <p className="settings-note">Mastery · type <code>/mos</code> on Now.</p>}</div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><div className="settings-calendar-default"><span className="settings-field-label">Default view</span><p className="settings-note" style={{ margin: "4px 0 10px" }}>Opens Calendar on this tab first.</p><div className="calendar-mode-tabs" role="group" aria-label="Default calendar view">{(["upcoming", "month", "day"] as CalendarDefaultView[]).map(option => <button key={option} type="button" className={normalizeCalendarDefaultView(settings.defaultCalendarView) === option ? "selected" : ""} onClick={() => update({ defaultCalendarView: option })}>{option === "upcoming" ? "Upcoming" : option === "month" ? "Month" : "Day"}</button>)}</div></div><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card settings-archives-card"><div className="card-head"><button type="button" className="settings-archives-toggle" aria-expanded={archivesOpen} onClick={() => setArchivesOpen(open => !open)}><div><span className="section-icon orange"><Archive size={14} /></span><h2>Archives</h2><ChevronDown size={16} className={`settings-archives-caret${archivesOpen ? " open" : ""}`} aria-hidden /></div><span className="count">{archivedTasks.length}</span></button></div>{archivesOpen ? <div className="settings-body"><p className="settings-note">Done and canceled tasks live here so your active lists stay clear. Restore any of them to put it back on your active list.</p><div className="agenda-list">{archivedTasks.length ? archivedTasks.slice(0, 40).map((task) => <div key={task.id} className="agenda-item compact archived-task-row"><i style={{ background: task.color || "var(--accent)" }} /><button type="button" className="archived-task-open" onClick={() => onOpenTask?.(task.id)}><strong>{task.title}</strong><p>{task.canceled || task.status === "Canceled" ? "Canceled" : "Done"}{task.project ? ` · ${task.project}` : ""}{task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</p></button><button type="button" className="archived-task-restore" onClick={() => onRestoreTask?.(task.id)}>Restore</button></div>) : <div className="priority-empty"><strong>No archived tasks yet.</strong><p>When you mark something done or canceled, it shows up here.</p></div>}</div></div> : null}</section><SubscriptionCheckoutCard entitlement={settings.entitlement} onEntitlementChange={(entitlement) => { update({ entitlement }); flash(!entitlement.expiresAt ? "LifeOS Pro unlocked for life." : entitlement.status === "promo" ? "Paid hubs unlocked for one year." : "LifeOS Pro unlocked for paid hubs."); }} onSubscribe={(offerId) => { const label = offerId === "pro-lifetime" ? "lifetime" : offerId === "pro-yearly" ? "annual" : "monthly"; flash(`Selected ${label} plan — finish store checkout when available, or redeem a promo code.`); }} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><SessionReplaySettingsRow /><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again. Session replay stays off unless you opt in; inputs are always masked.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body"><ToggleRow title="Show capture commands" desc="When you click the Now capture bar, show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} /><div className="shortcut-list" style={{ marginTop: 12 }}><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>/t</kbd><span>Add task (⌘K command bar)</span></div><div><kbd>/break</kbd><span>Take a break</span></div><div><kbd>/focus</kbd><span>Start focus</span></div><div><kbd>/w</kbd><span>Start ambient activity</span></div><div><kbd>/a</kbd><span>AI task</span></div><div><kbd>/spaces</kbd><span>Open Spaces</span></div><div><kbd>/mos</kbd><span>Open Mastery (web / iPad)</span></div></div><p className="settings-note">Capture commands live in Search anything (⌘K). Type / to filter commands anytime.</p></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
 }
 
 function BrainView({ items, onCapture, onArchive, onConvertToTask }: { items: string[]; onCapture: () => void; onArchive: (index: number) => void; onConvertToTask: (index: number, text: string) => void }) {
@@ -5629,8 +5388,184 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
   </motion.div>;
 }
 
-function CommandPalette({ query, setQuery, results, close, go, onFocus, onCapture, onNewTask, onResult }: { query: string; setQuery: (s: string) => void; results: string[]; close: () => void; go: (v: View) => void; onFocus: () => void; onCapture: () => void; onNewTask: () => void; onResult: (result: string) => void }) {
-  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="command-modal" onMouseDown={e => e.stopPropagation()} initial={{ scale: .98, y: -10 }} animate={{ scale: 1, y: 0 }}><div className="command-input"><Search size={20} /><input autoFocus placeholder="Find anything in LifeOS…" value={query} onChange={e => setQuery(e.target.value)} /><kbd>ESC</kbd></div><div className="command-results">{!query && <><p>QUICK ACTIONS</p><button onClick={onFocus}><span className="command-icon"><Focus size={16} /></span><span>Start focus session</span></button><button onClick={onCapture}><span className="command-icon"><Brain size={16} /></span><span>Capture a thought</span></button><button onClick={onNewTask}><span className="command-icon"><Plus size={16} /></span><span>Create new task</span></button></>}{query && <p>RESULTS</p>}{results.slice(0, 7).map(result => <button key={result} onClick={() => { onResult(result); close(); }}><span className="command-icon">{nav.some(n => n.name === result) ? <Command size={16} /> : <Search size={16} />}</span><span>{result}</span><ArrowRight size={14} /></button>)}</div><footer><span><kbd>⌘ K</kbd> Find</span><span><kbd>↵</kbd> Open</span><span>LifeOS Search</span></footer></motion.div></motion.div>;
+function CommandPalette({
+  query,
+  setQuery,
+  results,
+  close,
+  onFocus,
+  onCapture,
+  onNewTask,
+  onResult,
+  captureCommands,
+  onRunCaptureCommand,
+  showCaptureCommands,
+  onDismissCaptureCommands,
+}: {
+  query: string;
+  setQuery: (s: string) => void;
+  results: string[];
+  close: () => void;
+  onFocus: () => void;
+  onCapture: () => void;
+  onNewTask: () => void;
+  onResult: (result: string) => void;
+  captureCommands: CaptureCommand[];
+  onRunCaptureCommand: (raw: string) => "ran" | "partial" | false;
+  showCaptureCommands: boolean;
+  onDismissCaptureCommands: () => void;
+}) {
+  const [suggestedIndex, setSuggestedIndex] = useState(-1);
+  const slashMode = query.trim().startsWith("/");
+  const commandMatches = slashMode
+    ? filterCaptureCommands(captureCommands, query)
+    : showCaptureCommands && !query
+      ? captureCommands
+      : [];
+  const showCommandList = slashMode ? commandMatches.length > 0 : showCaptureCommands && !query;
+
+  const finish = () => {
+    setQuery("");
+    setSuggestedIndex(-1);
+    close();
+  };
+
+  const applyCommand = (cmd: CaptureCommand) => {
+    if (INSTANT_COMMANDS.has(cmd.shortcut)) {
+      const outcome = onRunCaptureCommand(cmd.shortcut);
+      if (outcome === "ran") finish();
+      return;
+    }
+    setQuery(cmd.shortcut + " ");
+    setSuggestedIndex(-1);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!commandMatches.length) return;
+      setSuggestedIndex((i) => Math.min(i + 1, commandMatches.length - 1));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSuggestedIndex((i) => Math.max(i - 1, -1));
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      finish();
+      return;
+    }
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (slashMode) {
+      if (suggestedIndex >= 0 && commandMatches[suggestedIndex]) {
+        applyCommand(commandMatches[suggestedIndex]);
+        return;
+      }
+      const outcome = onRunCaptureCommand(query);
+      if (outcome === "ran") finish();
+      return;
+    }
+    if (results[0]) {
+      onResult(results[0]);
+      finish();
+    }
+  };
+
+  return (
+    <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.div className="command-modal" onMouseDown={(e) => e.stopPropagation()} initial={{ scale: 0.98, y: -10 }} animate={{ scale: 1, y: 0 }}>
+        <div className="command-input">
+          <Search size={20} />
+          <input
+            autoFocus
+            placeholder="Search or type /t, /break, /focus…"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setSuggestedIndex(-1);
+            }}
+            onKeyDown={onKeyDown}
+          />
+          <kbd>ESC</kbd>
+        </div>
+        <div className="command-results">
+          {!query && (
+            <>
+              <p>QUICK ACTIONS</p>
+              <button type="button" onClick={onFocus}>
+                <span className="command-icon"><Focus size={16} /></span>
+                <span>Start focus session</span>
+              </button>
+              <button type="button" onClick={onCapture}>
+                <span className="command-icon"><Brain size={16} /></span>
+                <span>Capture a thought</span>
+              </button>
+              <button type="button" onClick={onNewTask}>
+                <span className="command-icon"><Plus size={16} /></span>
+                <span>Create new task</span>
+              </button>
+            </>
+          )}
+          {showCommandList && (
+            <>
+              <p>{slashMode ? "COMMANDS" : "CAPTURE COMMANDS"}</p>
+              {commandMatches.map((cmd, idx) => (
+                <button
+                  key={cmd.shortcut}
+                  type="button"
+                  className={idx === suggestedIndex ? "suggested" : ""}
+                  onClick={() => applyCommand(cmd)}
+                >
+                  <span className="command-icon"><Command size={16} /></span>
+                  <span>
+                    <strong style={{ marginRight: 8 }}>{cmd.shortcut}</strong>
+                    {cmd.desc}
+                  </span>
+                </button>
+              ))}
+              {!slashMode && showCaptureCommands ? (
+                <div className="capture-suggestions-footer" style={{ padding: "8px 10px" }}>
+                  <button type="button" className="capture-dismiss" onClick={onDismissCaptureCommands}>
+                    Don&apos;t show command tips
+                  </button>
+                </div>
+              ) : null}
+            </>
+          )}
+          {query && !slashMode && (
+            <>
+              <p>RESULTS</p>
+              {results.slice(0, 7).map((result) => (
+                <button
+                  key={result}
+                  type="button"
+                  onClick={() => {
+                    onResult(result);
+                    finish();
+                  }}
+                >
+                  <span className="command-icon">
+                    {nav.some((n) => n.name === result) ? <Command size={16} /> : <Search size={16} />}
+                  </span>
+                  <span>{result}</span>
+                  <ArrowRight size={14} />
+                </button>
+              ))}
+              {!results.length ? <p style={{ margin: 8, color: "var(--muted)", letterSpacing: 0, fontSize: 12 }}>No matches</p> : null}
+            </>
+          )}
+        </div>
+        <footer>
+          <span><kbd>⌘ K</kbd> Open</span>
+          <span><kbd>/</kbd> Commands</span>
+          <span><kbd>↵</kbd> Run</span>
+        </footer>
+      </motion.div>
+    </motion.div>
+  );
 }
 
 function AmbientStartModal({ close, start, spaces, draft }: { close: () => void; start: (title: string, space?: { name: string; color: string }) => void; spaces: { name: string; color: string }[]; draft: AmbientDraft }) {

@@ -22,7 +22,7 @@ Non-obvious gotchas:
 - New users get **LifeOS + SchoolOS** only; returning users keep existing environment flags (`lib/settingsDefaults.ts`).
 - Root `.npmrc` sets `legacy-peer-deps=true`; installs rely on this, so use plain `npm install`.
 
-Creating a task (quick smoke test): on the "Now" view, type `/t <task title>` in the command input and press Enter.
+Creating a task (quick smoke test): open Search anything / press ⌘K, type `/t <task title>`, and press Enter.
 
 Reticle verification (dev-only proof layer):
 - SDK is wired via `withReticle()` in `next.config.ts` and `<ReticleDev />` in `app/layout.tsx`. Bridge port defaults to **4400** (not the Next dev port).
