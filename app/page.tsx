@@ -39,6 +39,7 @@ import { shouldPersistOnboardingComplete } from "@/lib/onboardingGate";
 import { mergeSettingsWithEnvironmentDefaults } from "@/lib/settingsDefaults";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
+import { isNavigationOwner } from "@/lib/navigationOwner";
 import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
 import { buildMonthEventSegments, eventOccursOnDate, getEventDateRange, getEventDayBlockMinutes, usesDailyTimeWindow, type MonthEventSegment } from "@/lib/calendarEvents";
 import { coalesceEventMeetingUrl, detectMeetingProvider, eventNotesLabel, eventPlaceLabel, extractMeetingUrl, meetingJoinLabel, resolveEventMeeting } from "@/lib/meetingLinks";
@@ -127,7 +128,7 @@ import {
   BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, WalletCards, MapPin, Target,
 } from "lucide-react";
 
-type View = "Life" | "School" | "Work" | "Career" | "Study Abroad" | "Treasury" | "Mastery" | "Now" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
+type View = "Life" | "School" | "Work" | "Career" | "Study Abroad" | "Treasury" | "Mastery" | "Now" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Navigation" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
 type EnergyLevel = "Low" | "Medium" | "High";
 type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
 type AcademicItemType = "Assignment" | "Project" | "Exam" | "Quiz" | "Lab" | "Reading" | "Discussion";
@@ -155,7 +156,8 @@ const routedViews: Record<string, View> = {
   life: "Life", home: "Life", school: "School", work: "Work", career: "Career", "study-abroad": "Study Abroad", studyabroad: "Study Abroad",
   now: "Now", flow: "Now", dashboard: "Life", today: "Calendar", calendar: "Calendar", spaces: "Spaces",
   library: "Library", notes: "Library", resources: "Library", brain: "Library", knowledge: "Library",
-  settings: "Settings", tasks: "Tasks", budget: "Treasury", treasuryos: "Treasury", "treasury-os": "Treasury", treasury: "Treasury",
+  settings: "Settings", tasks: "Tasks", navigation: "Navigation", guided: "Navigation", executive: "Navigation",
+  budget: "Treasury", treasuryos: "Treasury", "treasury-os": "Treasury", treasury: "Treasury",
   masteros: "Mastery", "master-os": "Mastery", master: "Mastery", mastery: "Mastery", mos: "Mastery",
 };
 const viewFromLocation = (): View => {
@@ -297,13 +299,13 @@ function ColorSwatches({ value, onChange, label = "Color" }: { value: string; on
   </>;
 }
 
-type NavItem = { category?: string; name: string; icon: typeof Home; href?: string; action?: "openGuided"; view?: View };
+type NavItem = { category?: string; name: string; icon: typeof Home; href?: string; view?: View };
 
 /** Sidebar / breadcrumb label. Internal route view stays `Life`. */
 const navDisplayName = (name: string) => (name === "Life" ? "Home" : name);
 
 const navTargetView = (item: NavItem): View | null => {
-  if (item.action || item.href) return null;
+  if (item.href) return null;
   return item.view ?? (item.name as View);
 };
 
@@ -317,7 +319,7 @@ const nav: NavItem[] = [
   { category: "ENVIRONMENTS", name: "Treasury", icon: WalletCards },
   { category: "ENVIRONMENTS", name: "Mastery", icon: NotebookPen },
   { category: "NAVIGATION", name: "Tasks", icon: CheckCircle2 },
-  { category: "NAVIGATION", name: "Navigation", icon: ListChecks, action: "openGuided" },
+  { category: "NAVIGATION", name: "Navigation", icon: ListChecks },
   { category: "NAVIGATION", name: "Calendar", icon: CalendarDays },
   { category: "NAVIGATION", name: "Library", icon: Library },
 ];
@@ -656,7 +658,6 @@ export default function LifeOS() {
   const [careerHubHydrated, setCareerHubHydrated] = useState(false);
   const [guidedHub, setGuidedHub] = useState<ExecutiveHub>(emptyExecutiveHub());
   const [guidedHubHydrated, setGuidedHubHydrated] = useState(false);
-  const [guidedPanelOpen, setGuidedPanelOpen] = useState(false);
   const [careerView, setCareerView] = useState<CareerView>("overview");
   const [workFocusTaskId, setWorkFocusTaskId] = useState<string | null>(null);
   const [workView, setWorkView] = useState<WorkView>("dashboard");
@@ -964,6 +965,8 @@ export default function LifeOS() {
     ],
   );
 
+  const canAccessNavigation = isNavigationOwner(user?.email);
+
   const go = useCallback((next: View) => {
     let destination: View = next === "Dashboard" ? "Life" : ["Notes", "Resources", "Brain", "Knowledge"].includes(next) ? "Library" : next;
     if (isPaidHub(destination) && !canAccessPaidHubs(settingsState.entitlement)) {
@@ -972,10 +975,11 @@ export default function LifeOS() {
       setSidebar(false);
       return;
     }
+    if (destination === "Navigation" && !isNavigationOwner(user?.email)) destination = "Now";
     if (!isEnvironmentEnabled(destination)) destination = "Now";
     if (destination === "Spaces") { setSelectedProjectName(null); setSelectedClassId(null); }
     setView(destination); setSidebar(false); if (destination === "Focus") setFocus(true);
-  }, [isEnvironmentEnabled, settingsState.entitlement]);
+  }, [isEnvironmentEnabled, settingsState.entitlement, user?.email]);
   const openProjectSpace = useCallback((projectName: string, workProject?: WorkProject) => {
     setProjectItems(items => {
       if (items.some(project => project.name === projectName)) return items;
@@ -1086,12 +1090,14 @@ export default function LifeOS() {
       go("Calendar");
       return;
     }
-    if (action.type === "now") go("Now");
-    if (action.type === "guided") {
-      setGuidedPanelOpen(true);
+    if (action.type === "now") {
       go("Now");
+      return;
     }
-  }, [calendarEvents, go, openProjectSpace, openTaskPage, openWorkProjectSpace, openWorkTask, projectItems, tasks, workHub.deliverables, workHub.meetings]);
+    if (action.type === "guided") {
+      go(isNavigationOwner(user?.email) ? "Navigation" : "Now");
+    }
+  }, [calendarEvents, go, openProjectSpace, openTaskPage, openWorkProjectSpace, openWorkTask, projectItems, tasks, user?.email, workHub.deliverables, workHub.meetings]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const writeCurrentView = () => {
@@ -2470,16 +2476,21 @@ export default function LifeOS() {
   const visibleNav = useMemo(
     () =>
       nav.filter((item) => {
-        if (item.action || item.href) return true;
+        if (item.name === "Navigation") return canAccessNavigation;
+        if (item.href) return true;
         const target = navTargetView(item);
         // Same rules as Settings → Hubs toggles (Pro hubs need unlock + enable).
         return target ? isEnvironmentEnabled(target) : true;
       }),
-    [isEnvironmentEnabled],
+    [canAccessNavigation, isEnvironmentEnabled],
   );
   useEffect(() => {
+    if (view === "Navigation" && !canAccessNavigation) {
+      go("Now");
+      return;
+    }
     if (!isEnvironmentEnabled(view)) go("Now");
-  }, [view, isEnvironmentEnabled, go]);
+  }, [view, canAccessNavigation, isEnvironmentEnabled, go]);
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
     const matches = (value: string) => !q || value.toLowerCase().includes(q);
@@ -2535,7 +2546,13 @@ export default function LifeOS() {
         openBreak: () => setBreakOpen(true),
         openAmbient: () => setAmbientStartOpen(true),
         openSmartCapture: () => setAiTaskComposer(true),
-        openGuided: () => setGuidedPanelOpen(true),
+        openGuided: () => {
+          if (!isNavigationOwner(user?.email)) {
+            flash("Navigation is only available on this workspace.");
+            return;
+          }
+          go("Navigation");
+        },
         openTimesheet: () => {
           setWorkView("timesheet");
           go("Work");
@@ -2591,6 +2608,7 @@ export default function LifeOS() {
       studyAbroadHub,
       tasks,
       timeTracking,
+      user?.email,
     ],
   );
   const calendarFeed = useMemo(
@@ -2725,7 +2743,7 @@ export default function LifeOS() {
             const showCategory = Boolean(item.category && (idx === 0 || visibleNav[idx - 1].category !== item.category));
             const label = item.name === "Life" ? "Home" : item.name;
             const target = navTargetView(item);
-            const isActive = item.action === "openGuided" ? guidedPanelOpen : Boolean(target && view === target);
+            const isActive = Boolean(target && view === target);
             return (
               <div key={item.name}>
                 {showCategory && <p className="nav-label">{item.category}</p>}
@@ -2736,11 +2754,6 @@ export default function LifeOS() {
                     className={`nav-item ${isActive ? "active" : ""}`}
                     data-env={dataEnvForNav(item.name)}
                     onClick={() => {
-                      if (item.action === "openGuided") {
-                        setGuidedPanelOpen(true);
-                        setSidebar(false);
-                        return;
-                      }
                       if (target) go(target);
                     }}
                   >
@@ -2867,13 +2880,18 @@ export default function LifeOS() {
             {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onOpenTimesheet={() => { setWorkView("timesheet"); go("Work"); }} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableCareerOS={settingsState.enableCareerOS !== false} enableSchoolOS={settingsState.enableSchoolOS !== false} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableTreasuryOS={settingsState.enableTreasuryOS !== false} enableMasterOS={settingsState.enableMasterOS !== false} onboardingCompletedAt={settingsState.onboardingCompletedAt} onMarkOnboarded={() => setSettingsState(current => ({ ...current, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} flash={flash} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
             {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} onDeleteMany={deleteTasks} />}
+            {view === "Navigation" && canAccessNavigation && (
+              <div className="navigation-page">
+                <ExecutivePanel hub={guidedHub} onChange={setGuidedHub} flash={flash} />
+              </div>
+            )}
             {(view === "Today" || view === "Calendar") && <CalendarView events={calendarFeed} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} defaultView={normalizeCalendarDefaultView(settingsState.defaultCalendarView)} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => { if (id.startsWith("task-")) openTaskPage(Number(id.slice(5))); else if (id.startsWith("work-meet-")) { setWorkView("calendar"); go("Work"); } else setEditingCalendarEventId(id); }} onPlanTask={setEditingTaskId} />}
             {view === "Notes" && <NotesView notes={notes} classes={classes} projects={projectItems} selectedNoteId={selectedNoteId} onSelect={setSelectedNoteId} onCreate={() => createNote()} onUpdate={updateNote} onDelete={deleteNote} onImport={importNotes} onCreateTask={createTaskFromNote} />}
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onCreateTask={createTaskFromNote} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} onConvertToTask={(index, text) => { addTask(text, undefined, "", { flashLabel: "Task created from brain" }); setBrainItems(items => items.filter((_, i) => i !== index)); }} />}
             {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} />}
-            {!["Life", "School", "Work", "Career", "Study Abroad", "Treasury", "Mastery", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
+            {!["Life", "School", "Work", "Career", "Study Abroad", "Treasury", "Mastery", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Navigation", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
         </AnimatePresence>
         </>}
@@ -2926,15 +2944,16 @@ export default function LifeOS() {
           else if (note) { setSelectedNoteId(note.id); setView("Notes"); }
           else if (visibleNav.some(item => navDisplayName(item.name) === result || item.name === result)) {
             const navHit = visibleNav.find(item => navDisplayName(item.name) === result || item.name === result);
-            if (navHit?.action === "openGuided") setGuidedPanelOpen(true);
-            else if (navHit?.href) window.location.href = navHit.href;
-            else if (navHit) go(navHit.name as View);
+            if (navHit?.href) window.location.href = navHit.href;
+            else if (navHit) {
+              const target = navTargetView(navHit);
+              if (target) go(target);
+            }
           }
         }} />}
         {capture && <CaptureModal key="capture-modal" close={() => setCapture(false)} add={(text) => { setBrainItems(x => [text, ...x]); setCapture(false); flash("Thought captured"); }} />}
         {ambientStartOpen && <AmbientStartModal key="ambient-start-modal" close={() => { setAmbientStartOpen(false); setAmbientDraft(null); }} start={beginAmbientActivity} draft={ambientDraft} spaces={[...projectItems.map(item => ({ name: item.name, color: item.color })), ...classes.filter(item => !item.archived).map(item => ({ name: item.code, color: item.color }))]} />}
         {ambientWrapupOpen && settingsState.ambientActivity && <AmbientWrapupModal key="ambient-wrapup-modal" activity={settingsState.ambientActivity} close={() => setAmbientWrapupOpen(false)} finish={wrapUpAmbientActivity} />}
-        {guidedPanelOpen && <motion.div key="guided-panel" className="modal-layer" onMouseDown={() => setGuidedPanelOpen(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="capture-modal guided-modal" style={{ width: "min(720px, calc(100vw - 24px))", maxHeight: "min(88vh, 900px)", overflow: "auto" }} onMouseDown={e => e.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><ListChecks size={16} /></div><div><strong>Navigation</strong><span>Executive · Guided · Transition</span></div><button type="button" onClick={() => setGuidedPanelOpen(false)} aria-label="Close"><X size={18} /></button></div><div style={{ padding: "0 16px 16px" }}><ExecutivePanel hub={guidedHub} onChange={setGuidedHub} flash={flash} /></div></motion.div></motion.div>}
         {dailyResetOpen && <DailyResetModal key="daily-reset" tasks={tasks} close={() => { setDailyResetOpen(false); setSettingsState(current => ({ ...current, dailyReviewDate: toDateKey(new Date()) })); }} choose={chooseNowTask} complete={complete} />}
         {weeklyReviewOpen && <WeeklyReviewModal key="weekly-review" tasks={tasks} projects={projectItems} classes={classes} close={() => { setWeeklyReviewOpen(false); setSettingsState(current => ({ ...current, weeklyReviewDate: toDateKey(new Date()) })); }} onOpenTask={openTaskPage} onGoSpaces={() => { setWeeklyReviewOpen(false); go("Spaces"); }} />}
         {hubCollection?.scope === "school" && <HubCollectionModal key={`school-${hubCollection.key}`} target={hubCollection} records={schoolHub[hubCollection.key]} close={() => setHubCollection(null)} change={(records) => setSchoolHub(current => ({ ...current, [hubCollection.key]: records }))} />}
