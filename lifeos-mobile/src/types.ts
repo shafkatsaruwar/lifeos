@@ -122,6 +122,11 @@ export type CalendarEvent = {
   /** When true, a multi-day range only appears Mon–Fri. */
   weekdaysOnly?: boolean;
   /**
+   * Reverse link to a LifeOS task for scheduled work sessions.
+   * Complements Task.calendarEventId (primary Route-to-Task link).
+   */
+  linkedTaskId?: number;
+  /**
    * Present on expanded occurrence views only (not persisted).
    * Points at the master series id.
    */

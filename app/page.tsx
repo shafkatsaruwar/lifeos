@@ -42,6 +42,27 @@ import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { isNavigationOwner } from "@/lib/navigationOwner";
 import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
 import { buildMonthEventSegments, eventOccursOnDate, getEventDateRange, getEventDayBlockMinutes, usesDailyTimeWindow, type MonthEventSegment } from "@/lib/calendarEvents";
+import {
+  applyRouteEventToTask,
+  buildScheduledSessionEvent,
+  buildTaskCalendarOverlay,
+  classifyCalendarItem,
+  clearLinkedTaskIdOnEvent,
+  clearTaskLinksToEvent,
+  DEFAULT_CALENDAR_LAYER_VISIBILITY,
+  eventsLinkedToTask,
+  filterCalendarFeedByLayers,
+  findTaskForCalendarEvent,
+  futureLinkedSessions,
+  layerLabel,
+  normalizeCalendarLayerVisibility,
+  parseDeadlineEventId,
+  parseTaskCalendarEventId,
+  setLinkedTaskIdOnEvent,
+  suggestedSessionEnd,
+  unlinkTaskFromEvent,
+  type CalendarLayerVisibility,
+} from "@/lib/taskCalendar";
 import { coalesceEventMeetingUrl, detectMeetingProvider, eventNotesLabel, eventPlaceLabel, extractMeetingUrl, meetingJoinLabel, resolveEventMeeting } from "@/lib/meetingLinks";
 import { formatFocusMinutesShort, formatFocusSessionLabel, formatFocusTime } from "@/lib/focusTime";
 import { buildFocusStripKeys } from "@/lib/focusStrip";
@@ -141,7 +162,7 @@ type SpaceKind = "class" | "project" | "maintenance";
 type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban" | "BriefcaseBusiness" | "Camera" | "Code2" | "HeartPulse" | "Utensils" | "BookOpen";
 type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string; classId?: string; projectName?: string; storagePath?: string; storage?: "cloud" | "local" };
 type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind };
-type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work" | "Synapse"; color: string; notes?: string; location?: string; url?: string; weekdaysOnly?: boolean };
+type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work" | "Synapse"; color: string; notes?: string; location?: string; url?: string; weekdaysOnly?: boolean; linkedTaskId?: number };
 type GradeBand = { letter: string; min: number };
 type GradeCategory = { id: string; name: string; weight: number; defaultPoints?: number };
 type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterStart?: string; semesterEnd?: string; archived?: boolean; gradingScale?: GradeBand[]; gradeCategories?: GradeCategory[]; gradingMode?: "categories" | "items" };
@@ -191,6 +212,8 @@ type SettingsState = {
   weekStartsMonday: boolean;
   /** Initial Calendar tab when opening Today / Calendar. */
   defaultCalendarView: CalendarDefaultView;
+  /** Visibility for calendar layers (events / deadlines / scheduled tasks). */
+  calendarLayerVisibility?: CalendarLayerVisibility;
   compactMode: boolean;
   reduceMotion: boolean;
   nowTaskId?: number | null;
@@ -353,6 +376,7 @@ const initialSettings: SettingsState = {
   defaultEnergy: "Medium",
   weekStartsMonday: false,
   defaultCalendarView: "upcoming",
+  calendarLayerVisibility: { ...DEFAULT_CALENDAR_LAYER_VISIBILITY },
   compactMode: false,
   reduceMotion: false,
   nowTaskId: null,
@@ -1893,6 +1917,24 @@ export default function LifeOS() {
   const complete = (id: number) => {
     const completedTask = tasks.find(task => task.id === id);
     const isCompleting = Boolean(completedTask && !completedTask.done);
+    if (isCompleting && completedTask) {
+      const todayKey = toDateKey(new Date());
+      const upcoming = futureLinkedSessions(completedTask, calendarEvents, todayKey);
+      if (upcoming.length) {
+        const removeFuture = window.confirm(
+          `“${completedTask.title}” has ${upcoming.length} future calendar session${upcoming.length === 1 ? "" : "s"}.\n\nOK = remove future sessions · Cancel = keep them (recommended). Past sessions always stay.`,
+        );
+        if (removeFuture) {
+          const removeIds = new Set(upcoming.map(event => event.id));
+          setCalendarEvents(items => items.filter(event => !removeIds.has(event.id)));
+          setTasks(items => items.map(task => (
+            task.id === id && task.calendarEventId && removeIds.has(task.calendarEventId)
+              ? { ...task, calendarEventId: undefined }
+              : task
+          )));
+        }
+      }
+    }
     setTasks(items => {
       const target = items.find(task => task.id === id);
       if (!target) return items;
@@ -1900,7 +1942,7 @@ export default function LifeOS() {
       if (!target.done && target.recurringDays) {
         const nextDue = new Date();
         nextDue.setDate(nextDue.getDate() + target.recurringDays);
-        next.push(normalizeTask({ ...target, id: Date.now(), due: toDateKey(nextDue), done: false, canceled: false, status: "Not started", completedAt: undefined, focusRemainingSeconds: undefined, focusSessionStarted: false, focusHalfwayPrompted: false, checklistProgress: (target.checklist ?? []).map(() => false) }));
+        next.push(normalizeTask({ ...target, id: Date.now(), due: toDateKey(nextDue), done: false, canceled: false, status: "Not started", completedAt: undefined, focusRemainingSeconds: undefined, focusSessionStarted: false, focusHalfwayPrompted: false, checklistProgress: (target.checklist ?? []).map(() => false), calendarEventId: undefined }));
       }
       return next;
     });
@@ -2197,36 +2239,41 @@ export default function LifeOS() {
   };
   const deleteCalendarEvent = (id: string) => {
     setCalendarEvents(items => items.filter(event => event.id !== id));
+    setTasks(items => clearTaskLinksToEvent(items, id));
     setEditingCalendarEventId(null);
     flash("Calendar event deleted");
   };
   const routeCalendarEventToTask = (event: CalendarEvent, taskId: number) => {
     const target = tasks.find(task => task.id === taskId);
     if (!target) return;
-    const due = /^\d{4}-\d{2}-\d{2}/.test(event.start) ? event.start.slice(0, 10) : target.due;
-    const startTime = /^\d{2}:\d{2}/.test(event.start.slice(11, 16)) ? event.start.slice(11, 16) : target.startTime;
-    setTasks(items => items.map(task => {
-      if (task.id === taskId) {
-        return {
-          ...task,
-          calendarEventId: event.id,
-          due,
-          startTime,
-        };
-      }
-      if (task.calendarEventId === event.id) {
-        return { ...task, calendarEventId: undefined };
-      }
-      return task;
-    }));
+    setTasks(items => applyRouteEventToTask(items, event, taskId));
+    setCalendarEvents(items => setLinkedTaskIdOnEvent(items, event.id, taskId));
     setEditingCalendarEventId(null);
     flash(`Routed under ${target.title}`);
   };
+  const unlinkCalendarEventFromTask = (event: CalendarEvent) => {
+    const linked = findTaskForCalendarEvent(event, tasks);
+    if (linked) setTasks(items => unlinkTaskFromEvent(items, linked.id, event.id));
+    setCalendarEvents(items => clearLinkedTaskIdOnEvent(items, event.id));
+    flash("Unlinked from task");
+  };
   const openLinkedCalendarTask = (event: CalendarEvent) => {
-    const linkedTask = tasks.find(task => task.calendarEventId === event.id);
+    const linkedTask = findTaskForCalendarEvent(event, tasks);
     if (!linkedTask) return;
     setEditingCalendarEventId(null);
     setTaskPageId(linkedTask.id);
+  };
+  const scheduleTaskSession = (taskId: number, day: string, start: string, end: string) => {
+    const task = tasks.find(item => item.id === taskId);
+    if (!task) return;
+    const session = buildScheduledSessionEvent({ task, day, start, end });
+    setCalendarEvents(items => [...items, session as CalendarEvent]);
+    setTasks(items => items.map(item => {
+      if (item.id !== taskId) return item;
+      if (item.calendarEventId) return item;
+      return { ...item, calendarEventId: session.id };
+    }));
+    flash("Scheduled session added to calendar");
   };
   const importCalendarEvents = (events: CalendarEvent[]) => {
     setCalendarEvents(items => {
@@ -2342,6 +2389,21 @@ export default function LifeOS() {
     flash("Priority status updated");
   };
   const deleteTask = (id: number) => {
+    const target = tasks.find(task => task.id === id);
+    const linked = target ? eventsLinkedToTask(target, calendarEvents) : [];
+    if (linked.length) {
+      const removeEvents = window.confirm(
+        `Delete “${target?.title ?? "task"}”?\n\nOK = also delete ${linked.length} linked calendar event${linked.length === 1 ? "" : "s"} · Cancel = keep events (unlink only, recommended).`,
+      );
+      if (removeEvents) {
+        const removeIds = new Set(linked.map(event => event.id));
+        setCalendarEvents(items => items.filter(event => !removeIds.has(event.id)));
+      } else {
+        setCalendarEvents(items => items.map(event => (
+          event.linkedTaskId === id ? { ...event, linkedTaskId: undefined } : event
+        )));
+      }
+    }
     setTasks(items => {
       const next = items.filter(task => task.id !== id);
       if (activeTaskId === id) setActiveTaskId(next[0]?.id ?? 0);
@@ -2698,14 +2760,15 @@ export default function LifeOS() {
       user?.email,
     ],
   );
+  const calendarLayerVisibility = normalizeCalendarLayerVisibility(settingsState.calendarLayerVisibility);
   const calendarFeed = useMemo(
-    () => [
+    () => filterCalendarFeedByLayers([
       ...calendarEvents,
-      ...tasksToCalendarEvents(tasks),
+      ...buildTaskCalendarOverlay(tasks, calendarLayerVisibility),
       ...(settingsState.enableWorkOS === false ? [] : workMeetingsToCalendarEvents(workHub.meetings, workHub.projects)),
       ...(settingsState.enableStudyAbroad === false ? [] : studyAbroadToCalendarEvents(studyAbroadHub.timelineEvents)),
-    ],
-    [calendarEvents, settingsState.enableWorkOS, settingsState.enableStudyAbroad, tasks, workHub.meetings, workHub.projects, studyAbroadHub.timelineEvents],
+    ], calendarLayerVisibility),
+    [calendarEvents, calendarLayerVisibility, settingsState.enableWorkOS, settingsState.enableStudyAbroad, tasks, workHub.meetings, workHub.projects, studyAbroadHub.timelineEvents],
   );
 
   if (authLoading) {
@@ -2748,12 +2811,19 @@ export default function LifeOS() {
       tasks={taskPageTask.done || taskPageTask.canceled ? [...activeTasks, taskPageTask] : activeTasks}
       projects={projectItems}
       classes={classes}
+      calendarEvents={calendarEvents}
       onExit={() => setTaskPageId(null)}
       onSwitch={setTaskPageId}
       onUpdate={updates => updateTaskDetails(taskPageTask.id, updates)}
       onFocus={() => { chooseNowTask(taskPageTask.id); rememberSpaceTask(taskPageTask); setTaskPageId(null); setFocus(true); }}
-      onMarkDone={() => { updateTaskDetails(taskPageTask.id, { status: "Done" }); chooseNowTask(settingsState.nowTaskId === taskPageTask.id ? null : settingsState.nowTaskId ?? null); setTaskPageId(null); flash("Done. Cleared from active views."); }}
+      onMarkDone={() => { complete(taskPageTask.id); chooseNowTask(settingsState.nowTaskId === taskPageTask.id ? null : settingsState.nowTaskId ?? null); setTaskPageId(null); flash("Done. Cleared from active views."); }}
       onDelete={() => deleteTask(taskPageTask.id)}
+      onOpenCalendarEvent={(eventId) => { setTaskPageId(null); setEditingCalendarEventId(eventId); go("Calendar"); }}
+      onUnlinkSession={(eventId) => {
+        const event = calendarEvents.find(item => item.id === eventId);
+        if (event) unlinkCalendarEventFromTask(event);
+      }}
+      onScheduleSession={(day, start, end) => scheduleTaskSession(taskPageTask.id, day, start, end)}
     />
     </>;
   }
@@ -2972,7 +3042,7 @@ export default function LifeOS() {
                 <ExecutivePanel hub={guidedHub} onChange={setGuidedHub} flash={flash} />
               </div>
             )}
-            {(view === "Today" || view === "Calendar") && <CalendarView events={calendarFeed} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} defaultView={normalizeCalendarDefaultView(settingsState.defaultCalendarView)} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => { if (id.startsWith("task-")) openTaskPage(Number(id.slice(5))); else if (id.startsWith("work-meet-")) { setWorkView("calendar"); go("Work"); } else setEditingCalendarEventId(id); }} onPlanTask={setEditingTaskId} />}
+            {(view === "Today" || view === "Calendar") && <CalendarView events={calendarFeed} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} defaultView={normalizeCalendarDefaultView(settingsState.defaultCalendarView)} layerVisibility={calendarLayerVisibility} onLayerVisibilityChange={(calendarLayerVisibility) => updateSettings({ calendarLayerVisibility })} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => { const taskFromSynthetic = parseTaskCalendarEventId(id) ?? parseDeadlineEventId(id); if (taskFromSynthetic != null) openTaskPage(taskFromSynthetic); else if (id.startsWith("work-meet-")) { setWorkView("calendar"); go("Work"); } else setEditingCalendarEventId(id); }} onPlanTask={setEditingTaskId} />}
             {view === "Notes" && <NotesView notes={notes} classes={classes} projects={projectItems} selectedNoteId={selectedNoteId} onSelect={setSelectedNoteId} onCreate={() => createNote()} onUpdate={updateNote} onDelete={deleteNote} onImport={importNotes} onCreateTask={createTaskFromNote} />}
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onCreateTask={createTaskFromNote} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
@@ -3052,7 +3122,7 @@ export default function LifeOS() {
         {spaceComposer && <SpaceModal key={`space-modal-${spaceComposer}`} initialKind={spaceComposer} close={() => setSpaceComposer(null)} addProject={(name, kind, description, color, icon) => addProject(name, kind, undefined, icon, description, color)} addClass={addClass} />}
         {academicComposerClassId && classes.find(item => item.id === academicComposerClassId) && <AcademicItemModal key={`academic-${academicComposerClassId}`} classRecord={classes.find(item => item.id === academicComposerClassId)!} close={() => setAcademicComposerClassId(null)} add={(task) => addAcademicTask(academicComposerClassId, task)} defaults={{ focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy }} />}
         {calendarComposer && <CalendarEventModal key="calendar-event-modal" close={() => { setCalendarComposer(false); setDefaultEventDate(null); }} add={addCalendarEvent} defaultDate={defaultEventDate} />}
-        {editingCalendarEventId && calendarEvents.find(event => event.id === editingCalendarEventId) && <CalendarEventModal key={`calendar-edit-${editingCalendarEventId}`} event={calendarEvents.find(event => event.id === editingCalendarEventId)!} close={() => setEditingCalendarEventId(null)} add={updateCalendarEvent} remove={deleteCalendarEvent} tasks={activeTasks} linkedTaskId={tasks.find(task => task.calendarEventId === editingCalendarEventId)?.id} onOpenLinkedTask={openLinkedCalendarTask} onRouteToTask={routeCalendarEventToTask} />}
+        {editingCalendarEventId && calendarEvents.find(event => event.id === editingCalendarEventId) && <CalendarEventModal key={`calendar-edit-${editingCalendarEventId}`} event={calendarEvents.find(event => event.id === editingCalendarEventId)!} close={() => setEditingCalendarEventId(null)} add={updateCalendarEvent} remove={deleteCalendarEvent} tasks={activeTasks} linkedTaskId={findTaskForCalendarEvent(calendarEvents.find(event => event.id === editingCalendarEventId)!, tasks)?.id} onOpenLinkedTask={openLinkedCalendarTask} onRouteToTask={routeCalendarEventToTask} onUnlinkTask={unlinkCalendarEventFromTask} />}
         {calendarImporter && (
           <CalendarImportModal
             key="calendar-import-modal"
@@ -3108,7 +3178,19 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     };
     return score(b) - score(a);
   }).filter(task => task.id !== current?.id).slice(0, 5);
-  const todayEvents = events.filter(event => eventOccursOnDate(event, today)).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 8);
+  const todayTimed = events
+    .filter(event => eventOccursOnDate(event, today) && classifyCalendarItem(event) !== "deadline")
+    .sort((a, b) => a.start.localeCompare(b.start))
+    .slice(0, 8);
+  const todayDeadlines = events
+    .filter(event => eventOccursOnDate(event, today) && classifyCalendarItem(event) === "deadline")
+    .filter(event => {
+      const taskId = parseDeadlineEventId(event.id);
+      if (taskId == null) return true;
+      return !todayTimed.some(item => item.linkedTaskId === taskId || item.id === `task-${taskId}`);
+    })
+    .slice(0, 5);
+  const todayEvents = todayTimed;
   const activeSpace = current?.classId ? classes.find(item => item.id === current.classId)?.code : current?.project;
   const hasDue = (due: string) => /^\d{4}-\d{2}-\d{2}/.test(due);
   const resurfacing = allActive.filter(task => task.id !== current?.id && ((hasDue(task.due) && task.due < today) || (getTaskStatus(task) === "Waiting" && Boolean(task.followUpDate && task.followUpDate <= today)))).slice(0, 3);
@@ -3223,8 +3305,9 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             {todayEvents.length ? todayEvents.map((event, index) => {
               const start = new Date(event.start);
               const time = Number.isNaN(start.getTime()) ? "—" : start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+              const kind = classifyCalendarItem(event);
               return (
-                <div key={event.id} className="now-today-row">
+                <div key={event.id} className={`now-today-row now-today-${kind}`}>
                   <time dateTime={event.start}>{time}</time>
                   <div className="now-today-track" aria-hidden>
                     <i style={{ background: event.color || "var(--accent)" }} />
@@ -3232,12 +3315,26 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
                   </div>
                   <div className="now-today-body">
                     <strong>{event.title}</strong>
-                    <span>{event.source}{event.location ? ` · ${event.location}` : ""}</span>
+                    <span>{layerLabel(kind)}{event.location ? ` · ${event.location}` : ""}</span>
                   </div>
                 </div>
               );
-            }) : <div className="now-today-empty">No events on the calendar for today. Protect a block when you’re ready.</div>}
+            }) : <div className="now-today-empty">No timed blocks for today. Protect a session when you’re ready.</div>}
           </div>
+          {todayDeadlines.length ? (
+            <div className="now-today-deadlines" aria-label="Deadlines due today">
+              {todayDeadlines.map(event => (
+                <button type="button" key={event.id} className="now-deadline-chip" onClick={() => {
+                  const taskId = parseDeadlineEventId(event.id);
+                  if (taskId != null) onOpenTask(taskId);
+                }}>
+                  <i style={{ background: event.color || "var(--accent)" }} />
+                  <span>{event.title}</span>
+                  <em>Due today</em>
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="now-today-footer"><button type="button" onClick={() => onGo("Today")}>View full day</button></div>
         </section>
 
@@ -4087,31 +4184,6 @@ function AcademicItemModal({ classRecord, close, add, defaults }: { classRecord:
   return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.form className="create-modal academic-modal" onMouseDown={event => event.stopPropagation()} onSubmit={submit} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot" style={{ color: classRecord.color, background: `${classRecord.color}16` }}><BookOpen size={16} /></div><div><strong>Add coursework to {classRecord.code}</strong><span>Capture the deadline and the grade impact now.</span></div><button type="button" onClick={close} aria-label="Close"><X size={18} /></button></div><label className="academic-title-field" htmlFor="academic-title">{type} title <em>Required</em><input id="academic-title" autoFocus value={title} aria-invalid={Boolean(titleError)} aria-describedby={titleError ? "academic-title-error" : undefined} onChange={event => { setTitle(event.target.value); if (titleError) setTitleError(""); }} placeholder={type === "Quiz" ? "e.g. Module 2 quiz" : "e.g. Midterm exam"} /></label>{titleError && <p id="academic-title-error" className="academic-title-error" role="alert">{titleError}</p>}<div className="academic-form-grid"><label>Type<select value={type} onChange={event => { setType(event.target.value as AcademicItemType); setPointsError(""); }}>{(["Assignment", "Project", "Exam", "Quiz", "Lab", "Reading", "Discussion"] as AcademicItemType[]).map(value => <option key={value}>{value}</option>)}</select></label><label>Due date<input type="date" value={due} onChange={event => setDue(event.target.value)} /></label><label>Start time<div className="time-input-with-now"><input type="time" value={startTime} onChange={event => setStartTime(event.target.value)} /><button type="button" onClick={useCurrentTime}>Now</button></div></label><label>Priority<select value={priority} onChange={event => setPriority(event.target.value as Task["priority"])}><option>High</option><option>Medium</option><option>Low</option></select></label><label>Focus estimate<input type="number" min={5} max={240} step={5} value={focusMinutes} onChange={event => setFocusMinutes(event.target.value)} /></label><label>Energy<select value={energy} onChange={event => setEnergy(event.target.value as EnergyLevel)}><option>Low</option><option>Medium</option><option>High</option></select></label><label>Grade weight (%)<input type="number" min={0} max={100} step={0.5} value={gradeWeight} onChange={event => setGradeWeight(event.target.value)} placeholder="15" /></label><label>Submission / LMS<input value={submission} onChange={event => setSubmission(event.target.value)} placeholder="Canvas, Blackboard, room…" /></label>{isAssessment && <div className="assessment-points"><div className="assessment-points-head"><strong>Points</strong><span>Optional until it’s graded</span></div><div className="assessment-points-grid"><label>Total points<input type="number" min={1} step={0.5} value={pointsPossible} onChange={event => { setPointsPossible(event.target.value); setPointsError(""); }} placeholder="100" /></label><label>Points earned<input type="number" min={0} max={pointsPossible || undefined} step={0.5} value={pointsEarned} onChange={event => { setPointsEarned(event.target.value); setPointsError(""); }} placeholder="Leave blank for now" /></label></div>{pointsPossible !== "" && possiblePoints > 0 && <p>{pointsEarned === "" ? `${possiblePoints} points possible` : `${earnedPoints}/${possiblePoints} points · ${((earnedPoints / possiblePoints) * 100).toFixed(1)}%`}</p>}{pointsError && <p className="assessment-points-error" role="alert">{pointsError}</p>}</div>}</div><div className="create-actions"><button type="button" onClick={close}>Cancel</button><button className="primary" type="submit">Add {type.toLowerCase()} to {classRecord.code}</button></div></motion.form></motion.div>;
 }
 
-const tasksToCalendarEvents = (tasks: Task[]): CalendarEvent[] => {
-  return tasks
-    .filter(task => !task.done && !task.canceled && task.due && !task.calendarEventId && Boolean(task.startTime?.trim()))
-    .map(task => {
-      const dueKey = /^\d{4}-\d{2}-\d{2}/.test(task.due) ? task.due.slice(0, 10) : task.due;
-      const match = task.startTime!.trim().match(/^(\d{1,2}):(\d{2})$/);
-      const hours = match ? Math.min(23, Math.max(0, Number(match[1]))) : 9;
-      const minutes = match ? Math.min(59, Math.max(0, Number(match[2]))) : 0;
-      const time = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-      const endMinutes = hours * 60 + minutes + Math.max(15, task.focusMinutes || 30);
-      const endHours = Math.min(23, Math.floor(endMinutes / 60));
-      const endMins = endMinutes >= 24 * 60 ? 59 : endMinutes % 60;
-      const end = `${dueKey}T${String(endHours).padStart(2, "0")}:${String(endMins).padStart(2, "0")}`;
-      return {
-        id: `task-${task.id}`,
-        title: task.title,
-        start: `${dueKey}T${time}`,
-        end,
-        color: task.color,
-        source: "LifeOS" as const,
-        notes: `${task.project} · ${task.focusMinutes}m · ${task.energy}`,
-      };
-    });
-};
-
 const workMeetingsToCalendarEvents = (meetings: WorkMeeting[], projects: WorkProject[]): CalendarEvent[] => {
   return meetings.map(meeting => {
     const project = projects.find(item => item.id === meeting.projectId);
@@ -4181,10 +4253,11 @@ function LegacyCalendarView({ events, weekStartsMonday, onNew, onImport, onEdit 
   return <><div className="page-title"><div><p className="eyebrow">Protect your time</p><h1>Calendar</h1><p>Manual planning plus iCal imports from Apple Calendar, school, work, or anything that exports `.ics`.</p></div><div className="calendar-actions"><div className="calendar-mode-tabs"><button className={mode === "month" ? "selected" : ""} onClick={() => setMode("month")}><CalendarDays size={14} /> Month</button><button className={mode === "day" ? "selected" : ""} onClick={() => setMode("day")}><Clock3 size={14} /> Day</button></div><button onClick={onImport}><Link2 size={16} /> Import iCal</button><button className="primary" onClick={() => onNew(selected)}><Plus size={16} /> Add event</button></div></div><div className="calendar-layout"><section className="card calendar-card">{mode === "month" ? <><div className="calendar-toolbar"><button onClick={() => changeMonth(-1)}>←</button><strong>{cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</strong><button onClick={() => changeMonth(1)}>→</button></div><div className="calendar-weekdays">{weekDays.map(day => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{days.map(day => { const key = toDateKey(day); const dayEvents = events.filter(event => event.start.slice(0, 10) === key); return <button key={key} className={`${day.getMonth() !== cursor.getMonth() ? "muted" : ""} ${key === selected ? "selected" : ""} ${key === toDateKey(new Date()) ? "today" : ""}`} onClick={() => selectDay(key)}><span>{day.getDate()}</span><div>{dayEvents.slice(0, 3).map(event => <i key={event.id} style={{ background: event.color }} title={event.title} />)}</div>{dayEvents.length > 3 && <small>+{dayEvents.length - 3}</small>}</button>; })}</div></> : <><div className="calendar-toolbar day-toolbar"><button onClick={() => changeDay(-1)}>←</button><div><strong>{selectedLabel}</strong><span>{selectedEvents.length ? `${selectedEvents.length} scheduled event${selectedEvents.length === 1 ? "" : "s"}` : "Open day"}</span></div><button onClick={() => changeDay(1)}>→</button></div><div className="day-jump-row"><button onClick={() => changeDay(-1)}>Yesterday</button><button onClick={() => { const today = new Date(); setSelected(toDateKey(today)); setCursor(new Date(today.getFullYear(), today.getMonth(), 1)); }}>Today</button><button onClick={() => changeDay(1)}>Tomorrow</button></div><div className="day-timeline"><div className="day-hours">{hours.map(hour => <div key={hour} className="day-hour"><span>{new Date(`${selected}T${String(hour).padStart(2, "0")}:00`).toLocaleTimeString("en-US", { hour: "numeric" })}</span></div>)}</div><div className="day-events-layer">{selectedIsToday && <div className="now-line" style={{ top: `${nowTop}%` }}><span>Now</span></div>}{selectedEvents.map(event => <button key={event.id} className="day-event-block" style={eventBlockStyle(event)} onClick={() => onEdit(event.id)}><strong>{event.title}</strong><span>{formatEventTime(event.start)}{event.end ? ` – ${formatEventTime(event.end)}` : ""}</span>{event.notes && <small>{event.notes}</small>}</button>)}</div></div></>}</section><aside className="calendar-side"><section className="card agenda-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>{selectedLabel}</h2></div><span className="count">{selectedEvents.length} events</span></div><div className="agenda-list">{selectedEvents.length ? selectedEvents.map(event => <button className="agenda-item editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventTime(event.start)}{event.end ? ` – ${formatEventTime(event.end)}` : ""} · {event.source}</p>{event.notes && <small>{event.notes}</small>}</div><Pencil size={14} /></button>) : <div className="priority-empty"><strong>Nothing scheduled.</strong><p>That white space is not a bug. Protect it.</p></div>}</div></section><section className="card agenda-card"><div className="card-head"><div><span className="section-icon violet"><Clock3 size={14} /></span><h2>Today</h2></div><span className="count">{todayEvents.length}</span></div><div className="agenda-list">{todayEvents.slice(0, 4).map(event => <button className="agenda-item compact editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventTime(event.start)}</p></div><Pencil size={14} /></button>)}</div></section></aside></div></>;
 }
 
-function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming", onNew, onImport, onEdit, onPlanTask }: { events: CalendarEvent[]; tasks: Task[]; weekStartsMonday: boolean; defaultView?: CalendarDefaultView; onNew: (date: string) => void; onImport: () => void; onEdit: (id: string) => void; onPlanTask: (id: number) => void }) {
+function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming", layerVisibility = DEFAULT_CALENDAR_LAYER_VISIBILITY, onLayerVisibilityChange, onNew, onImport, onEdit, onPlanTask }: { events: CalendarEvent[]; tasks: Task[]; weekStartsMonday: boolean; defaultView?: CalendarDefaultView; layerVisibility?: CalendarLayerVisibility; onLayerVisibilityChange?: (next: CalendarLayerVisibility) => void; onNew: (date: string) => void; onImport: () => void; onEdit: (id: string) => void; onPlanTask: (id: number) => void }) {
   const [cursor, setCursor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => toDateKey(new Date()));
   const [mode, setMode] = useState<CalendarDefaultView>(() => normalizeCalendarDefaultView(defaultView));
+  const layers = normalizeCalendarLayerVisibility(layerVisibility);
   useEffect(() => {
     setMode(normalizeCalendarDefaultView(defaultView));
   }, [defaultView]);
@@ -4198,21 +4271,47 @@ function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming
     day.setDate(gridStart.getDate() + index);
     return day;
   });
-  const monthSegments = buildMonthEventSegments(events, days);
-  const selectedEvents = events.filter(event => eventOccursOnDate(event, selected)).sort((a, b) => a.start.localeCompare(b.start));
+  const timelineEvents = events.filter(event => classifyCalendarItem(event) !== "deadline");
+  const deadlineEvents = events.filter(event => classifyCalendarItem(event) === "deadline");
+  const monthSegments = buildMonthEventSegments(timelineEvents, days);
+  const selectedEvents = timelineEvents.filter(event => eventOccursOnDate(event, selected)).sort((a, b) => a.start.localeCompare(b.start));
+  const selectedDeadlines = deadlineEvents.filter(event => eventOccursOnDate(event, selected)).sort((a, b) => a.title.localeCompare(b.title));
   const todayKey = toDateKey(new Date());
-  const todayEvents = events.filter(event => eventOccursOnDate(event, todayKey)).sort((a, b) => a.start.localeCompare(b.start));
+  const todayEvents = timelineEvents.filter(event => eventOccursOnDate(event, todayKey)).sort((a, b) => a.start.localeCompare(b.start));
   const selectedDate = new Date(`${selected}T12:00`);
   const selectedLabel = selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
-  type UpcomingItem = { id: string; kind: "event" | "task"; title: string; date: string; color: string; meta: string };
+  type UpcomingItem = { id: string; kind: "event" | "task" | "deadline" | "session"; title: string; date: string; color: string; meta: string };
   const upcomingItems: UpcomingItem[] = [
-    ...events
-      .filter(event => !event.id.startsWith("task-") && (event.end ?? event.start).slice(0, 10) >= todayKey)
-      .map(event => ({ id: event.id, kind: "event" as const, title: event.title, date: event.start, color: event.color, meta: `${formatEventRange(event)} · ${event.source}` })),
-    ...tasks
-      .filter(task => !task.done && !task.canceled && /^\d{4}-\d{2}-\d{2}$/.test(task.due) && task.due >= todayKey && !task.calendarEventId)
-      .map(task => ({ id: String(task.id), kind: "task" as const, title: task.title, date: `${task.due}T${task.startTime || "09:00"}`, color: task.color, meta: `Task · due ${task.due === todayKey ? "today" : task.due} · ${task.focusMinutes}m` })),
+    ...timelineEvents
+      .filter(event => !event.id.startsWith("deadline-") && (event.end ?? event.start).slice(0, 10) >= todayKey)
+      .map(event => ({
+        id: event.id,
+        kind: (classifyCalendarItem(event) === "scheduledTask" ? "session" : "event") as "session" | "event",
+        title: event.title,
+        date: event.start,
+        color: event.color,
+        meta: `${formatEventRange(event)} · ${classifyCalendarItem(event) === "scheduledTask" ? "Scheduled task" : event.source}`,
+      })),
+    ...deadlineEvents
+      .filter(event => event.start.slice(0, 10) >= todayKey)
+      .filter(event => {
+        const taskId = parseDeadlineEventId(event.id);
+        // Avoid duplicating a task that already has a timed session on the feed.
+        if (taskId == null) return true;
+        return !timelineEvents.some(item => item.linkedTaskId === taskId || item.id === `task-${taskId}`);
+      })
+      .map(event => ({
+        id: event.id,
+        kind: "deadline" as const,
+        title: event.title,
+        date: event.start,
+        color: event.color,
+        meta: `Deadline · due ${event.start.slice(0, 10) === todayKey ? "today" : event.start.slice(0, 10)}`,
+      })),
   ].sort((a, b) => a.date.localeCompare(b.date));
+  const toggleLayer = (key: keyof CalendarLayerVisibility) => {
+    onLayerVisibilityChange?.({ ...layers, [key]: !layers[key] });
+  };
   const hours = Array.from({ length: 24 }, (_, hour) => hour);
   const changeMonth = (offset: number) => setCursor(value => new Date(value.getFullYear(), value.getMonth() + offset, 1));
   const changeDay = (offset: number) => {
@@ -4245,6 +4344,11 @@ function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming
       <div><p className="eyebrow">Protect your time</p><h1>Today</h1><p>Your timeline, calendar, and ready work in one calm planning layer.</p></div>
       <div className="calendar-actions">
         <div className="calendar-mode-tabs"><button className={mode === "upcoming" ? "selected" : ""} onClick={() => setMode("upcoming")}><ListTodo size={14} /> Upcoming</button><button className={mode === "month" ? "selected" : ""} onClick={() => setMode("month")}><CalendarDays size={14} /> Month</button><button className={mode === "day" ? "selected" : ""} onClick={() => setMode("day")}><Clock3 size={14} /> Day</button></div>
+        <div className="calendar-layer-toggles" role="group" aria-label="Calendar layers">
+          <button type="button" className={layers.events ? "selected" : ""} onClick={() => toggleLayer("events")}>Events</button>
+          <button type="button" className={layers.deadlines ? "selected" : ""} onClick={() => toggleLayer("deadlines")}>Task deadlines</button>
+          <button type="button" className={layers.scheduledTasks ? "selected" : ""} onClick={() => toggleLayer("scheduledTasks")}>Scheduled tasks</button>
+        </div>
         <button onClick={onImport}><Link2 size={16} /> Import iCal</button>
         <button className="primary" onClick={() => onNew(selected)}><Plus size={16} /> Add event</button>
       </div>
@@ -4254,12 +4358,13 @@ function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming
         {mode === "upcoming" ? <>
           <div className="calendar-toolbar upcoming-toolbar"><div><strong>What’s coming up</strong><span>Events and dated tasks, in order.</span></div><span className="count">{upcomingItems.length} upcoming</span></div>
           <div className="upcoming-list">
-            {upcomingItems.length ? upcomingItems.slice(0, 5).map(item => {
+            {upcomingItems.length ? upcomingItems.slice(0, 8).map(item => {
               const itemDate = new Date(`${item.date.slice(0, 10)}T12:00`);
-              return <button key={`${item.kind}-${item.id}`} className="upcoming-item" onClick={() => item.kind === "event" ? onEdit(item.id) : onPlanTask(Number(item.id))}>
+              const kindLabel = item.kind === "deadline" ? "Deadline" : item.kind === "session" ? "Scheduled task" : "Calendar event";
+              return <button key={`${item.kind}-${item.id}`} className={`upcoming-item upcoming-${item.kind}`} onClick={() => onEdit(item.id)}>
                 <time dateTime={item.date}><strong>{itemDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</strong><span>{itemDate.toLocaleDateString("en-US", { weekday: "short" })}</span></time>
                 <i style={{ background: item.color }} />
-                <div><span className="upcoming-kind">{item.kind === "event" ? "Calendar event" : "Task"}</span><strong>{item.title}</strong><small>{item.meta}</small></div>
+                <div><span className="upcoming-kind">{kindLabel}</span><strong>{item.title}</strong><small>{item.meta}</small></div>
                 <ArrowRight size={16} />
               </button>;
             }) : <div className="priority-empty"><strong>Nothing upcoming yet.</strong><p>Add an event, import a calendar, or give a task a due date.</p></div>}
@@ -4292,23 +4397,27 @@ function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming
           <div className="day-jump-row"><button onClick={() => changeDay(-1)}>Yesterday</button><button onClick={() => { const today = new Date(); setSelected(toDateKey(today)); setCursor(new Date(today.getFullYear(), today.getMonth(), 1)); }}>Today</button><button onClick={() => changeDay(1)}>Tomorrow</button></div>
           <div className="day-timeline">
             <div className="day-hours">{hours.map(hour => <div key={hour} className="day-hour"><span>{new Date(`${selected}T${String(hour).padStart(2, "0")}:00`).toLocaleTimeString("en-US", { hour: "numeric" })}</span></div>)}</div>
-            <div className="day-events-layer">{selectedIsToday && <div className="now-line" style={{ top: `${nowTop}%` }}><span>Now</span></div>}{selectedEvents.map(event => {
+            <div className="day-events-layer">{selectedIsToday && <div className="now-line" style={{ top: `${nowTop}%` }}><span>Now</span></div>}            {selectedEvents.map(event => {
               const place = eventPlaceLabel(event.location);
               const meeting = resolveEventMeeting(event);
               const notes = eventNotesLabel(event.notes);
               const detail = place || notes;
-              return <div key={event.id} className="day-event-block" style={eventBlockStyle(event)} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><strong>{event.title}</strong><span>{formatEventRange(event)}</span>{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : null}{detail ? <small>{detail}</small> : null}</div>;
+              const kind = classifyCalendarItem(event);
+              return <div key={event.id} className={`day-event-block${kind === "scheduledTask" ? " day-event-scheduled-task" : ""}`} style={eventBlockStyle(event)} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><strong>{event.title}</strong><span>{formatEventRange(event)}{kind === "scheduledTask" ? " · Task" : ""}</span>{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : null}{detail ? <small>{detail}</small> : null}</div>;
             })}</div>
           </div>
         </>}
       </section>
       <aside className="calendar-side">
-        <section className="card agenda-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>{selectedLabel}</h2></div><span className="count">{selectedEvents.length} events</span></div><div className="agenda-list">{selectedEvents.length ? selectedEvents.map(event => {
+        <section className="card agenda-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>{selectedLabel}</h2></div><span className="count">{selectedEvents.length + selectedDeadlines.length}</span></div><div className="agenda-list">{selectedDeadlines.length ? selectedDeadlines.map(event => (
+          <div className="agenda-item editable agenda-deadline" key={event.id} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>Deadline · all day</p></div><ListTodo size={14} /></div>
+        )) : null}{selectedEvents.length ? selectedEvents.map(event => {
           const place = eventPlaceLabel(event.location);
           const meeting = resolveEventMeeting(event);
           const notes = eventNotesLabel(event.notes);
-          return <div className="agenda-item editable" key={event.id} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)} · {event.source}</p>{place ? <small className="event-place"><MapPin size={11} /> {place}</small> : null}{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : null}{notes ? <small>{notes}</small> : null}</div><Pencil size={14} /></div>;
-        }) : <div className="priority-empty"><strong>Nothing scheduled.</strong><p>That white space is not a bug. Protect it.</p></div>}</div></section>
+          const kind = classifyCalendarItem(event);
+          return <div className={`agenda-item editable${kind === "scheduledTask" ? " agenda-scheduled-task" : ""}`} key={event.id} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)} · {kind === "scheduledTask" ? "Scheduled task" : event.source}</p>{place ? <small className="event-place"><MapPin size={11} /> {place}</small> : null}{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : null}{notes ? <small>{notes}</small> : null}</div><Pencil size={14} /></div>;
+        }) : !selectedDeadlines.length ? <div className="priority-empty"><strong>Nothing scheduled.</strong><p>That white space is not a bug. Protect it.</p></div> : null}</div></section>
         <section className="card agenda-card"><div className="card-head"><div><span className="section-icon violet"><Clock3 size={14} /></span><h2>Today</h2></div><span className="count">{todayEvents.length}</span></div><div className="agenda-list">{todayEvents.slice(0, 4).map(event => {
           const meeting = resolveEventMeeting(event);
           return <div className="agenda-item compact editable" key={event.id} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)}</p>{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : null}</div><Pencil size={14} /></div>;
@@ -5079,6 +5188,21 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
                       ))}
                     </div>
                   </div>
+                  <div className="settings-calendar-default">
+                    <span className="settings-field-label">Calendar layers</span>
+                    <p className="settings-note" style={{ margin: "4px 0 10px" }}>Visibility only — nothing is deleted when you hide a layer.</p>
+                    {(() => {
+                      const layers = normalizeCalendarLayerVisibility(settings.calendarLayerVisibility);
+                      const setLayer = (key: keyof CalendarLayerVisibility, value: boolean) => update({ calendarLayerVisibility: { ...layers, [key]: value } });
+                      return (
+                        <>
+                          <ToggleRow title="Events" desc="Regular calendar events from LifeOS and imports." checked={layers.events} onChange={(events) => setLayer("events", events)} />
+                          <ToggleRow title="Task deadlines" desc="All-day due-date indicators for open tasks." checked={layers.deadlines} onChange={(deadlines) => setLayer("deadlines", deadlines)} />
+                          <ToggleRow title="Scheduled tasks" desc="Timed task blocks and linked work sessions." checked={layers.scheduledTasks} onChange={(scheduledTasks) => setLayer("scheduledTasks", scheduledTasks)} />
+                        </>
+                      );
+                    })()}
+                  </div>
                   <p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p>
                 </div>
               </section>
@@ -5512,9 +5636,13 @@ function EmptyFocus({ onExit, onNewTask }: { onExit: () => void; onNewTask: () =
   return <div className="focus-mode empty-focus"><header><div className="brand"><div className="brand-mark light"><span /><span /><span /></div><span>LifeOS</span></div><button onClick={onExit}><X size={16} /> Exit focus <kbd>Esc</kbd></button></header><main><section className="empty-state"><div><Focus size={28} /></div><p className="eyebrow">Nothing to focus on</p><h1>Your priorities are clear.</h1><p>You deleted every priority, and LifeOS respected it. Add a new one when you’re ready to choose the next lane.</p><button className="primary" onClick={onNewTask}><Plus size={16} /> Add priority</button></section></main></div>;
 }
 
-function TaskWorkspace({ task, tasks, projects, classes, onExit, onSwitch, onUpdate, onFocus, onMarkDone, onDelete }: { task: Task; tasks: Task[]; projects: Project[]; classes: ClassRecord[]; onExit: () => void; onSwitch: (id: number) => void; onUpdate: (updates: Partial<Task>) => void; onFocus: () => void; onMarkDone: () => void; onDelete: () => void }) {
+function TaskWorkspace({ task, tasks, projects, classes, calendarEvents = [], onExit, onSwitch, onUpdate, onFocus, onMarkDone, onDelete, onOpenCalendarEvent, onUnlinkSession, onScheduleSession }: { task: Task; tasks: Task[]; projects: Project[]; classes: ClassRecord[]; calendarEvents?: CalendarEvent[]; onExit: () => void; onSwitch: (id: number) => void; onUpdate: (updates: Partial<Task>) => void; onFocus: () => void; onMarkDone: () => void; onDelete: () => void; onOpenCalendarEvent?: (eventId: string) => void; onUnlinkSession?: (eventId: string) => void; onScheduleSession?: (day: string, start: string, end: string) => void }) {
   const [taskFilter, setTaskFilter] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
+  const [scheduleDay, setScheduleDay] = useState(() => (/^\d{4}-\d{2}-\d{2}$/.test(task.due) ? task.due : toDateKey(new Date())));
+  const [scheduleStart, setScheduleStart] = useState(task.startTime || "09:00");
+  const [scheduleEnd, setScheduleEnd] = useState(() => suggestedSessionEnd(task.startTime || "09:00", task.focusMinutes));
   const { createBreakdown, loading: breakdownLoading, error: breakdownError } = useTaskBreakdown();
   const checklist = task.checklist ?? [];
   const checklistProgress = checklist.map((_, index) => task.checklistProgress?.[index] ?? false);
@@ -5523,6 +5651,7 @@ function TaskWorkspace({ task, tasks, projects, classes, onExit, onSwitch, onUpd
   const dateValue = /^\d{4}-\d{2}-\d{2}$/.test(task.due) ? task.due : "";
   const visibleTasks = tasks.filter(item => `${item.title} ${item.project}`.toLowerCase().includes(taskFilter.toLowerCase()));
   const spaceValue = task.classId ? `class:${task.classId}` : task.project !== "Inbox" ? `project:${task.project}` : "";
+  const linkedSessions = eventsLinkedToTask(task, calendarEvents);
 
   const updateSpace = (value: string) => {
     if (value.startsWith("class:")) {
@@ -5632,8 +5761,66 @@ function TaskWorkspace({ task, tasks, projects, classes, onExit, onSwitch, onUpd
           </div>)}</div> : <div className="task-inline-empty">No steps yet. Add one when the next move becomes clear.</div>}
         </section>
 
+        <section className="task-scheduled-sessions">
+          <div className="task-section-heading">
+            <div>
+              <h2>Scheduled Sessions</h2>
+              <p>Calendar time blocks linked to this task. Multiple sessions are fine.</p>
+            </div>
+            {onScheduleSession && status !== "Done" && status !== "Canceled" && (
+              <button type="button" onClick={() => {
+                setScheduleDay(/^\d{4}-\d{2}-\d{2}$/.test(task.due) ? task.due : toDateKey(new Date()));
+                setScheduleStart(task.startTime || "09:00");
+                setScheduleEnd(suggestedSessionEnd(task.startTime || "09:00", task.focusMinutes));
+                setScheduling(true);
+              }}><CalendarDays size={14} /> Schedule Time</button>
+            )}
+          </div>
+          {linkedSessions.length ? (
+            <div className="task-session-list">
+              {linkedSessions.map(session => (
+                <div key={session.id} className="task-session-row">
+                  <i style={{ background: session.color }} />
+                  <div>
+                    <strong>{session.title}</strong>
+                    <small>{formatEventRange(session)}</small>
+                  </div>
+                  <div className="task-session-actions">
+                    {onOpenCalendarEvent && <button type="button" onClick={() => onOpenCalendarEvent(session.id)}>Open</button>}
+                    {onUnlinkSession && <button type="button" className="text-button" onClick={() => onUnlinkSession(session.id)}>Unlink</button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="task-inline-empty">No scheduled sessions yet. Use Schedule Time to put a work block on the calendar.</div>
+          )}
+          {scheduling && onScheduleSession && (
+            <form
+              className="task-schedule-form"
+              onSubmit={event => {
+                event.preventDefault();
+                if (!scheduleDay || !scheduleStart || !scheduleEnd || scheduleEnd <= scheduleStart) return;
+                const ok = window.confirm(`Schedule “${task.title}” on ${scheduleDay} from ${scheduleStart} to ${scheduleEnd}?`);
+                if (!ok) return;
+                onScheduleSession(scheduleDay, scheduleStart, scheduleEnd);
+                setScheduling(false);
+              }}
+            >
+              <label>Date<input type="date" value={scheduleDay} onChange={event => setScheduleDay(event.target.value)} /></label>
+              <label>Start<input type="time" value={scheduleStart} onChange={event => { setScheduleStart(event.target.value); setScheduleEnd(suggestedSessionEnd(event.target.value, task.focusMinutes)); }} /></label>
+              <label>End<input type="time" value={scheduleEnd} onChange={event => setScheduleEnd(event.target.value)} /></label>
+              <p className="task-schedule-hint">Suggested length from focus estimate: {task.focusMinutes}m</p>
+              <div className="create-actions">
+                <button type="button" onClick={() => setScheduling(false)}>Cancel</button>
+                <button className="primary" type="submit" disabled={!scheduleDay || scheduleEnd <= scheduleStart}>Confirm schedule</button>
+              </div>
+            </form>
+          )}
+        </section>
+
         <section className="task-danger-zone">
-          {!confirmDelete ? <button onClick={() => setConfirmDelete(true)}><Trash2 size={14} /> Delete task</button> : <div><span>This permanently deletes the task.</span><button onClick={() => setConfirmDelete(false)}>Keep it</button><button className="confirm-delete" onClick={onDelete}>Yes, delete</button></div>}
+          {!confirmDelete ? <button onClick={() => setConfirmDelete(true)}><Trash2 size={14} /> Delete task</button> : <div><span>This permanently deletes the task. Linked calendar events stay unless you choose otherwise.</span><button onClick={() => setConfirmDelete(false)}>Keep it</button><button className="confirm-delete" onClick={onDelete}>Yes, delete</button></div>}
         </section>
       </section>
 
@@ -6314,7 +6501,7 @@ function LegacyCalendarEventModal({ close, add, event, remove, defaultDate }: { 
   return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.form className="create-modal calendar-modal" onMouseDown={modalEvent => modalEvent.stopPropagation()} onSubmit={submitEvent => { submitEvent.preventDefault(); if (!title.trim()) return; add({ id: event?.id ?? `lifeos-${Date.now()}`, title: title.trim(), start: `${day}T${start}`, end: end ? `${day}T${end}` : undefined, source: event?.source ?? "LifeOS", color, notes: notes.trim() || undefined }); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot" style={{ color, background: `${color}16` }}><CalendarDays size={16} /></div><div><strong>{isEditing ? "Edit calendar event" : "Add calendar event"}</strong><span>{isEditing ? "Change time, notes, color, or delete it." : "Put time on the board so your day stops being abstract."}</span></div><button type="button" onClick={close} aria-label="Close"><X size={18} /></button></div><label htmlFor="event-title">Event title</label><input id="event-title" autoFocus placeholder="What’s happening?" value={title} onChange={event => setTitle(event.target.value)} /><div className="calendar-form-grid"><label>Date<input type="date" value={day} onChange={event => setDay(event.target.value)} /></label><label>Start<input type="time" value={start} onChange={event => setStart(event.target.value)} /></label><label>End<input type="time" value={end} onChange={event => setEnd(event.target.value)} /></label></div><label htmlFor="event-notes">Notes / location</label><textarea id="event-notes" className="event-notes" placeholder="Location, link, reminder, whatever helps…" value={notes} onChange={event => setNotes(event.target.value)} /><label>Color</label><div className="calendar-color-picker">{["#665df6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b", "#cf625a"].map(option => <button type="button" aria-label={`Use color ${option}`} className={color === option ? "selected" : ""} key={option} style={{ background: option }} onClick={() => setColor(option)} />)}</div><div className="create-actions split-actions">{isEditing && remove && <button type="button" className="danger-text" onClick={() => remove(event!.id)}><Trash2 size={14} /> Delete</button>}<button type="button" onClick={close}>Cancel</button><button className="primary" disabled={!title.trim()} type="submit">{isEditing ? "Save event" : "Add event"}</button></div></motion.form></motion.div>;
 }
 
-function CalendarEventModal({ close, add, event, remove, defaultDate, tasks = [], linkedTaskId, onOpenLinkedTask, onRouteToTask }: { close: () => void; add: (event: CalendarEvent) => void; event?: CalendarEvent; remove?: (id: string) => void; defaultDate?: string | null; tasks?: Task[]; linkedTaskId?: number; onOpenLinkedTask?: (event: CalendarEvent) => void; onRouteToTask?: (event: CalendarEvent, taskId: number) => void }) {
+function CalendarEventModal({ close, add, event, remove, defaultDate, tasks = [], linkedTaskId, onOpenLinkedTask, onRouteToTask, onUnlinkTask }: { close: () => void; add: (event: CalendarEvent) => void; event?: CalendarEvent; remove?: (id: string) => void; defaultDate?: string | null; tasks?: Task[]; linkedTaskId?: number; onOpenLinkedTask?: (event: CalendarEvent) => void; onRouteToTask?: (event: CalendarEvent, taskId: number) => void; onUnlinkTask?: (event: CalendarEvent) => void }) {
   const now = new Date();
   const eventDay = event?.start.slice(0, 10) ?? defaultDate ?? toDateKey(now);
   const initialEndDay = event?.end?.slice(0, 10) ?? eventDay;
@@ -6369,6 +6556,7 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, tasks = []
         notes,
       }),
       weekdaysOnly: weekdaysOnly || undefined,
+      linkedTaskId: event?.linkedTaskId,
     });
   };
   return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -6435,6 +6623,9 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, tasks = []
         <div className="event-main-actions">
           {isEditing && event && linkedTaskId != null && onOpenLinkedTask && (
             <button type="button" className="event-task-action" onClick={() => onOpenLinkedTask(event)}><ListTodo size={14} /> Open task</button>
+          )}
+          {isEditing && event && linkedTaskId != null && onUnlinkTask && (
+            <button type="button" className="event-task-action" onClick={() => { onUnlinkTask(event); setPickingTask(false); }}><Link2 size={14} /> Unlink</button>
           )}
           {isEditing && event && linkedTaskId == null && onRouteToTask && (
             <button type="button" className="event-task-action" onClick={() => setPickingTask(value => !value)}><ListTodo size={14} /> Route to Task</button>
