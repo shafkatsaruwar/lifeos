@@ -393,6 +393,8 @@ export function NowScreen() {
           </View>
         ) : null}
 
+        <ExecutiveStrip />
+
         <TimesheetNowStrip
           theme={theme}
           timeTracking={workspace.timeTracking}
@@ -400,8 +402,6 @@ export function NowScreen() {
           onChange={(next) => void updateTimeTracking(next)}
           onOpenTimesheet={openTimesheet}
         />
-
-        <ExecutiveStrip />
 
         {ambient ? (
           <Pressable
