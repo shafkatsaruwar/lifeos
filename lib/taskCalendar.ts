@@ -328,3 +328,94 @@ export function layerLabel(kind: CalendarLayerKind): string {
   if (kind === "scheduledTask") return "Scheduled task";
   return "Event";
 }
+
+/** Remove specific calendar events by id (used when completing/deleting a task). */
+export function removeEventsByIds<T extends CalendarEventRef>(
+  events: T[],
+  eventIds: Iterable<string>,
+): T[] {
+  const remove = new Set(eventIds);
+  return events.filter((event) => !remove.has(event.id));
+}
+
+/** Clear primary calendarEventId when those events were removed. */
+export function clearPrimaryLinksIfRemoved<T extends TaskCalendarRef>(
+  tasks: T[],
+  taskId: number,
+  removedEventIds: Iterable<string>,
+): T[] {
+  const remove = new Set(removedEventIds);
+  return tasks.map((task) =>
+    task.id === taskId && task.calendarEventId && remove.has(task.calendarEventId)
+      ? { ...task, calendarEventId: undefined }
+      : task,
+  );
+}
+
+/** Clear reverse links when deleting a task but keeping calendar events. */
+export function clearLinkedTaskIdsForTask<T extends CalendarEventRef>(
+  events: T[],
+  taskId: number,
+): T[] {
+  return events.map((event) =>
+    event.linkedTaskId === taskId ? { ...event, linkedTaskId: undefined } : event,
+  );
+}
+
+export type CompleteTaskSessionChoice = "keep" | "removeFuture";
+export type DeleteTaskEventChoice = "keep" | "deleteLinked";
+
+/**
+ * Apply the completion choice for future linked sessions.
+ * Past/historical sessions are never removed here.
+ */
+export function applyCompleteTaskSessionChoice<
+  TEvent extends CalendarEventRef,
+  TTask extends TaskCalendarRef,
+>(input: {
+  tasks: TTask[];
+  events: TEvent[];
+  taskId: number;
+  todayKey: string;
+  choice: CompleteTaskSessionChoice;
+}): { tasks: TTask[]; events: TEvent[] } {
+  if (input.choice === "keep") return { tasks: input.tasks, events: input.events };
+  const task = input.tasks.find((item) => item.id === input.taskId);
+  if (!task) return { tasks: input.tasks, events: input.events };
+  const upcoming = futureLinkedSessions(task, input.events, input.todayKey);
+  if (!upcoming.length) return { tasks: input.tasks, events: input.events };
+  const removeIds = upcoming.map((event) => event.id);
+  return {
+    events: removeEventsByIds(input.events, removeIds),
+    tasks: clearPrimaryLinksIfRemoved(input.tasks, input.taskId, removeIds),
+  };
+}
+
+/**
+ * Apply the delete-task choice for linked calendar events.
+ * Never deletes events silently — caller must pass an explicit choice when links exist.
+ */
+export function applyDeleteTaskEventChoice<
+  TEvent extends CalendarEventRef,
+  TTask extends TaskCalendarRef,
+>(input: {
+  tasks: TTask[];
+  events: TEvent[];
+  taskId: number;
+  choice: DeleteTaskEventChoice;
+}): { tasks: TTask[]; events: TEvent[] } {
+  const task = input.tasks.find((item) => item.id === input.taskId);
+  const linked = task ? eventsLinkedToTask(task, input.events) : [];
+  let events = input.events;
+  if (linked.length) {
+    if (input.choice === "deleteLinked") {
+      events = removeEventsByIds(events, linked.map((event) => event.id));
+    } else {
+      events = clearLinkedTaskIdsForTask(events, input.taskId);
+    }
+  }
+  return {
+    tasks: input.tasks.filter((item) => item.id !== input.taskId),
+    events,
+  };
+}
