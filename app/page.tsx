@@ -4795,9 +4795,11 @@ function AuthEntry({ onLoginSuccess }: { onLoginSuccess: () => void }) {
 
   if (showLogin === null) {
     return (
-      <div className="preauth-shell" aria-busy="true">
-        <div className="preauth-card">
-          <div className="preauth-brand">LifeOS</div>
+      <div className="ob-shell" aria-busy="true">
+        <div className="ob-card" style={{ gridTemplateColumns: "1fr", maxWidth: 420 }}>
+          <div className="ob-panel">
+            <div className="ob-brand">LifeOS</div>
+          </div>
         </div>
       </div>
     );
