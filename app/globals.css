@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Drop SFProDisplay-Medium.ttf into /public/fonts/ for identical Medium weight in every browser. */
+@font-face {
+  font-family: "SF Pro Display";
+  src: local("SFProDisplay-Medium"), local("SF Pro Display Medium"), url("/fonts/SFProDisplay-Medium.ttf") format("truetype");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --canvas:#F7F9FC;
   --panel:#FFFFFF;

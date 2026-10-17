@@ -30,18 +30,6 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        {/* Drop SFProDisplay-Medium.ttf into /public/fonts/ for identical Medium weight in every browser. */}
-        <style>{`
-          @font-face {
-            font-family: "SF Pro Display";
-            src: local("SFProDisplay-Medium"), local("SF Pro Display Medium"), url("/fonts/SFProDisplay-Medium.ttf") format("truetype");
-            font-weight: 400 700;
-            font-style: normal;
-            font-display: swap;
-          }
-        `}</style>
-      </head>
       <body>{process.env.NODE_ENV === 'development' ? <ReticleDev /> : null}
         <PrivacyTelemetryBoot />
         <ErrorBoundary>{children}</ErrorBoundary>
