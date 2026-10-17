@@ -1,14 +1,14 @@
 "use client";
+import { useMosParams, useMosRouter } from "@/lib/masteros/embed-routing";
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
 import { formatDate } from "@/lib/masteros/helpers";
 import { studentsForCourse, unitsForCourse, useMasterOS } from "@/lib/masteros/store";
 
 export default function CourseDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const router = useRouter();
+  const { id } = useMosParams<{ id: string }>();
+  const router = useMosRouter();
   const { state, addUnit, deleteUnit, deleteCourse, addNote } = useMasterOS();
   const course = state.courses.find((item) => item.id === id);
   const [unitTitle, setUnitTitle] = useState("");

@@ -1,13 +1,13 @@
 "use client";
+import { useMosParams, useMosRouter } from "@/lib/masteros/embed-routing";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
 import { formatDate, SECTION_LABEL } from "@/lib/masteros/helpers";
 import { useMasterOS } from "@/lib/masteros/store";
 
 export default function LessonDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const router = useRouter();
+  const { id } = useMosParams<{ id: string }>();
+  const router = useMosRouter();
   const { state, updateLesson, updateSection, reorderSections, deleteLesson } = useMasterOS();
   const lesson = state.lessons.find((item) => item.id === id);
   if (!lesson) return <div className="mos-page"><p>Lesson not found.</p></div>;

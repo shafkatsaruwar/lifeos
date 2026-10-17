@@ -37,7 +37,7 @@ export function MasterOSShell({
     <View style={[styles.fill, { backgroundColor: theme.bg, paddingTop: insets.top }]}>
       <View style={styles.row}>
         <View style={[styles.sidebar, { borderRightColor: theme.border, backgroundColor: theme.surface, paddingBottom: insets.bottom + 12 }]}>
-          <Text style={[styles.eyebrow, { color: theme.muted }]}>MASTEROS</Text>
+          <Text style={[styles.eyebrow, { color: theme.muted }]}>MASTERY</Text>
           <Text style={[styles.brand, { color: theme.text }]}>Classroom</Text>
           {NAV.map((item) => {
             const on = item.key === active;

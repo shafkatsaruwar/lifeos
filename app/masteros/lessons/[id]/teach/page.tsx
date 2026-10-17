@@ -1,14 +1,14 @@
 "use client";
+import { useMosParams, useMosRouter } from "@/lib/masteros/embed-routing";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { SECTION_LABEL } from "@/lib/masteros/helpers";
 import { useMasterOS } from "@/lib/masteros/store";
 
 function TeachingModeInner() {
-  const { id } = useParams<{ id: string }>();
-  const router = useRouter();
+  const { id } = useMosParams<{ id: string }>();
+  const router = useMosRouter();
   const { state, updateLesson, updateSection, addNote, completeLesson } = useMasterOS();
   const lesson = state.lessons.find((item) => item.id === id);
   const sections = useMemo(

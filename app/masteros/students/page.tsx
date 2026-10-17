@@ -1,14 +1,14 @@
 "use client";
+import { useMosSearchParams } from "@/lib/masteros/embed-routing";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 import { initials } from "@/lib/masteros/helpers";
 import { attentionSkills, courseProgress, coursesForStudent, useMasterOS } from "@/lib/masteros/store";
 
 function StudentsInner() {
   const { state, addStudent, deleteStudent } = useMasterOS();
-  const params = useSearchParams();
+  const params = useMosSearchParams();
   const [open, setOpen] = useState(params.get("new") === "1");
   const [name, setName] = useState("");
   const [grade, setGrade] = useState("");

@@ -28,6 +28,7 @@ const kindIcon = (kind: NotificationKind, source: NotificationSource) => {
   if (kind === "assignment") return GraduationCap;
   if (kind === "meeting") return BriefcaseBusiness;
   if (kind === "event") return CalendarDays;
+  if (kind === "guided" || source === "guided") return Check;
   if (source === "work") return ListTodo;
   if (source === "life") return Check;
   if (source === "school") return GraduationCap;

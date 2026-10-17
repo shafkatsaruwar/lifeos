@@ -6,7 +6,7 @@ import { parseTaskFromText, type AiParsedTask } from "../lib/api";
 import { formatDueDate } from "../lib/helpers";
 
 // Mirrors web's NLTaskCreationModal ("AI task Fn A" / Sparkles icon), which
-// calls POST https://lifeos-mu-three.vercel.app/api/ai with
+// calls POST http://localhost:3000/api/ai with
 // { action: "parse-task", input, spaces }. See lib/useNLTaskCreation.ts.
 export function AiTaskModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { theme, workspace, updateTasks } = useLifeOS();

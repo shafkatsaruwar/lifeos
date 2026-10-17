@@ -32,19 +32,34 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { syncDataToFirebase, loadDataFromFirebase, loadTasksFromFirebase, listenToFirebaseChanges, stopListeningToFirebaseChanges, pullAllDataFromFirebase, setUserId, clearUserId, getUserId } from "@/lib/dataSync";
+import { coerceFirebaseList } from "@/lib/validation";
 import { readTaskBackup, writeTaskBackup } from "@/lib/taskBackup";
 import { signInWithGoogle, signOut, onAuthStateChanged, whenClientAuthReady } from "@/lib/firebase";
 import { shouldPersistOnboardingComplete } from "@/lib/onboardingGate";
+import { mergeSettingsWithEnvironmentDefaults } from "@/lib/settingsDefaults";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
+import { isNavigationOwner } from "@/lib/navigationOwner";
 import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrgencyColor, getUrgencyPercentage } from "@/lib/helpers";
-import { buildMonthEventSegments, eventOccursOnDate, getEventDateRange, type MonthEventSegment } from "@/lib/calendarEvents";
+import { buildMonthEventSegments, eventOccursOnDate, getEventDateRange, getEventDayBlockMinutes, usesDailyTimeWindow, type MonthEventSegment } from "@/lib/calendarEvents";
+import { coalesceEventMeetingUrl, detectMeetingProvider, eventNotesLabel, eventPlaceLabel, extractMeetingUrl, meetingJoinLabel, resolveEventMeeting } from "@/lib/meetingLinks";
 import { formatFocusMinutesShort, formatFocusSessionLabel, formatFocusTime } from "@/lib/focusTime";
+import { buildFocusStripKeys } from "@/lib/focusStrip";
 import { buildTasksFromNote } from "@/lib/noteToTask";
 import { emptyTimeTracking, normalizeTimeTracking, clockIn, clockOut, getActiveEntry } from "@/lib/timeTracking";
 import type { TimeTrackingState } from "@/lib/timeTracking";
 import { getFileStorage } from "@/lib/fileStorage";
 import { GlobalNotificationShell } from "@/app/components/NotificationCenter";
+import { AgeGateCheckbox, AGE_GATE_BLOCKED_MESSAGE, ageGateBlockedStyle } from "@/app/components/AgeGateCheckbox";
+import { PaywallGate } from "@/app/components/PaywallGate";
+import { SubscriptionCheckoutCard } from "@/app/components/SubscriptionCheckoutCard";
+import { canAccessPaidHubs, isHubVisibleInNav, isPaidHub, type Entitlement } from "@/lib/billing/entitlement";
+import { SessionReplaySettingsRow } from "@/app/components/PrivacyTelemetry";
+import {
+  PreAuthOnboarding,
+  hasCompletedPreAuthOnboarding,
+  markPreAuthOnboardingComplete,
+} from "@/app/components/PreAuthOnboarding";
 import {
   generateLifeOSNotifications,
   loadDismissedNotificationIds,
@@ -73,6 +88,28 @@ import {
   type StudyAbroadView,
 } from "@/app/components/StudyAbroadDashboard";
 import {
+  CareerDashboard,
+  emptyCareerHub,
+  type CareerHub,
+  type CareerView,
+} from "@/app/components/CareerDashboard";
+import { normalizeCareerHub } from "@/lib/careerHelpers";
+import { ExecutivePanel } from "@/app/components/ExecutivePanel";
+import { NowWeatherWidget } from "@/app/components/NowWeatherWidget";
+import {
+  executeCaptureCommand,
+  filterCaptureCommands,
+  INSTANT_COMMANDS,
+  listCaptureCommands,
+  type CaptureCommand,
+} from "@/lib/captureCommands";
+import { SettingsBentoGrid, type SettingsBentoSection } from "@/components/ui/bento-grid-01";
+import { emptyExecutiveHub, normalizeExecutiveHub } from "@/lib/executive/hub";
+import { tickExecutiveSchedules } from "@/lib/executive/engine";
+import type { ExecutiveHub } from "@/lib/executive/types";
+import { TreasuryOSDashboard } from "@/app/components/TreasuryOSDashboard";
+import { MasterOSDashboard } from "@/app/components/MasterOSDashboard";
+import {
   appendHistory,
   buildStudyAbroadCopilotContext,
   newId,
@@ -85,27 +122,29 @@ import { useTaskBreakdown } from "@/lib/useTaskBreakdown";
 import {
   Aperture, Archive, ArrowRight, Brain, CalendarDays, Check, CheckCircle2,
   ChevronDown, Circle, Clock3, Command, FileText, Flame, Focus, FolderKanban,
-  Globe2, Home, Inbox, LayoutGrid, Library, Link2, ListTodo, Menu, Moon, MoreHorizontal,
+  Globe2, Home, Inbox, LayoutGrid, Library, Link2, ListChecks, ListTodo, Menu, Moon, MoreHorizontal,
   Mail, Music2, Plus, Search, Settings, Sparkles, Sun, TimerReset, UserRound, X, Zap,
   Ban, Pencil, Trash2, Bell, Download, Palette, Shield, SlidersHorizontal, Coffee, Maximize, Mic, GripVertical,
   GraduationCap, NotebookPen, BookOpen, ExternalLink, Upload, RefreshCw, Bold, Italic, List, Heading1, Highlighter,
-  BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils,
+  BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, WalletCards, MapPin, Target,
 } from "lucide-react";
 
-type View = "Life" | "School" | "Work" | "Study Abroad" | "Now" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
+type View = "Life" | "School" | "Work" | "Career" | "Study Abroad" | "Treasury" | "Mastery" | "Now" | "Today" | "Spaces" | "Library" | "Settings" | "Dashboard" | "Focus" | "Tasks" | "Navigation" | "Calendar" | "Notes" | "Brain" | "Knowledge" | "Resources";
 type EnergyLevel = "Low" | "Medium" | "High";
 type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
 type AcademicItemType = "Assignment" | "Project" | "Exam" | "Quiz" | "Lab" | "Reading" | "Discussion";
 type TaskProperty = { id: string; name: string; value: string };
-type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; status?: TaskStatus; notes?: string; handoffNote?: string; nextAction?: string; followUpDate?: string; recurringDays?: number; completedAt?: string; customProperties?: TaskProperty[]; checklist?: string[]; checklistProgress?: boolean[]; focusRemainingSeconds?: number; focusSessionStarted?: boolean; focusSessionRunning?: boolean; focusHalfwayPrompted?: boolean; focusUpdatedAt?: string; classId?: string; academicType?: AcademicItemType; gradeWeight?: number; pointsEarned?: number; pointsPossible?: number; submission?: string; calendarEventId?: string; done?: boolean; canceled?: boolean };
+type Task = { id: number; title: string; project: string; color: string; due: string; startTime?: string; priority: "High" | "Medium" | "Low"; focusMinutes: number; energy: EnergyLevel; status?: TaskStatus; notes?: string; handoffNote?: string; nextAction?: string; followUpDate?: string; recurringDays?: number; completedAt?: string; customProperties?: TaskProperty[]; checklist?: string[]; checklistProgress?: boolean[]; focusRemainingSeconds?: number; focusSessionStarted?: boolean; focusSessionRunning?: boolean; focusHalfwayPrompted?: boolean; focusUpdatedAt?: string; classId?: string; academicType?: AcademicItemType; gradeCategoryId?: string; gradeWeight?: number; pointsEarned?: number; pointsPossible?: number; submission?: string; calendarEventId?: string; done?: boolean; canceled?: boolean };
 type FocusSessionUpdate = { remainingSeconds: number; hasStarted: boolean; isRunning: boolean; halfwayPrompted: boolean; focusMinutes?: number; checkpoint?: boolean };
 type ProjectKind = "maintenance" | "finishable";
 type SpaceKind = "class" | "project" | "maintenance";
 type ProjectIcon = "Zap" | "Aperture" | "Sparkles" | "FileText" | "UserRound" | "FolderKanban" | "BriefcaseBusiness" | "Camera" | "Code2" | "HeartPulse" | "Utensils" | "BookOpen";
 type Resource = { id: string; name: string; type: string; size: number; url: string; uploadedAt: string; classId?: string; projectName?: string; storagePath?: string; storage?: "cloud" | "local" };
 type Project = { name: string; desc: string; progress: number; color: string; icon: typeof Home; iconName: ProjectIcon; tasks: number; kind: ProjectKind };
-type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work" | "Synapse"; color: string; notes?: string; location?: string; weekdaysOnly?: boolean };
-type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterStart?: string; semesterEnd?: string; archived?: boolean };
+type CalendarEvent = { id: string; title: string; start: string; end?: string; source: "LifeOS" | "iCal" | "Google" | "Outlook" | "Work" | "Synapse"; color: string; notes?: string; location?: string; url?: string; weekdaysOnly?: boolean };
+type GradeBand = { letter: string; min: number };
+type GradeCategory = { id: string; name: string; weight: number; defaultPoints?: number };
+type ClassRecord = { id: string; code: string; name: string; term: string; instructor: string; color: string; location?: string; credits?: number; semesterStart?: string; semesterEnd?: string; archived?: boolean; gradingScale?: GradeBand[]; gradeCategories?: GradeCategory[]; gradingMode?: "categories" | "items" };
 type Note = { id: string; title: string; body: string; classId?: string; projectName?: string; template?: "blank" | "lined" | "dotted" | "cornell" | "meeting"; /** Handwriting from mobile (Apple PencilKit PKDrawing base64, or legacy strokes); preserved on web updates */ ink?: { version?: 1 | 2; format?: "pencilkit"; data?: string; pencilKitData?: string; strokes?: Array<{ id: string; color: string; width: number; tool: "pen" | "highlighter" | "eraser"; points: Array<{ x: number; y: number; t?: number }> }>; height?: number; updatedAt?: number }; updatedAt: string };
 type AmbientActivity = { title: string; startedAt: string; note?: string; spaceName?: string; spaceColor?: string };
 type AmbientDraft = { title: string; spaceName?: string; sourceLabel?: string } | null;
@@ -115,10 +154,12 @@ type WeeklyPlan = { [dayOfWeek: number]: WeeklyPlanItem[] }; // 0=Sunday through
 // Work OS types imported from OSDashboards
 
 const routedViews: Record<string, View> = {
-  life: "Life", school: "School", work: "Work", "study-abroad": "Study Abroad", studyabroad: "Study Abroad",
+  life: "Life", home: "Life", school: "School", work: "Work", career: "Career", "study-abroad": "Study Abroad", studyabroad: "Study Abroad",
   now: "Now", flow: "Now", dashboard: "Life", today: "Calendar", calendar: "Calendar", spaces: "Spaces",
   library: "Library", notes: "Library", resources: "Library", brain: "Library", knowledge: "Library",
-  settings: "Settings", tasks: "Tasks",
+  settings: "Settings", tasks: "Tasks", navigation: "Navigation", guided: "Navigation", executive: "Navigation",
+  budget: "Treasury", treasuryos: "Treasury", "treasury-os": "Treasury", treasury: "Treasury",
+  masteros: "Mastery", "master-os": "Mastery", master: "Mastery", mastery: "Mastery", mos: "Mastery",
 };
 const viewFromLocation = (): View => {
   if (typeof window === "undefined") return "Now";
@@ -136,7 +177,10 @@ type SettingsState = {
     life?: string;
     school?: string;
     work?: string;
+    career?: string;
     studyAbroad?: string;
+    treasuryOS?: string;
+    masterOS?: string;
   };
   dailyDigest: boolean;
   focusReminders: boolean;
@@ -160,7 +204,9 @@ type SettingsState = {
   enableLifeOS?: boolean;
   enableSchoolOS?: boolean;
   enableWorkOS?: boolean;
+  enableCareerOS?: boolean;
   enableStudyAbroad?: boolean;
+  enableTreasuryOS?: boolean;
   enableMasterOS?: boolean;
   /** When true (default), focusing the Now capture bar shows the /command cheatsheet. */
   showCaptureCommands?: boolean;
@@ -173,6 +219,14 @@ type SettingsState = {
   onboardingVersion?: number;
   /** Saved webcal / .ics feeds — subscribe to multiple calendars. */
   icalSubscriptions?: IcalSubscription[];
+  /** Access entitlement — promo year or paid Pro (synced with mobile). */
+  entitlement?: {
+    status: "none" | "promo" | "pro";
+    expiresAt?: string;
+    unlockedAt?: string;
+    source?: "promo" | "stripe" | "app_store";
+    promoCode?: string;
+  } | null;
 };
 
 type IcalSubscription = {
@@ -198,21 +252,45 @@ const DEFAULT_WORKSPACE_COLORS = {
   life: "#d99b38",
   school: "#8b5cf6",
   work: "#4338ca",
+  career: "#0f766e",
   studyAbroad: "#0d9488",
+  treasuryOS: "#47a47b",
+  masterOS: "#625af6",
 } as const;
+
+type WorkspaceColorKey = keyof typeof DEFAULT_WORKSPACE_COLORS;
+
+/** Add a row here when shipping a new environment — Settings, CSS vars, and sidebar tint follow. */
+const WORKSPACE_COLOR_OPTIONS: {
+  key: WorkspaceColorKey;
+  label: string;
+  navName: string;
+  dataEnv: string;
+  cssVar: `--env-${string}`;
+  enableKey: "enableLifeOS" | "enableSchoolOS" | "enableWorkOS" | "enableCareerOS" | "enableStudyAbroad" | "enableTreasuryOS" | "enableMasterOS";
+}[] = [
+  { key: "life", label: "Home", navName: "Life", dataEnv: "life", cssVar: "--env-life", enableKey: "enableLifeOS" },
+  { key: "school", label: "School", navName: "School", dataEnv: "school", cssVar: "--env-school", enableKey: "enableSchoolOS" },
+  { key: "work", label: "Work", navName: "Work", dataEnv: "work", cssVar: "--env-work", enableKey: "enableWorkOS" },
+  { key: "career", label: "Career", navName: "Career", dataEnv: "career", cssVar: "--env-career", enableKey: "enableCareerOS" },
+  { key: "studyAbroad", label: "Study Abroad", navName: "Study Abroad", dataEnv: "study-abroad", cssVar: "--env-study-abroad", enableKey: "enableStudyAbroad" },
+  { key: "treasuryOS", label: "Treasury", navName: "Treasury", dataEnv: "treasury", cssVar: "--env-treasury", enableKey: "enableTreasuryOS" },
+  { key: "masterOS", label: "Mastery", navName: "Mastery", dataEnv: "master", cssVar: "--env-master", enableKey: "enableMasterOS" },
+];
 
 const workspaceColorFor = (
   settings: SettingsState,
-  key: keyof typeof DEFAULT_WORKSPACE_COLORS,
+  key: WorkspaceColorKey,
 ) => settings.workspaceColors?.[key]?.trim() || DEFAULT_WORKSPACE_COLORS[key];
 
 const accentForView = (view: string, settings: SettingsState) => {
-  if (view === "Life") return workspaceColorFor(settings, "life");
-  if (view === "School") return workspaceColorFor(settings, "school");
-  if (view === "Work") return workspaceColorFor(settings, "work");
-  if (view === "Study Abroad") return workspaceColorFor(settings, "studyAbroad");
+  const match = WORKSPACE_COLOR_OPTIONS.find(option => option.navName === view);
+  if (match) return workspaceColorFor(settings, match.key);
   return settings.accent;
 };
+
+const dataEnvForNav = (name: string) =>
+  WORKSPACE_COLOR_OPTIONS.find(option => option.navName === name || (name === "Home" && option.navName === "Life"))?.dataEnv;
 
 const projectIconOptions: { value: ProjectIcon; label: string; icon: typeof Home }[] = [
   { value: "FolderKanban", label: "Project", icon: FolderKanban }, { value: "BriefcaseBusiness", label: "Career", icon: BriefcaseBusiness },
@@ -233,27 +311,35 @@ function ColorSwatches({ value, onChange, label = "Color" }: { value: string; on
   </>;
 }
 
-type NavName = View | "MasterOS";
-type NavItem = { category?: string; name: NavName; icon: typeof Home; href?: string };
+type NavItem = { category?: string; name: string; icon: typeof Home; href?: string; view?: View };
+
+/** Sidebar / breadcrumb label. Internal route view stays `Life`. */
+const navDisplayName = (name: string) => (name === "Life" ? "Home" : name);
+
+const navTargetView = (item: NavItem): View | null => {
+  if (item.href) return null;
+  return item.view ?? (item.name as View);
+};
 
 const nav: NavItem[] = [
   { name: "Now", icon: TimerReset },
-  { category: "ENVIRONMENTS", name: "Life", icon: Home },
+  { category: "ENVIRONMENTS", name: "Home", view: "Life", icon: Home },
   { category: "ENVIRONMENTS", name: "Work", icon: BriefcaseBusiness },
+  { category: "ENVIRONMENTS", name: "Career", icon: Target },
   { category: "ENVIRONMENTS", name: "School", icon: GraduationCap },
   { category: "ENVIRONMENTS", name: "Study Abroad", icon: Globe2 },
-  { category: "ENVIRONMENTS", name: "MasterOS", icon: NotebookPen, href: "/masteros" },
+  { category: "ENVIRONMENTS", name: "Treasury", icon: WalletCards },
+  { category: "ENVIRONMENTS", name: "Mastery", icon: NotebookPen },
   { category: "NAVIGATION", name: "Tasks", icon: CheckCircle2 },
+  { category: "NAVIGATION", name: "Navigation", icon: ListChecks },
   { category: "NAVIGATION", name: "Calendar", icon: CalendarDays },
   { category: "NAVIGATION", name: "Library", icon: Library },
 ];
 
 const initialTasks: Task[] = [
-  { id: 1, title: "Finalize onboarding flow", project: "Synapse", color: "#635bff", due: "2026-07-10", priority: "High", focusMinutes: 45, energy: "High" },
-  { id: 2, title: "Edit Brooklyn portrait set", project: "Photography", color: "#e48b6b", due: "2026-07-10", priority: "Medium", focusMinutes: 60, energy: "Medium" },
-  { id: 3, title: "Review personal statement draft", project: "Master's Applications", color: "#47a47b", due: "2026-07-10", priority: "High", focusMinutes: 30, energy: "High" },
-  { id: 4, title: "Update catering menu pricing", project: "Mom's Catering", color: "#d99b38", due: "2026-07-11", priority: "Medium", focusMinutes: 25, energy: "Medium" },
-  { id: 5, title: "Prepare portfolio case study", project: "Career", color: "#4e8bd7", due: "2026-07-12", priority: "Low", focusMinutes: 45, energy: "Low" },
+  { id: 1, title: "Add your first priority", project: "Inbox", color: "#625af6", due: "", priority: "High", focusMinutes: 25, energy: "Medium" },
+  { id: 2, title: "Explore Spaces and environments", project: "Inbox", color: "#625af6", due: "", priority: "Medium", focusMinutes: 20, energy: "Low" },
+  { id: 3, title: "Try a short focus session", project: "Inbox", color: "#625af6", due: "", priority: "Low", focusMinutes: 15, energy: "Medium" },
 ];
 
 const initialSettings: SettingsState = {
@@ -276,9 +362,11 @@ const initialSettings: SettingsState = {
   momentumLog: [],
   enableLifeOS: true,
   enableSchoolOS: true,
-  enableWorkOS: true,
-  enableStudyAbroad: true,
-  enableMasterOS: true,
+  enableWorkOS: false,
+  enableCareerOS: false,
+  enableStudyAbroad: false,
+  enableTreasuryOS: false,
+  enableMasterOS: false,
   showCaptureCommands: true,
   nowQueueIds: [],
   icalSubscriptions: [],
@@ -362,7 +450,8 @@ const mergeTasksFocus = (local: Task[], remote: Task[]) => {
 const formatEventRange = (event: CalendarEvent) => {
   const { startKey, endKey } = getEventDateRange(event);
   const weekdayNote = event.weekdaysOnly ? " · weekdays" : "";
-  if (startKey === endKey) return `${formatEventTime(event.start)}${event.end ? ` – ${formatEventTime(event.end)}` : ""}${weekdayNote}`;
+  const timeRange = `${formatEventTime(event.start)}${event.end ? ` – ${formatEventTime(event.end)}` : ""}`;
+  if (startKey === endKey || usesDailyTimeWindow(event)) return `${timeRange}${weekdayNote}`;
   const start = new Date(event.start);
   const end = new Date(event.end ?? `${endKey}T23:59`);
   const startLabel = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -418,6 +507,7 @@ const normalizeTask = (task: Partial<Task>): Task => ({
     : [],
   classId: typeof task.classId === "string" ? task.classId : undefined,
   academicType: task.academicType,
+  gradeCategoryId: typeof task.gradeCategoryId === "string" ? task.gradeCategoryId : undefined,
   gradeWeight: typeof task.gradeWeight === "number" ? task.gradeWeight : undefined,
   pointsEarned: typeof task.pointsEarned === "number" && Number.isFinite(task.pointsEarned) ? Math.max(0, task.pointsEarned) : undefined,
   pointsPossible: typeof task.pointsPossible === "number" && Number.isFinite(task.pointsPossible) ? Math.max(0, task.pointsPossible) : undefined,
@@ -447,6 +537,28 @@ const normalizeClass = (record: Partial<ClassRecord>): ClassRecord => ({
   semesterStart: /^\d{4}-\d{2}-\d{2}$/.test(record.semesterStart ?? "") ? record.semesterStart : undefined,
   semesterEnd: /^\d{4}-\d{2}-\d{2}$/.test(record.semesterEnd ?? "") ? record.semesterEnd : undefined,
   archived: Boolean(record.archived),
+  gradingScale: Array.isArray(record.gradingScale)
+    ? record.gradingScale
+        .filter((band) => band && typeof band.letter === "string" && Number.isFinite(band.min))
+        .map((band) => ({ letter: String(band.letter).trim() || "?", min: Math.max(0, Math.min(100, Number(band.min))) }))
+    : undefined,
+  gradeCategories: Array.isArray(record.gradeCategories)
+    ? record.gradeCategories
+        .filter((cat) => cat && typeof cat.id === "string" && typeof cat.name === "string" && Number.isFinite(cat.weight))
+        .map((cat) => {
+          const defaultPoints =
+            typeof cat.defaultPoints === "number" && Number.isFinite(cat.defaultPoints) && cat.defaultPoints > 0
+              ? Math.round(cat.defaultPoints * 10) / 10
+              : undefined;
+          return {
+            id: cat.id,
+            name: cat.name.trim() || "Category",
+            weight: Math.max(0, Math.min(100, Number(cat.weight))),
+            ...(defaultPoints != null ? { defaultPoints } : {}),
+          };
+        })
+    : undefined,
+  gradingMode: record.gradingMode === "items" ? "items" : record.gradingMode === "categories" ? "categories" : undefined,
 });
 const isClassArchived = (record: ClassRecord, today = toDateKey(new Date())) => Boolean(record.archived || (record.semesterEnd && record.semesterEnd < today));
 const getTaskStatus = (task: Task): TaskStatus => task.status ?? (task.canceled ? "Canceled" : task.done ? "Done" : "Not started");
@@ -500,6 +612,10 @@ const parseIcsEvents = (
     const start = parseIcsDate(getIcsValue(block, "DTSTART"));
     if (!start) return null;
     const uid = getIcsValue(block, "UID") || `${getIcsValue(block, "SUMMARY")}-${start}-${index}`;
+    const locationRaw = getIcsValue(block, "LOCATION");
+    const description = getIcsValue(block, "DESCRIPTION");
+    const urlRaw = getIcsValue(block, "URL");
+    const meetingUrl = extractMeetingUrl(urlRaw) || extractMeetingUrl(locationRaw) || extractMeetingUrl(description) || undefined;
     return {
       id: `${prefix}${uid}`,
       title: getIcsValue(block, "SUMMARY") || "Untitled calendar event",
@@ -507,7 +623,9 @@ const parseIcsEvents = (
       end: parseIcsDate(getIcsValue(block, "DTEND")) || undefined,
       source: "iCal" as const,
       color,
-      notes: getIcsValue(block, "LOCATION") || getIcsValue(block, "DESCRIPTION"),
+      location: eventPlaceLabel(locationRaw) || undefined,
+      url: meetingUrl || (urlRaw.startsWith("http") ? urlRaw : undefined),
+      notes: description || undefined,
     };
   }).filter(Boolean) as CalendarEvent[];
 };
@@ -552,6 +670,7 @@ export default function LifeOS() {
   const [brainHydrated, setBrainHydrated] = useState(false);
   const [classes, setClasses] = useState<ClassRecord[]>([]);
   const [classesHydrated, setClassesHydrated] = useState(false);
+  const [classesSyncEnabled, setClassesSyncEnabled] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [notesHydrated, setNotesHydrated] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
@@ -578,6 +697,11 @@ export default function LifeOS() {
   const [studyAbroadHubHydrated, setStudyAbroadHubHydrated] = useState(false);
   const [studyAbroadView, setStudyAbroadView] = useState<StudyAbroadView>("dashboard");
   const [studyAbroadFocusEntity, setStudyAbroadFocusEntity] = useState<StudyAbroadFocusEntity | null>(null);
+  const [careerHub, setCareerHub] = useState<CareerHub>(emptyCareerHub());
+  const [careerHubHydrated, setCareerHubHydrated] = useState(false);
+  const [guidedHub, setGuidedHub] = useState<ExecutiveHub>(emptyExecutiveHub());
+  const [guidedHubHydrated, setGuidedHubHydrated] = useState(false);
+  const [careerView, setCareerView] = useState<CareerView>("overview");
   const [workFocusTaskId, setWorkFocusTaskId] = useState<string | null>(null);
   const [workView, setWorkView] = useState<WorkView>("dashboard");
   const [schoolFocusTaskId, setSchoolFocusTaskId] = useState<number | null>(null);
@@ -595,6 +719,9 @@ export default function LifeOS() {
   const [editingCalendarEventId, setEditingCalendarEventId] = useState<string | null>(null);
   const [breakOpen, setBreakOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [subscribeNote, setSubscribeNote] = useState("");
+  const [hubPaywallOpen, setHubPaywallOpen] = useState(false);
+  const [pendingPaidHub, setPendingPaidHub] = useState<View | null>(null);
   const [actionTaskId, setActionTaskId] = useState<number | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [taskPageId, setTaskPageId] = useState<number | null>(null);
@@ -673,8 +800,10 @@ export default function LifeOS() {
         enableSchoolOS: settingsState.enableSchoolOS,
         enableLifeOS: settingsState.enableLifeOS,
       },
+      guidedRuns: guidedHub.runs.map((r) => ({ id: r.id, status: r.state, state: r.state, routineId: r.routineId, currentStepId: r.currentStepId, followUpOfferedAt: r.followUpOfferedAt })),
+      guidedRoutines: guidedHub.routines.map((r) => ({ id: r.id, name: r.name })),
     });
-  }, [workHub, workHubHydrated, tasks, tasksHydrated, projectItems, projectsHydrated, classes, calendarEvents, settingsState.calendarAlerts, settingsState.enableWorkOS, settingsState.enableSchoolOS, settingsState.enableLifeOS, notificationsTick]);
+  }, [workHub, workHubHydrated, tasks, tasksHydrated, projectItems, projectsHydrated, classes, calendarEvents, settingsState.calendarAlerts, settingsState.enableWorkOS, settingsState.enableSchoolOS, settingsState.enableLifeOS, guidedHub, notificationsTick]);
 
   const visibleNotifications = useMemo(
     () => allNotifications.filter(item => !dismissedNotificationIds.has(item.id)),
@@ -855,20 +984,45 @@ export default function LifeOS() {
     const lifeTaskId = bridgeStudyAbroadTaskToLife(studyAbroadTaskId);
     if (lifeTaskId) openFocus(lifeTaskId);
   }, [bridgeStudyAbroadTaskToLife, openFocus]);
-  const isEnvironmentEnabled = useCallback((name: View) => {
-    if (name === "Life" || name === "Dashboard") return settingsState.enableLifeOS !== false;
-    if (name === "Work") return settingsState.enableWorkOS !== false;
-    if (name === "School") return settingsState.enableSchoolOS !== false;
-    if (name === "Study Abroad") return settingsState.enableStudyAbroad !== false;
-    return true;
-  }, [settingsState.enableLifeOS, settingsState.enableSchoolOS, settingsState.enableWorkOS, settingsState.enableStudyAbroad]);
+  const isEnvironmentEnabled = useCallback(
+    (name: View) =>
+      isHubVisibleInNav(name, {
+        entitlement: settingsState.entitlement,
+        enableLifeOS: settingsState.enableLifeOS,
+        enableSchoolOS: settingsState.enableSchoolOS,
+        enableWorkOS: settingsState.enableWorkOS,
+        enableCareerOS: settingsState.enableCareerOS,
+        enableStudyAbroad: settingsState.enableStudyAbroad,
+        enableTreasuryOS: settingsState.enableTreasuryOS,
+        enableMasterOS: settingsState.enableMasterOS,
+      }),
+    [
+      settingsState.entitlement,
+      settingsState.enableLifeOS,
+      settingsState.enableSchoolOS,
+      settingsState.enableWorkOS,
+      settingsState.enableCareerOS,
+      settingsState.enableStudyAbroad,
+      settingsState.enableTreasuryOS,
+      settingsState.enableMasterOS,
+    ],
+  );
+
+  const canAccessNavigation = isNavigationOwner(user?.email);
 
   const go = useCallback((next: View) => {
     let destination: View = next === "Dashboard" ? "Life" : ["Notes", "Resources", "Brain", "Knowledge"].includes(next) ? "Library" : next;
+    if (isPaidHub(destination) && !canAccessPaidHubs(settingsState.entitlement)) {
+      setPendingPaidHub(destination);
+      setHubPaywallOpen(true);
+      setSidebar(false);
+      return;
+    }
+    if (destination === "Navigation" && !isNavigationOwner(user?.email)) destination = "Now";
     if (!isEnvironmentEnabled(destination)) destination = "Now";
     if (destination === "Spaces") { setSelectedProjectName(null); setSelectedClassId(null); }
     setView(destination); setSidebar(false); if (destination === "Focus") setFocus(true);
-  }, [isEnvironmentEnabled]);
+  }, [isEnvironmentEnabled, settingsState.entitlement, user?.email]);
   const openProjectSpace = useCallback((projectName: string, workProject?: WorkProject) => {
     setProjectItems(items => {
       if (items.some(project => project.name === projectName)) return items;
@@ -979,15 +1133,24 @@ export default function LifeOS() {
       go("Calendar");
       return;
     }
-    if (action.type === "now") go("Now");
-  }, [calendarEvents, go, openProjectSpace, openTaskPage, openWorkProjectSpace, openWorkTask, projectItems, tasks, workHub.deliverables, workHub.meetings]);
+    if (action.type === "now") {
+      go("Now");
+      return;
+    }
+    if (action.type === "guided") {
+      go(isNavigationOwner(user?.email) ? "Navigation" : "Now");
+    }
+  }, [calendarEvents, go, openProjectSpace, openTaskPage, openWorkProjectSpace, openWorkTask, projectItems, tasks, user?.email, workHub.deliverables, workHub.meetings]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const writeCurrentView = () => {
       const url = new URL(window.location.href);
-      const routeValue = view === "Dashboard" ? "now" : view === "Calendar" ? "today" : view === "Study Abroad" ? "study-abroad" : view.toLowerCase();
-      if (url.searchParams.get("view") === routeValue) return;
+      const routeValue = view === "Dashboard" ? "now" : view === "Calendar" ? "today" : view === "Study Abroad" ? "study-abroad" : view === "Career" ? "career" : view === "Mastery" ? "masteros" : view.toLowerCase();
+      const currentView = url.searchParams.get("view");
+      const shouldClearMos = view !== "Mastery" && url.searchParams.has("mos");
+      if (currentView === routeValue && !shouldClearMos) return;
       url.searchParams.set("view", routeValue);
+      if (view !== "Mastery") url.searchParams.delete("mos");
       window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
     };
     const restoreView = () => setView(viewFromLocation());
@@ -1118,6 +1281,8 @@ export default function LifeOS() {
       setSchoolHub(emptySchoolHub);
       setWorkHub(emptyWorkHub);
       setStudyAbroadHub(emptyStudyAbroadHub);
+      setCareerHub(emptyCareerHub());
+    setGuidedHub(emptyExecutiveHub());
       setWorkFocusTaskId(null);
     }
   }, [cloudUserId]);
@@ -1137,13 +1302,15 @@ export default function LifeOS() {
         const cachedAt = typeof window !== 'undefined' && cloudUserId
           ? window.localStorage.getItem(`lifeos-onboarding-complete:${cloudUserId}`)
           : null;
-        const merged = firebaseSettings
-          ? { ...initialSettings, ...firebaseSettings }
-          : initialSettings;
-        if (!merged.onboardingCompletedAt && cachedAt) {
-          merged.onboardingCompletedAt = cachedAt;
-          merged.onboardingVersion = merged.onboardingVersion ?? 1;
+        const stored =
+          firebaseSettings && typeof firebaseSettings === "object"
+            ? { ...firebaseSettings }
+            : null;
+        if (stored && !stored.onboardingCompletedAt && cachedAt) {
+          stored.onboardingCompletedAt = cachedAt;
+          stored.onboardingVersion = stored.onboardingVersion ?? 1;
         }
+        const merged = mergeSettingsWithEnvironmentDefaults(initialSettings, stored);
         if (firebaseSettings || merged.onboardingCompletedAt) {
           setSettingsState(merged);
         }
@@ -1174,17 +1341,20 @@ export default function LifeOS() {
     syncDataToFirebase('dark', dark);
   }, [cloudUserId, dark, settingsHydrated]);
   useEffect(() => {
-    const life = workspaceColorFor(settingsState, "life");
-    const school = workspaceColorFor(settingsState, "school");
-    const work = workspaceColorFor(settingsState, "work");
-    const studyAbroad = workspaceColorFor(settingsState, "studyAbroad");
-    document.documentElement.style.setProperty("--env-life", life);
-    document.documentElement.style.setProperty("--env-school", school);
-    document.documentElement.style.setProperty("--env-work", work);
-    document.documentElement.style.setProperty("--env-study-abroad", studyAbroad);
+    for (const option of WORKSPACE_COLOR_OPTIONS) {
+      document.documentElement.style.setProperty(option.cssVar, workspaceColorFor(settingsState, option.key));
+    }
     document.documentElement.style.setProperty("--accent", accentForView(view, settingsState));
     document.documentElement.classList.toggle("compact", settingsState.compactMode);
     document.documentElement.classList.toggle("reduce-motion", settingsState.reduceMotion);
+    try {
+      const colors = Object.fromEntries(
+        WORKSPACE_COLOR_OPTIONS.map(option => [option.key, workspaceColorFor(settingsState, option.key)]),
+      );
+      window.localStorage.setItem("lifeos-workspace-colors", JSON.stringify(colors));
+    } catch {
+      /* ignore quota / private mode */
+    }
   }, [settingsState, view]);
   useEffect(() => {
     if (!cloudUserId || !settingsHydrated) return;
@@ -1222,7 +1392,39 @@ export default function LifeOS() {
     setTasksSyncEnabled(false);
     (async () => {
       const applyList = (raw: unknown[], source: "cloud" | "backup") => {
-        const normalized = raw.map(task => normalizeTask(task as Partial<Task>));
+        // If an older cloud write stripped school fields, restore them from the
+        // local backup so assignments do not vanish from SchoolOS on reload.
+        const backup = source === "cloud" ? readTaskBackup(cloudUserId) : null;
+        const backupById = new Map(
+          (backup ?? [])
+            .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+            .map((item) => [Number((item as { id?: unknown }).id), item] as const)
+            .filter(([id]) => Number.isFinite(id)),
+        );
+        const enriched = raw.map((item) => {
+          if (!item || typeof item !== "object") return item;
+          const task = item as Record<string, unknown>;
+          const prior = backupById.get(Number(task.id));
+          if (!prior) return task;
+          const next = { ...task };
+          if (typeof next.classId !== "string" && typeof prior.classId === "string") {
+            next.classId = prior.classId;
+          }
+          if (next.academicType == null && prior.academicType != null) {
+            next.academicType = prior.academicType;
+          }
+          if (next.gradeCategoryId == null && typeof prior.gradeCategoryId === "string") {
+            next.gradeCategoryId = prior.gradeCategoryId;
+          }
+          if (typeof next.gradeWeight !== "number" && typeof prior.gradeWeight === "number") {
+            next.gradeWeight = prior.gradeWeight;
+          }
+          if (typeof next.submission !== "string" && typeof prior.submission === "string") {
+            next.submission = prior.submission;
+          }
+          return next;
+        });
+        const normalized = enriched.map(task => normalizeTask(task as Partial<Task>));
         const next = isStarterTaskSet(normalized) ? [] : normalized;
         setTasks(next);
         if (next.length) writeTaskBackup(cloudUserId, next);
@@ -1370,21 +1572,27 @@ export default function LifeOS() {
   useEffect(() => {
     if (!cloudUserId) return;
     setClassesHydrated(false);
+    setClassesSyncEnabled(false);
     (async () => {
       try {
         const data = await loadDataFromFirebase('classes');
-        if (Array.isArray(data)) setClasses(data.map(record => normalizeClass(record)));
+        const list = coerceFirebaseList(data);
+        if (list) setClasses(list.map(record => normalizeClass(record as Partial<ClassRecord>)));
+        else setClasses([]);
+        setClassesSyncEnabled(true);
       } catch (error) {
         console.error('Failed to load classes from Firebase:', error);
+        // Keep sync OFF — do not write [] over classes we failed to read.
+        setClassesSyncEnabled(false);
       } finally {
         setClassesHydrated(true);
       }
     })();
   }, [cloudUserId]);
   useEffect(() => {
-    if (!cloudUserId || !classesHydrated) return;
+    if (!cloudUserId || !classesHydrated || !classesSyncEnabled) return;
     syncDataToFirebase('classes', classes);
-  }, [classes, classesHydrated, cloudUserId]);
+  }, [classes, classesHydrated, classesSyncEnabled, cloudUserId]);
   useEffect(() => {
     if (!cloudUserId) return;
     setWeeklyPlanHydrated(false);
@@ -1412,7 +1620,9 @@ export default function LifeOS() {
     (async () => {
       try {
         const data = await loadDataFromFirebase('notes');
-        if (Array.isArray(data)) setNotes(data);
+        const list = coerceFirebaseList(data);
+        if (list) setNotes(list as Note[]);
+        else setNotes([]);
       } catch (error) {
         console.error('Failed to load notes from Firebase:', error);
       } finally {
@@ -1553,6 +1763,61 @@ export default function LifeOS() {
   }, [cloudUserId, studyAbroadHub, studyAbroadHubHydrated]);
 
   useEffect(() => {
+    if (!cloudUserId) return;
+    setCareerHubHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('career');
+        if (data && typeof data === "object") {
+          setCareerHub(normalizeCareerHub(data));
+        } else {
+          setCareerHub(emptyCareerHub());
+    setGuidedHub(emptyExecutiveHub());
+        }
+      } catch (error) {
+        console.error('Failed to load Career data from Firebase:', error);
+        setCareerHub(emptyCareerHub());
+    setGuidedHub(emptyExecutiveHub());
+      } finally {
+        setCareerHubHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !careerHubHydrated) return;
+    syncDataToFirebase('career', careerHub);
+  }, [cloudUserId, careerHub, careerHubHydrated]);
+
+  useEffect(() => {
+    if (!cloudUserId) return;
+    setGuidedHubHydrated(false);
+    (async () => {
+      try {
+        const data = await loadDataFromFirebase('guided');
+        if (data && typeof data === "object") {
+          setGuidedHub(normalizeExecutiveHub(data));
+        } else {
+          setGuidedHub(emptyExecutiveHub());
+        }
+      } catch (error) {
+        console.error('Failed to load Executive Function hub from Firebase:', error);
+        setGuidedHub(emptyExecutiveHub());
+      } finally {
+        setGuidedHubHydrated(true);
+      }
+    })();
+  }, [cloudUserId]);
+  useEffect(() => {
+    if (!cloudUserId || !guidedHubHydrated) return;
+    syncDataToFirebase('guided', guidedHub);
+  }, [cloudUserId, guidedHub, guidedHubHydrated]);
+
+  useEffect(() => {
+    if (!guidedHubHydrated) return;
+    setGuidedHub((current) => tickExecutiveSchedules(current));
+  }, [guidedHubHydrated, notificationsTick]);
+
+  useEffect(() => {
     if (!cloudUserId || !tasksHydrated) return;
     listenToFirebaseChanges('tasks', (data) => {
       const list = asTaskList(data);
@@ -1602,7 +1867,8 @@ export default function LifeOS() {
   useEffect(() => {
     if (!cloudUserId || !classesHydrated) return;
     listenToFirebaseChanges('classes', data => {
-      if (Array.isArray(data)) setClasses(data.map(record => normalizeClass(record)));
+      const list = coerceFirebaseList(data);
+      if (list) setClasses(list.map(record => normalizeClass(record as Partial<ClassRecord>)));
     });
     return () => stopListeningToFirebaseChanges('classes');
   }, [classesHydrated, cloudUserId]);
@@ -1610,7 +1876,8 @@ export default function LifeOS() {
   useEffect(() => {
     if (!cloudUserId || !notesHydrated) return;
     listenToFirebaseChanges('notes', data => {
-      if (Array.isArray(data)) setNotes(data);
+      const list = coerceFirebaseList(data);
+      if (list) setNotes(list as Note[]);
     });
     return () => stopListeningToFirebaseChanges('notes');
   }, [cloudUserId, notesHydrated]);
@@ -1817,20 +2084,29 @@ export default function LifeOS() {
     openProjectSpace(name);
   };
   const addClass = (classRecord: Omit<ClassRecord, "id">) => {
-    const next = normalizeClass({ ...classRecord, id: `${Date.now()}-${Math.random().toString(36).slice(2)}` });
+    const next = normalizeClass({
+      ...classRecord,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      gradingMode: classRecord.gradingMode ?? "categories",
+    });
+    setClassesSyncEnabled(true);
     setClasses(items => [...items, next]);
     setSpaceComposer(null);
     openClassSpace(next.id);
     flash(`${next.code} class created`);
   };
-  const updateClass = (id: string, updates: Omit<ClassRecord, "id">) => {
+  const updateClass = (id: string, updates: Partial<Omit<ClassRecord, "id">>, opts?: { quiet?: boolean }) => {
+    setClassesSyncEnabled(true);
     setClasses(items => items.map(item => item.id === id ? normalizeClass({ ...item, ...updates, id }) : item));
-    setTasks(items => items.map(task => task.classId === id ? { ...task, color: updates.color } : task));
-    setEditingClassId(null);
-    flash("Class details saved");
+    if (updates.color) setTasks(items => items.map(task => task.classId === id ? { ...task, color: updates.color as string } : task));
+    if (!opts?.quiet) {
+      setEditingClassId(null);
+      flash("Class details saved");
+    }
   };
   const deleteClass = (id: string) => {
     if (!window.confirm("Delete this class folder? Assignments and notes will be kept, but unlinked from the class.")) return;
+    setClassesSyncEnabled(true);
     setClasses(items => items.filter(item => item.id !== id));
     setTasks(items => items.map(task => task.classId === id ? { ...task, classId: undefined } : task));
     setNotes(items => items.map(note => note.classId === id ? { ...note, classId: undefined } : note));
@@ -1924,39 +2200,33 @@ export default function LifeOS() {
     setEditingCalendarEventId(null);
     flash("Calendar event deleted");
   };
-  const useCalendarEventAsTask = (event: CalendarEvent) => {
-    const linkedTask = tasks.find(task => task.calendarEventId === event.id);
-    if (linkedTask) {
-      setEditingCalendarEventId(null);
-      setTaskPageId(linkedTask.id);
-      return;
-    }
-    const startAt = new Date(event.start);
-    const endAt = event.end ? new Date(event.end) : null;
-    const durationMinutes = endAt && !Number.isNaN(endAt.getTime()) && !Number.isNaN(startAt.getTime())
-      ? Math.round((endAt.getTime() - startAt.getTime()) / 60000)
-      : settingsState.defaultFocusMinutes;
-    const taskId = Date.now();
-    setTasks(items => [...items, normalizeTask({
-      id: taskId,
-      title: event.title,
-      project: "Inbox",
-      color: event.color,
-      due: /^\d{4}-\d{2}-\d{2}/.test(event.start) ? event.start.slice(0, 10) : toDateKey(new Date()),
-      startTime: /^\d{2}:\d{2}/.test(event.start.slice(11, 16)) ? event.start.slice(11, 16) : undefined,
-      priority: "Medium",
-      focusMinutes: Math.max(5, Math.min(240, durationMinutes > 0 ? durationMinutes : settingsState.defaultFocusMinutes)),
-      energy: settingsState.defaultEnergy,
-      status: "Not started",
-      notes: event.notes ?? "",
-      calendarEventId: event.id,
-      customProperties: [],
-      checklist: [],
-      checklistProgress: [],
-    })]);
+  const routeCalendarEventToTask = (event: CalendarEvent, taskId: number) => {
+    const target = tasks.find(task => task.id === taskId);
+    if (!target) return;
+    const due = /^\d{4}-\d{2}-\d{2}/.test(event.start) ? event.start.slice(0, 10) : target.due;
+    const startTime = /^\d{2}:\d{2}/.test(event.start.slice(11, 16)) ? event.start.slice(11, 16) : target.startTime;
+    setTasks(items => items.map(task => {
+      if (task.id === taskId) {
+        return {
+          ...task,
+          calendarEventId: event.id,
+          due,
+          startTime,
+        };
+      }
+      if (task.calendarEventId === event.id) {
+        return { ...task, calendarEventId: undefined };
+      }
+      return task;
+    }));
     setEditingCalendarEventId(null);
-    setTaskPageId(taskId);
-    flash("Task created from calendar event");
+    flash(`Routed under ${target.title}`);
+  };
+  const openLinkedCalendarTask = (event: CalendarEvent) => {
+    const linkedTask = tasks.find(task => task.calendarEventId === event.id);
+    if (!linkedTask) return;
+    setEditingCalendarEventId(null);
+    setTaskPageId(linkedTask.id);
   };
   const importCalendarEvents = (events: CalendarEvent[]) => {
     setCalendarEvents(items => {
@@ -2083,6 +2353,24 @@ export default function LifeOS() {
     setSettingsState(current => current.nowTaskId === id ? { ...current, nowTaskId: null } : current);
     flash("Priority deleted");
   };
+  const deleteTasks = (ids: number[]) => {
+    if (!ids.length) return;
+    const doomed = new Set(ids);
+    setTasks(items => {
+      const next = items.filter(task => !doomed.has(task.id));
+      if (doomed.has(activeTaskId)) setActiveTaskId(next[0]?.id ?? 0);
+      return next;
+    });
+    setActionTaskId(current => current != null && doomed.has(current) ? null : current);
+    setEditingTaskId(current => current != null && doomed.has(current) ? null : current);
+    setTaskPageId(current => current != null && doomed.has(current) ? null : current);
+    setSettingsState(current => (
+      current.nowTaskId != null && doomed.has(current.nowTaskId)
+        ? { ...current, nowTaskId: null }
+        : current
+    ));
+    flash(ids.length === 1 ? "Priority deleted" : `Deleted ${ids.length} tasks`);
+  };
   const syncFromCloud = async () => {
     try {
       const data = await pullAllDataFromFirebase();
@@ -2116,6 +2404,8 @@ export default function LifeOS() {
       if (data.work && typeof data.work === "object") setWorkHub({ ...emptyWorkHub, ...data.work });
       if (data.timeTracking && typeof data.timeTracking === "object") setTimeTracking(normalizeTimeTracking(data.timeTracking));
       if (data.studyAbroad && typeof data.studyAbroad === "object") setStudyAbroadHub(ensureCountriesFromUniversities(normalizeStudyAbroadHub(data.studyAbroad)));
+      if (data.career && typeof data.career === "object") setCareerHub(normalizeCareerHub(data.career));
+      if (data.guided && typeof data.guided === "object") setGuidedHub(normalizeExecutiveHub(data.guided));
       if (data.settings) setSettingsState(current => ({ ...current, ...data.settings }));
       if (data.dark !== undefined) setDark(data.dark);
       flash("✓ Cloud data synced successfully");
@@ -2126,7 +2416,7 @@ export default function LifeOS() {
   };
 
   const exportData = () => {
-    const payload = { exportedAt: new Date().toISOString(), tasks, projects: projectItems.map(({ icon: _, ...project }) => project), events: calendarEvents, brainItems, classes, notes, resources, life: lifeHub, school: schoolHub, work: workHub, timeTracking, studyAbroad: studyAbroadHub, settings: settingsState, dark };
+    const payload = { exportedAt: new Date().toISOString(), tasks, projects: projectItems.map(({ icon: _, ...project }) => project), events: calendarEvents, brainItems, classes, notes, resources, life: lifeHub, school: schoolHub, work: workHub, timeTracking, studyAbroad: studyAbroadHub, career: careerHub, guided: guidedHub, settings: settingsState, dark };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -2151,6 +2441,8 @@ export default function LifeOS() {
     setWorkHub(emptyWorkHub);
     setTimeTracking(emptyTimeTracking());
     setStudyAbroadHub(emptyStudyAbroadHub);
+    setCareerHub(emptyCareerHub());
+    setGuidedHub(emptyExecutiveHub());
     setSettingsState(initialSettings);
     setDark(false);
     window.location.reload();
@@ -2232,6 +2524,11 @@ export default function LifeOS() {
             setStudyAbroadHub(nextStudy);
             await syncDataToFirebase('studyAbroad', nextStudy);
           }
+          if (data.career && typeof data.career === "object") {
+            const nextCareer = normalizeCareerHub(data.career);
+            setCareerHub(nextCareer);
+            await syncDataToFirebase('career', nextCareer);
+          }
           if (data.settings) {
             setSettingsState(current => ({ ...current, ...data.settings }));
             await syncDataToFirebase('settings', data.settings);
@@ -2264,20 +2561,28 @@ export default function LifeOS() {
   const activeTasks = useMemo(() => tasks.filter(task => !task.done && !task.canceled), [tasks]);
   const floatingFocusTask = useMemo(() => activeTasks.find(task => Boolean(task.focusSessionStarted) && getTaskFocusSeconds(task) > 0), [activeTasks]);
   const visibleNav = useMemo(
-    () => nav.filter(item => {
-      if (item.name === "MasterOS") return settingsState.enableMasterOS !== false;
-      return isEnvironmentEnabled(item.name as View);
-    }),
-    [isEnvironmentEnabled, settingsState.enableMasterOS],
+    () =>
+      nav.filter((item) => {
+        if (item.name === "Navigation") return canAccessNavigation;
+        if (item.href) return true;
+        const target = navTargetView(item);
+        // Same rules as Settings → Hubs toggles (Pro hubs need unlock + enable).
+        return target ? isEnvironmentEnabled(target) : true;
+      }),
+    [canAccessNavigation, isEnvironmentEnabled],
   );
   useEffect(() => {
+    if (view === "Navigation" && !canAccessNavigation) {
+      go("Now");
+      return;
+    }
     if (!isEnvironmentEnabled(view)) go("Now");
-  }, [view, isEnvironmentEnabled, go]);
+  }, [view, canAccessNavigation, isEnvironmentEnabled, go]);
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
     const matches = (value: string) => !q || value.toLowerCase().includes(q);
     const base = [
-      ...visibleNav.map(n => n.name),
+      ...visibleNav.map(n => navDisplayName(n.name)),
       ...projectItems.map(p => p.name),
       ...classes.map(item => item.code),
       ...notes.map(note => note.title),
@@ -2297,6 +2602,102 @@ export default function LifeOS() {
     if (view === "Study Abroad") return [...studyHits, ...base];
     return [...base, ...studyHits];
   }, [activeTasks, classes, notes, projectItems, query, settingsState.enableStudyAbroad, studyAbroadHub, view, visibleNav]);
+  const captureCommands = useMemo(
+    () =>
+      listCaptureCommands({
+        enableWorkOS: settingsState.enableWorkOS !== false,
+        enableStudyAbroad: settingsState.enableStudyAbroad !== false,
+        enableMasterOS: settingsState.enableMasterOS !== false,
+      }),
+    [settingsState.enableMasterOS, settingsState.enableStudyAbroad, settingsState.enableWorkOS],
+  );
+  const runCaptureCommand = useCallback(
+    (raw: string) => {
+      const activeNow = tasks.filter((task) => !task.done && !task.canceled);
+      const current = activeNow.find((task) => task.id === settingsState.nowTaskId);
+      const focusTarget =
+        current ??
+        [...activeNow].sort((a, b) => {
+          const rank = (task: Task) => (task.priority === "High" ? 0 : task.priority === "Medium" ? 1 : 2);
+          return rank(a) - rank(b);
+        })[0];
+      return executeCaptureCommand(raw, {
+        flags: {
+          enableWorkOS: settingsState.enableWorkOS !== false,
+          enableStudyAbroad: settingsState.enableStudyAbroad !== false,
+          enableMasterOS: settingsState.enableMasterOS !== false,
+        },
+        flash,
+        go: (view) => go(view as View),
+        openFocus,
+        openBreak: () => setBreakOpen(true),
+        openAmbient: () => setAmbientStartOpen(true),
+        openSmartCapture: () => setAiTaskComposer(true),
+        openGuided: () => {
+          if (!isNavigationOwner(user?.email)) {
+            flash("Navigation is only available on this workspace.");
+            return;
+          }
+          go("Navigation");
+        },
+        openTimesheet: () => {
+          setWorkView("timesheet");
+          go("Work");
+        },
+        addTask: (title, options) => addTask(title, undefined, "", options),
+        addProject: (name) => addProject(name),
+        addNote: (title) => createNote(undefined, undefined, title),
+        addAssignment: (title) => {
+          const activeClasses = classes.filter((item) => !isClassArchived(item));
+          if (!activeClasses.length) {
+            flash("Add a course first");
+            setSpaceComposer("class");
+            return;
+          }
+          addAcademicTask(activeClasses[0].id, {
+            title,
+            due: toDateKey(new Date()),
+            priority: "Medium",
+            focusMinutes: settingsState.defaultFocusMinutes,
+            energy: settingsState.defaultEnergy,
+            academicType: "Assignment",
+          });
+        },
+        nowTaskId: settingsState.nowTaskId ?? null,
+        enqueue: enqueueNowTask,
+        choose: chooseNowTask,
+        focusTargetId: focusTarget?.id ?? null,
+        timeTracking,
+        setTimeTracking,
+        setWorkHub,
+        studyAbroadHub,
+        setStudyAbroadHub,
+        currentTaskTitle: current?.title,
+      });
+    },
+    [
+      addAcademicTask,
+      addProject,
+      addTask,
+      chooseNowTask,
+      classes,
+      createNote,
+      enqueueNowTask,
+      flash,
+      go,
+      openFocus,
+      settingsState.defaultEnergy,
+      settingsState.defaultFocusMinutes,
+      settingsState.enableMasterOS,
+      settingsState.enableStudyAbroad,
+      settingsState.enableWorkOS,
+      settingsState.nowTaskId,
+      studyAbroadHub,
+      tasks,
+      timeTracking,
+      user?.email,
+    ],
+  );
   const calendarFeed = useMemo(
     () => [
       ...calendarEvents,
@@ -2317,7 +2718,15 @@ export default function LifeOS() {
   }
 
   if (!user) {
-    return <LoginPage onLoginSuccess={() => { setUser({ displayName: TEST_USER.DISPLAY_NAME, email: TEST_USER.EMAIL }); setUserId(TEST_USER.ID); setCloudUserId(TEST_USER.ID); }} />;
+    return (
+      <AuthEntry
+        onLoginSuccess={() => {
+          setUser({ displayName: TEST_USER.DISPLAY_NAME, email: TEST_USER.EMAIL });
+          setUserId(TEST_USER.ID);
+          setCloudUserId(TEST_USER.ID);
+        }}
+      />
+    );
   }
 
   const activeTask = activeTasks.find(task => task.id === activeTaskId) ?? activeTasks.find(task => task.id === settingsState.nowTaskId) ?? activeTasks[0];
@@ -2363,9 +2772,54 @@ export default function LifeOS() {
   const workspaceInitials = workspaceName.split(/\s+/).filter(Boolean).slice(0, 2).map((part: string) => part[0]).join("").toUpperCase() || "U";
   const needsWorkspaceName = Boolean(user && settingsHydrated && !settingsState.preferredName?.trim());
 
+  const unlockEntitlement = (entitlement: Entitlement) => {
+    setSettingsState((current) => ({ ...current, entitlement }));
+    setHubPaywallOpen(false);
+    flash(
+      !entitlement.expiresAt
+        ? "LifeOS Pro unlocked for life."
+        : entitlement.status === "promo"
+          ? "Paid hubs unlocked for one year."
+          : "LifeOS Pro unlocked for paid hubs.",
+    );
+    if (pendingPaidHub) {
+      const hub = pendingPaidHub;
+      setPendingPaidHub(null);
+      // Re-enter after unlock so enable flags / view can proceed.
+      window.setTimeout(() => {
+        setView(hub);
+        if (hub === "Work") setSettingsState((current) => ({ ...current, enableWorkOS: true }));
+        if (hub === "Career") setSettingsState((current) => ({ ...current, enableCareerOS: true }));
+        if (hub === "Study Abroad") setSettingsState((current) => ({ ...current, enableStudyAbroad: true }));
+        if (hub === "Treasury") setSettingsState((current) => ({ ...current, enableTreasuryOS: true }));
+        if (hub === "Mastery") setSettingsState((current) => ({ ...current, enableMasterOS: true }));
+      }, 0);
+    }
+  };
+
+  const startSubscribe = (offerId: string) => {
+    const label =
+      offerId === "pro-lifetime" ? "lifetime" : offerId === "pro-yearly" ? "annual" : "monthly";
+    setSubscribeNote(
+      "Paid checkout uses Stripe on web and the App Store on iPhone when products are live. If you have a promo code, enter it below.",
+    );
+    flash(`Selected ${label} plan — finish store checkout when available, or redeem a promo code.`);
+  };
+
   return (
     <div className="app-shell">
       {notificationShell}
+      {hubPaywallOpen ? (
+        <PaywallGate
+          onUnlock={unlockEntitlement}
+          onSubscribe={startSubscribe}
+          onClose={() => {
+            setHubPaywallOpen(false);
+            setPendingPaidHub(null);
+          }}
+          subscribeNote={subscribeNote}
+        />
+      ) : null}
       <AnimatePresence>{sidebar && <motion.button aria-label="Close navigation" className="mobile-scrim" onClick={() => setSidebar(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />}</AnimatePresence>
       <aside className={`sidebar ${sidebar ? "sidebar-open" : ""}`}>
         <div className="brand"><div className="brand-mark"><span /><span /><span /></div><span>LifeOS</span></div>
@@ -2374,18 +2828,23 @@ export default function LifeOS() {
           {visibleNav.map((item, idx) => {
             const Icon = item.icon;
             const showCategory = Boolean(item.category && (idx === 0 || visibleNav[idx - 1].category !== item.category));
+            const label = item.name === "Life" ? "Home" : item.name;
+            const target = navTargetView(item);
+            const isActive = Boolean(target && view === target);
             return (
               <div key={item.name}>
                 {showCategory && <p className="nav-label">{item.category}</p>}
                 {item.href ? (
-                  <a className="nav-item" href={item.href} onClick={() => setSidebar(false)} data-env={item.name === "MasterOS" ? "master" : undefined}><Icon size={17} strokeWidth={1.8} /><span>{item.name}</span><ExternalLink size={13} className="nav-external-icon" /></a>
+                  <a className="nav-item" href={item.href} onClick={() => setSidebar(false)} data-env={dataEnvForNav(item.name)}><Icon size={17} strokeWidth={1.8} /><span>{label}</span><ExternalLink size={13} className="nav-external-icon" /></a>
                 ) : (
                   <button
-                    className={`nav-item ${view === item.name ? "active" : ""}`}
-                    data-env={item.name === "Life" ? "life" : item.name === "School" ? "school" : item.name === "Work" ? "work" : item.name === "Study Abroad" ? "study-abroad" : undefined}
-                    onClick={() => go(item.name as View)}
+                    className={`nav-item ${isActive ? "active" : ""}`}
+                    data-env={dataEnvForNav(item.name)}
+                    onClick={() => {
+                      if (target) go(target);
+                    }}
                   >
-                    <Icon size={17} strokeWidth={1.8} /><span>{item.name}</span>{item.name === "Brain" && <em>{brainItems.length}</em>}{item.name === "Spaces" && projectItems.length + classes.length > 0 && <em>{projectItems.length + classes.length}</em>}
+                    <Icon size={17} strokeWidth={1.8} /><span>{label}</span>{item.name === "Brain" && <em>{brainItems.length}</em>}{item.name === "Spaces" && projectItems.length + classes.length > 0 && <em>{projectItems.length + classes.length}</em>}
                   </button>
                 )}
               </div>
@@ -2394,7 +2853,7 @@ export default function LifeOS() {
         </nav>
         <div className="sidebar-bottom">
           <button className="nav-item" onClick={() => go("Settings")}><Settings size={17} /><span>Settings</span></button>
-          <button className="profile" onClick={() => go("Settings")}><div className="avatar">{workspaceInitials}</div><div><strong>{workspaceName}</strong><small>Personal workspace</small></div><MoreHorizontal size={16} /></button>
+          <button className="profile" onClick={() => go("Settings")}><div className="avatar">{workspaceInitials}</div><div><strong>{workspaceName}</strong><small>Personal workspace</small></div></button>
         </div>
       </aside>
 
@@ -2403,14 +2862,14 @@ export default function LifeOS() {
         {!fullscreenProject && <>
         <header className="topbar">
           <IconButton label="Open navigation" onClick={() => setSidebar(true)}><Menu size={19} /></IconButton>
-          <div className="breadcrumb"><span>LifeOS</span><span>/</span><strong>{view}</strong></div>
+          <div className="breadcrumb"><span>LifeOS</span><span>/</span><strong>{navDisplayName(view)}</strong></div>
           <div className="top-actions">
             <IconButton label="Toggle theme" onClick={() => setDark(v => !v)}>{dark ? <Sun size={18} /> : <Moon size={18} />}</IconButton>
           </div>
         </header>
         <AnimatePresence mode="wait">
-          <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Work" || view === "Study Abroad" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
-            {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarFeed} workspaceName={workspaceName} onComplete={complete} onOpenTask={openTaskPage} onOpenProject={openProjectSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => openSpacesList("Projects")} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} enableMasterOS={settingsState.enableMasterOS !== false} />}
+          <motion.div key={view} className={`page ${view === "Life" || view === "School" || view === "Work" || view === "Career" || view === "Study Abroad" || view === "Mastery" ? "os-page" : ""}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .18 }}>
+            {view === "Life" && <LifeDashboard tasks={tasks} projects={projectItems} notes={notes} events={calendarFeed} workspaceName={workspaceName} onComplete={complete} onOpenTask={openTaskPage} onOpenProject={openProjectSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onOpenTasks={() => go("Tasks")} onOpenProjects={() => openSpacesList("Projects")} onOpenNotes={() => { setSelectedNoteId(null); setView("Notes"); }} onNewTask={() => setComposer("task")} onNewProject={() => setComposer("project")} onNewNote={() => createNote()} onOpenCalendar={() => go("Calendar")} onOpenNow={() => go("Now")} enableMasterOS={settingsState.enableMasterOS !== false} onOpenMasterOS={() => go("Mastery")} />}
             {view === "School" && <SchoolDashboard tasks={tasks} classes={classes} notes={notes} events={calendarFeed} school={schoolHub} schoolView={schoolView} onChangeView={setSchoolView} schoolFocusTaskId={schoolFocusTaskId} onSelectFocusTask={setSchoolFocusTaskId} workspaceName={workspaceName} workspaceEmail={user?.email} onComplete={complete} onOpenTask={openTaskPage} onOpenClass={openClassSpace} onOpenNote={(id) => { setSelectedNoteId(id); setView("Notes"); }} onNewCourse={() => setSpaceComposer("class")} onNewAcademic={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("coursework") : setSpaceComposer("class")} onNewLecture={() => classes.some(item => !isClassArchived(item)) ? setSchoolClassAction("lecture") : setSpaceComposer("class")} onOpenCollection={(key: SchoolHubKey, startAdd) => setHubCollection({ scope: "school", key, startAdd })} onOpenProfile={() => setSchoolProfileOpen(true)} onFocus={(id) => { setSchoolFocusTaskId(id); openFocus(id); }} onOpenCalendar={() => go("Calendar")} onOpenSettings={() => go("Settings")} onImportTimetable={() => setCalendarImporter(true)} onQuickCapture={(payload) => {
               if (payload.kind === "Note") {
                 createNote(payload.classId, undefined, payload.title);
@@ -2470,7 +2929,26 @@ export default function LifeOS() {
               if (nextEvents.length) setCalendarEvents((current) => [...current, ...nextEvents]);
               const dated = nextEvents.length;
               flash(dated ? `Imported ${items.length} tasks · ${dated} on calendar` : `Imported ${items.length} tasks`);
-            }} appearanceLabel={dark ? "Dark" : "Light"} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} enableMasterOS={settingsState.enableMasterOS !== false} />}
+            }} appearanceLabel={dark ? "Dark" : "Light"} onUpdateTaskStatus={(id, status) => updateTaskDetails(id, { status, done: status === "Done" })} onUpdateClass={(id, updates) => updateClass(id, updates, { quiet: true })} onUpdateTask={(id, updates) => updateTaskDetails(id, {
+              ...updates,
+              academicType: updates.academicType as AcademicItemType | undefined,
+            })} onCreateGradeItems={(classId, items) => {
+              const classRecord = classes.find((item) => item.id === classId);
+              if (!classRecord) return;
+              for (const item of items) {
+                addAcademicTask(classId, {
+                  title: item.title,
+                  due: toDateKey(new Date()),
+                  priority: "Medium",
+                  focusMinutes: settingsState.defaultFocusMinutes,
+                  energy: settingsState.defaultEnergy,
+                  academicType: (item.academicType as AcademicItemType) || "Assignment",
+                  pointsPossible: item.pointsPossible,
+                  pointsEarned: item.pointsEarned,
+                });
+              }
+              flash(items.length === 1 ? `Added “${items[0].title}”` : `Added ${items.length} grade items`);
+            }} enableMasterOS={settingsState.enableMasterOS !== false} onOpenMasterOS={() => go("Mastery")} />}
             {view === "Work" && <WorkDashboard workHub={workHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onTimesheetFlash={flash} weekStartsMonday={settingsState.weekStartsMonday} focusTaskId={workFocusTaskId} workView={workView} onChangeView={setWorkView} onChange={setWorkHub} onFocusWork={focusWorkTask} onOpenWorkTask={openWorkTask} onOpenCalendar={() => go("Calendar")} onOpenProject={openWorkProjectSpace} onBrowseProjects={() => setWorkView("projects")} onProjectDeleted={(name) => {
               setProjectItems(items => items.filter(project => project.name !== name));
               setTasks(items => items.map(task => task.project === name ? { ...task, project: "Inbox", color: "#625af6" } : task));
@@ -2478,30 +2956,30 @@ export default function LifeOS() {
               setSelectedProjectName(current => current === name ? null : current);
               flash(`Deleted ${name}`);
             }} />}
+                        {view === "Career" && <CareerDashboard hub={careerHub} careerView={careerView} onChangeView={setCareerView} onChange={setCareerHub} workspaceName={workspaceName} flash={flash} />}
             {view === "Study Abroad" && <StudyAbroadDashboard hub={studyAbroadHub} studyView={studyAbroadView} onChangeView={setStudyAbroadView} onChange={setStudyAbroadHub} workspaceName={workspaceName} onOpenCalendar={() => go("Calendar")} onFocusStudyTask={focusStudyAbroadTask} focusEntity={studyAbroadFocusEntity} onFocusEntityConsumed={() => setStudyAbroadFocusEntity(null)} />}
-            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onOpenTimesheet={() => { setWorkView("timesheet"); go("Work"); }} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableMasterOS={settingsState.enableMasterOS !== false} onboardingCompletedAt={settingsState.onboardingCompletedAt} onMarkOnboarded={() => setSettingsState(current => ({ ...current, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} flash={flash} />}
+            {view === "Treasury" && (
+              <TreasuryOSDashboard
+                lifeosUser={cloudUserId && user ? { uid: cloudUserId, email: user.email ?? null, displayName: user.displayName } : null}
+              />
+            )}
+            {view === "Mastery" && <MasterOSDashboard />}
+            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onOpenTimesheet={() => { setWorkView("timesheet"); go("Work"); }} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableCareerOS={settingsState.enableCareerOS !== false} enableSchoolOS={settingsState.enableSchoolOS !== false} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableTreasuryOS={settingsState.enableTreasuryOS !== false} enableMasterOS={settingsState.enableMasterOS !== false} onboardingCompletedAt={settingsState.onboardingCompletedAt} onMarkOnboarded={() => setSettingsState(current => ({ ...current, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} flash={flash} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
-            {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} />}
+            {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} onDeleteMany={deleteTasks} />}
+            {view === "Navigation" && canAccessNavigation && (
+              <div className="navigation-page">
+                <ExecutivePanel hub={guidedHub} onChange={setGuidedHub} flash={flash} />
+              </div>
+            )}
             {(view === "Today" || view === "Calendar") && <CalendarView events={calendarFeed} tasks={activeTasks} weekStartsMonday={settingsState.weekStartsMonday} defaultView={normalizeCalendarDefaultView(settingsState.defaultCalendarView)} onNew={(date) => { setDefaultEventDate(date); setCalendarComposer(true); }} onImport={() => setCalendarImporter(true)} onEdit={(id) => { if (id.startsWith("task-")) openTaskPage(Number(id.slice(5))); else if (id.startsWith("work-meet-")) { setWorkView("calendar"); go("Work"); } else setEditingCalendarEventId(id); }} onPlanTask={setEditingTaskId} />}
             {view === "Notes" && <NotesView notes={notes} classes={classes} projects={projectItems} selectedNoteId={selectedNoteId} onSelect={setSelectedNoteId} onCreate={() => createNote()} onUpdate={updateNote} onDelete={deleteNote} onImport={importNotes} onCreateTask={createTaskFromNote} />}
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onCreateTask={createTaskFromNote} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} onConvertToTask={(index, text) => { addTask(text, undefined, "", { flashLabel: "Task created from brain" }); setBrainItems(items => items.filter((_, i) => i !== index)); }} />}
-            {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} />}
-            {view === "Settings" && <AssistantAccessPanel user={user} userId={cloudUserId} flash={flash} />}
-            {view === "Settings" && (
-              <CalendarConnections
-                user={user}
-                flash={flash}
-                subscriptions={settingsState.icalSubscriptions ?? []}
-                onSubscriptionsChange={(icalSubscriptions) => updateSettings({ icalSubscriptions })}
-                onReplaceSubscriptionEvents={replaceIcalSubscriptionEvents}
-                onRemoveSubscriptionEvents={removeIcalSubscriptionEvents}
-                onSyncAll={() => void syncIcalSubscriptions()}
-              />
-            )}
+            {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} icalSubscriptions={settingsState.icalSubscriptions ?? []} onIcalSubscriptionsChange={(icalSubscriptions) => updateSettings({ icalSubscriptions })} onReplaceIcalSubscriptionEvents={replaceIcalSubscriptionEvents} onRemoveIcalSubscriptionEvents={removeIcalSubscriptionEvents} onSyncIcalSubscriptions={() => void syncIcalSubscriptions()} />}
             {view === "Settings" && <SynapseDayPlanImport flash={flash} />}
-            {!["Life", "School", "Work", "Study Abroad", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
+            {!["Life", "School", "Work", "Career", "Study Abroad", "Treasury", "Mastery", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Navigation", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
         </AnimatePresence>
         </>}
@@ -2509,7 +2987,7 @@ export default function LifeOS() {
       {!focus && floatingFocusTask && <FloatingFocusDock task={floatingFocusTask} onResume={(session) => { updateFocusSession(floatingFocusTask.id, session); setActiveTaskId(floatingFocusTask.id); chooseNowTask(floatingFocusTask.id); setFocus(true); }} onUpdateSession={(session) => updateFocusSession(floatingFocusTask.id, session)} onEnd={() => updateFocusSession(floatingFocusTask.id, { remainingSeconds: getTaskFocusSeconds(floatingFocusTask), hasStarted: false, isRunning: false, halfwayPrompted: Boolean(floatingFocusTask.focusHalfwayPrompted) })} />}
       <AnimatePresence>
         {needsWorkspaceName && <WelcomeNameModal key="welcome-name-modal" suggestedName={user?.displayName} save={(preferredName) => setSettingsState(current => ({ ...current, preferredName, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} />}
-        {palette && <CommandPalette key="command-palette" query={query} setQuery={setQuery} results={filtered} close={() => { setPalette(false); setQuery(""); }} go={go} onFocus={() => { setPalette(false); openFocus(); }} onCapture={() => { setPalette(false); setCapture(true); }} onNewTask={() => { setPalette(false); setComposer("task"); }} onResult={(result) => {
+        {palette && <CommandPalette key="command-palette" query={query} setQuery={setQuery} results={filtered} close={() => { setPalette(false); setQuery(""); }} captureCommands={captureCommands} onRunCaptureCommand={runCaptureCommand} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} onFocus={() => { setPalette(false); openFocus(); }} onCapture={() => { setPalette(false); setCapture(true); }} onNewTask={() => { setPalette(false); setComposer("task"); }} onResult={(result) => {
           const task = activeTasks.find(item => item.title === result);
           const project = projectItems.find(item => item.name === result);
           const classRecord = classes.find(item => item.code === result);
@@ -2552,10 +3030,13 @@ export default function LifeOS() {
           else if (project) openProjectSpace(project.name);
           else if (classRecord) openClassSpace(classRecord.id);
           else if (note) { setSelectedNoteId(note.id); setView("Notes"); }
-          else if (visibleNav.some(item => item.name === result)) {
-            const navHit = visibleNav.find(item => item.name === result);
+          else if (visibleNav.some(item => navDisplayName(item.name) === result || item.name === result)) {
+            const navHit = visibleNav.find(item => navDisplayName(item.name) === result || item.name === result);
             if (navHit?.href) window.location.href = navHit.href;
-            else go(result as View);
+            else if (navHit) {
+              const target = navTargetView(navHit);
+              if (target) go(target);
+            }
           }
         }} />}
         {capture && <CaptureModal key="capture-modal" close={() => setCapture(false)} add={(text) => { setBrainItems(x => [text, ...x]); setCapture(false); flash("Thought captured"); }} />}
@@ -2571,7 +3052,7 @@ export default function LifeOS() {
         {spaceComposer && <SpaceModal key={`space-modal-${spaceComposer}`} initialKind={spaceComposer} close={() => setSpaceComposer(null)} addProject={(name, kind, description, color, icon) => addProject(name, kind, undefined, icon, description, color)} addClass={addClass} />}
         {academicComposerClassId && classes.find(item => item.id === academicComposerClassId) && <AcademicItemModal key={`academic-${academicComposerClassId}`} classRecord={classes.find(item => item.id === academicComposerClassId)!} close={() => setAcademicComposerClassId(null)} add={(task) => addAcademicTask(academicComposerClassId, task)} defaults={{ focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy }} />}
         {calendarComposer && <CalendarEventModal key="calendar-event-modal" close={() => { setCalendarComposer(false); setDefaultEventDate(null); }} add={addCalendarEvent} defaultDate={defaultEventDate} />}
-        {editingCalendarEventId && calendarEvents.find(event => event.id === editingCalendarEventId) && <CalendarEventModal key={`calendar-edit-${editingCalendarEventId}`} event={calendarEvents.find(event => event.id === editingCalendarEventId)!} close={() => setEditingCalendarEventId(null)} add={updateCalendarEvent} remove={deleteCalendarEvent} onTaskAction={useCalendarEventAsTask} taskActionLabel={tasks.some(task => task.calendarEventId === editingCalendarEventId) ? "Open task" : "Create task"} />}
+        {editingCalendarEventId && calendarEvents.find(event => event.id === editingCalendarEventId) && <CalendarEventModal key={`calendar-edit-${editingCalendarEventId}`} event={calendarEvents.find(event => event.id === editingCalendarEventId)!} close={() => setEditingCalendarEventId(null)} add={updateCalendarEvent} remove={deleteCalendarEvent} tasks={activeTasks} linkedTaskId={tasks.find(task => task.calendarEventId === editingCalendarEventId)?.id} onOpenLinkedTask={openLinkedCalendarTask} onRouteToTask={routeCalendarEventToTask} />}
         {calendarImporter && (
           <CalendarImportModal
             key="calendar-import-modal"
@@ -2598,15 +3079,10 @@ export default function LifeOS() {
   );
 }
 
-function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, timeTracking, onTimeTrackingChange, onOpenTimesheet, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableWorkOS, enableStudyAbroad, enableMasterOS, onboardingCompletedAt, onMarkOnboarded, flash }: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; timeTracking: TimeTrackingState; onTimeTrackingChange: (next: TimeTrackingState) => void; onOpenTimesheet: () => void; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableWorkOS: boolean; enableStudyAbroad: boolean; enableMasterOS: boolean; onboardingCompletedAt?: string; onMarkOnboarded: () => void; flash: (message: string) => void }) {
+function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, timeTracking, onTimeTrackingChange, onOpenTimesheet, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableCareerOS, enableSchoolOS, enableWorkOS, enableStudyAbroad, enableTreasuryOS, enableMasterOS, onboardingCompletedAt, onMarkOnboarded, flash}: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; timeTracking: TimeTrackingState; onTimeTrackingChange: (next: TimeTrackingState) => void; onOpenTimesheet: () => void; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableCareerOS: boolean; enableSchoolOS: boolean; enableWorkOS: boolean; enableStudyAbroad: boolean; enableTreasuryOS: boolean; enableMasterOS: boolean; onboardingCompletedAt?: string; onMarkOnboarded: () => void; flash: (message: string) => void }) {
   const [handoff, setHandoff] = useState("");
-  const [captureInput, setCaptureInput] = useState("");
-  const [captureFocused, setCaptureFocused] = useState(false);
-  const [suggestedCommandIndex, setSuggestedCommandIndex] = useState(-1);
   const [queueOpen, setQueueOpen] = useState(false);
   const [dragQueueId, setDragQueueId] = useState<number | null>(null);
-  const captureInputRef = useRef<HTMLInputElement | null>(null);
-  const captureBlurTimer = useRef<number | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false;
     if (onboardingCompletedAt) return false;
@@ -2618,7 +3094,6 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   }, [onboardingCompletedAt]);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
-  useEffect(() => () => { if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current); }, []);
   const today = toDateKey(new Date());
   const allActive = tasks.filter(task => !task.done && !task.canceled);
   const active = allActive.filter(task => getTaskStatus(task) !== "Waiting" || !task.followUpDate || task.followUpDate <= today);
@@ -2633,7 +3108,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     };
     return score(b) - score(a);
   }).filter(task => task.id !== current?.id).slice(0, 5);
-  const todayEvents = events.filter(event => eventOccursOnDate(event, today)).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 3);
+  const todayEvents = events.filter(event => eventOccursOnDate(event, today)).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 8);
   const activeSpace = current?.classId ? classes.find(item => item.id === current.classId)?.code : current?.project;
   const hasDue = (due: string) => /^\d{4}-\d{2}-\d{2}/.test(due);
   const resurfacing = allActive.filter(task => task.id !== current?.id && ((hasDue(task.due) && task.due < today) || (getTaskStatus(task) === "Waiting" && Boolean(task.followUpDate && task.followUpDate <= today)))).slice(0, 3);
@@ -2666,433 +3141,230 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     if (typeof window !== 'undefined') localStorage.setItem('lifeos-onboarding-seen', 'true');
     onMarkOnboarded();
   };
-  const commands = [
-    { shortcut: '/t', label: 'Add task', desc: 'Create a new task' },
-    { shortcut: '/tm', label: 'Minor task', desc: 'Low-energy errand — water, charge, quick chore' },
-    { shortcut: '/proj', label: 'Add project', desc: 'Start a new project' },
-    { shortcut: '/asg', label: 'Add assignment', desc: 'School mode only' },
-    { shortcut: '/note', label: 'Add note', desc: 'Capture a quick note' },
-    { shortcut: '/focus', label: 'Start focus', desc: 'Enter a focus session' },
-    { shortcut: '/break', label: 'Break', desc: 'I need a break' },
-    { shortcut: '/clock', label: 'Clock in/out', desc: 'Start or stop contractor timesheet' },
-    { shortcut: '/timesheet', label: 'Timesheet', desc: 'Open full timesheet editor' },
-    { shortcut: '/spaces', label: 'Spaces', desc: 'Open your spaces' },
-    { shortcut: '/w', label: 'I\'m doing something', desc: 'Start ambient activity' },
-    { shortcut: '/a', label: 'AI task', desc: 'Create with AI assistance' },
-    ...(enableWorkOS ? [
-      { shortcut: '/w proj', label: 'Work project', desc: 'Start a work project' },
-      { shortcut: '/w deliver', label: 'Deliverable', desc: 'Add a work deliverable' },
-      { shortcut: '/w task', label: 'Work task', desc: 'Add a work task' },
-      { shortcut: '/w tasks', label: 'Work task', desc: 'Add a work task (alias)' },
-      { shortcut: '/w meet', label: 'Schedule meeting', desc: 'Schedule a meeting' },
-    ] : []),
-    ...(enableStudyAbroad ? [
-      { shortcut: '/sa', label: 'Study Abroad', desc: 'Open Study Abroad' },
-      { shortcut: '/sa country', label: 'Country', desc: 'Add a country path' },
-      { shortcut: '/sa uni', label: 'University', desc: 'Add a university' },
-      { shortcut: '/sa prog', label: 'Program', desc: 'Add a program' },
-      { shortcut: '/sa app', label: 'Application', desc: 'Start an application' },
-      { shortcut: '/sa fund', label: 'Scholarship', desc: 'Add funding / scholarship' },
-      { shortcut: '/sa note', label: 'Note', desc: 'Add study-abroad knowledge' },
-      { shortcut: '/sa task', label: 'SA task', desc: 'Add a study-abroad task' },
-    ] : []),
-    ...(enableMasterOS ? [
-      { shortcut: '/mos', label: 'MasterOS', desc: 'Open teaching workspace (web / iPad)' },
-    ] : []),
-  ];
-  const captureQuery = captureInput.startsWith('/') ? captureInput.trim().toLowerCase() : '';
-  const showCommandHelp = showCaptureCommands && captureFocused && (!captureInput || captureInput.startsWith('/'));
-  const filtered = captureQuery
-    ? commands.filter(c => c.shortcut.startsWith(captureQuery) || c.shortcut.includes(captureQuery) || c.label.toLowerCase().includes(captureQuery.slice(1)))
-    : (showCommandHelp ? commands : []);
-  const showSuggestions = filtered.length > 0 && (captureFocused || Boolean(captureQuery));
-  const runInstantCommand = (raw: string) => {
-    const val = raw.trim().toLowerCase();
-    if (val === '/w') { onStartAmbient(); return true; }
-    if (val === '/break') { onBreak(); return true; }
-    if (val === '/clock') {
-      const active = getActiveEntry(timeTracking);
-      if (active) {
-        onTimeTrackingChange(clockOut(timeTracking));
-        flash("Clocked out");
-      } else {
-        onTimeTrackingChange(clockIn(timeTracking, {
-          clientName: timeTracking.defaultClientName,
-          title: current?.title || "Work session",
-        }));
-        flash("Clocked in");
-      }
-      return true;
-    }
-    if (val === '/timesheet') { onOpenTimesheet(); return true; }
-    if (val === '/a') { onSmartCapture(); return true; }
-    if (val === '/focus') {
-      const target = current ?? recommendations[0];
-      if (target) onFocus(target.id);
-      return true;
-    }
-    if (val === '/spaces') { onGo('Spaces'); return true; }
-    if (enableStudyAbroad && (val === '/sa' || val === '/study abroad')) { onGo('Study Abroad'); return true; }
-    if (enableMasterOS && (val === '/mos' || val === '/masteros')) { window.location.href = '/masteros'; return true; }
-    return false;
-  };
-  const handleCaptureFocus = () => {
-    if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current);
-    setCaptureFocused(true);
-  };
-  const handleCaptureBlur = () => {
-    captureBlurTimer.current = window.setTimeout(() => setCaptureFocused(false), 160);
-  };
-  /** After a command runs, clear + unfocus so the help list does not pop back open. */
-  const finishCaptureCommand = () => {
-    if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current);
-    setCaptureInput("");
-    setSuggestedCommandIndex(-1);
-    setCaptureFocused(false);
-    captureInputRef.current?.blur();
-  };
-  const handleCaptureKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setSuggestedCommandIndex(Math.min(suggestedCommandIndex + 1, filtered.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSuggestedCommandIndex(Math.max(suggestedCommandIndex - 1, -1));
-    } else if (e.key === 'Escape') {
-      setCaptureFocused(false);
-      e.currentTarget.blur();
-    } else if (e.key === 'Enter') {
-      const val = e.currentTarget.value.trim();
-      if (suggestedCommandIndex >= 0) {
-        const cmd = filtered[suggestedCommandIndex];
-        if (['/w', '/break', '/a', '/focus', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
-          runInstantCommand(cmd.shortcut);
-          finishCaptureCommand();
-        } else {
-          setCaptureInput(cmd.shortcut + ' ');
-          setSuggestedCommandIndex(-1);
-        }
-      } else if (val) {
-        if (runInstantCommand(val)) {
-          finishCaptureCommand();
-        } else if (val.startsWith('/t ')) {
-          const taskTitle = val.slice(3).trim();
-          if (taskTitle) {
-            const id = onAddTask(taskTitle);
-            if (id) {
-              if (nowTaskId) onEnqueue(id);
-              else onChoose(id);
-            }
-          }
-          finishCaptureCommand();
-        } else if (val.startsWith('/tm ')) {
-          const taskTitle = val.slice(4).trim();
-          if (taskTitle) {
-            const id = onAddTask(taskTitle, {
-              energy: 'Low',
-              priority: 'Low',
-              focusMinutes: 5,
-              flashLabel: 'Minor task added',
-            });
-            if (id) {
-              if (nowTaskId) onEnqueue(id);
-              else onChoose(id);
-            }
-          }
-          finishCaptureCommand();
-        } else if (val.startsWith('/proj ')) {
-          const projectName = val.slice(6).trim();
-          if (projectName) onAddProject(projectName);
-          finishCaptureCommand();
-        } else if (val.startsWith('/asg ')) {
-          const assignmentTitle = val.slice(5).trim();
-          if (assignmentTitle) onAddAssignment(assignmentTitle);
-          finishCaptureCommand();
-        } else if (val.startsWith('/note ')) {
-          const noteTitle = val.slice(6).trim();
-          if (noteTitle) onAddNote(noteTitle);
-          finishCaptureCommand();
-        } else if (enableWorkOS && val.startsWith('/w proj ')) {
-          const projName = val.slice(8).trim() || 'New Project';
-          const newProj: WorkProject = { id: `proj-${Date.now()}`, name: projName, color: '#625af6', status: 'active', createdAt: new Date().toISOString() };
-          onSetWorkHub((current: WorkHubState) => ({ ...current, projects: [...current.projects, newProj] }));
-          finishCaptureCommand();
-        } else if (enableWorkOS && val.startsWith('/w deliver ')) {
-          const title = val.slice(11).trim() || 'New deliverable';
-          onSetWorkHub((current: WorkHubState) => {
-            const project = current.projects.find(item => item.status === 'active');
-            if (!project) return current;
-            const deliverable: WorkDeliverable = { id: `del-${Date.now()}`, projectId: project.id, title, type: 'document', status: 'planned', priority: 'medium', dueDate: toDateKey(new Date()), createdAt: new Date().toISOString() };
-            return { ...current, deliverables: [...current.deliverables, deliverable] };
-          });
-          finishCaptureCommand();
-        } else if (enableWorkOS && (val.startsWith('/w task ') || val.startsWith('/w tasks '))) {
-          const title = val.startsWith('/w tasks ') ? val.slice(9).trim() : val.slice(8).trim();
-          onSetWorkHub((current: WorkHubState) => captureAddWorkTask(current, title || "New task"));
-          flash(title ? `Work task added: ${title}` : "Work task added");
-          finishCaptureCommand();
-        } else if (!enableWorkOS && (val.startsWith('/w task ') || val.startsWith('/w tasks ') || val.startsWith('/w proj ') || val.startsWith('/w deliver ') || val.startsWith('/w meet '))) {
-          flash("Enable WorkOS in Settings to use /w work commands");
-          finishCaptureCommand();
-        } else if (enableWorkOS && val.startsWith('/w meet ')) {
-          const meetTitle = val.slice(8).trim() || 'New Meeting';
-          const newMeet: WorkMeeting = { id: `meet-${Date.now()}`, title: meetTitle, start: new Date().toISOString(), type: 'other', createdAt: new Date().toISOString() };
-          onSetWorkHub((current: WorkHubState) => ({ ...current, meetings: [...current.meetings, newMeet] }));
-          finishCaptureCommand();
-        } else if (enableStudyAbroad && val.startsWith('/sa country ')) {
-          const name = val.slice(12).trim();
-          if (name) {
-            const stamp = nowIso();
-            onSetStudyAbroadHub(current => appendHistory({
-              ...current,
-              countries: [...current.countries, { id: newId('country'), name, createdAt: stamp, updatedAt: stamp }],
-            }, 'Added country', name, 'country'));
-            flash(`Country added: ${name}`);
-          }
-          finishCaptureCommand();
-        } else if (enableStudyAbroad && val.startsWith('/sa uni ')) {
-          const name = val.slice(8).trim();
-          if (name) {
-            const country = studyAbroadHub.countries[0];
-            if (!country) flash('Add a country first with /sa country');
-            else {
-              const stamp = nowIso();
-              onSetStudyAbroadHub(current => appendHistory({
-                ...current,
-                universities: [...current.universities, { id: newId('uni'), name, countryId: country.id, createdAt: stamp, updatedAt: stamp }],
-              }, 'Added university', name, 'university'));
-              flash(`University added: ${name}`);
-            }
-          }
-          finishCaptureCommand();
-        } else if (enableStudyAbroad && val.startsWith('/sa prog ')) {
-          const name = val.slice(9).trim();
-          if (name) {
-            const university = studyAbroadHub.universities[0];
-            if (!university) flash('Add a university first with /sa uni');
-            else {
-              const stamp = nowIso();
-              onSetStudyAbroadHub(current => appendHistory({
-                ...current,
-                programs: [...current.programs, { id: newId('prog'), name, universityId: university.id, status: 'discovering', shortlisted: false, createdAt: stamp, updatedAt: stamp }],
-              }, 'Added program', name, 'program'));
-              flash(`Program added: ${name}`);
-            }
-          }
-          finishCaptureCommand();
-        } else if (enableStudyAbroad && val.startsWith('/sa app ')) {
-          const name = val.slice(8).trim();
-          const program = name
-            ? studyAbroadHub.programs.find(item => item.name.toLowerCase() === name.toLowerCase()) || studyAbroadHub.programs[0]
-            : studyAbroadHub.programs[0];
-          if (!program) flash('Add a program first with /sa prog');
-          else {
-            const stamp = nowIso();
-            onSetStudyAbroadHub(current => appendHistory({
-              ...current,
-              applications: [...current.applications, { id: newId('app'), programId: program.id, stage: 'preparing', createdAt: stamp, updatedAt: stamp }],
-              programs: current.programs.map(item => item.id === program.id ? { ...item, status: 'preparing', shortlisted: true, updatedAt: stamp } : item),
-            }, 'Started application', program.name, 'application'));
-            flash(`Application started: ${program.name}`);
-          }
-          finishCaptureCommand();
-        } else if (enableStudyAbroad && (val.startsWith('/sa fund ') || val.startsWith('/sa scholarship '))) {
-          const name = val.startsWith('/sa scholarship ') ? val.slice(16).trim() : val.slice(9).trim();
-          if (name) {
-            const stamp = nowIso();
-            onSetStudyAbroadHub(current => appendHistory({
-              ...current,
-              funding: [...current.funding, { id: newId('fund'), name, kind: 'scholarship', countryId: current.countries[0]?.id, status: 'researching', createdAt: stamp, updatedAt: stamp }],
-            }, 'Added funding', name, 'funding'));
-            flash(`Scholarship added: ${name}`);
-          }
-          finishCaptureCommand();
-        } else if (enableStudyAbroad && val.startsWith('/sa task ')) {
-          const title = val.slice(9).trim();
-          if (title) {
-            const parentProgramId = studyAbroadHub.sessionMemory?.lastProgramId || studyAbroadHub.programs[0]?.id;
-            const parentCountryId = studyAbroadHub.countries[0]?.id;
-            if (!parentProgramId && !parentCountryId) flash('Add a country or program first');
-            else {
-              const stamp = nowIso();
-              const parentType = parentProgramId ? 'program' as const : 'country' as const;
-              const parentId = parentProgramId || parentCountryId!;
-              onSetStudyAbroadHub(current => appendHistory({
-                ...current,
-                tasks: [...current.tasks, { id: newId('task'), title, parentType, parentId, createdAt: stamp, updatedAt: stamp }],
-              }, 'Added study-abroad task', title, parentType, parentId));
-              flash(`Study Abroad task: ${title}`);
-            }
-          }
-          finishCaptureCommand();
-        } else if (enableStudyAbroad && val.startsWith('/sa note ')) {
-          const title = val.slice(9).trim();
-          if (title) {
-            const stamp = nowIso();
-            onSetStudyAbroadHub(current => appendHistory({
-              ...current,
-              knowledge: [...current.knowledge, { id: newId('know'), title, contextType: 'general', createdAt: stamp, updatedAt: stamp }],
-              sessionMemory: { ...current.sessionMemory, lastNote: title, updatedAt: stamp },
-            }, 'Added knowledge note', title, 'general'));
-            flash(`Study Abroad note: ${title}`);
-          }
-          finishCaptureCommand();
-        } else if (!val.startsWith('/')) {
-          onStartAmbient();
-          finishCaptureCommand();
-        }
-      }
-    }
-  };
   return <div className="now-view">
     {showOnboarding && (
-      <div className="onboarding-overlay">
-        <div className="onboarding-modal">
-          <button className="onboarding-close" onClick={closeOnboarding}>✕</button>
-          <div className="onboarding-content">
-            <h2>Welcome to LifeOS</h2>
-            <p className="onboarding-subtitle">Your life, in focus.</p>
-            <div className="onboarding-tips">
-              <div className="tip">
-                <strong>📝 Capture Commands</strong>
-                <p>Type <code>/t</code> to add tasks, <code>/proj</code> for projects, <code>/asg</code> for assignments</p>
-              </div>
-              <div className="tip">
-                <strong>🎯 Current Task</strong>
-                <p>Click any task to focus on it. Your active task shows here with focus features.</p>
-              </div>
-              <div className="tip">
-                <strong>✨ LifeOS Copilot</strong>
-                <p>Your AI assistant suggests what to do next based on your priorities and context.</p>
-              </div>
-              <div className="tip">
-                <strong>⌨️ Capture bar</strong>
-                <p>Click the capture bar on Now to see commands like <code>/t</code>, <code>/break</code>, and <code>/focus</code>.</p>
-              </div>
+      <div className="ob-overlay" role="dialog" aria-modal="true" aria-labelledby="postauth-onboarding-title">
+        <div className="ob-card">
+          <button type="button" className="ob-close" onClick={closeOnboarding} aria-label="Close onboarding"><X size={18} /></button>
+          <div className="ob-visual" aria-hidden>
+            <svg className="ob-illus" viewBox="0 0 280 280" fill="none">
+              <circle cx="140" cy="150" r="78" stroke="currentColor" strokeWidth="3" />
+              <path d="M96 168c12-28 28-42 44-42s32 14 44 42" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              <circle cx="140" cy="112" r="22" stroke="currentColor" strokeWidth="3" />
+              <path d="M70 214h140" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              <rect x="88" y="190" width="104" height="14" rx="4" stroke="currentColor" strokeWidth="3" />
+            </svg>
+          </div>
+          <div className="ob-panel">
+            <div className="ob-brand">LifeOS</div>
+            <p className="ob-eyebrow">You&apos;re in</p>
+            <h2 id="postauth-onboarding-title" className="ob-title">Ready to start your week?</h2>
+            <p className="ob-body">A few habits that keep Now clear — capture fast, focus on one thing, let Copilot suggest the next move.</p>
+            <div className="ob-tips">
+              <div className="ob-tip"><span className="ob-tip-icon"><Command size={16} /></span><div><strong>Command bar</strong><p>Use <code>⌘ K</code> or Search anything — type <code>/t</code> for tasks, <code>/break</code>, <code>/focus</code>.</p></div></div>
+              <div className="ob-tip"><span className="ob-tip-icon"><Focus size={16} /></span><div><strong>Current task</strong><p>Click any task to focus on it. Your active work shows here with focus tools.</p></div></div>
+              <div className="ob-tip"><span className="ob-tip-icon"><Sparkles size={16} /></span><div><strong>LifeOS Copilot</strong><p>Suggestions based on your priorities and context — you decide what runs.</p></div></div>
             </div>
-            <button className="onboarding-button" onClick={closeOnboarding}>Let&apos;s go!</button>
+            <div className="ob-actions">
+              <button type="button" className="ob-primary" onClick={closeOnboarding}>Continue</button>
+              <button type="button" className="ob-skip" onClick={closeOnboarding}>Skip</button>
+            </div>
           </div>
         </div>
       </div>
     )}
-    <div className="page-title">
-      <div><p className="eyebrow">{new Date(now).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p><h1>Now</h1><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
-      <div className="now-header-actions"><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button onClick={onDailyReset}>Daily reset</button><button onClick={onWeeklyReview}>Weekly review</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
-    </div>
-    {ambientActivity ? (
-      <section className="ambient-active-strip">
-        <div><span className="section-icon orange"><TimerReset size={14} /></span><div><p>YOU’RE ALREADY DOING IT</p><strong>{ambientActivity.title}</strong><small>{formatAmbientDuration(now - new Date(ambientActivity.startedAt).getTime())} so far · no planning required</small></div></div>
-        <button onClick={onWrapAmbient}>Finish & sort later <ArrowRight size={15} /></button>
-      </section>
-    ) : (
-      <div className="capture-bar-wrapper">
-        <section className="capture-bar-section" title="Capture commands: /t, /break, /focus, and more">
-          <span className="section-icon blue"><Command size={16} /></span>
-          <input
-            ref={captureInputRef}
-            type="text"
-            placeholder="Click for commands, or type /"
-            value={captureInput}
-            onChange={(e) => { setCaptureInput(e.currentTarget.value); setSuggestedCommandIndex(-1); }}
-            onFocus={handleCaptureFocus}
-            onClick={handleCaptureFocus}
-            onBlur={handleCaptureBlur}
-            onKeyDown={handleCaptureKeyDown}
-            title="Click to see capture commands"
-          />
-          <span className="capture-hint">/t · /tm · /break · /focus · /clock{enableMasterOS ? " · /mos" : ""}</span>
+    {(() => {
+      const dateObj = new Date(now);
+      const greetingRaw = getGreeting(dateObj, workspaceName);
+      const nameNeedle = workspaceName.trim();
+      const greetingNode = (!nameNeedle || nameNeedle === "there" || greetingRaw.lastIndexOf(nameNeedle) < 0)
+        ? greetingRaw
+        : (() => {
+            const idx = greetingRaw.lastIndexOf(nameNeedle);
+            return <>{greetingRaw.slice(0, idx)}<span className="atelier-name">{nameNeedle}</span>{greetingRaw.slice(idx + nameNeedle.length)}</>;
+          })();
+      const totalFocusSec = (current?.focusMinutes ?? 0) * 60;
+      const focusPct = current && totalFocusSec > 0 && typeof current.focusRemainingSeconds === "number" && current.focusSessionStarted
+        ? Math.max(0, Math.min(100, Math.round(100 * (1 - current.focusRemainingSeconds / totalFocusSec))))
+        : null;
+      const ringR = 54;
+      const ringC = 2 * Math.PI * ringR;
+      const schoolOpen = active.filter((task) => Boolean(task.classId)).length;
+      const lifeOpen = active.filter((task) => !task.classId).length;
+      return (
+    <>
+    <div className="atelier-now">
+      <header className="atelier-now-hero">
+        <div className="atelier-now-hero-copy">
+          <h1 className="atelier-greeting">{greetingNode}</h1>
+          <p className="atelier-hero-copy">A clear mind builds a better tomorrow.</p>
+          <p className="atelier-hero-date">{dateObj.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }).toUpperCase()}</p>
+        </div>
+        <div className="atelier-now-hero-widgets">
+          <NowWeatherWidget />
+          <div className="atelier-glass-card atelier-quote-widget">
+            <p>“Progress, not perfection.”</p>
+            <ArrowRight size={16} aria-hidden />
+          </div>
+        </div>
+      </header>
+
+      {ambientActivity ? (
+        <section className="ambient-active-strip">
+          <div><span className="section-icon orange"><TimerReset size={14} /></span><div><p>YOU’RE ALREADY DOING IT</p><strong>{ambientActivity.title}</strong><small>{formatAmbientDuration(now - new Date(ambientActivity.startedAt).getTime())} so far · no planning required</small></div></div>
+          <button onClick={onWrapAmbient}>Finish & sort later <ArrowRight size={15} /></button>
         </section>
-        {showSuggestions ? (
-          <div className="capture-suggestions" onMouseDown={(e) => e.preventDefault()}>
-            <div className="capture-suggestions-list">
-              {filtered.map((cmd, idx) => (
-                <button
-                  key={cmd.shortcut}
-                  type="button"
-                  className={idx === suggestedCommandIndex ? "suggested" : ""}
-                  onClick={() => {
-                    if (['/w', '/break', '/a', '/focus', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
-                      runInstantCommand(cmd.shortcut);
-                      finishCaptureCommand();
-                    } else {
-                      setCaptureInput(cmd.shortcut + " ");
-                      setSuggestedCommandIndex(-1);
-                      captureInputRef.current?.focus();
-                    }
+      ) : null}
+
+      <div className="atelier-now-main">
+        <section className="card atelier-today-panel" aria-label="Today">
+          <div className="card-head"><div><h2>Today</h2></div></div>
+          <div className={`now-today-list${todayEvents.length ? " now-today-timeline" : ""}`}>
+            {todayEvents.length ? todayEvents.map((event, index) => {
+              const start = new Date(event.start);
+              const time = Number.isNaN(start.getTime()) ? "—" : start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+              return (
+                <div key={event.id} className="now-today-row">
+                  <time dateTime={event.start}>{time}</time>
+                  <div className="now-today-track" aria-hidden>
+                    <i style={{ background: event.color || "var(--accent)" }} />
+                    {index < todayEvents.length - 1 ? <span className="now-today-rail" /> : null}
+                  </div>
+                  <div className="now-today-body">
+                    <strong>{event.title}</strong>
+                    <span>{event.source}{event.location ? ` · ${event.location}` : ""}</span>
+                  </div>
+                </div>
+              );
+            }) : <div className="now-today-empty">No events on the calendar for today. Protect a block when you’re ready.</div>}
+          </div>
+          <div className="now-today-footer"><button type="button" onClick={() => onGo("Today")}>View full day</button></div>
+        </section>
+
+        <div className="atelier-now-mid">
+          <section className="card atelier-focus-panel" title="Your focused task">
+            <div className="atelier-focus-ring-wrap" aria-hidden={focusPct == null}>
+              <svg className="atelier-focus-ring" viewBox="0 0 140 140">
+                <circle cx="70" cy="70" r={ringR} pathLength="100" />
+                <circle
+                  cx="70"
+                  cy="70"
+                  r={ringR}
+                  pathLength="100"
+                  style={{
+                    strokeDasharray: `${focusPct ?? 0} 100`,
                   }}
-                >
-                  <strong>{cmd.shortcut}</strong>
-                  <span>{cmd.desc}</span>
-                </button>
-              ))}
+                />
+              </svg>
+              <div className="atelier-focus-ring-label">
+                {focusPct != null ? <strong>{focusPct}%</strong> : <Focus size={22} />}
+                <span>{focusPct != null ? "Focus" : "Ready"}</span>
+              </div>
             </div>
-            {showCaptureCommands ? (
-              <div className="capture-suggestions-footer">
-                <button type="button" className="capture-dismiss" onClick={() => { onDismissCaptureCommands(); setCaptureFocused(false); }}>
-                  Don&apos;t show again
-                </button>
+            {current ? (
+              <div className="atelier-focus-copy">
+                <p className="eyebrow">{activeSpace || "Focus"}</p>
+                <h2>{current.title}</h2>
+                <p>{current.focusMinutes} min · {current.energy} energy</p>
+                <div className="now-current-actions">
+                  <button className="primary" type="button" onClick={() => onFocus(current.id)}><Focus size={16} /> Start focus</button>
+                  <button type="button" onClick={() => onOpenTask(current.id)}>Open</button>
+                  <button type="button" onClick={() => onComplete(current.id)}><Check size={16} /></button>
+                </div>
+                <div className="atelier-focus-tools">
+                  <button type="button" className="text-button" onClick={() => setQueueOpen((value) => !value)}>{queueOpen ? "Hide queue" : "Open Queue"}</button>
+                  <button type="button" className="text-button" onClick={() => onChoose(null)}>Clear</button>
+                </div>
               </div>
-            ) : null}
+            ) : (
+              <div className="atelier-focus-copy">
+                <p className="eyebrow">Focus</p>
+                <h2>Nothing claiming attention</h2>
+                <p>Choose a next move when you’re ready.</p>
+                <div className="now-current-actions">
+                  <button type="button" className="primary" onClick={onSmartCapture}><Sparkles size={16} /> Make a task</button>
+                  <button type="button" onClick={() => setQueueOpen((value) => !value)}>Open Queue</button>
+                </div>
+              </div>
+            )}
+            {queueOpen && (
+              <div className="now-queue-panel">
+                <div className="now-queue-head"><strong>Up next</strong><span>Drag to reorder · first 5</span></div>
+                {queueTasks.length ? queueTasks.map((task, index) => (
+                  <div
+                    key={task.id}
+                    className={`now-queue-row ${dragQueueId === task.id ? "dragging" : ""}`}
+                    draggable
+                    onDragStart={() => setDragQueueId(task.id)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => { if (dragQueueId != null) moveQueueItem(dragQueueId, task.id); setDragQueueId(null); }}
+                    onDragEnd={() => setDragQueueId(null)}
+                  >
+                    <GripVertical size={14} className="now-queue-grip" />
+                    <em>{index + 1}</em>
+                    <button type="button" className="now-queue-main" onClick={() => switchTo(task)}>
+                      <i style={{ background: task.color }} />
+                      <span><strong>{task.title}</strong><small>{task.classId ? classes.find((item) => item.id === task.classId)?.code : task.project} · {formatDueDate(task.due)}</small></span>
+                    </button>
+                    <button type="button" className="text-button" onClick={() => switchTo(task)}>Make current</button>
+                  </div>
+                )) : <div className="now-queue-empty">Nothing queued yet. Add tasks with <code>/t</code>.</div>}
+              </div>
+            )}
+          </section>
+
+          <div className="atelier-hub-tiles" aria-label="Spaces">
+            {(() => {
+              type StripTile = { key: string; label: string; sub: string; view: View; className: string; Icon: typeof Home };
+              const byKey: Record<string, StripTile> = {
+                home: { key: "home", label: "Home", sub: `${lifeOpen} open`, view: "Life", className: "tile-life", Icon: Home },
+                work: { key: "work", label: "Work", sub: "Workspace", view: "Work", className: "tile-work", Icon: BriefcaseBusiness },
+                career: { key: "career", label: "Career", sub: "Pipeline", view: "Career", className: "tile-career", Icon: Target },
+                school: { key: "school", label: "School", sub: `${schoolOpen} open`, view: "School", className: "tile-school", Icon: GraduationCap },
+                "study-abroad": { key: "study-abroad", label: "Study Abroad", sub: "Paths", view: "Study Abroad", className: "tile-study", Icon: Globe2 },
+                treasury: { key: "treasury", label: "Treasury", sub: "Money", view: "Treasury", className: "tile-treasury", Icon: WalletCards },
+                mastery: { key: "mastery", label: "Mastery", sub: "Teaching", view: "Mastery", className: "tile-mastery", Icon: NotebookPen },
+                calendar: { key: "calendar", label: "Calendar", sub: "Schedule", view: "Calendar", className: "tile-calendar", Icon: CalendarDays },
+                tasks: { key: "tasks", label: "Tasks", sub: `${active.length} open`, view: "Tasks", className: "tile-tasks", Icon: CheckCircle2 },
+                library: { key: "library", label: "Library", sub: "Notes & files", view: "Library", className: "tile-library", Icon: Library },
+              };
+              // Home → all enabled hubs (sidebar order) → Calendar → Tasks; Library if no hubs.
+              const tiles = buildFocusStripKeys({
+                enableWorkOS,
+                enableCareerOS,
+                enableSchoolOS,
+                enableStudyAbroad,
+                enableTreasuryOS,
+                enableMasterOS,
+              }).map((key) => byKey[key]);
+              return tiles.map((tile) => (
+                <button key={tile.key} type="button" className={`atelier-hub-tile ${tile.className}`} onClick={() => onGo(tile.view)}>
+                  <tile.Icon size={18} /><strong>{tile.label}</strong><span>{tile.sub}</span>
+                </button>
+              ));
+            })()}
           </div>
-        ) : null}
-      </div>
-    )}
-    <TimesheetNowStrip
-      timeTracking={timeTracking}
-      onChange={onTimeTrackingChange}
-      onOpenTimesheet={onOpenTimesheet}
-      nowMs={now}
-      workTitle={current?.title}
-      onFlash={flash}
-    />
-    {enableMasterOS ? (
-      <section className="card" style={{ marginBottom: 16 }}>
-        <div className="card-head">
-          <div><span className="section-icon blue"><GraduationCap size={14} /></span><h2>MasterOS</h2></div>
-          <a className="text-button" href="/masteros">Open <ArrowRight size={14} /></a>
         </div>
-        <p className="mos-muted" style={{ padding: "0 18px 16px", margin: 0, color: "var(--muted)", fontSize: 13, lineHeight: 1.5 }}>
-          Your teaching app — classes, lessons, whiteboard, gradebook. Web and iPad; type <code>/mos</code> anytime. Not on iPhone.
-        </p>
-      </section>
-    ) : null}
-    <div className="now-layout">
-      <section className="card now-current-card" title="Your focused task. Click any task to focus on it here.">
-        <div className="card-head"><div><span className="section-icon violet"><Focus size={14} /></span><h2>Current task</h2></div><div className="now-current-head-actions"><button type="button" className="text-button" onClick={() => setQueueOpen(value => !value)}>{queueOpen ? "Hide queue" : "Open Queue"}</button>{current && <button className="text-button" onClick={() => onChoose(null)}>Clear</button>}</div></div>
-        {queueOpen && (
-          <div className="now-queue-panel">
-            <div className="now-queue-head"><strong>Up next</strong><span>Drag to reorder · first 5</span></div>
-            {queueTasks.length ? queueTasks.map((task, index) => (
-              <div
-                key={task.id}
-                className={`now-queue-row ${dragQueueId === task.id ? "dragging" : ""}`}
-                draggable
-                onDragStart={() => setDragQueueId(task.id)}
-                onDragOver={event => event.preventDefault()}
-                onDrop={() => { if (dragQueueId != null) moveQueueItem(dragQueueId, task.id); setDragQueueId(null); }}
-                onDragEnd={() => setDragQueueId(null)}
-              >
-                <GripVertical size={14} className="now-queue-grip" />
-                <em>{index + 1}</em>
-                <button type="button" className="now-queue-main" onClick={() => switchTo(task)}>
-                  <i style={{ background: task.color }} />
-                  <span><strong>{task.title}</strong><small>{task.classId ? classes.find(item => item.id === task.classId)?.code : task.project} · {formatDueDate(task.due)}</small></span>
-                </button>
-                <button type="button" className="text-button" onClick={() => switchTo(task)}>Make current</button>
-              </div>
-            )) : <div className="now-queue-empty">Nothing queued yet. Add tasks with <code>/t</code>.</div>}
-          </div>
-        )}
-        {current ? <div className="now-current-content">
-          <span className="task-dot" style={{ background: current.color }} />
-          <p className="eyebrow">{activeSpace || "Unsorted"} · {current.focusMinutes} min · {current.energy} energy</p>
-          <h2>{current.title}</h2><p>{current.nextAction || current.handoffNote ? `Next visible step: ${current.nextAction || current.handoffNote}` : `${formatDueDate(current.due)} · ${current.priority} priority`}</p>
-          <div className="now-current-actions"><button className="primary" onClick={() => onFocus(current.id)}><Focus size={16} /> Start focus</button><button onClick={() => onOpenTask(current.id)}>Open task</button><button type="button" onClick={() => onComplete(current.id)}><Check size={16} /> Mark as done</button></div>
-          <label className="handoff-field"><span>What is the smallest visible next step?</span><input value={handoff} onChange={event => setHandoff(event.target.value)} onBlur={() => handoff.trim() && onUpdateTask(current.id, { handoffNote: handoff.trim(), nextAction: handoff.trim() })} placeholder={current.nextAction || "Next visible step…"} /></label>
-        </div> : <div className="priority-empty now-empty now-empty-productive"><div><strong>Nothing is claiming your attention.</strong><p>That’s not a void — it’s room to choose your next move on purpose.</p></div><div className="now-idle-actions"><button onClick={onStartAmbient}><TimerReset size={15} /><span><strong>I already started</strong><small>Track it without stopping</small></span></button><button onClick={onSmartCapture}><Sparkles size={15} /><span><strong>Make a task</strong><small>Say it naturally</small></span></button><button onClick={() => onGo("Today")}><CalendarDays size={15} /><span><strong>Protect time</strong><small>Plan a spot today</small></span></button></div></div>}
-      </section>
-      <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} studyAbroadContext={enableStudyAbroad ? buildStudyAbroadCopilotContext(studyAbroadHub) : null} />
+      </div>
+
+      <div className="atelier-now-bottom">
+        <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} studyAbroadContext={enableStudyAbroad ? buildStudyAbroadCopilotContext(studyAbroadHub) : null} />
+      </div>
+
+      <div className="atelier-now-utility">
+        <TimesheetNowStrip
+          timeTracking={timeTracking}
+          onChange={onTimeTrackingChange}
+          onOpenTimesheet={onOpenTimesheet}
+          nowMs={now}
+          workTitle={current?.title}
+          onFlash={flash}
+        />
+      </div>
     </div>
+    </>
+      );
+    })()}
     <section className="card week-brainstorm">
       <div className="card-head">
         <div><span className="section-icon blue"><Brain size={14} /></span><h2>Plan the week</h2></div>
@@ -3290,8 +3562,12 @@ function Dashboard({ tasks, projects, classes, brainCount, user, onComplete, onF
           const end = event.end ? new Date(event.end) : new Date(start.getTime() + 45 * 60_000);
           const startTime = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
           const endTime = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
-          return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong><span>{event.notes || (event.source === "LifeOS" ? "Focus block" : event.source)}</span></div></div>;
-        }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p><p style={{ marginTop: 6 }}>Share a day plan from Synapse → Settings → LifeOS to see meds and appointments here.</p></div>}
+          const place = eventPlaceLabel(event.location);
+          const meeting = resolveEventMeeting(event);
+          const notes = eventNotesLabel(event.notes);
+          const subtitle = place || notes || (event.source === "LifeOS" ? "Focus block" : event.source);
+          return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong>{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : <span>{subtitle}</span>}</div></div>;
+        }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p><p style={{ marginTop: 6 }}>Import a calendar or add an event to fill this view.</p></div>}
       </section>
       <DashboardGmailCard user={user} onSettings={() => onGo("Settings")} />
       <section className="card projects-card">
@@ -3443,8 +3719,127 @@ function SpaceModal({ initialKind, close, addProject, addClass }: { initialKind:
   </motion.form></motion.div>;
 }
 
-function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask }: { tasks: Task[]; classes: ClassRecord[]; onComplete: (id: number) => void; onNew: () => void; onTaskMenu: (id: number) => void; onOpenTask: (id: number) => void }) {
-  return <><div className="page-title"><div><p className="eyebrow">Make it happen</p><h1>Tasks</h1><p>A clear list of what needs your attention.</p></div><button className="primary" onClick={onNew}><Plus size={16} /> New task</button></div><section className="card task-table"><div className="table-view-label">List view</div><div className="table-head"><span>Task</span><span>Space</span><span>Due</span><span>Priority</span><span>Focus</span></div>{tasks.map(t => <div className={`table-row ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""}`} key={t.id}><button className="round-check" disabled={t.canceled} onClick={() => onComplete(t.id)}>{t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}</button><button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button><span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span><span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span><span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span><span>{t.focusMinutes}m · {t.energy}</span><button aria-label={`Actions for ${t.title}`} onClick={() => onTaskMenu(t.id)}><MoreHorizontal size={17} /></button></div>)}</section></>;
+function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDeleteMany }: { tasks: Task[]; classes: ClassRecord[]; onComplete: (id: number) => void; onNew: () => void; onTaskMenu: (id: number) => void; onOpenTask: (id: number) => void; onDeleteMany: (ids: number[]) => void }) {
+  const [selected, setSelected] = useState<number[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const taskIds = tasks.map((task) => task.id);
+  const visibleSelected = selected.filter((id) => taskIds.includes(id));
+  const allSelected = tasks.length > 0 && visibleSelected.length === tasks.length;
+  const someSelected = visibleSelected.length > 0 && !allSelected;
+
+  useEffect(() => {
+    setSelected((current) => {
+      const next = current.filter((id) => taskIds.includes(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [taskIds.join(",")]);
+
+  useEffect(() => {
+    if (!visibleSelected.length) setConfirmDelete(false);
+  }, [visibleSelected.length]);
+
+  const toggleOne = (id: number) => {
+    setConfirmDelete(false);
+    setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  };
+  const toggleAll = () => {
+    setConfirmDelete(false);
+    setSelected(allSelected ? [] : taskIds);
+  };
+  const clearSelection = () => {
+    setConfirmDelete(false);
+    setSelected([]);
+  };
+  const requestDelete = () => {
+    if (!visibleSelected.length) return;
+    setConfirmDelete(true);
+  };
+  const confirmDeleteSelected = () => {
+    if (!visibleSelected.length) return;
+    onDeleteMany(visibleSelected);
+    setSelected([]);
+    setConfirmDelete(false);
+  };
+
+  return (
+    <>
+      <div className="page-title">
+        <div>
+          <p className="eyebrow">Make it happen</p>
+          <h1>Tasks</h1>
+          <p>A clear list of what needs your attention.</p>
+        </div>
+        <div className="page-title-actions">
+          {visibleSelected.length > 0 ? (
+            confirmDelete ? (
+              <>
+                <span className="batch-delete-prompt" data-testid="tasks-batch-delete-prompt">
+                  Delete {visibleSelected.length} permanently?
+                </span>
+                <button type="button" className="ghost" onClick={() => setConfirmDelete(false)}>Cancel</button>
+                <button type="button" className="danger" data-testid="tasks-batch-delete-confirm" onClick={confirmDeleteSelected}>
+                  <Trash2 size={16} /> Confirm delete
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="ghost" onClick={clearSelection}>Clear ({visibleSelected.length})</button>
+                <button type="button" className="danger" data-testid="tasks-batch-delete" onClick={requestDelete}>
+                  <Trash2 size={16} /> Delete {visibleSelected.length}
+                </button>
+              </>
+            )
+          ) : null}
+          <button className="primary" onClick={onNew}><Plus size={16} /> New task</button>
+        </div>
+      </div>
+      <section className="card task-table" data-testid="tasks-table">
+        <div className="table-view-label">List view{visibleSelected.length ? ` · ${visibleSelected.length} selected` : ""}</div>
+        <div className="table-head table-head-selectable">
+          <button
+            type="button"
+            className={`select-check ${allSelected ? "is-on" : ""} ${someSelected ? "is-partial" : ""}`}
+            aria-label={allSelected ? "Deselect all tasks" : "Select all tasks"}
+            data-testid="tasks-select-all"
+            onClick={toggleAll}
+          >
+            {allSelected ? <Check size={12} /> : someSelected ? <span className="select-dash" /> : null}
+          </button>
+          <span>Task</span>
+          <span>Space</span>
+          <span>Due</span>
+          <span>Priority</span>
+          <span>Focus</span>
+        </div>
+        {tasks.map((t) => {
+          const isSelected = selected.includes(t.id);
+          return (
+            <div className={`table-row table-row-selectable ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""} ${isSelected ? "is-selected" : ""}`} key={t.id}>
+              <button
+                type="button"
+                className={`select-check ${isSelected ? "is-on" : ""}`}
+                aria-label={isSelected ? `Deselect ${t.title}` : `Select ${t.title}`}
+                aria-pressed={isSelected}
+                data-testid={`task-select-${t.id}`}
+                onClick={() => toggleOne(t.id)}
+              >
+                {isSelected ? <Check size={12} /> : null}
+              </button>
+              <button className="round-check" disabled={t.canceled} onClick={() => onComplete(t.id)} aria-label={t.done ? `Reopen ${t.title}` : `Complete ${t.title}`}>
+                {t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}
+              </button>
+              <button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button>
+              <span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span>
+              <span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span>
+              <span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span>
+              <span>{t.focusMinutes}m · {t.energy}</span>
+              <button aria-label={`Actions for ${t.title}`} onClick={() => onTaskMenu(t.id)}><MoreHorizontal size={17} /></button>
+            </div>
+          );
+        })}
+      </section>
+    </>
+  );
 }
 
 function ClassesView({ classes, tasks, notes, resources, selectedClassId, onSelectClass, onNewClass, onNewAcademicItem, onNewNote, onOpenTask, onOpenNote, onEditClass, onDeleteClass, onUploadResource, onDeleteResource, onReplaceResource, onDownloadResource }: { classes: ClassRecord[]; tasks: Task[]; notes: Note[]; resources: Resource[]; selectedClassId: string | null; onSelectClass: (id: string | null) => void; onNewClass: () => void; onNewAcademicItem: (id: string) => void; onNewNote: (classId?: string) => void; onOpenTask: (id: number) => void; onOpenNote: (id: string) => void; onEditClass: (id: string) => void; onDeleteClass: (id: string) => void; onUploadResource: (file: File, classId?: string) => Promise<void>; onDeleteResource: (resource: Resource) => Promise<void>; onReplaceResource: (resource: Resource, file: File) => Promise<void>; onDownloadResource: (resource: Resource) => Promise<void> }) {
@@ -3672,7 +4067,7 @@ function AcademicItemModal({ classRecord, close, add, defaults }: { classRecord:
   const [submission, setSubmission] = useState("");
   const [titleError, setTitleError] = useState("");
   const [pointsError, setPointsError] = useState("");
-  const isAssessment = type === "Quiz" || type === "Exam";
+  const isAssessment = true; // points optional on any coursework for grades tracking
   const possiblePoints = Number(pointsPossible);
   const earnedPoints = Number(pointsEarned);
   const useCurrentTime = () => {
@@ -3694,15 +4089,27 @@ function AcademicItemModal({ classRecord, close, add, defaults }: { classRecord:
 
 const tasksToCalendarEvents = (tasks: Task[]): CalendarEvent[] => {
   return tasks
-    .filter(task => !task.done && !task.canceled && task.due)
-    .map(task => ({
-      id: `task-${task.id}`,
-      title: task.title,
-      start: `${task.due}T09:00`,
-      color: task.color,
-      source: "LifeOS" as const,
-      notes: `${task.project} · ${task.focusMinutes}m · ${task.energy}`,
-    }));
+    .filter(task => !task.done && !task.canceled && task.due && !task.calendarEventId && Boolean(task.startTime?.trim()))
+    .map(task => {
+      const dueKey = /^\d{4}-\d{2}-\d{2}/.test(task.due) ? task.due.slice(0, 10) : task.due;
+      const match = task.startTime!.trim().match(/^(\d{1,2}):(\d{2})$/);
+      const hours = match ? Math.min(23, Math.max(0, Number(match[1]))) : 9;
+      const minutes = match ? Math.min(59, Math.max(0, Number(match[2]))) : 0;
+      const time = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+      const endMinutes = hours * 60 + minutes + Math.max(15, task.focusMinutes || 30);
+      const endHours = Math.min(23, Math.floor(endMinutes / 60));
+      const endMins = endMinutes >= 24 * 60 ? 59 : endMinutes % 60;
+      const end = `${dueKey}T${String(endHours).padStart(2, "0")}:${String(endMins).padStart(2, "0")}`;
+      return {
+        id: `task-${task.id}`,
+        title: task.title,
+        start: `${dueKey}T${time}`,
+        end,
+        color: task.color,
+        source: "LifeOS" as const,
+        notes: `${task.project} · ${task.focusMinutes}m · ${task.energy}`,
+      };
+    });
 };
 
 const workMeetingsToCalendarEvents = (meetings: WorkMeeting[], projects: WorkProject[]): CalendarEvent[] => {
@@ -3761,16 +4168,12 @@ function LegacyCalendarView({ events, weekStartsMonday, onNew, onImport, onEdit 
   const selectedIsToday = selected === toDateKey(now);
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 1440) * 100;
   const eventBlockStyle = (event: CalendarEvent) => {
-    const start = new Date(event.start);
-    const end = event.end ? new Date(event.end) : new Date(start.getTime() + 45 * 60_000);
-    const { startKey, endKey } = getEventDateRange(event);
-    const startMinutes = selected === startKey ? start.getHours() * 60 + start.getMinutes() : 0;
-    const endMinutes = selected === endKey ? end.getHours() * 60 + end.getMinutes() : 1440;
-    const durationMinutes = Math.max(20, endMinutes - startMinutes);
+    const { startMinutes, endMinutes } = getEventDayBlockMinutes(event, selected);
+    const durationMinutes = Math.max(5, endMinutes - startMinutes);
     return {
       top: `${(startMinutes / 1440) * 100}%`,
-      minHeight: 34,
-      height: `${Math.max(2.5, (durationMinutes / 1440) * 100)}%`,
+      minHeight: 12,
+      height: `${(durationMinutes / 1440) * 100}%`,
       borderColor: event.color,
       background: `linear-gradient(135deg, ${event.color}22, var(--panel))`,
     } as React.CSSProperties;
@@ -3826,16 +4229,12 @@ function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming
   const selectedIsToday = selected === todayKey;
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 1440) * 100;
   const eventBlockStyle = (event: CalendarEvent) => {
-    const start = new Date(event.start);
-    const end = event.end ? new Date(event.end) : new Date(start.getTime() + 45 * 60_000);
-    const { startKey, endKey } = getEventDateRange(event);
-    const startMinutes = selected === startKey ? start.getHours() * 60 + start.getMinutes() : 0;
-    const endMinutes = selected === endKey ? end.getHours() * 60 + end.getMinutes() : 1440;
-    const durationMinutes = Math.max(20, endMinutes - startMinutes);
+    const { startMinutes, endMinutes } = getEventDayBlockMinutes(event, selected);
+    const durationMinutes = Math.max(5, endMinutes - startMinutes);
     return {
       top: `${(startMinutes / 1440) * 100}%`,
-      minHeight: 34,
-      height: `${Math.max(2.5, (durationMinutes / 1440) * 100)}%`,
+      minHeight: 12,
+      height: `${(durationMinutes / 1440) * 100}%`,
       borderColor: event.color,
       background: `linear-gradient(135deg, ${event.color}22, var(--panel))`,
     } as React.CSSProperties;
@@ -3893,13 +4292,27 @@ function CalendarView({ events, tasks, weekStartsMonday, defaultView = "upcoming
           <div className="day-jump-row"><button onClick={() => changeDay(-1)}>Yesterday</button><button onClick={() => { const today = new Date(); setSelected(toDateKey(today)); setCursor(new Date(today.getFullYear(), today.getMonth(), 1)); }}>Today</button><button onClick={() => changeDay(1)}>Tomorrow</button></div>
           <div className="day-timeline">
             <div className="day-hours">{hours.map(hour => <div key={hour} className="day-hour"><span>{new Date(`${selected}T${String(hour).padStart(2, "0")}:00`).toLocaleTimeString("en-US", { hour: "numeric" })}</span></div>)}</div>
-            <div className="day-events-layer">{selectedIsToday && <div className="now-line" style={{ top: `${nowTop}%` }}><span>Now</span></div>}{selectedEvents.map(event => <button key={event.id} className="day-event-block" style={eventBlockStyle(event)} onClick={() => onEdit(event.id)}><strong>{event.title}</strong><span>{formatEventRange(event)}</span>{event.notes && <small>{event.notes}</small>}</button>)}</div>
+            <div className="day-events-layer">{selectedIsToday && <div className="now-line" style={{ top: `${nowTop}%` }}><span>Now</span></div>}{selectedEvents.map(event => {
+              const place = eventPlaceLabel(event.location);
+              const meeting = resolveEventMeeting(event);
+              const notes = eventNotesLabel(event.notes);
+              const detail = place || notes;
+              return <div key={event.id} className="day-event-block" style={eventBlockStyle(event)} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><strong>{event.title}</strong><span>{formatEventRange(event)}</span>{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : null}{detail ? <small>{detail}</small> : null}</div>;
+            })}</div>
           </div>
         </>}
       </section>
       <aside className="calendar-side">
-        <section className="card agenda-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>{selectedLabel}</h2></div><span className="count">{selectedEvents.length} events</span></div><div className="agenda-list">{selectedEvents.length ? selectedEvents.map(event => <button className="agenda-item editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)} · {event.source}</p>{event.notes && <small>{event.notes}</small>}</div><Pencil size={14} /></button>) : <div className="priority-empty"><strong>Nothing scheduled.</strong><p>That white space is not a bug. Protect it.</p></div>}</div></section>
-        <section className="card agenda-card"><div className="card-head"><div><span className="section-icon violet"><Clock3 size={14} /></span><h2>Today</h2></div><span className="count">{todayEvents.length}</span></div><div className="agenda-list">{todayEvents.slice(0, 4).map(event => <button className="agenda-item compact editable" key={event.id} onClick={() => onEdit(event.id)}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)}</p></div><Pencil size={14} /></button>)}</div></section>
+        <section className="card agenda-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>{selectedLabel}</h2></div><span className="count">{selectedEvents.length} events</span></div><div className="agenda-list">{selectedEvents.length ? selectedEvents.map(event => {
+          const place = eventPlaceLabel(event.location);
+          const meeting = resolveEventMeeting(event);
+          const notes = eventNotesLabel(event.notes);
+          return <div className="agenda-item editable" key={event.id} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)} · {event.source}</p>{place ? <small className="event-place"><MapPin size={11} /> {place}</small> : null}{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : null}{notes ? <small>{notes}</small> : null}</div><Pencil size={14} /></div>;
+        }) : <div className="priority-empty"><strong>Nothing scheduled.</strong><p>That white space is not a bug. Protect it.</p></div>}</div></section>
+        <section className="card agenda-card"><div className="card-head"><div><span className="section-icon violet"><Clock3 size={14} /></span><h2>Today</h2></div><span className="count">{todayEvents.length}</span></div><div className="agenda-list">{todayEvents.slice(0, 4).map(event => {
+          const meeting = resolveEventMeeting(event);
+          return <div className="agenda-item compact editable" key={event.id} role="button" tabIndex={0} onClick={() => onEdit(event.id)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); onEdit(event.id); } }}><i style={{ background: event.color }} /><div><strong>{event.title}</strong><p>{formatEventRange(event)}</p>{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : null}</div><Pencil size={14} /></div>;
+        })}</div></section>
         <section className="card agenda-card"><div className="card-head"><div><span className="section-icon orange"><ListTodo size={14} /></span><h2>Ready to place</h2></div><span className="count">{tasks.filter(task => !task.startTime || task.due !== selected).length}</span></div><div className="agenda-list">{tasks.filter(task => !task.startTime || task.due !== selected).slice(0, 4).map(task => <button className="agenda-item compact editable" key={task.id} onClick={() => onPlanTask(task.id)}><i style={{ background: task.color }} /><div><strong>{task.title}</strong><p>{task.focusMinutes}m · {task.energy} energy</p></div><Plus size={14} /></button>)}{!tasks.filter(task => !task.startTime || task.due !== selected).length && <div className="priority-empty"><strong>Everything has a place.</strong><p>Leave the rest unscheduled on purpose.</p></div>}</div></section>
       </aside>
     </div>
@@ -4001,6 +4414,58 @@ function GoogleCalendarAutoSync({ user }: { user: any }) {
   }, [user]);
   return null;
 }
+function SynapseDayPlanImport({ flash }: { flash: (message: string) => void }) {
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const importPlan = () => {
+    try {
+      setBusy(true);
+      setError("");
+      const events = parseSynapseDayPlan(text);
+      if (!events.length) throw new Error("No Synapse events found in that paste.");
+      window.dispatchEvent(new CustomEvent("lifeos:synapse-calendar-events", { detail: events }));
+      setText("");
+      flash(`${events.length} Synapse event${events.length === 1 ? "" : "s"} imported into your calendar`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not import Synapse day plan.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="card settings-card">
+      <div className="card-head">
+        <div>
+          <span className="section-icon blue"><HeartPulse size={14} /></span>
+          <h2>Synapse health day plan</h2>
+        </div>
+      </div>
+      <div className="settings-body">
+        <div className="integration-empty">
+          <strong>See upcoming meds and appointments beside your LifeOS day.</strong>
+          <p>In Synapse → Settings → LifeOS, tap Share day plan. Then paste the JSON here. Each import replaces earlier Synapse events so the plan stays current.</p>
+        </div>
+        <label htmlFor="synapse-day-plan">Synapse day-plan JSON</label>
+        <textarea
+          id="synapse-day-plan"
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          placeholder='{"v":1,"events":[...]}'
+          rows={5}
+        />
+        <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+          <button className="primary" type="button" disabled={busy || !text.trim()} onClick={importPlan}>
+            {busy ? "Importing…" : "Import Synapse plan"}
+          </button>
+        </div>
+        {error ? <p className="gmail-error" role="alert">{error}</p> : null}
+        <p className="settings-note">Read-only planning view. Log doses and change appointments in Synapse.</p>
+      </div>
+    </section>
+  );
+}
+
 function CalendarConnections({
   user,
   flash,
@@ -4234,58 +4699,6 @@ function IcalFeedsPanel({
   );
 }
 
-function SynapseDayPlanImport({ flash }: { flash: (message: string) => void }) {
-  const [text, setText] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const importPlan = () => {
-    try {
-      setBusy(true);
-      setError("");
-      const events = parseSynapseDayPlan(text);
-      if (!events.length) throw new Error("No Synapse events found in that paste.");
-      window.dispatchEvent(new CustomEvent("lifeos:synapse-calendar-events", { detail: events }));
-      setText("");
-      flash(`${events.length} Synapse event${events.length === 1 ? "" : "s"} imported into your calendar`);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not import Synapse day plan.");
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <section className="card settings-card">
-      <div className="card-head">
-        <div>
-          <span className="section-icon blue"><HeartPulse size={14} /></span>
-          <h2>Synapse health day plan</h2>
-        </div>
-      </div>
-      <div className="settings-body">
-        <div className="integration-empty">
-          <strong>See upcoming meds and appointments beside your LifeOS day.</strong>
-          <p>In Synapse → Settings → LifeOS, tap Share day plan. Then paste the JSON here. Each import replaces earlier Synapse events so the plan stays current.</p>
-        </div>
-        <label htmlFor="synapse-day-plan">Synapse day-plan JSON</label>
-        <textarea
-          id="synapse-day-plan"
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          placeholder='{"v":1,"events":[...]}'
-          rows={5}
-        />
-        <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-          <button className="primary" type="button" disabled={busy || !text.trim()} onClick={importPlan}>
-            {busy ? "Importing…" : "Import Synapse plan"}
-          </button>
-        </div>
-        {error ? <p className="gmail-error" role="alert">{error}</p> : null}
-        <p className="settings-note">Read-only planning view. Log doses and change appointments in Synapse.</p>
-      </div>
-    </section>
-  );
-}
-
 function GoogleCalendarIntegration({ user, flash }: { user?: any; flash: (message: string) => void }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -4356,7 +4769,7 @@ function OutlookCalendarIntegration({ user, flash }: { user?: any; flash: (messa
   const save = async (next: string[]) => { setSelected(next); try { const response = await fetch("/api/outlook/calendar", { method: "PUT", headers: { authorization: "Bearer " + await token(), "content-type": "application/json" }, body: JSON.stringify({ selectedCalendarIds: next }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not save calendar choices."); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save Outlook calendar choices."); } };
   const sync = async () => { try { setBusy(true); setError(""); const response = await fetch("/api/outlook/calendar/sync", { method: "POST", headers: { authorization: "Bearer " + await token() } }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not sync Outlook Calendar."); window.dispatchEvent(new CustomEvent("lifeos:outlook-calendar-events", { detail: Array.isArray(data.events) ? data.events : [] })); flash((data.events?.length || 0) + " Outlook events synced"); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not sync Outlook Calendar."); } finally { setBusy(false); } };
   const disconnect = async () => { if (!window.confirm("Disconnect Outlook Calendar? LifeOS will remove its encrypted connection record.")) return; try { setBusy(true); const response = await fetch("/api/outlook/calendar", { method: "DELETE", headers: { authorization: "Bearer " + await token() } }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not disconnect Outlook."); setConnected(false); setCalendars([]); setSelected([]); flash("Outlook Calendar disconnected"); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not disconnect Outlook Calendar."); } finally { setBusy(false); } };
-  return <section className="card settings-card calendar-connection-card"><div className="card-head"><div><span className="section-icon outlook-calendar-icon"><CalendarDays size={14} /></span><h2>Outlook Calendar</h2></div>{connected && <button onClick={() => void sync()} disabled={busy}><RefreshCw size={14} /> {busy ? "Syncing…" : "Sync now"}</button>}</div><div className="settings-body">{loading ? <p className="settings-note">Checking Outlook Calendar…</p> : !connected ? <div className="integration-empty"><strong>Connect Outlook Calendar.</strong><p>Choose the Microsoft calendars LifeOS can read. Sync is read-only: LifeOS never changes events in Outlook.</p><ol className="integration-steps"><li>Press <b>Connect Outlook Calendar</b> and sign in to Microsoft.</li><li>Approve read-only calendar access.</li><li>Back in LifeOS, check the calendars you want and press <b>Sync now</b>.</li></ol><details className="integration-help"><summary>First-time Microsoft setup (only if Connect does not open)</summary><p>In Microsoft Entra, add <code>https://lifeos-mu-three.vercel.app/api/outlook/callback</code> as a Web redirect URL. Then add <code>MICROSOFT_OUTLOOK_CLIENT_ID</code> and <code>MICROSOFT_OUTLOOK_CLIENT_SECRET</code> to Vercel, and grant Microsoft Graph delegated <code>Calendars.Read</code>.</p></details><button className="primary" onClick={() => void connect()} disabled={busy}><CalendarDays size={15} /> {busy ? "Opening Microsoft…" : "Connect Outlook Calendar"}</button></div> : <><div className="icloud-status"><span><CheckCircle2 size={15} /> Connected securely</span><button onClick={() => void disconnect()} disabled={busy}>Disconnect</button></div><p className="settings-note">Choose the Outlook calendars LifeOS should import.</p>{calendars.length ? <div className="icloud-calendar-list">{calendars.map(calendar => <label key={calendar.id} className="outlook-calendar-option"><input type="checkbox" checked={selected.includes(calendar.id)} onChange={event => void save(event.target.checked ? [...selected, calendar.id] : selected.filter(id => id !== calendar.id))} /><i style={{ background: calendar.color || "#0078d4" }} /><span>{calendar.name}{calendar.primary ? " · Default" : ""}</span></label>)}</div> : <div className="integration-empty"><strong>No Outlook calendars found.</strong><p>Try reconnecting your Microsoft account.</p><button onClick={() => void connect()} disabled={busy}>Reconnect Outlook</button></div>}</>}{error && <p className="gmail-error" role="alert">{error}</p>}</div></section>;
+  return <section className="card settings-card calendar-connection-card"><div className="card-head"><div><span className="section-icon outlook-calendar-icon"><CalendarDays size={14} /></span><h2>Outlook Calendar</h2></div>{connected && <button onClick={() => void sync()} disabled={busy}><RefreshCw size={14} /> {busy ? "Syncing…" : "Sync now"}</button>}</div><div className="settings-body">{loading ? <p className="settings-note">Checking Outlook Calendar…</p> : !connected ? <div className="integration-empty"><strong>Connect Outlook Calendar.</strong><p>Choose the Microsoft calendars LifeOS can read. Sync is read-only: LifeOS never changes events in Outlook.</p><ol className="integration-steps"><li>Press <b>Connect Outlook Calendar</b> and sign in to Microsoft.</li><li>Approve read-only calendar access.</li><li>Back in LifeOS, check the calendars you want and press <b>Sync now</b>.</li></ol><details className="integration-help"><summary>First-time Microsoft setup (only if Connect does not open)</summary><p>In Microsoft Entra, add <code>https://YOUR_HOST/api/outlook/callback</code> as a Web redirect URL. Then add <code>MICROSOFT_OUTLOOK_CLIENT_ID</code> and <code>MICROSOFT_OUTLOOK_CLIENT_SECRET</code> to Vercel, and grant Microsoft Graph delegated <code>Calendars.Read</code>.</p></details><button className="primary" onClick={() => void connect()} disabled={busy}><CalendarDays size={15} /> {busy ? "Opening Microsoft…" : "Connect Outlook Calendar"}</button></div> : <><div className="icloud-status"><span><CheckCircle2 size={15} /> Connected securely</span><button onClick={() => void disconnect()} disabled={busy}>Disconnect</button></div><p className="settings-note">Choose the Outlook calendars LifeOS should import.</p>{calendars.length ? <div className="icloud-calendar-list">{calendars.map(calendar => <label key={calendar.id} className="outlook-calendar-option"><input type="checkbox" checked={selected.includes(calendar.id)} onChange={event => void save(event.target.checked ? [...selected, calendar.id] : selected.filter(id => id !== calendar.id))} /><i style={{ background: calendar.color || "#0078d4" }} /><span>{calendar.name}{calendar.primary ? " · Default" : ""}</span></label>)}</div> : <div className="integration-empty"><strong>No Outlook calendars found.</strong><p>Try reconnecting your Microsoft account.</p><button onClick={() => void connect()} disabled={busy}>Reconnect Outlook</button></div>}</>}{error && <p className="gmail-error" role="alert">{error}</p>}</div></section>;
 }
 function ICloudCalendarAutoSync({ user }: { user: any }) {
   useEffect(() => {
@@ -4452,8 +4865,91 @@ function ICloudCalendarIntegration({ user, flash }: { user?: any; flash: (messag
   return <section className="card settings-card icloud-card"><div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>iCloud Calendar</h2></div>{connected && <button onClick={() => void sync()} disabled={busy}><RefreshCw size={14} /> {busy ? "Syncing…" : "Sync now"}</button>}</div><div className="settings-body">{loading ? <p className="settings-note">Checking iCloud Calendar…</p> : !configured ? <div className="integration-empty"><strong>One setup step left.</strong><p>Add <code>ICLOUD_CONNECTION_SECRET</code> in Vercel to turn on encrypted iCloud Calendar connections.</p></div> : !connected ? <form className="icloud-connect-form" onSubmit={connect}><p className="settings-note">Use an Apple app-specific password — never your normal Apple Account password. LifeOS encrypts it server-side.</p><label>Apple ID<input type="email" required autoComplete="username" value={appleId} onChange={event => setAppleId(event.target.value)} placeholder="you@icloud.com" /></label><label>App-specific password<input type="password" required autoComplete="new-password" value={appPassword} onChange={event => setAppPassword(event.target.value)} placeholder="xxxx-xxxx-xxxx-xxxx" /></label><button className="primary" disabled={busy}>{busy ? "Connecting…" : "Connect iCloud Calendar"}</button></form> : <><div className="icloud-status"><span><CheckCircle2 size={15} /> Connected securely</span><button onClick={() => void disconnect()} disabled={busy}>Disconnect</button></div><p className="settings-note">Choose the calendars LifeOS should import. Sync is read-only for now, so it won’t alter Apple Calendar.</p>{calendars.length ? <div className="icloud-calendar-list">{calendars.map(calendar => <label key={calendar.url}><input type="checkbox" checked={selected.includes(calendar.url)} onChange={event => void saveSelection(event.target.checked ? [...selected, calendar.url] : selected.filter(url => url !== calendar.url))} /><i style={{ background: calendar.color || "#8b7cff" }} /><span>{calendar.name}</span></label>)}</div> : <div className="integration-empty"><strong>Calendars need a refresh.</strong><p>Your connection is safe. Refreshing re-reads the available iCloud calendars.</p><button onClick={() => void refreshCalendars()} disabled={busy}>Refresh calendars</button></div>}</>}{error && <p className="gmail-error" role="alert">{error}</p>}</div></section>;
 }
 
-function SettingsView({ dark, setDark, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport, user, onLogout, onOpenTask, onRestoreTask }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; onLogout?: () => void; onOpenTask?: (id: number) => void; onRestoreTask?: (id: number) => void }) {
+function WorkspaceHubsEditor({
+  settings,
+  update,
+  onRequestPaywall,
+}: {
+  settings: SettingsState;
+  update: (updates: Partial<SettingsState>) => void;
+  onRequestPaywall?: (hub: View) => void;
+}) {
+  const [editingKey, setEditingKey] = useState<WorkspaceColorKey | null>(null);
+  const hubsUnlocked = canAccessPaidHubs(settings.entitlement);
+
+  return (
+    <div className="workspace-hubs">
+      <div className="workspace-hubs-head">
+        <span className="settings-field-label">Hubs</span>
+        <p className="settings-note">Home, School, and Career are free. Work, Study Abroad, Treasury, and Mastery need Pro.</p>
+      </div>
+      {WORKSPACE_COLOR_OPTIONS.map(({ key, label, enableKey, navName }) => {
+        const current = workspaceColorFor(settings, key);
+        const editing = editingKey === key;
+        const paid = isPaidHub(navName);
+        const enabled = paid ? hubsUnlocked && settings[enableKey] !== false : settings[enableKey] !== false;
+        return (
+          <div key={key} className={`workspace-hub-row${editing ? " editing" : ""}`}>
+            <div className="workspace-hub-summary">
+              <button
+                type="button"
+                className="workspace-color-swatch"
+                style={{ background: current }}
+                aria-label={`${label} color`}
+                aria-expanded={editing}
+                onClick={() => setEditingKey(open => (open === key ? null : key))}
+              />
+              <strong>{label}{paid && !hubsUnlocked ? " · Pro" : ""}</strong>
+              <button
+                type="button"
+                className={`toggle ${enabled ? "on" : ""}`}
+                onClick={() => {
+                  if (paid && !hubsUnlocked && !enabled) {
+                    onRequestPaywall?.(navName as View);
+                    return;
+                  }
+                  update({ [enableKey]: !enabled });
+                }}
+                aria-label={`${enabled ? "Hide" : "Show"} ${label}`}
+                aria-pressed={enabled}
+              >
+                <span />
+              </button>
+            </div>
+            {editing ? (
+              <div className="accent-picker workspace-hub-picker">
+                {SPACE_COLORS.map(color => (
+                  <button
+                    key={`${key}-${color}`}
+                    type="button"
+                    className={current.toLowerCase() === color.toLowerCase() ? "selected" : ""}
+                    style={{ background: color }}
+                    onClick={() => {
+                      update({
+                        workspaceColors: {
+                          ...DEFAULT_WORKSPACE_COLORS,
+                          ...settings.workspaceColors,
+                          [key]: color,
+                        },
+                      });
+                      setEditingKey(null);
+                    }}
+                    aria-label={`Set ${label} color ${color}`}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SettingsView({ dark, setDark, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport, user, userId, onLogout, onOpenTask, onRestoreTask, onRequestPaywall, icalSubscriptions = [], onIcalSubscriptionsChange, onReplaceIcalSubscriptionEvents, onRemoveIcalSubscriptionEvents, onSyncIcalSubscriptions }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; userId?: string | null; onLogout?: () => void; onOpenTask?: (id: number) => void; onRestoreTask?: (id: number) => void; onRequestPaywall?: (hub: View) => void; icalSubscriptions?: IcalSubscription[]; onIcalSubscriptionsChange?: (subscriptions: IcalSubscription[]) => void; onReplaceIcalSubscriptionEvents?: (subscriptionId: string, events: CalendarEvent[]) => void; onRemoveIcalSubscriptionEvents?: (subscriptionId: string) => void; onSyncIcalSubscriptions?: () => void }) {
   const archivedTasks = tasks.filter((task) => task.done || task.canceled || task.status === "Done" || task.status === "Canceled");
+  const [archivesOpen, setArchivesOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<SettingsBentoSection | "account" | null>(null);
   const requestNotifications = async () => {
     if (!("Notification" in window)) {
       flash("Notifications are not supported here");
@@ -4462,15 +4958,226 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
     const permission = await Notification.requestPermission();
     flash(permission === "granted" ? "Browser notifications enabled" : "Notifications not enabled");
   };
-  return <><div className="page-title"><div><p className="eyebrow">Make it yours</p><h1>Settings</h1><p>Theme, notifications, focus defaults, calendar behavior, data, and workspace controls.</p></div><button className="primary" onClick={onExport}><Download size={16} /> Export data</button></div><div className="settings-layout"><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Palette size={14} /></span><h2>Appearance</h2></div></div><div className="settings-body"><div className="theme-options"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button></div><div className="accent-picker">{SPACE_COLORS.map(color => <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />)}</div><p className="settings-note" style={{ marginTop: 4 }}>Default accent for Now, Tasks, and the rest of LifeOS.</p><div className="workspace-color-block"><span className="settings-field-label">Workspace colors</span><p className="settings-note" style={{ margin: "4px 0 10px" }}>Life, School, and Work each get their own tint in the sidebar and inside that hub.</p>{([
-                ["life", "Life"],
-                ["school", "School"],
-                ["work", "Work"],
-                ["studyAbroad", "Study Abroad"],
-              ] as const).map(([key, label]) => {
-                const current = settings.workspaceColors?.[key] || DEFAULT_WORKSPACE_COLORS[key];
-                return <div key={key} className="workspace-color-row"><strong>{label}</strong><div className="accent-picker">{SPACE_COLORS.map(color => <button key={`${key}-${color}`} type="button" className={current.toLowerCase() === color.toLowerCase() ? "selected" : ""} style={{ background: color }} onClick={() => update({ workspaceColors: { ...DEFAULT_WORKSPACE_COLORS, ...settings.workspaceColors, [key]: color } })} aria-label={`Set ${label} color ${color}`} />)}</div></div>;
-              })}</div><ToggleRow title="Compact mode" desc="Tighten spacing when you want more on screen." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} /><ToggleRow title="Reduce motion" desc="Calmer transitions for lower sensory load." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Bell size={14} /></span><h2>Notifications</h2></div><button onClick={requestNotifications}>Enable browser</button></div><div className="settings-body"><ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} /><ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} /><ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} /><ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} /></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon green"><Focus size={14} /></span><h2>Focus defaults</h2></div></div><div className="settings-body"><div className="settings-grid-fields"><label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label><label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label></div><p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div><div className="settings-body"><ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} /><div className="settings-calendar-default"><span className="settings-field-label">Default view</span><p className="settings-note" style={{ margin: "4px 0 10px" }}>Opens Calendar on this tab first.</p><div className="calendar-mode-tabs" role="group" aria-label="Default calendar view">{(["upcoming", "month", "day"] as CalendarDefaultView[]).map(option => <button key={option} type="button" className={normalizeCalendarDefaultView(settings.defaultCalendarView) === option ? "selected" : ""} onClick={() => update({ defaultCalendarView: option })}>{option === "upcoming" ? "Upcoming" : option === "month" ? "Month" : "Day"}</button>)}</div></div><p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon blue"><Settings size={14} /></span><h2>Environments</h2></div></div><div className="settings-body"><ToggleRow title="LifeOS" desc="Personal task management and life organization." checked={settings.enableLifeOS !== false} onChange={(enableLifeOS) => update({ enableLifeOS })} /><ToggleRow title="SchoolOS" desc="Academic coursework, assignments, and learning." checked={settings.enableSchoolOS !== false} onChange={(enableSchoolOS) => update({ enableSchoolOS })} /><ToggleRow title="WorkOS" desc="Professional projects, tasks, and deliverables." checked={settings.enableWorkOS !== false} onChange={(enableWorkOS) => update({ enableWorkOS })} /><ToggleRow title="Study Abroad" desc="Multi-country research and applications for studying abroad." checked={settings.enableStudyAbroad !== false} onChange={(enableStudyAbroad) => update({ enableStudyAbroad })} /><ToggleRow title="MasterOS" desc="Teaching app — classes, lessons, whiteboard, gradebook. Web + iPad only; not on iPhone." checked={settings.enableMasterOS !== false} onChange={(enableMasterOS) => update({ enableMasterOS })} />{settings.enableMasterOS !== false && <p className="settings-note"><a href="/masteros">Open MasterOS</a> · type <code>/mos</code> on Now · sidebar under Environments.</p>}</div></section><GmailIntegration user={user} flash={flash} /><section className="card settings-card"><div className="card-head"><div><span className="section-icon orange"><Archive size={14} /></span><h2>Archives</h2></div><span className="count">{archivedTasks.length}</span></div><div className="settings-body"><p className="settings-note">Done and canceled tasks live here so your active lists stay clear. Restore any of them to put it back on your active list.</p><div className="agenda-list">{archivedTasks.length ? archivedTasks.slice(0, 40).map((task) => <div key={task.id} className="agenda-item compact archived-task-row"><i style={{ background: task.color || "var(--accent)" }} /><button type="button" className="archived-task-open" onClick={() => onOpenTask?.(task.id)}><strong>{task.title}</strong><p>{task.canceled || task.status === "Canceled" ? "Canceled" : "Done"}{task.project ? ` · ${task.project}` : ""}{task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</p></button><button type="button" className="archived-task-restore" onClick={() => onRestoreTask?.(task.id)}>Restore</button></div>) : <div className="priority-empty"><strong>No archived tasks yet.</strong><p>When you mark something done or canceled, it shows up here.</p></div>}</div></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon dark-icon"><Shield size={14} /></span><h2>Privacy & data</h2></div></div><div className="settings-body"><div className="data-stats"><span>{tasks.length}<small>priorities</small></span><span>{projects.length}<small>projects</small></span><span>{brainItems.length}<small>brain</small></span></div><div className="settings-actions">{onSync && <button onClick={onSync}><Download size={15} /> Sync from cloud</button>}<button onClick={onExport}><Download size={15} /> Export JSON</button><button onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button><button className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button></div><p className="settings-note">All your data syncs to the cloud. Access it from any device by visiting this link. Deleted brain thoughts stay deleted unless you capture them again.</p></div></section><section className="card settings-card"><div className="card-head"><div><span className="section-icon violet"><Command size={14} /></span><h2>Shortcuts</h2></div></div><div className="settings-body"><ToggleRow title="Show capture commands" desc="When you click the Now capture bar, show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} /><div className="shortcut-list" style={{ marginTop: 12 }}><div><kbd>⌘ K</kbd><span>Command palette</span></div><div><kbd>/t</kbd><span>Add task (Now capture bar)</span></div><div><kbd>/break</kbd><span>Take a break</span></div><div><kbd>/focus</kbd><span>Start focus</span></div><div><kbd>/w</kbd><span>Start ambient activity</span></div><div><kbd>/a</kbd><span>AI task</span></div><div><kbd>/spaces</kbd><span>Open Spaces</span></div><div><kbd>/mos</kbd><span>Open MasterOS (web / iPad)</span></div></div><p className="settings-note">Capture commands live in the Now capture bar. Type / to filter after you hide the cheatsheet.</p></div></section><section className="card settings-card workspace-settings"><div className="card-head"><div><span className="section-icon blue"><SlidersHorizontal size={14} /></span><h2>Account</h2></div></div><div className="settings-body"><div className="workspace-profile"><div className="avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div><div><strong>{user?.displayName || 'User'}</strong><p>{user?.email}</p></div></div><button onClick={onLogout} style={{marginTop: '16px', width: '100%', padding: '8px 12px', background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'}} onMouseEnter={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.2)'}} onMouseLeave={(e) => {e.currentTarget.style.background = 'rgba(255,107,107,0.1)'}}>Sign out</button><p className="settings-note" style={{marginTop: '16px'}}>Your data is securely stored in the cloud and synced across all your devices.</p></div></section></div></>;
+  const sectionMeta: Record<SettingsBentoSection | "account", { title: string; blurb: string }> = {
+    appearance: { title: "Appearance", blurb: "Theme, accent, density, and capture shortcuts." },
+    hubs: { title: "Hubs", blurb: "Choose which spaces show in the sidebar." },
+    connections: { title: "Connections", blurb: "Gmail, calendars, assistant access, and calendar defaults." },
+    focus: { title: "Focus", blurb: "Default session length and energy." },
+    privacy: { title: "Privacy & data", blurb: "Export, sync, archives, subscription, and session replay." },
+    notifications: { title: "Notifications", blurb: "Digest, focus nudges, and calendar alerts." },
+    account: { title: "Account", blurb: "Profile and sign out." },
+  };
+  const panel = activeSection ? sectionMeta[activeSection] : null;
+
+  return (
+    <>
+      <div className="page-title">
+        <div>
+          <p className="eyebrow">Make it yours</p>
+          <h1>Settings</h1>
+          <p>{panel ? panel.blurb : "Appearance, hubs, notifications, connections, and account — in one place."}</p>
+        </div>
+        <div className="settings-title-actions">
+          {activeSection ? (
+            <button type="button" onClick={() => setActiveSection(null)}>← All settings</button>
+          ) : (
+            <button type="button" onClick={() => setActiveSection("account")}>Account</button>
+          )}
+          <button className="primary" type="button" onClick={onExport}><Download size={16} /> Export data</button>
+        </div>
+      </div>
+
+      {!activeSection ? (
+        <SettingsBentoGrid reduceMotion={settings.reduceMotion} onSelect={setActiveSection} />
+      ) : (
+        <div className="settings-bento-panel">
+          <header className="settings-bento-panel-head">
+            <button type="button" className="settings-bento-back" onClick={() => setActiveSection(null)}>← Back</button>
+            <h2>{panel?.title}</h2>
+          </header>
+
+          {activeSection === "appearance" && (
+            <section className="card settings-card">
+              <div className="settings-body settings-body-dense">
+                <div className="theme-options">
+                  <button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button>
+                  <button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button>
+                </div>
+                <div className="accent-picker">
+                  {SPACE_COLORS.map(color => (
+                    <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />
+                  ))}
+                </div>
+                <p className="settings-note">Default accent for Now, Tasks, and the rest of LifeOS.</p>
+                <div className="settings-toggle-pair">
+                  <ToggleRow title="Compact" desc="Tighter spacing." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} />
+                  <ToggleRow title="Reduce motion" desc="Calmer transitions." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} />
+                </div>
+                {settings.enableMasterOS !== false && <p className="settings-note">Mastery · type <code>/mos</code> on Now.</p>}
+                <div className="settings-panel-divider" />
+                <ToggleRow title="Show capture commands" desc="When you open Search anything (⌘K), show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} />
+                <div className="shortcut-list" style={{ marginTop: 12 }}>
+                  <div><kbd>⌘ K</kbd><span>Command bar / search</span></div>
+                  <div><kbd>/t</kbd><span>Add task</span></div>
+                  <div><kbd>/break</kbd><span>Take a break</span></div>
+                  <div><kbd>/focus</kbd><span>Start focus</span></div>
+                  <div><kbd>/w</kbd><span>Start ambient activity</span></div>
+                  <div><kbd>/a</kbd><span>AI task</span></div>
+                  <div><kbd>/spaces</kbd><span>Open Spaces</span></div>
+                  <div><kbd>/mos</kbd><span>Open Mastery (web / iPad)</span></div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {activeSection === "hubs" && (
+            <section className="card settings-card">
+              <div className="settings-body">
+                <WorkspaceHubsEditor settings={settings} update={update} onRequestPaywall={onRequestPaywall} />
+              </div>
+            </section>
+          )}
+
+          {activeSection === "notifications" && (
+            <section className="card settings-card">
+              <div className="card-head"><div /><button type="button" onClick={requestNotifications}>Enable browser</button></div>
+              <div className="settings-body">
+                <ToggleRow title="Daily digest" desc="A quick morning/evening summary of what matters." checked={settings.dailyDigest} onChange={(dailyDigest) => update({ dailyDigest })} />
+                <ToggleRow title="Focus reminders" desc="Gentle nudges when a priority is waiting." checked={settings.focusReminders} onChange={(focusReminders) => update({ focusReminders })} />
+                <ToggleRow title="Calendar alerts" desc="Remind you before events you added or imported." checked={settings.calendarAlerts} onChange={(calendarAlerts) => update({ calendarAlerts })} />
+                <ToggleRow title="Sound effects" desc="Optional little audio cues for starts and completions." checked={settings.soundEffects} onChange={(soundEffects) => update({ soundEffects })} />
+              </div>
+            </section>
+          )}
+
+          {activeSection === "focus" && (
+            <section className="card settings-card">
+              <div className="settings-body">
+                <div className="settings-grid-fields">
+                  <label>Default focus length<input type="number" min={5} max={240} step={5} value={settings.defaultFocusMinutes} onChange={event => update({ defaultFocusMinutes: Math.max(5, Number(event.target.value) || 45) })} /></label>
+                  <label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label>
+                </div>
+                <p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p>
+              </div>
+            </section>
+          )}
+
+          {activeSection === "connections" && (
+            <div className="settings-bento-stack">
+              <section className="card settings-card">
+                <div className="card-head"><div><span className="section-icon orange"><CalendarDays size={14} /></span><h2>Calendar</h2></div></div>
+                <div className="settings-body">
+                  <ToggleRow title="Week starts Monday" desc="Use a workweek-style calendar layout preference." checked={settings.weekStartsMonday} onChange={(weekStartsMonday) => update({ weekStartsMonday })} />
+                  <div className="settings-calendar-default">
+                    <span className="settings-field-label">Default view</span>
+                    <p className="settings-note" style={{ margin: "4px 0 10px" }}>Opens Calendar on this tab first.</p>
+                    <div className="calendar-mode-tabs" role="group" aria-label="Default calendar view">
+                      {(["upcoming", "month", "day"] as CalendarDefaultView[]).map(option => (
+                        <button key={option} type="button" className={normalizeCalendarDefaultView(settings.defaultCalendarView) === option ? "selected" : ""} onClick={() => update({ defaultCalendarView: option })}>
+                          {option === "upcoming" ? "Upcoming" : option === "month" ? "Month" : "Day"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="settings-note">iCal imports are editable locally. Full private Apple Calendar sync needs a backend/CalDAV layer later.</p>
+                </div>
+              </section>
+              <GmailIntegration user={user} flash={flash} />
+              <CalendarConnections
+                user={user}
+                flash={flash}
+                subscriptions={icalSubscriptions}
+                onSubscriptionsChange={onIcalSubscriptionsChange ?? (() => {})}
+                onReplaceSubscriptionEvents={onReplaceIcalSubscriptionEvents ?? (() => {})}
+                onRemoveSubscriptionEvents={onRemoveIcalSubscriptionEvents ?? (() => {})}
+                onSyncAll={onSyncIcalSubscriptions ?? (() => {})}
+              />
+              <AssistantAccessPanel user={user} userId={userId} flash={flash} />
+            </div>
+          )}
+
+          {activeSection === "privacy" && (
+            <div className="settings-bento-stack">
+              <section className="card settings-card">
+                <div className="settings-body">
+                  <div className="data-stats">
+                    <span>{tasks.length}<small>priorities</small></span>
+                    <span>{projects.length}<small>projects</small></span>
+                    <span>{brainItems.length}<small>brain</small></span>
+                  </div>
+                  <SessionReplaySettingsRow />
+                  <div className="settings-actions">
+                    {onSync && <button type="button" onClick={onSync}><Download size={15} /> Sync from cloud</button>}
+                    <button type="button" onClick={onExport}><Download size={15} /> Export JSON</button>
+                    <button type="button" onClick={onImport}><Download size={15} style={{ transform: "scaleY(-1)" }} /> Import JSON</button>
+                    <button type="button" className="danger-settings" onClick={onReset}><Trash2 size={15} /> Reset local data</button>
+                  </div>
+                  <p className="settings-note">All your data syncs to the cloud. Session replay stays off unless you opt in; inputs are always masked.</p>
+                </div>
+              </section>
+              <SubscriptionCheckoutCard
+                entitlement={settings.entitlement}
+                onEntitlementChange={(entitlement) => {
+                  update({ entitlement });
+                  flash(!entitlement.expiresAt ? "LifeOS Pro unlocked for life." : entitlement.status === "promo" ? "Paid hubs unlocked for one year." : "LifeOS Pro unlocked for paid hubs.");
+                }}
+                onSubscribe={(offerId) => {
+                  const label = offerId === "pro-lifetime" ? "lifetime" : offerId === "pro-yearly" ? "annual" : "monthly";
+                  flash(`Selected ${label} plan — finish store checkout when available, or redeem a promo code.`);
+                }}
+              />
+              <section className="card settings-card settings-archives-card">
+                <div className="card-head">
+                  <button type="button" className="settings-archives-toggle" aria-expanded={archivesOpen} onClick={() => setArchivesOpen(open => !open)}>
+                    <div><span className="section-icon orange"><Archive size={14} /></span><h2>Archives</h2><ChevronDown size={16} className={`settings-archives-caret${archivesOpen ? " open" : ""}`} aria-hidden /></div>
+                    <span className="count">{archivedTasks.length}</span>
+                  </button>
+                </div>
+                {archivesOpen ? (
+                  <div className="settings-body">
+                    <p className="settings-note">Done and canceled tasks live here so your active lists stay clear.</p>
+                    <div className="agenda-list">
+                      {archivedTasks.length ? archivedTasks.slice(0, 40).map((task) => (
+                        <div key={task.id} className="agenda-item compact archived-task-row">
+                          <i style={{ background: task.color || "var(--accent)" }} />
+                          <button type="button" className="archived-task-open" onClick={() => onOpenTask?.(task.id)}>
+                            <strong>{task.title}</strong>
+                            <p>{task.canceled || task.status === "Canceled" ? "Canceled" : "Done"}{task.project ? ` · ${task.project}` : ""}{task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</p>
+                          </button>
+                          <button type="button" className="archived-task-restore" onClick={() => onRestoreTask?.(task.id)}>Restore</button>
+                        </div>
+                      )) : (
+                        <div className="priority-empty"><strong>No archived tasks yet.</strong><p>When you mark something done or canceled, it shows up here.</p></div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            </div>
+          )}
+
+          {activeSection === "account" && (
+            <section className="card settings-card workspace-settings">
+              <div className="settings-body">
+                <div className="workspace-profile">
+                  <div className="avatar">{user?.email?.charAt(0).toUpperCase() || "U"}</div>
+                  <div><strong>{user?.displayName || "User"}</strong><p>{user?.email}</p></div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  style={{ marginTop: "16px", width: "100%", padding: "8px 12px", background: "rgba(255,107,107,0.1)", color: "#ff6b6b", border: "1px solid rgba(255,107,107,0.3)", borderRadius: "6px", fontSize: "13px", cursor: "pointer" }}
+                >
+                  Sign out
+                </button>
+                <p className="settings-note" style={{ marginTop: "16px" }}>Your data is securely stored in the cloud and synced across all your devices.</p>
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+    </>
+  );
 }
 
 function BrainView({ items, onCapture, onArchive, onConvertToTask }: { items: string[]; onCapture: () => void; onArchive: (index: number) => void; onConvertToTask: (index: number, text: string) => void }) {
@@ -4557,11 +5264,57 @@ function ResourcesView({ resources, classes, onUpload, onDelete, onReplace, onDo
   </>;
 }
 
+function AuthEntry({ onLoginSuccess }: { onLoginSuccess: () => void }) {
+  const [showLogin, setShowLogin] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setShowLogin(hasCompletedPreAuthOnboarding());
+  }, []);
+
+  if (showLogin === null) {
+    return (
+      <div className="ob-shell" aria-busy="true">
+        <div className="ob-card" style={{ gridTemplateColumns: "1fr", maxWidth: 420 }}>
+          <div className="ob-panel">
+            <div className="ob-brand">LifeOS</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!showLogin) {
+    return (
+      <PreAuthOnboarding
+        onFinished={() => {
+          markPreAuthOnboardingComplete();
+          setShowLogin(true);
+        }}
+      />
+    );
+  }
+
+  return <LoginPage onLoginSuccess={onLoginSuccess} />;
+}
+
 function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [ageBlocked, setAgeBlocked] = useState(false);
+
+  const requireAge = () => {
+    if (ageConfirmed) {
+      setAgeBlocked(false);
+      return true;
+    }
+    setAgeBlocked(true);
+    setError(AGE_GATE_BLOCKED_MESSAGE);
+    return false;
+  };
 
   const handleGoogleSignIn = async () => {
+    if (!requireAge()) return;
     setIsLoading(true);
     setError(null);
     try {
@@ -4584,6 +5337,7 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   };
 
   const handleTestLogin = () => {
+    if (!requireAge()) return;
     if (typeof window !== 'undefined') {
       sessionStorage.setItem(STORAGE_KEYS.USER_ID, TEST_USER.ID);
       logger.debug('Test login initiated');
@@ -4622,6 +5376,18 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
           Your personal operating system for priorities, focus, and growth
         </p>
 
+        <AgeGateCheckbox
+          tone="dark"
+          onChange={(confirmed) => {
+            setAgeConfirmed(confirmed);
+            if (confirmed) {
+              setAgeBlocked(false);
+              setError(null);
+            }
+          }}
+        />
+        {ageBlocked ? <p role="alert" style={ageGateBlockedStyle("dark")}>{AGE_GATE_BLOCKED_MESSAGE}</p> : null}
+
         <div style={{ marginBottom: '32px' }}>
           <div style={{
             fontSize: '12px',
@@ -4632,7 +5398,7 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
           }}>New here?</div>
           <button
             onClick={handleGoogleSignIn}
-            disabled={isLoading}
+            disabled={isLoading || !ageConfirmed}
             style={{
               width: '100%',
               padding: '12px 16px',
@@ -4642,13 +5408,13 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
               borderRadius: '8px',
               fontSize: '14px',
               fontWeight: '500',
-              cursor: isLoading ? 'not-allowed' : 'pointer',
-              opacity: isLoading ? 0.6 : 1,
+              cursor: isLoading || !ageConfirmed ? 'not-allowed' : 'pointer',
+              opacity: isLoading || !ageConfirmed ? 0.6 : 1,
               transition: 'all 0.2s',
               marginBottom: '16px'
             }}
-            onMouseEnter={(e) => !isLoading && (e.currentTarget.style.background = '#7c6fff')}
-            onMouseLeave={(e) => !isLoading && (e.currentTarget.style.background = '#625af6')}
+            onMouseEnter={(e) => !isLoading && ageConfirmed && (e.currentTarget.style.background = '#7c6fff')}
+            onMouseLeave={(e) => !isLoading && ageConfirmed && (e.currentTarget.style.background = '#625af6')}
           >
             {isLoading ? 'Creating account...' : 'Create Account with Google'}
           </button>
@@ -4667,7 +5433,7 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
         }}>Returning user?</div>
         <button
           onClick={handleGoogleSignIn}
-          disabled={isLoading}
+          disabled={isLoading || !ageConfirmed}
           style={{
             width: '100%',
             padding: '12px 16px',
@@ -4677,12 +5443,12 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
             borderRadius: '8px',
             fontSize: '14px',
             fontWeight: '500',
-            cursor: isLoading ? 'not-allowed' : 'pointer',
-            opacity: isLoading ? 0.6 : 1,
+            cursor: isLoading || !ageConfirmed ? 'not-allowed' : 'pointer',
+            opacity: isLoading || !ageConfirmed ? 0.6 : 1,
             transition: 'all 0.2s'
           }}
-          onMouseEnter={(e) => !isLoading && (e.currentTarget.style.background = 'rgba(98, 90, 246, 0.1)')}
-          onMouseLeave={(e) => !isLoading && (e.currentTarget.style.background = 'transparent')}
+          onMouseEnter={(e) => !isLoading && ageConfirmed && (e.currentTarget.style.background = 'rgba(98, 90, 246, 0.1)')}
+          onMouseLeave={(e) => !isLoading && ageConfirmed && (e.currentTarget.style.background = 'transparent')}
         >
           {isLoading ? 'Signing in...' : 'Sign in with Google'}
         </button>
@@ -4700,6 +5466,7 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
         {typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname) && (
           <button
             onClick={handleTestLogin}
+            disabled={!ageConfirmed}
             style={{
               width: '100%',
               padding: '12px 16px',
@@ -4709,12 +5476,13 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
               borderRadius: '8px',
               fontSize: '12px',
               fontWeight: '500',
-              cursor: 'pointer',
+              cursor: ageConfirmed ? 'pointer' : 'not-allowed',
+              opacity: ageConfirmed ? 1 : 0.6,
               transition: 'all 0.2s',
               marginTop: '12px'
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
+            onMouseEnter={(e) => ageConfirmed && (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)')}
+            onMouseLeave={(e) => ageConfirmed && (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
           >
             Dev: Test Login
           </button>
@@ -4725,7 +5493,10 @@ function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
           opacity: 0.5,
           marginTop: '24px'
         }}>
-          Your data stays private and syncs across all your devices
+          Your data stays private and syncs across all your devices.{" "}
+          <a href="/legal/dmca" style={{ color: '#938cff' }}>DMCA</a>
+          {" · "}
+          <a href="/unsubscribe" style={{ color: '#938cff' }}>Email preferences</a>
         </p>
       </div>
     </div>
@@ -5210,8 +5981,184 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
   </motion.div>;
 }
 
-function CommandPalette({ query, setQuery, results, close, go, onFocus, onCapture, onNewTask, onResult }: { query: string; setQuery: (s: string) => void; results: string[]; close: () => void; go: (v: View) => void; onFocus: () => void; onCapture: () => void; onNewTask: () => void; onResult: (result: string) => void }) {
-  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="command-modal" onMouseDown={e => e.stopPropagation()} initial={{ scale: .98, y: -10 }} animate={{ scale: 1, y: 0 }}><div className="command-input"><Search size={20} /><input autoFocus placeholder="Find anything in LifeOS…" value={query} onChange={e => setQuery(e.target.value)} /><kbd>ESC</kbd></div><div className="command-results">{!query && <><p>QUICK ACTIONS</p><button onClick={onFocus}><span className="command-icon"><Focus size={16} /></span><span>Start focus session</span></button><button onClick={onCapture}><span className="command-icon"><Brain size={16} /></span><span>Capture a thought</span></button><button onClick={onNewTask}><span className="command-icon"><Plus size={16} /></span><span>Create new task</span></button></>}{query && <p>RESULTS</p>}{results.slice(0, 7).map(result => <button key={result} onClick={() => { onResult(result); close(); }}><span className="command-icon">{nav.some(n => n.name === result) ? <Command size={16} /> : <Search size={16} />}</span><span>{result}</span><ArrowRight size={14} /></button>)}</div><footer><span><kbd>⌘ K</kbd> Find</span><span><kbd>↵</kbd> Open</span><span>LifeOS Search</span></footer></motion.div></motion.div>;
+function CommandPalette({
+  query,
+  setQuery,
+  results,
+  close,
+  onFocus,
+  onCapture,
+  onNewTask,
+  onResult,
+  captureCommands,
+  onRunCaptureCommand,
+  showCaptureCommands,
+  onDismissCaptureCommands,
+}: {
+  query: string;
+  setQuery: (s: string) => void;
+  results: string[];
+  close: () => void;
+  onFocus: () => void;
+  onCapture: () => void;
+  onNewTask: () => void;
+  onResult: (result: string) => void;
+  captureCommands: CaptureCommand[];
+  onRunCaptureCommand: (raw: string) => "ran" | "partial" | false;
+  showCaptureCommands: boolean;
+  onDismissCaptureCommands: () => void;
+}) {
+  const [suggestedIndex, setSuggestedIndex] = useState(-1);
+  const slashMode = query.trim().startsWith("/");
+  const commandMatches = slashMode
+    ? filterCaptureCommands(captureCommands, query)
+    : showCaptureCommands && !query
+      ? captureCommands
+      : [];
+  const showCommandList = slashMode ? commandMatches.length > 0 : showCaptureCommands && !query;
+
+  const finish = () => {
+    setQuery("");
+    setSuggestedIndex(-1);
+    close();
+  };
+
+  const applyCommand = (cmd: CaptureCommand) => {
+    if (INSTANT_COMMANDS.has(cmd.shortcut)) {
+      const outcome = onRunCaptureCommand(cmd.shortcut);
+      if (outcome === "ran") finish();
+      return;
+    }
+    setQuery(cmd.shortcut + " ");
+    setSuggestedIndex(-1);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!commandMatches.length) return;
+      setSuggestedIndex((i) => Math.min(i + 1, commandMatches.length - 1));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSuggestedIndex((i) => Math.max(i - 1, -1));
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      finish();
+      return;
+    }
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (slashMode) {
+      if (suggestedIndex >= 0 && commandMatches[suggestedIndex]) {
+        applyCommand(commandMatches[suggestedIndex]);
+        return;
+      }
+      const outcome = onRunCaptureCommand(query);
+      if (outcome === "ran") finish();
+      return;
+    }
+    if (results[0]) {
+      onResult(results[0]);
+      finish();
+    }
+  };
+
+  return (
+    <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.div className="command-modal" onMouseDown={(e) => e.stopPropagation()} initial={{ scale: 0.98, y: -10 }} animate={{ scale: 1, y: 0 }}>
+        <div className="command-input">
+          <Search size={20} />
+          <input
+            autoFocus
+            placeholder="Search or type /t, /break, /focus…"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setSuggestedIndex(-1);
+            }}
+            onKeyDown={onKeyDown}
+          />
+          <kbd>ESC</kbd>
+        </div>
+        <div className="command-results">
+          {!query && (
+            <>
+              <p>QUICK ACTIONS</p>
+              <button type="button" onClick={onFocus}>
+                <span className="command-icon"><Focus size={16} /></span>
+                <span>Start focus session</span>
+              </button>
+              <button type="button" onClick={onCapture}>
+                <span className="command-icon"><Brain size={16} /></span>
+                <span>Capture a thought</span>
+              </button>
+              <button type="button" onClick={onNewTask}>
+                <span className="command-icon"><Plus size={16} /></span>
+                <span>Create new task</span>
+              </button>
+            </>
+          )}
+          {showCommandList && (
+            <>
+              <p>{slashMode ? "COMMANDS" : "CAPTURE COMMANDS"}</p>
+              {commandMatches.map((cmd, idx) => (
+                <button
+                  key={cmd.shortcut}
+                  type="button"
+                  className={idx === suggestedIndex ? "suggested" : ""}
+                  onClick={() => applyCommand(cmd)}
+                >
+                  <span className="command-icon"><Command size={16} /></span>
+                  <span>
+                    <strong style={{ marginRight: 8 }}>{cmd.shortcut}</strong>
+                    {cmd.desc}
+                  </span>
+                </button>
+              ))}
+              {!slashMode && showCaptureCommands ? (
+                <div className="capture-suggestions-footer" style={{ padding: "8px 10px" }}>
+                  <button type="button" className="capture-dismiss" onClick={onDismissCaptureCommands}>
+                    Don&apos;t show command tips
+                  </button>
+                </div>
+              ) : null}
+            </>
+          )}
+          {query && !slashMode && (
+            <>
+              <p>RESULTS</p>
+              {results.slice(0, 7).map((result) => (
+                <button
+                  key={result}
+                  type="button"
+                  onClick={() => {
+                    onResult(result);
+                    finish();
+                  }}
+                >
+                  <span className="command-icon">
+                    {nav.some((n) => n.name === result) ? <Command size={16} /> : <Search size={16} />}
+                  </span>
+                  <span>{result}</span>
+                  <ArrowRight size={14} />
+                </button>
+              ))}
+              {!results.length ? <p style={{ margin: 8, color: "var(--muted)", letterSpacing: 0, fontSize: 12 }}>No matches</p> : null}
+            </>
+          )}
+        </div>
+        <footer>
+          <span><kbd>⌘ K</kbd> Open</span>
+          <span><kbd>/</kbd> Commands</span>
+          <span><kbd>↵</kbd> Run</span>
+        </footer>
+      </motion.div>
+    </motion.div>
+  );
 }
 
 function AmbientStartModal({ close, start, spaces, draft }: { close: () => void; start: (title: string, space?: { name: string; color: string }) => void; spaces: { name: string; color: string }[]; draft: AmbientDraft }) {
@@ -5234,7 +6181,56 @@ function AmbientWrapupModal({ activity, close, finish }: { activity: AmbientActi
 function WelcomeNameModal({ suggestedName, save }: { suggestedName?: string | null; save: (name: string) => void }) {
   const [name, setName] = useState(suggestedName?.trim() || "");
   const trimmedName = name.trim();
-  return <motion.div className="modal-layer welcome-name-layer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="presentation"><motion.form className="capture-modal welcome-name-modal" role="dialog" aria-modal="true" aria-labelledby="welcome-name-title" onSubmit={event => { event.preventDefault(); if (trimmedName) save(trimmedName); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><UserRound size={16} /></div><div><strong id="welcome-name-title">What should we call you?</strong><span>Use the name that feels right inside your LifeOS.</span></div></div><label className="welcome-name-field" htmlFor="preferred-name">YOUR NAME<input id="preferred-name" autoFocus autoComplete="name" maxLength={40} value={name} onChange={event => setName(event.target.value)} placeholder="Your name" /></label><div className="capture-footer"><span>Private to your workspace.</span><button type="submit" disabled={!trimmedName}>Continue <ArrowRight size={14} /></button></div></motion.form></motion.div>;
+  return (
+    <motion.div className="modal-layer welcome-name-layer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="presentation">
+      <motion.form
+        className="welcome-name-modal ob-welcome"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="welcome-name-title"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (trimmedName) save(trimmedName);
+        }}
+        initial={{ scale: 0.98, y: 8 }}
+        animate={{ scale: 1, y: 0 }}
+      >
+        <div className="ob-card">
+          <div className="ob-visual" aria-hidden>
+            <svg className="ob-illus" viewBox="0 0 280 280" fill="none">
+              <circle cx="140" cy="132" r="36" stroke="currentColor" strokeWidth="3" />
+              <path d="M86 208c18-36 40-54 54-54s36 18 54 54" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              <rect x="72" y="64" width="136" height="18" rx="6" stroke="currentColor" strokeWidth="3" />
+              <path d="M96 96h88" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          </div>
+          <div className="ob-panel">
+            <div className="ob-brand">LifeOS</div>
+            <p className="ob-eyebrow">Personal workspace</p>
+            <h2 id="welcome-name-title" className="ob-title">What should we call you?</h2>
+            <p className="ob-body">Use the name that feels right inside your LifeOS. It stays private to your workspace.</p>
+            <div className="ob-field">
+              <label htmlFor="preferred-name">Your name</label>
+              <input
+                id="preferred-name"
+                autoFocus
+                autoComplete="name"
+                maxLength={40}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Your name"
+              />
+            </div>
+            <div className="ob-actions">
+              <button type="submit" className="ob-primary" disabled={!trimmedName}>
+                Continue <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </motion.form>
+    </motion.div>
+  );
 }
 
 function CaptureModal({ close, add }: { close: () => void; add: (s: string) => void }) {
@@ -5318,7 +6314,7 @@ function LegacyCalendarEventModal({ close, add, event, remove, defaultDate }: { 
   return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.form className="create-modal calendar-modal" onMouseDown={modalEvent => modalEvent.stopPropagation()} onSubmit={submitEvent => { submitEvent.preventDefault(); if (!title.trim()) return; add({ id: event?.id ?? `lifeos-${Date.now()}`, title: title.trim(), start: `${day}T${start}`, end: end ? `${day}T${end}` : undefined, source: event?.source ?? "LifeOS", color, notes: notes.trim() || undefined }); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot" style={{ color, background: `${color}16` }}><CalendarDays size={16} /></div><div><strong>{isEditing ? "Edit calendar event" : "Add calendar event"}</strong><span>{isEditing ? "Change time, notes, color, or delete it." : "Put time on the board so your day stops being abstract."}</span></div><button type="button" onClick={close} aria-label="Close"><X size={18} /></button></div><label htmlFor="event-title">Event title</label><input id="event-title" autoFocus placeholder="What’s happening?" value={title} onChange={event => setTitle(event.target.value)} /><div className="calendar-form-grid"><label>Date<input type="date" value={day} onChange={event => setDay(event.target.value)} /></label><label>Start<input type="time" value={start} onChange={event => setStart(event.target.value)} /></label><label>End<input type="time" value={end} onChange={event => setEnd(event.target.value)} /></label></div><label htmlFor="event-notes">Notes / location</label><textarea id="event-notes" className="event-notes" placeholder="Location, link, reminder, whatever helps…" value={notes} onChange={event => setNotes(event.target.value)} /><label>Color</label><div className="calendar-color-picker">{["#665df6", "#4b8bdc", "#47a47b", "#d99b38", "#e48b6b", "#cf625a"].map(option => <button type="button" aria-label={`Use color ${option}`} className={color === option ? "selected" : ""} key={option} style={{ background: option }} onClick={() => setColor(option)} />)}</div><div className="create-actions split-actions">{isEditing && remove && <button type="button" className="danger-text" onClick={() => remove(event!.id)}><Trash2 size={14} /> Delete</button>}<button type="button" onClick={close}>Cancel</button><button className="primary" disabled={!title.trim()} type="submit">{isEditing ? "Save event" : "Add event"}</button></div></motion.form></motion.div>;
 }
 
-function CalendarEventModal({ close, add, event, remove, defaultDate, onTaskAction, taskActionLabel }: { close: () => void; add: (event: CalendarEvent) => void; event?: CalendarEvent; remove?: (id: string) => void; defaultDate?: string | null; onTaskAction?: (event: CalendarEvent) => void; taskActionLabel?: string }) {
+function CalendarEventModal({ close, add, event, remove, defaultDate, tasks = [], linkedTaskId, onOpenLinkedTask, onRouteToTask }: { close: () => void; add: (event: CalendarEvent) => void; event?: CalendarEvent; remove?: (id: string) => void; defaultDate?: string | null; tasks?: Task[]; linkedTaskId?: number; onOpenLinkedTask?: (event: CalendarEvent) => void; onRouteToTask?: (event: CalendarEvent, taskId: number) => void }) {
   const now = new Date();
   const eventDay = event?.start.slice(0, 10) ?? defaultDate ?? toDateKey(now);
   const initialEndDay = event?.end?.slice(0, 10) ?? eventDay;
@@ -5328,12 +6324,29 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, onTaskActi
   const [start, setStart] = useState(event?.start.slice(11, 16) ?? "09:00");
   const [end, setEnd] = useState(event?.end?.slice(11, 16) ?? "10:00");
   const [notes, setNotes] = useState(event?.notes ?? "");
+  const [location, setLocation] = useState(eventPlaceLabel(event?.location) || event?.location || "");
+  const [link, setLink] = useState(
+    event?.url || extractMeetingUrl(event?.location) || extractMeetingUrl(event?.notes) || "",
+  );
   const [color, setColor] = useState(event?.color ?? "#665df6");
   const [weekdaysOnly, setWeekdaysOnly] = useState(Boolean(event?.weekdaysOnly));
+  const [pickingTask, setPickingTask] = useState(false);
+  const [taskQuery, setTaskQuery] = useState("");
   const isEditing = Boolean(event);
   const datesValid = endDay >= day;
   const timesValid = endDay > day || !end || end > start;
   const rangeValid = datesValid && timesValid;
+  const detectedProvider = detectMeetingProvider(link);
+  const detectedJoinUrl = extractMeetingUrl(link) || (/^https?:\/\//i.test(link.trim()) ? link.trim() : "");
+  const detectedJoin = detectedProvider && detectedJoinUrl ? meetingJoinLabel(detectedProvider) : null;
+  const routeCandidates = tasks
+    .filter(task => !task.done && !task.canceled)
+    .filter(task => {
+      if (!taskQuery.trim()) return true;
+      const q = taskQuery.trim().toLowerCase();
+      return task.title.toLowerCase().includes(q) || task.project.toLowerCase().includes(q);
+    })
+    .slice(0, 12);
   const changeStartDay = (value: string) => {
     setDay(value);
     if (endDay < value) setEndDay(value);
@@ -5349,6 +6362,12 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, onTaskActi
       source: event?.source ?? "LifeOS",
       color,
       notes: notes.trim() || undefined,
+      location: eventPlaceLabel(location) || undefined,
+      url: coalesceEventMeetingUrl({
+        url: extractMeetingUrl(link) || link.trim() || undefined,
+        location,
+        notes,
+      }),
       weekdaysOnly: weekdaysOnly || undefined,
     });
   };
@@ -5371,15 +6390,55 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, onTaskActi
         <span>Weekdays only (Mon–Fri)</span>
       </label>
       <p className="calendar-weekdays-hint">Use this for work blocks that run until a date but skip weekends.</p>
-      <label htmlFor="event-notes">Notes / location</label>
-      <textarea id="event-notes" className="event-notes" placeholder="Location, link, reminder, whatever helps…" value={notes} onChange={inputEvent => setNotes(inputEvent.target.value)} />
+      <label htmlFor="event-location">Location</label>
+      <input id="event-location" placeholder="Room, campus, address…" value={location} onChange={inputEvent => setLocation(inputEvent.target.value)} />
+      <label htmlFor="event-link">Link</label>
+      <input id="event-link" placeholder="Zoom, Teams, or Webex link" value={link} onChange={inputEvent => setLink(inputEvent.target.value)} />
+      {detectedJoin && detectedJoinUrl ? <a className="event-join-link" href={detectedJoinUrl} target="_blank" rel="noopener noreferrer">{detectedJoin}</a> : null}
+      <label htmlFor="event-notes">Notes</label>
+      <textarea id="event-notes" className="event-notes" placeholder="Optional details…" value={notes} onChange={inputEvent => setNotes(inputEvent.target.value)} />
       <ColorSwatches value={color} onChange={setColor} />
+      {isEditing && event && pickingTask && onRouteToTask && (
+        <div className="event-task-picker" role="listbox" aria-label="Route to an existing task">
+          <div className="event-task-picker-head">
+            <strong>Route under an existing task</strong>
+            <button type="button" className="text-button" onClick={() => setPickingTask(false)}>Close</button>
+          </div>
+          <input
+            aria-label="Search tasks"
+            placeholder="Search tasks…"
+            value={taskQuery}
+            onChange={inputEvent => setTaskQuery(inputEvent.target.value)}
+          />
+          <div className="event-task-picker-list">
+            {routeCandidates.length ? routeCandidates.map(task => (
+              <button
+                type="button"
+                key={task.id}
+                role="option"
+                onClick={() => onRouteToTask(event, task.id)}
+              >
+                <i style={{ background: task.color }} />
+                <span>
+                  <strong>{task.title}</strong>
+                  <small>{task.project} · {formatDueDate(task.due)}</small>
+                </span>
+              </button>
+            )) : <p className="event-task-picker-empty">No open tasks match.</p>}
+          </div>
+        </div>
+      )}
       <div className="event-form-actions">
         <div className="event-danger-action">
           {isEditing && remove && <button type="button" className="danger-text" onClick={() => remove(event!.id)}><Trash2 size={14} /> Delete event</button>}
         </div>
         <div className="event-main-actions">
-          {isEditing && event && onTaskAction && <button type="button" className="event-task-action" onClick={() => onTaskAction(event)}><ListTodo size={14} /> {taskActionLabel ?? "Create task"}</button>}
+          {isEditing && event && linkedTaskId != null && onOpenLinkedTask && (
+            <button type="button" className="event-task-action" onClick={() => onOpenLinkedTask(event)}><ListTodo size={14} /> Open task</button>
+          )}
+          {isEditing && event && linkedTaskId == null && onRouteToTask && (
+            <button type="button" className="event-task-action" onClick={() => setPickingTask(value => !value)}><ListTodo size={14} /> Route to Task</button>
+          )}
           <span className="event-action-divider" aria-hidden="true" />
           <button type="button" className="event-cancel-action" onClick={close}>Cancel</button>
           <button className="primary" disabled={!title.trim() || !rangeValid} type="submit">{isEditing ? "Save event" : "Add event"}</button>

@@ -10,7 +10,7 @@ import { API_BASE } from "../lib/api";
 // Deliberate simplification: Gmail / Outlook / iCloud calendar sync all rely
 // on server-side OAuth flows (app/api/gmail/*, app/api/outlook/*,
 // app/api/icloud/*) that expect a browser redirect back to
-// https://lifeos-mu-three.vercel.app. Reimplementing three separate OAuth
+// http://localhost:3000. Reimplementing three separate OAuth
 // consent screens natively (with app-specific redirect URIs registered with
 // Google/Microsoft/Apple) is out of scope for this pass, so mobile instead
 // opens the already-working web flow in an in-app browser via

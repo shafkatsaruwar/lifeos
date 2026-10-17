@@ -2,7 +2,7 @@ import Feather from "@expo/vector-icons/Feather";
 import Constants from "expo-constants";
 import { initialWindowMetrics } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   Alert,
   FlatList,
@@ -151,6 +151,10 @@ export function PageCanvasScreen() {
   const drawingPolicy = preferredDrawingPolicy(isTablet);
   const ensuringNextPageRef = useRef(false);
   const moreBtnRef = useRef<View>(null);
+  const penBtnRef = useRef<View>(null);
+  const eraserBtnRef = useRef<View>(null);
+  const eraserTapAtRef = useRef(0);
+  const [toolAnchor, setToolAnchor] = useState<LayoutRectangle | null>(null);
 
   const [mode, setMode] = useState<PageCanvasMode>("ink");
   modeRef.current = mode;
@@ -690,6 +694,13 @@ export function PageCanvasScreen() {
     });
   };
 
+  const openInkTray = (panel: "pen" | "eraser", ref: RefObject<View | null>) => {
+    ref.current?.measureInWindow((x, y, width, height) => {
+      setToolAnchor({ x, y, width, height });
+      setToolPanel(panel);
+    });
+  };
+
   const runMoreAction = (action: () => void) => {
     setMoreOpen(false);
     requestAnimationFrame(action);
@@ -766,6 +777,7 @@ export function PageCanvasScreen() {
             inkColor={inkColor}
             inkWidth={inkWidth}
             zoomScale={zoomScale}
+            showFrameBorder={false}
             onInkChange={(ink) => {
               void persistPageById(item.id, { ink });
             }}
@@ -833,62 +845,12 @@ export function PageCanvasScreen() {
               {pageIndicator ? ` · ${pageIndicator}` : ""}
             </Text>
           </View>
-          <View ref={moreBtnRef} collapsable={false} style={styles.chromeBtnWrap}>
-            <Pressable accessibilityLabel="More" onPress={openMore} style={styles.chromeBtn}>
-              <Feather name="more-horizontal" size={20} color={theme.text} />
-            </Pressable>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chromeTrailingScroll}
-            contentContainerStyle={styles.chromeTrailing}
-          >
-            <Pressable
-              accessibilityLabel={viewMode === "seamless" ? "Seamless view" : "Single page view"}
-              onPress={() => setPageView(viewMode === "seamless" ? "single" : "seamless")}
-              style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
-            >
-              <Feather name={viewMode === "seamless" ? "menu" : "square"} size={13} color={theme.muted} />
-              <Text style={[styles.viewChipText, { color: theme.muted }]}>
-                {viewMode === "seamless" ? "Seamless" : "Single"}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel={zoomScale > 1.01 ? "Reset zoom to 100%" : "Zoom to 160%"}
-              onPress={() => setZoomScale((z) => (z > 1.05 ? 1 : 1.6))}
-              style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
-            >
-              <Text style={[styles.viewChipText, { color: theme.muted }]}>
-                {`${Math.round(zoomScale * 100)}%`}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel="Previous page"
-              disabled={pageIndex <= 0}
-              onPress={() => goPage(-1)}
-              style={[styles.chromeBtn, pageIndex <= 0 && { opacity: 0.3 }]}
-            >
-              <Feather name="chevron-up" size={18} color={theme.text} />
-            </Pressable>
-            <Pressable
-              accessibilityLabel={pageIndex >= pages.length - 1 ? "Add page" : "Next page"}
-              onPress={() => {
-                if (pageIndex >= pages.length - 1) void addPage();
-                else goPage(1);
-              }}
-              style={styles.chromeBtn}
-            >
-              <Feather
-                name={pageIndex >= pages.length - 1 ? "plus" : "chevron-down"}
-                size={18}
-                color={theme.text}
-              />
-            </Pressable>
-          </ScrollView>
         </View>
       </View>
 
+      <View style={[styles.toolDock, { paddingRight: chromePadRight }]}>
+        <View style={styles.toolDockRow}>
+        <View style={styles.toolDockSide} />
       <View
         style={[
           styles.toolRail,
@@ -898,20 +860,23 @@ export function PageCanvasScreen() {
           },
         ]}
       >
-        <ToolBtn
-          icon="edit-3"
-          label="Pen"
-          active={mode === "ink" && (inkTool === "pen" || inkTool === "pencil" || inkTool === "marker")}
-          onPress={() => {
-            const drawing =
-              inkTool === "pen" || inkTool === "pencil" || inkTool === "marker" ? inkTool : "pen";
-            if (mode === "ink" && toolPanel === "pen" && drawing === inkTool) {
-              setToolPanel("none");
-              return;
-            }
-            selectInkTool(drawing, "pen");
-          }}
-        />
+        <View ref={penBtnRef} collapsable={false}>
+          <ToolBtn
+            icon="edit-3"
+            label="Pen"
+            active={mode === "ink" && (inkTool === "pen" || inkTool === "pencil" || inkTool === "marker")}
+            onPress={() => {
+              const drawing =
+                inkTool === "pen" || inkTool === "pencil" || inkTool === "marker" ? inkTool : "pen";
+              if (mode === "ink" && toolPanel === "pen" && drawing === inkTool) {
+                setToolPanel("none");
+                return;
+              }
+              selectInkTool(drawing, "none");
+              openInkTray("pen", penBtnRef);
+            }}
+          />
+        </View>
         <ToolBtn
           icon="type"
           label="Text"
@@ -971,19 +936,22 @@ export function PageCanvasScreen() {
           active={mode === "ink" && inkTool === "lasso"}
           onPress={() => selectInkTool("lasso")}
         />
-        <ToolBtn
-          icon="slash"
-          label="Eraser"
-          active={mode === "ink" && (inkTool === "eraser" || inkTool === "vectorEraser")}
-          onPress={() => {
-            const tool = inkTool === "vectorEraser" ? "vectorEraser" : "eraser";
-            if (mode === "ink" && toolPanel === "eraser" && (inkTool === "eraser" || inkTool === "vectorEraser")) {
-              setToolPanel("none");
-              return;
-            }
-            selectInkTool(tool, "eraser");
-          }}
-        />
+        <View ref={eraserBtnRef} collapsable={false}>
+          <ToolBtn
+            icon="slash"
+            label="Eraser"
+            active={mode === "ink" && (inkTool === "eraser" || inkTool === "vectorEraser")}
+            onPress={() => {
+              const tool = inkTool === "vectorEraser" ? "vectorEraser" : "eraser";
+              const now = Date.now();
+              const isDouble = now - eraserTapAtRef.current < 320;
+              eraserTapAtRef.current = isDouble ? 0 : now;
+              // Single tap: eraser on only. Double tap: open options over the note.
+              selectInkTool(tool, "none");
+              if (isDouble) openInkTray("eraser", eraserBtnRef);
+            }}
+          />
+        </View>
         {pencilReady ? (
           <>
             <View style={[styles.toolDivider, { backgroundColor: theme.border }]} />
@@ -996,23 +964,87 @@ export function PageCanvasScreen() {
         ) : null}
       </View>
 
+        <View style={[styles.toolDockSide, styles.toolDockTrailing]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.viewRailScroll}
+            contentContainerStyle={styles.viewRail}
+          >
+            <Pressable
+              accessibilityLabel={viewMode === "seamless" ? "Seamless view" : "Single page view"}
+              onPress={() => setPageView(viewMode === "seamless" ? "single" : "seamless")}
+              style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
+            >
+              <Feather name={viewMode === "seamless" ? "menu" : "square"} size={13} color={theme.muted} />
+              <Text style={[styles.viewChipText, { color: theme.muted }]}>
+                {viewMode === "seamless" ? "Seamless" : "Single"}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel={zoomScale > 1.01 ? "Reset zoom to 100%" : "Zoom to 135%"}
+              onPress={() => setZoomScale((z) => (z > 1.05 ? 1 : 1.35))}
+              style={[styles.viewChip, { borderColor: theme.border, backgroundColor: theme.surface }]}
+            >
+              <Text style={[styles.viewChipText, { color: theme.muted }]}>
+                {`${Math.round(zoomScale * 100)}%`}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Previous page"
+              disabled={pageIndex <= 0}
+              onPress={() => goPage(-1)}
+              style={[styles.chromeBtn, pageIndex <= 0 && { opacity: 0.3 }]}
+            >
+              <Feather name="chevron-up" size={18} color={theme.text} />
+            </Pressable>
+            <Pressable
+              accessibilityLabel={pageIndex >= pages.length - 1 ? "Add page" : "Next page"}
+              onPress={() => {
+                if (pageIndex >= pages.length - 1) void addPage();
+                else goPage(1);
+              }}
+              style={styles.chromeBtn}
+            >
+              <Feather
+                name={pageIndex >= pages.length - 1 ? "plus" : "chevron-down"}
+                size={18}
+                color={theme.text}
+              />
+            </Pressable>
+          </ScrollView>
+          <View ref={moreBtnRef} collapsable={false} style={styles.chromeBtnWrap}>
+            <Pressable accessibilityLabel="More" onPress={openMore} style={styles.chromeBtn}>
+              <Feather name="more-horizontal" size={20} color={theme.text} />
+            </Pressable>
+          </View>
+        </View>
+        </View>
+
       {toolPanel === "pen" || toolPanel === "eraser" ? (
-        <InkToolTray
-          mode={toolPanel === "eraser" ? "eraser" : "pen"}
-          inkTool={inkTool}
-          inkColor={inkColor}
-          onSelectTip={(tip: DrawingTip, width: number) => {
-            setToolPanel("pen");
-            applyInk(tip, inkColor, width);
-          }}
-          onColorChange={(color) => applyInk(inkTool, color, inkWidth)}
-          onWidthChange={(width) => applyInk(inkTool, inkColor, width)}
-          onSelectEraser={(tool, width) => {
-            setToolPanel("eraser");
-            applyInk(tool, inkColor, width);
-          }}
-          onClearPage={clearPageInk}
-        />
+        <AnchoredPopover
+          visible
+          bare
+          align="center"
+          width={toolPanel === "eraser" ? 300 : 340}
+          anchor={toolAnchor}
+          onClose={() => setToolPanel("none")}
+        >
+          <InkToolTray
+            mode={toolPanel === "eraser" ? "eraser" : "pen"}
+            inkTool={inkTool}
+            inkColor={inkColor}
+            onSelectTip={(tip: DrawingTip, width: number) => {
+              applyInk(tip, inkColor, width);
+            }}
+            onColorChange={(color) => applyInk(inkTool, color, inkWidth)}
+            onWidthChange={(width) => applyInk(inkTool, inkColor, width)}
+            onSelectEraser={(tool, width) => {
+              applyInk(tool, inkColor, width);
+            }}
+            onClearPage={clearPageInk}
+          />
+        </AnchoredPopover>
       ) : null}
 
       {toolPanel === "shape" ? (
@@ -1091,6 +1123,7 @@ export function PageCanvasScreen() {
           </Pressable>
         </ScrollView>
       ) : null}
+      </View>
 
       <View style={[styles.stage, isWide && styles.stageWide]}>
         <View
@@ -1103,6 +1136,7 @@ export function PageCanvasScreen() {
             }
           }}
         >
+          <View style={styles.pageViewport}>
           <DocumentZoom
             scale={zoomScale}
             onScaleChange={setZoomScale}
@@ -1171,6 +1205,7 @@ export function PageCanvasScreen() {
                   inkColor={inkColor}
                   inkWidth={inkWidth}
                   zoomScale={zoomScale}
+                  showFrameBorder={false}
                   onInkChange={onInkChangeLive}
                   onSelect={(id) => {
                     setSelectedId(id);
@@ -1188,6 +1223,7 @@ export function PageCanvasScreen() {
               </View>
             )}
           </DocumentZoom>
+          </View>
           {!isWide ? (
             <Text style={[styles.hint, { color: theme.muted }]}>
               {viewMode === "seamless"
@@ -1438,8 +1474,6 @@ const styles = StyleSheet.create({
   chromeBtnWrap: { flexShrink: 0 },
   chromeBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   chromeMid: { flex: 1, minWidth: 0, paddingHorizontal: 4, flexShrink: 1 },
-  chromeTrailingScroll: { flexGrow: 0, flexShrink: 0, maxWidth: 220 },
-  chromeTrailing: { flexDirection: "row", alignItems: "center", gap: 2, paddingRight: 4 },
   notebookName: { fontSize: 15, fontWeight: "800" },
   pageName: { fontSize: 11, fontWeight: "700", marginTop: 1 },
   viewChip: {
@@ -1454,13 +1488,40 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   viewChipText: { fontSize: 10, fontWeight: "800" },
+  toolDock: {
+    alignSelf: "stretch",
+    alignItems: "center",
+    marginHorizontal: 12,
+    marginBottom: 6,
+    maxWidth: "100%",
+    zIndex: 6,
+  },
+  toolDockRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "stretch",
+    width: "100%",
+  },
+  toolDockSide: {
+    flex: 1,
+    minWidth: 0,
+  },
+  toolDockTrailing: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 2,
+  },
+  viewRailScroll: { flexGrow: 0, flexShrink: 1, maxWidth: "100%" },
+  viewRail: { flexDirection: "row", alignItems: "center", gap: 2, paddingRight: 2 },
   toolRail: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
-    marginHorizontal: 12,
-    marginBottom: 6,
+    flexShrink: 0,
+    marginHorizontal: 0,
+    marginBottom: 0,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 22,
     paddingHorizontal: 10,
@@ -1479,6 +1540,15 @@ const styles = StyleSheet.create({
   templateHint: { fontSize: 11, fontWeight: "800", marginRight: 4, alignSelf: "center" },
   stage: { flex: 1, minHeight: 0, paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
   stageWide: { flexDirection: "row", paddingHorizontal: 8, paddingBottom: 0, gap: 0 },
+  pageViewport: {
+    flex: 1,
+    minHeight: 0,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "rgba(98,90,246,0.28)",
+    overflow: "hidden",
+    backgroundColor: "rgba(241,245,249,0.65)",
+  },
   pageNavFloat: {
     position: "absolute",
     left: 4,

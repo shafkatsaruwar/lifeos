@@ -1,7 +1,7 @@
 "use client";
+import { useMosSearchParams } from "@/lib/masteros/embed-routing";
 
 import { FormEvent, Suspense, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { useMasterOS } from "@/lib/masteros/store";
 import { DIFFICULTY_LABEL, QUESTION_TYPE_LABEL } from "@/lib/masteros/helpers";
 import { groupQuestionsForBank, resolveQuestionCategory } from "@/lib/masteros/questionBank";
@@ -9,7 +9,7 @@ import type { Difficulty, QuestionType } from "@/lib/masteros/types";
 
 function QuestionsInner() {
   const { state, addQuestion, deleteQuestion } = useMasterOS();
-  const params = useSearchParams();
+  const params = useMosSearchParams();
   const [open, setOpen] = useState(params.get("new") === "1");
   const [text, setText] = useState("");
   const [answer, setAnswer] = useState("");

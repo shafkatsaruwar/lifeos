@@ -8,7 +8,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const APP_GROUP = "group.com.shafkatsaruwar.lifeos";
+const APP_GROUP = "group.com.example.lifeos";
 const BEGIN = "// MARK: - BEGIN LifeOS Home Widgets (generated)";
 const END = "// MARK: - END LifeOS Home Widgets (generated)";
 

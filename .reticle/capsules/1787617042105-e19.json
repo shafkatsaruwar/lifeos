@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "id": "1787617042105-e19",
+  "createdAt": 1787617042105,
+  "origin": "failed-assert",
+  "expected": "declared consequence",
+  "observed": "no element matched {\"text\":\"Tap items to start an order\"}",
+  "steps": [
+    {
+      "tool": "reticle_act",
+      "anchor": {
+        "kind": "testid",
+        "value": "pos-clear",
+        "source": {
+          "file": "src/pages/AdminPOS.jsx",
+          "line": 614,
+          "column": 34
+        }
+      },
+      "action": "click"
+    }
+  ]
+}

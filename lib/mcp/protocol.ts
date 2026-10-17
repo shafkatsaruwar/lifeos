@@ -1,9 +1,10 @@
 import { loadWorkspace, readStoreConfig, sourceLabel } from "./store";
 import { MCP_TOOLS, callTool } from "./tools";
+import { WRITE_TOOLS, executeWrite, isWriteTool } from "./writes";
 import type { StoreConfig } from "./store";
 
 export const MCP_SERVER_NAME = "lifeos";
-export const MCP_SERVER_VERSION = "0.2.0";
+export const MCP_SERVER_VERSION = "0.3.0";
 export const MCP_PROTOCOL_VERSION = "2024-11-05";
 
 export type JsonRpcId = string | number | null;
@@ -41,7 +42,7 @@ function isNotification(message: JsonRpcRequest): boolean {
 }
 
 export function listToolDescriptors() {
-  return MCP_TOOLS.map((tool) => ({
+  return [...MCP_TOOLS, ...WRITE_TOOLS].map((tool) => ({
     name: tool.name,
     description: tool.description,
     inputSchema: tool.inputSchema,
@@ -78,7 +79,10 @@ export async function handleMcpRequest(
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: MCP_SERVER_NAME, version: MCP_SERVER_VERSION },
           instructions:
-            "LifeOS personal cockpit. Prefer lifeos_status, then list_tasks / list_projects / list_classes / list_work / list_events. " +
+            "LifeOS personal cockpit. Prefer lifeos_status, then list_tasks / list_projects / list_classes / list_work / list_events / list_career. " +
+            (config.allowWrites
+              ? "Writes are enabled for live Firebase only (LIFEOS_ALLOW_WRITES). Export files are never edited. "
+              : "Writes are off until LIFEOS_ALLOW_WRITES=1. ") +
             `Store: ${storeHint}.`,
         });
       }
@@ -96,8 +100,15 @@ export async function handleMcpRequest(
         if (isNotification(message)) return null;
         const params = (message.params ?? {}) as { name?: string; arguments?: Record<string, unknown> };
         if (!params.name) return fail(message.id ?? null, INVALID_PARAMS, "tools/call requires params.name");
+        if (isWriteTool(params.name)) {
+          const result = await executeWrite(params.name, params.arguments, config);
+          return ok(message.id ?? null, result);
+        }
         const loaded = await loadWorkspace(config);
-        const result = callTool(params.name, params.arguments, loaded.workspace, { warning: loaded.warning });
+        const result = callTool(params.name, params.arguments, loaded.workspace, {
+          warning: loaded.warning,
+          writesEnabled: config.allowWrites === true,
+        });
         return ok(message.id ?? null, result);
       }
       case "resources/list":

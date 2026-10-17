@@ -2,7 +2,7 @@ import { Platform } from "react-native";
 import type { CalendarEvent } from "../types";
 import { parseIcsEvents } from "./api";
 
-export const SHARE_APP_GROUP = "group.com.shafkatsaruwar.lifeos";
+export const SHARE_APP_GROUP = "group.com.example.lifeos";
 export const SHARE_QUEUE_KEY = "lifeosPendingShares";
 
 export type SharePayload = {

@@ -402,7 +402,9 @@ describe("MCP tools", () => {
     const status = JSON.parse(callTool("lifeos_status", {}, workspace, { warning: "hi" }).content[0].text);
     expect(status.counts.openTasks).toBe(2);
     expect(status.warning).toBe("hi");
-    expect(status.limitations.join(" ")).toMatch(/Read-only/);
+    expect(status.limitations.join(" ")).toMatch(/LIFEOS_ALLOW_WRITES/);
+    expect(status.writes).toEqual({ enabled: false, flag: "LIFEOS_ALLOW_WRITES", liveFirebase: false });
+    expect(status.counts.careerApplications).toBe(0);
   });
 });
 
@@ -420,7 +422,24 @@ describe("MCP protocol", () => {
       "list_school",
       "list_work",
       "list_events",
+      "list_career",
       "search_lifeos",
+      "create_task",
+      "update_task",
+      "complete_task",
+      "uncomplete_task",
+      "delete_task",
+      "create_event",
+      "update_event",
+      "delete_event",
+      "create_project",
+      "update_project",
+      "create_note",
+      "update_note",
+      "delete_note",
+      "create_career_entry",
+      "update_career_entry",
+      "bulk_import_career",
     ]);
   });
 

@@ -1,3 +1,5 @@
+import type { CareerHub } from "../careerTypes";
+
 /** Normalized LifeOS workspace as the MCP tools see it. */
 
 export type TaskStatus =
@@ -153,6 +155,8 @@ export type LifeOSWorkspace = {
   brain: string[];
   school: SchoolHub;
   work: WorkHub;
+  /** Job Seeker OS hub stored at users/{uid}/career. */
+  career: CareerHub;
   settings: Record<string, unknown>;
 };
 

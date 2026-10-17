@@ -1,15 +1,15 @@
 {
   "counts": {
-    "calls": 19,
-    "verdicts": 2,
-    "passed": 2,
-    "failed": 0,
-    "unknown": 0,
+    "calls": 61,
+    "verdicts": 15,
+    "passed": 10,
+    "failed": 4,
+    "unknown": 1,
     "refusals": 0,
     "marks": 0,
-    "sessions": 2,
-    "tokensReturned": 3377,
-    "drivingMs": 24201
+    "sessions": 9,
+    "tokensReturned": 34237,
+    "drivingMs": 85793
   },
   "days": [
     {
@@ -41,14 +41,44 @@
         "tokensReturned": 1190,
         "drivingMs": 21028
       }
+    },
+    {
+      "date": "2026-09-22",
+      "counts": {
+        "calls": 7,
+        "verdicts": 4,
+        "passed": 3,
+        "failed": 1,
+        "unknown": 0,
+        "refusals": 0,
+        "marks": 0,
+        "sessions": 3,
+        "tokensReturned": 5582,
+        "drivingMs": 17299
+      }
+    },
+    {
+      "date": "2026-09-23",
+      "counts": {
+        "calls": 35,
+        "verdicts": 9,
+        "passed": 5,
+        "failed": 3,
+        "unknown": 1,
+        "refusals": 0,
+        "marks": 0,
+        "sessions": 4,
+        "tokensReturned": 25278,
+        "drivingMs": 44293
+      }
     }
   ],
   "records": {
     "longestRunMs": 0,
-    "bestVerdictDay": 2,
-    "bestDefectDay": 0,
-    "streakDays": 1,
-    "bestStreakDays": 1
+    "bestVerdictDay": 9,
+    "bestDefectDay": 3,
+    "streakDays": 2,
+    "bestStreakDays": 2
   },
   "savings": {
     "tokens": {
@@ -56,9 +86,31 @@
       "basis": "vs an agent reading the app through screenshots"
     },
     "minutes": {
-      "value": 0,
-      "basis": "vs one re-prompt cycle per defect caught"
+      "value": 23.5,
+      "basis": "vs checking each consequence by hand, plus one re-prompt cycle per defect caught"
     }
   },
-  "since": 1787610554119
+  "since": 1787610554119,
+  "defects": [
+    {
+      "at": 1790171869250,
+      "title": "a declared consequence did not hold — observed potentially destructive action blocked; retry with args.confirmDangerous=true"
+    },
+    {
+      "at": 1790171790978,
+      "title": "a declared consequence did not hold — observed target matched 2 elements and an action must not guess between them (ranked: in-viewport, then role): e104 (button \"New task\"; in-viewport), e113 (generic; in-viewport). Narrow the query (add role/name/testid or a scope), or pass an explicit `ref` from reticle_query."
+    },
+    {
+      "at": 1790171763982,
+      "title": "Select all tasks",
+      "detail": "no element matched {\"testid\":\"tasks-batch-delete\"} — testids present here: tasks-table, tasks-select-all",
+      "source": "app/page.tsx:3530"
+    },
+    {
+      "at": 1790109227348,
+      "title": "SchoolDashboard",
+      "detail": "no element matched {\"text\":\"Course standing\"}",
+      "source": "app/components/SchoolPlanner.tsx:884"
+    }
+  ]
 }

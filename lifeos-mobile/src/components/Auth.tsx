@@ -19,7 +19,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { GoogleAuthProvider, OAuthProvider, signInWithCredential } from "firebase/auth";
+import { GoogleAuthProvider, OAuthProvider, getAdditionalUserInfo, signInWithCredential } from "firebase/auth";
 import { auth, firebaseConfigured } from "../lib/firebase";
 import { LIGHT, DARK } from "../lib/theme";
 import { ActionButton } from "./UI";
@@ -28,11 +28,12 @@ import { useLifeOS } from "../lib/LifeOSContext";
 WebBrowser.maybeCompleteAuthSession();
 
 const LIFEOS_ORIGIN = (() => {
-  const raw = process.env.EXPO_PUBLIC_LIFEOS_URL?.trim() || "https://lifeos-mu-three.vercel.app";
+  const raw = process.env.EXPO_PUBLIC_LIFEOS_URL?.trim() || (__DEV__ ? "http://localhost:3000" : "");
+  if (!raw) return "";
   try {
     return new URL(raw).origin;
   } catch {
-    return "https://lifeos-mu-three.vercel.app";
+    return "";
   }
 })();
 
@@ -55,6 +56,13 @@ function GoogleSignInButton() {
 
   const promptSignIn = useCallback(async () => {
     if (signingIn) return;
+    if (!LIFEOS_ORIGIN) {
+      Alert.alert(
+        "LifeOS URL missing",
+        "Set EXPO_PUBLIC_LIFEOS_URL in lifeos-mobile/.env to your web app origin (e.g. http://localhost:3000).",
+      );
+      return;
+    }
     setSigningIn(true);
     try {
       // Google rejects Expo Go's exp:// redirect_uri. Run OAuth on HTTPS LifeOS,
@@ -134,7 +142,24 @@ function AppleSignInButton() {
         idToken: apple.identityToken,
         rawNonce: nonce,
       });
-      await signInWithCredential(auth, credential);
+      const result = await signInWithCredential(auth, credential);
+      const info = getAdditionalUserInfo(result);
+      if (info?.isNewUser) {
+        Alert.alert(
+          "This is a new Apple account",
+          "LifeOS stores Google and Apple as separate accounts. If you already use LifeOS on the web with Google, sign out and tap Continue with Google to open that workspace.",
+          [
+            { text: "Stay on Apple", style: "cancel" },
+            {
+              text: "Sign out",
+              style: "destructive",
+              onPress: () => {
+                void auth.signOut();
+              },
+            },
+          ],
+        );
+      }
     } catch (reason: any) {
       if (reason?.code === "ERR_REQUEST_CANCELED") return;
       const code = typeof reason?.code === "string" ? reason.code : "";
@@ -171,7 +196,8 @@ function AppleSignInButton() {
 export function SignIn() {
   const dark = useColorScheme() === "dark";
   const theme = dark ? DARK : LIGHT;
-  const googleConfigured = Boolean(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim());
+  const googleClientIdInBuild = Boolean(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim());
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
 
   return (
     <SafeAreaView style={[styles.signIn, { backgroundColor: "#111115" }]}>
@@ -182,24 +208,48 @@ export function SignIn() {
         <Text style={styles.signInCopy}>
           Your life, in focus. Native iPhone & iPad app — same private cloud data as the web.
         </Text>
-        {firebaseConfigured && googleConfigured ? (
-          <GoogleSignInButton />
+        <Text style={styles.accountHint}>
+          Already on LifeOS with Google? Use Continue with Google here too — Apple signs into a separate empty account.
+        </Text>
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: ageConfirmed }}
+          onPress={() => setAgeConfirmed((value) => !value)}
+          style={styles.ageGateRow}
+        >
+          <View style={[styles.ageGateBox, ageConfirmed && styles.ageGateBoxChecked]}>
+            {ageConfirmed ? <Feather name="check" size={14} color="#FFF" /> : null}
+          </View>
+          <Text style={styles.ageGateLabel}>I confirm I am 13 years of age or older.</Text>
+        </Pressable>
+        {!ageConfirmed ? (
+          <Text style={styles.ageGateHint}>LifeOS is not available to users under 13.</Text>
+        ) : null}
+        {firebaseConfigured ? (
+          ageConfirmed ? <GoogleSignInButton /> : (
+            <View style={[styles.signInButton, { opacity: 0.45 }]}>
+              <Feather name="log-in" size={18} color="#FFF" />
+              <Text style={styles.signInButtonText}>Continue with Google</Text>
+            </View>
+          )
         ) : (
           <View style={[styles.signInButton, { opacity: 0.45 }]}>
             <Feather name="log-in" size={18} color="#FFF" />
             <Text style={styles.signInButtonText}>Continue with Google</Text>
           </View>
         )}
-        {firebaseConfigured && Platform.OS === "ios" ? <AppleSignInButton /> : null}
+        {firebaseConfigured && Platform.OS === "ios" && ageConfirmed ? <AppleSignInButton /> : null}
         {!firebaseConfigured ? (
           <Text style={[styles.setupText, { color: theme.muted }]}>
-            Add the Firebase values to your local .env file first.
+            {__DEV__
+              ? "Add the Firebase values to your local .env file first."
+              : "Cloud sign-in isn’t configured in this build. Reinstall from TestFlight after the next update."}
           </Text>
         ) : null}
-        {firebaseConfigured && !googleConfigured ? (
+        {__DEV__ && firebaseConfigured && !googleClientIdInBuild ? (
           <Text style={[styles.setupText, { color: theme.muted }]}>
-            Firebase is connected. Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to enable Google sign-in. Apple Sign In still
-            works when enabled in Firebase Console.
+            Dev tip: set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for direct Google OAuth. Without it, sign-in still uses the
+            LifeOS /shell-auth bridge.
           </Text>
         ) : null}
       </View>
@@ -245,7 +295,22 @@ const styles = StyleSheet.create({
   signInInner: { flex: 1, justifyContent: "center", padding: 28, gap: 14, width: "100%", maxWidth: 480, alignSelf: "center" },
   logo: { width: 56, height: 56, borderRadius: 16, marginBottom: 8 },
   signInTitle: { color: "#FFF", fontSize: 40, fontWeight: "800", letterSpacing: -1 },
-  signInCopy: { color: "#A1A1AA", fontSize: 16, lineHeight: 24, marginBottom: 12, maxWidth: 320 },
+  signInCopy: { color: "#A1A1AA", fontSize: 16, lineHeight: 24, marginBottom: 4, maxWidth: 320 },
+  accountHint: { color: "#71717A", fontSize: 13, lineHeight: 18, marginBottom: 12, maxWidth: 340 },
+  ageGateRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 4 },
+  ageGateBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: "#52525B",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  ageGateBoxChecked: { backgroundColor: "#6D5DFB", borderColor: "#6D5DFB" },
+  ageGateLabel: { flex: 1, color: "#D4D4D8", fontSize: 14, lineHeight: 20 },
+  ageGateHint: { color: "#F87171", fontSize: 12, lineHeight: 17, marginBottom: 4 },
   signInButton: { height: 52, borderRadius: 14, backgroundColor: "#6D5DFB", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
   signInButtonText: { color: "#FFF", fontSize: 16, fontWeight: "700" },
   appleBlock: { width: "100%", gap: 8 },

@@ -1,10 +1,13 @@
 import Feather from "@expo/vector-icons/Feather";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -42,6 +45,16 @@ import {
   toDateKey,
 } from "../lib/helpers";
 import { fetchIcsFromUrl, hashIcalUrl, parseIcsEvents, removeIcalSubscriptionEvents, replaceIcalSubscriptionEvents } from "../lib/api";
+import { stageIcsImport } from "../lib/icsImportQueue";
+import {
+  coalesceEventMeetingUrl,
+  detectMeetingProvider,
+  eventNotesLabel,
+  eventPlaceLabel,
+  extractMeetingUrl,
+  meetingJoinLabel,
+  resolveEventMeeting,
+} from "../lib/meetingLinks";
 import {
   expandEventsInRange,
   parseOccurrenceId,
@@ -128,6 +141,8 @@ export function CalendarScreen() {
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
   const [notes, setNotes] = useState("");
+  const [location, setLocation] = useState("");
+  const [link, setLink] = useState("");
   const [weekdaysOnly, setWeekdaysOnly] = useState(false);
   const [calendarId, setCalendarId] = useState(CAL_PERSONAL_ID);
   const [repeat, setRepeat] = useState<EventRepeatFrequency>("never");
@@ -306,6 +321,13 @@ export function CalendarScreen() {
       setStartTime(master.start.slice(11, 16) || "09:00");
       setEndTime(master.end?.slice(11, 16) || "10:00");
       setNotes(master.notes ?? "");
+      setLocation(eventPlaceLabel(master.location) || master.location || "");
+      setLink(
+        master.url ||
+          extractMeetingUrl(master.location) ||
+          extractMeetingUrl(master.notes) ||
+          "",
+      );
       setWeekdaysOnly(Boolean(master.weekdaysOnly));
       setCalendarId(cal?.id || CAL_PERSONAL_ID);
       setRepeat(master.repeat && master.repeat !== "never" ? master.repeat : "never");
@@ -320,6 +342,8 @@ export function CalendarScreen() {
       setStartTime("09:00");
       setEndTime("10:00");
       setNotes("");
+      setLocation("");
+      setLink("");
       setWeekdaysOnly(false);
       setCalendarId(fallback?.id || CAL_PERSONAL_ID);
       setRepeat("never");
@@ -416,6 +440,12 @@ export function CalendarScreen() {
     const endDayValue = endDay.trim() < day.trim() ? day.trim() : endDay.trim();
     const end = `${endDayValue}T${normalizeTime(endTime)}`;
     const master = workspace.calendar.find((event) => event.id === editingId);
+    const cleanedLocation = eventPlaceLabel(location) || undefined;
+    const cleanedLink = coalesceEventMeetingUrl({
+      url: extractMeetingUrl(link) || link.trim() || undefined,
+      location,
+      notes,
+    });
     const payload: CalendarEvent = {
       id: editingId ?? `lifeos-${Date.now()}`,
       title: clean,
@@ -425,6 +455,8 @@ export function CalendarScreen() {
       calendarId: cal?.id || CAL_PERSONAL_ID,
       color: cal?.color,
       notes: notes.trim() || undefined,
+      location: cleanedLocation,
+      url: cleanedLink,
       weekdaysOnly: weekdaysOnly || undefined,
       repeat: repeat === "never" ? undefined : repeat,
       repeatUntil: repeat === "never" ? undefined : repeatUntil,
@@ -498,6 +530,18 @@ export function CalendarScreen() {
     );
   };
 
+  const stageParsed = (parsed: CalendarEvent[], sourceLabel: string) => {
+    if (!parsed.length) {
+      Alert.alert("No events found", "That file didn’t contain any calendar events.");
+      return false;
+    }
+    const staged = stageIcsImport(parsed, {
+      sourceLabel,
+      existingIds: workspace.calendar.map((event) => event.id),
+    });
+    return Boolean(staged);
+  };
+
   const doSubscribe = async () => {
     if (!icalUrl.trim()) return;
     setImporting(true);
@@ -527,6 +571,23 @@ export function CalendarScreen() {
       Alert.alert("Subscribed", `Added ${parsed.length} event${parsed.length === 1 ? "" : "s"} from ${feed.name}.`);
     } catch (err: any) {
       Alert.alert("Subscribe failed", err?.message || "Could not read that calendar link.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const doImportUrl = async () => {
+    if (!icalUrl.trim()) return;
+    setImporting(true);
+    try {
+      const ics = await fetchIcsFromUrl(icalUrl.trim());
+      const parsed = parseIcsEvents(ics);
+      if (stageParsed(parsed, "Calendar feed")) {
+        setImportOpen(false);
+        setIcalUrl("");
+      }
+    } catch (err: any) {
+      Alert.alert("Import failed", err?.message || "Could not read that calendar link.");
     } finally {
       setImporting(false);
     }
@@ -579,6 +640,35 @@ export function CalendarScreen() {
     ]);
   };
 
+  const doImportFile = async () => {
+    if (importing) return;
+    setImporting(true);
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({
+        type: ["text/calendar", "application/ics", "text/plain", "*/*"],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (picked.canceled || !picked.assets?.[0]) return;
+      const asset = picked.assets[0];
+      const name = asset.name || "calendar.ics";
+      if (!/\.ics$/i.test(name) && asset.mimeType && !/calendar|ics/i.test(asset.mimeType)) {
+        Alert.alert("Pick an .ics file", "Choose a calendar invite or subscription export (.ics).");
+        return;
+      }
+      const text = await FileSystem.readAsStringAsync(asset.uri);
+      const parsed = parseIcsEvents(text);
+      if (stageParsed(parsed, name)) {
+        setImportOpen(false);
+        setIcalUrl("");
+      }
+    } catch (err: any) {
+      Alert.alert("Import failed", err?.message || "Could not read that .ics file.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const goConnectWeb = () => {
     setImportOpen(false);
     navigation.navigate("ConnectWeb");
@@ -595,7 +685,7 @@ export function CalendarScreen() {
         <View style={styles.headerActions}>
           <IconButton icon="layers" label="Calendars" onPress={() => setCalendarsOpen(true)} />
           <IconButton icon="plus" label="Add event" onPress={() => openComposer(undefined, selected)} />
-          <IconButton icon="link" label="Subscribe calendars" onPress={() => setImportOpen(true)} />
+          <IconButton icon="download" label="Calendars & import" onPress={() => setImportOpen(true)} />
         </View>
       </View>
 
@@ -770,20 +860,53 @@ export function CalendarScreen() {
                 taskId !== null
                   ? "Task"
                   : findCalendar(calendars, eventCalendarId(event))?.name || event.source || "LifeOS";
+              const place = eventPlaceLabel(event.location);
+              const meeting = resolveEventMeeting(event);
+              const notesLabel = eventNotesLabel(event.notes);
               return (
-                <Pressable
+                <View
                   key={event.id}
-                  onPress={() => openCalendarItem(event)}
                   style={[styles.dayEventCard, { borderColor, backgroundColor: theme.surface }]}
                 >
-                  <Text style={[styles.dayEventTitle, { color: theme.text }]}>{event.title}</Text>
-                  <Text style={[styles.dayEventMeta, { color: theme.muted }]}>
-                    {formatEventRange(event)}
-                    {" · "}
-                    {sourceLabel}
-                  </Text>
-                  {event.notes ? <Text style={[styles.dayEventNotes, { color: theme.muted }]}>{event.notes}</Text> : null}
-                </Pressable>
+                  <Pressable onPress={() => openCalendarItem(event)}>
+                    <Text style={[styles.dayEventTitle, { color: theme.text }]}>{event.title}</Text>
+                    <Text style={[styles.dayEventMeta, { color: theme.muted }]}>
+                      {formatEventRange(event)}
+                      {" · "}
+                      {sourceLabel}
+                    </Text>
+                    {place ? (
+                      <View style={styles.joinRow}>
+                        <Feather name="map-pin" size={12} color={theme.muted} />
+                        <Text style={[styles.dayEventNotes, { color: theme.muted, marginTop: 0 }]}>{place}</Text>
+                      </View>
+                    ) : null}
+                    {notesLabel ? <Text style={[styles.dayEventNotes, { color: theme.muted }]}>{notesLabel}</Text> : null}
+                  </Pressable>
+                  {meeting ? (
+                    <Pressable
+                      accessibilityRole="link"
+                      accessibilityLabel={meeting.label}
+                      onPress={() => {
+                        void Linking.openURL(meeting.url);
+                      }}
+                      hitSlop={8}
+                      style={styles.joinRow}
+                    >
+                      <Feather name="video" size={14} color={theme.accent} />
+                      <Text
+                        style={{
+                          color: theme.accent,
+                          fontWeight: "800",
+                          fontSize: 13,
+                          textDecorationLine: "underline",
+                        }}
+                      >
+                        {meeting.label}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               );
             })
           ) : (
@@ -1005,6 +1128,51 @@ export function CalendarScreen() {
                   )}
                 </View>
               </View>
+              <Text style={[styles.fieldLabel, { color: theme.muted }]}>Location</Text>
+              <TextInput
+                value={location}
+                onChangeText={setLocation}
+                placeholder="Room, campus, address…"
+                placeholderTextColor={theme.muted}
+                style={[styles.importInput, { color: theme.text, borderColor: theme.border }]}
+              />
+              <Text style={[styles.fieldLabel, { color: theme.muted }]}>Link</Text>
+              <TextInput
+                value={link}
+                onChangeText={setLink}
+                placeholder="Zoom, Teams, or Webex link"
+                placeholderTextColor={theme.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                style={[styles.importInput, { color: theme.text, borderColor: theme.border }]}
+              />
+              {detectMeetingProvider(link) && (extractMeetingUrl(link) || /^https?:\/\//i.test(link.trim())) ? (
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => {
+                    const url = extractMeetingUrl(link) || link.trim();
+                    if (url) void Linking.openURL(url);
+                  }}
+                  style={styles.joinRow}
+                >
+                  <Feather name="video" size={14} color={theme.accent} />
+                  <Text
+                    style={{
+                      color: theme.accent,
+                      fontSize: 12,
+                      fontWeight: "800",
+                      textDecorationLine: "underline",
+                    }}
+                  >
+                    {meetingJoinLabel(detectMeetingProvider(link)!)}
+                  </Text>
+                </Pressable>
+              ) : link.trim() ? (
+                <Text style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>
+                  Paste a Zoom, Teams, or Webex URL — it’ll show as a join link.
+                </Text>
+              ) : null}
               <Text style={[styles.fieldLabel, { color: theme.muted }]}>Notes</Text>
               <TextInput
                 value={notes}
@@ -1176,9 +1344,9 @@ export function CalendarScreen() {
         <View style={styles.modalBackdrop}>
           <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 20 }}>
             <View style={[styles.importCard, { backgroundColor: theme.surface }]}>
-              <Text style={[styles.importTitle, { color: theme.text }]}>Subscribe to calendars</Text>
+              <Text style={[styles.importTitle, { color: theme.text }]}>Calendars & import</Text>
               <Text style={[styles.importSub, { color: theme.muted }]}>
-                Add multiple public webcal / .ics feeds. Each syncs on its own and can be removed later.
+                Subscribe to public webcal / .ics feeds, or preview a one-time .ics import before anything is added.
               </Text>
 
               {subscriptions.length ? (
@@ -1220,6 +1388,7 @@ export function CalendarScreen() {
                 </View>
               ) : null}
 
+              <Text style={[styles.fieldLabel, { color: theme.muted }]}>Subscribe to a feed</Text>
               <TextInput
                 value={icalName}
                 onChangeText={setIcalName}
@@ -1253,12 +1422,29 @@ export function CalendarScreen() {
                 ))}
               </View>
               <View style={styles.row}>
-                <ActionButton label="Close" quiet onPress={() => setImportOpen(false)} />
                 <ActionButton
                   label={importing ? "Subscribing…" : "Subscribe"}
                   onPress={() => void doSubscribe()}
                   disabled={importing || !icalUrl.trim()}
                 />
+                <ActionButton
+                  label={importing ? "Reading…" : "Preview once"}
+                  quiet
+                  onPress={() => void doImportUrl()}
+                  disabled={importing || !icalUrl.trim()}
+                />
+              </View>
+
+              <Text style={[styles.fieldLabel, { color: theme.muted, marginTop: 16 }]}>Or import an .ics file</Text>
+              <ActionButton
+                label={importing ? "Reading…" : "Choose .ics file"}
+                icon="file-text"
+                onPress={() => void doImportFile()}
+                disabled={importing}
+              />
+
+              <View style={[styles.row, { marginTop: 12 }]}>
+                <ActionButton label="Close" quiet onPress={() => setImportOpen(false)} />
               </View>
               <Pressable onPress={goConnectWeb}>
                 <Text style={[styles.connectWebLink, { color: theme.accent }]}>Connect Gmail / Outlook / iCloud on web →</Text>
@@ -1354,6 +1540,7 @@ const styles = StyleSheet.create({
   dayEventTitle: { fontSize: 15, fontWeight: "800" },
   dayEventMeta: { fontSize: 13 },
   dayEventNotes: { fontSize: 12, marginTop: 2 },
+  joinRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4, alignSelf: "flex-start" },
   sectionLabel: { fontSize: 16, fontWeight: "800", marginTop: 10 },
   readyRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 12 },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: 24 },

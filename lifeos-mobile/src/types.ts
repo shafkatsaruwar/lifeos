@@ -76,6 +76,9 @@ export type ClassRecord = {
   /** Local time "HH:MM" (24h). */
   meetingStart?: string;
   meetingEnd?: string;
+  gradingScale?: { letter: string; min: number }[];
+  gradeCategories?: { id: string; name: string; weight: number; defaultPoints?: number }[];
+  gradingMode?: "categories" | "items";
 };
 
 /** Named calendar list (iOS-style) — events point at these via `calendarId`. */
@@ -106,6 +109,10 @@ export type CalendarEvent = {
   calendarId?: string;
   color?: string;
   notes?: string;
+  /** Physical place (room, campus, address). Meeting URLs belong in `url`. */
+  location?: string;
+  /** Meeting / join link (Zoom, Teams, Webex, etc.). */
+  url?: string;
   /** Recurrence rule; omit or `never` for a one-off event */
   repeat?: EventRepeatFrequency;
   /** Inclusive end date (YYYY-MM-DD) for the series */
@@ -293,12 +300,14 @@ export type CalendarDefaultView = "upcoming" | "month" | "day";
 
 export type SettingsState = {
   accent?: string;
-  /** Per-workspace accents (Life / School / Work / Study Abroad). Synced with web. */
+  /** Per-workspace accents (Life / School / Work / Study Abroad / TreasuryOS / MasterOS). Synced with web. */
   workspaceColors?: {
     life?: string;
     school?: string;
     work?: string;
     studyAbroad?: string;
+    treasuryOS?: string;
+    masterOS?: string;
   };
   preferredName?: string;
   nowTaskId?: number | null;
@@ -330,6 +339,14 @@ export type SettingsState = {
   onboardingCompletedAt?: string;
   /** Bump to offer a short “what’s new” flow later without replaying v1. */
   onboardingVersion?: number;
+  /** Access entitlement — promo year or paid Pro (synced with web). */
+  entitlement?: {
+    status: "none" | "promo" | "pro";
+    expiresAt?: string;
+    unlockedAt?: string;
+    source?: "promo" | "stripe" | "app_store";
+    promoCode?: string;
+  } | null;
   currentEnergy?: EnergyLevel;
   ambientActivity?: AmbientActivity | null;
   momentumLog?: MomentumEntry[];

@@ -3,7 +3,7 @@ import { MasterOSShell } from "./components/Shell";
 import "./masteros.css";
 
 export const metadata: Metadata = {
-  title: "MasterOS — Personal teaching OS",
+  title: "Mastery — Personal teaching OS",
   description: "Teach any subject with a reusable lesson → practice → mastery loop.",
 };
 

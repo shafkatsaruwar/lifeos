@@ -1,3 +1,5 @@
+import { normalizeCareerHub } from "../careerHelpers";
+import type { CareerHub } from "../careerTypes";
 import { coerceFirebaseList } from "../validation";
 import type {
   LifeOSClass,
@@ -276,6 +278,31 @@ function normalizeSchoolHub(raw: unknown): SchoolHub {
   };
 }
 
+const CAREER_LIST_KEYS = [
+  "companies",
+  "applications",
+  "stageHistory",
+  "contacts",
+  "interactions",
+  "interviews",
+  "tasks",
+  "documents",
+  "activity",
+  "observations",
+] as const;
+
+/** Firebase sometimes stores dense arrays as object maps. Coerce those before the app normalizer. */
+export function coerceCareerHub(raw: unknown): CareerHub {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return normalizeCareerHub(null);
+  const record = { ...(raw as Record<string, unknown>) };
+  for (const key of CAREER_LIST_KEYS) {
+    if (record[key] == null) continue;
+    const list = coerceFirebaseList(record[key]);
+    if (list) record[key] = list;
+  }
+  return normalizeCareerHub(record);
+}
+
 function pickCalendar(raw: Record<string, unknown>): unknown {
   return raw.calendar ?? raw.events ?? raw.calendarEvents;
 }
@@ -307,6 +334,7 @@ export function normalizeWorkspace(
     brain: asList(pickBrain(root)).filter((item): item is string => typeof item === "string"),
     school: normalizeSchoolHub(root.school),
     work: normalizeWorkHub(root.work),
+    career: coerceCareerHub(root.career),
     settings: {
       preferredName: settings.preferredName,
       enableLifeOS: settings.enableLifeOS,

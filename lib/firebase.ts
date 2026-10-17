@@ -27,16 +27,32 @@ let shellSignInWaiter: {
   timer: ReturnType<typeof setTimeout>;
 } | null = null;
 
+const env = (value?: string) => value?.trim() || undefined;
+
 /**
- * Prefer the current LifeOS host as authDomain so Google OAuth stays on
- * lifeos-mu-three.vercel.app via the /__/auth rewrite. Using firebaseapp.com
- * inside Expo's in-app browser loses session state and loops the account picker.
+ * Public Firebase web client config — from env only.
+ * Blank env = local-only mode (Dev Test Login on localhost; no cloud sync).
+ * Do not bake a shared production project into the repo.
+ */
+function readFirebaseConfig() {
+  return {
+    apiKey: env(process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
+    authDomain:
+      env(process.env.NEXT_PUBLIC_LIFEOS_AUTH_DOMAIN) ||
+      env(process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
+    databaseURL: env(process.env.NEXT_PUBLIC_FIREBASE_DB_URL),
+    projectId: env(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
+    storageBucket: env(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET),
+  };
+}
+
+/**
+ * Prefer the current LifeOS host as authDomain so Google OAuth stays on your
+ * deployed domain via the /__/auth rewrite. Using firebaseapp.com inside Expo's
+ * in-app browser can lose session state and loop the account picker.
  */
 function resolveAuthDomain() {
-  const configured =
-    process.env.NEXT_PUBLIC_LIFEOS_AUTH_DOMAIN ||
-    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ||
-    '';
+  const configured = readFirebaseConfig().authDomain;
   if (typeof window === 'undefined') return configured;
   const host = window.location.hostname;
   if (
@@ -54,16 +70,19 @@ function resolveAuthDomain() {
 function initializeFirebase() {
   if (initialized || typeof window === 'undefined') return;
   try {
-    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-    const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+    const fromEnv = readFirebaseConfig();
+    const storageBucket = fromEnv.storageBucket;
     const firebaseConfig = {
-      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-      // Keep Firebase's OAuth helper under the LifeOS domain via next.config rewrites.
+      apiKey: fromEnv.apiKey,
       authDomain: resolveAuthDomain(),
-      databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DB_URL,
-      projectId,
+      databaseURL: fromEnv.databaseURL,
+      projectId: fromEnv.projectId,
       ...(storageBucket ? { storageBucket } : {}),
     };
+    if (!firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.databaseURL) {
+      console.info('Firebase is not configured (set NEXT_PUBLIC_FIREBASE_*). Running local-only.');
+      return;
+    }
     app = initializeApp(firebaseConfig);
     database = getDatabase(app);
     auth = getAuth(app);

@@ -13,7 +13,8 @@ export type CaptureInstantCommand =
   | "ai"
   | "spaces"
   | "studyAbroad"
-  | "masteros";
+  | "masteros"
+  | "executive";
 
 export type CaptureAction =
   | { type: "none" }
@@ -40,6 +41,8 @@ const INSTANT = new Set([
   "/spaces",
   "/sa",
   "/mos",
+  "/executive",
+  "/guide",
 ]);
 
 export function buildCaptureCommands(options: {
@@ -58,6 +61,8 @@ export function buildCaptureCommands(options: {
     { shortcut: "/clock", label: "Clock in/out", desc: "Start or stop contractor timesheet" },
     { shortcut: "/timesheet", label: "Timesheet", desc: "Open full timesheet editor" },
     { shortcut: "/spaces", label: "Spaces", desc: "Open your spaces" },
+    { shortcut: "/executive", label: "Executive", desc: "Commitments — retainers, salah, follow-through" },
+    { shortcut: "/guide", label: "Executive", desc: "Alias for /executive" },
     { shortcut: "/w", label: "I'm doing something", desc: "Start ambient activity" },
     { shortcut: "/a", label: "AI task", desc: "Create with AI assistance" },
   ];
@@ -83,7 +88,7 @@ export function buildCaptureCommands(options: {
     );
   }
   if (options.enableMasterOS !== false) {
-    commands.push({ shortcut: "/mos", label: "MasterOS", desc: "Open teaching workspace (iPad)" });
+    commands.push({ shortcut: "/mos", label: "Mastery", desc: "Open teaching workspace (iPad)" });
   }
   return commands;
 }
@@ -121,6 +126,9 @@ export function resolveCaptureAction(
   }
   if (options.enableMasterOS !== false && (val === "/mos" || val === "/masteros")) {
     return { type: "instant", command: "masteros" };
+  }
+  if (val === "/executive" || val === "/guide" || val === "/guided") {
+    return { type: "instant", command: "executive" };
   }
   if (val.startsWith("/t ")) {
     const title = sliceArg(raw, 3);

@@ -1,8 +1,8 @@
 "use client";
+import { useMosParams } from "@/lib/masteros/embed-routing";
 
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
 import { useMasterOS } from "@/lib/masteros/store";
 import {
   ASSIGNMENT_LABEL,
@@ -20,7 +20,7 @@ import type { AssignmentStatus, Difficulty, MistakeType, Question, QuestionType,
 const STATUSES: AssignmentStatus[] = ["assigned", "in_progress", "submitted", "graded"];
 
 export default function AssignmentDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useMosParams<{ id: string }>();
   const {
     state,
     updateAssignment,

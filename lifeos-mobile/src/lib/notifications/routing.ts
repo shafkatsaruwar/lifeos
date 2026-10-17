@@ -26,6 +26,17 @@ export function navigateFromNotification(payload: Partial<NotifPayload> | null |
     return;
   }
 
+  if (category === "executive") {
+    navigationRef.navigate("NowTab" as never, {
+      screen: "ExecutiveHome",
+      params: {
+        focusRunId: payload.path === "routine" ? undefined : id,
+        startRoutineId: payload.path === "routine" ? id : undefined,
+      },
+    } as never);
+    return;
+  }
+
   if ((category === "task" || category === "deadline" || category === "important") && id) {
     const taskId = parseTaskRouteId(id);
     if (taskId != null) {

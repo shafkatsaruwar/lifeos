@@ -1,14 +1,8 @@
 import { ReticleDev } from './reticle-dev';
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { PrivacyTelemetryBoot } from "@/app/components/PrivacyTelemetry";
 import "./globals.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-inter",
-});
 
 export const metadata: Metadata = {
   title: "LifeOS — Your life, in focus",
@@ -28,15 +22,16 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f7f9" },
-    { media: "(prefers-color-scheme: dark)", color: "#111214" },
+    { media: "(prefers-color-scheme: light)", color: "#F7F9FC" },
+    { media: "(prefers-color-scheme: dark)", color: "#0B1220" },
   ],
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
-      <body className={inter.className}>{process.env.NODE_ENV === 'development' ? <ReticleDev /> : null}
+    <html lang="en" suppressHydrationWarning>
+      <body>{process.env.NODE_ENV === 'development' ? <ReticleDev /> : null}
+        <PrivacyTelemetryBoot />
         <ErrorBoundary>{children}</ErrorBoundary>
       </body>
     </html>

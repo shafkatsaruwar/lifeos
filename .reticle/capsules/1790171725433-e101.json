@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "id": "1790171725433-e101",
+  "createdAt": 1790171725433,
+  "origin": "failed-assert",
+  "expected": "declared consequence",
+  "observed": "expected element to be absent but found 1",
+  "steps": [
+    {
+      "tool": "reticle_act",
+      "anchor": {
+        "kind": "testid",
+        "value": "e101",
+        "source": {
+          "file": "app/page.tsx",
+          "line": 4670,
+          "column": 10
+        }
+      },
+      "action": "click"
+    }
+  ]
+}

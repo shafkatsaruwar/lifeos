@@ -25,6 +25,8 @@ export const FIREBASE_PATHS = {
   work: (userId: string) => `users/${userId}/work`,
   timeTracking: (userId: string) => `users/${userId}/timeTracking`,
   studyAbroad: (userId: string) => `users/${userId}/studyAbroad`,
+  career: (userId: string) => `users/${userId}/career`,
+  guided: (userId: string) => `users/${userId}/guided`,
   settings: (userId: string) => `users/${userId}/settings`,
   dark: (userId: string) => `users/${userId}/dark`,
 } as const;

@@ -1,15 +1,15 @@
 "use client";
+import { useMosSearchParams } from "@/lib/masteros/embed-routing";
 
 import Link from "next/link";
 import { FormEvent, Suspense, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { useMasterOS } from "@/lib/masteros/store";
 import { ASSIGNMENT_LABEL, assignmentStatusLabel, formatDate, scorePercent, todayKey } from "@/lib/masteros/helpers";
 import type { AssignmentType } from "@/lib/masteros/types";
 
 function AssignmentsInner() {
   const { state, addAssignment } = useMasterOS();
-  const params = useSearchParams();
+  const params = useMosSearchParams();
   const [open, setOpen] = useState(params.get("new") === "1");
   const [title, setTitle] = useState("");
   const [courseId, setCourseId] = useState(state.courses[0]?.id ?? "");

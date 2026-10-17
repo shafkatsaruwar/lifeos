@@ -1,7 +1,7 @@
 "use client";
+import { useMosSearchParams } from "@/lib/masteros/embed-routing";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useMemo, useState } from "react";
 import { formatDate, todayKey } from "@/lib/masteros/helpers";
 import { groupLessonsForList, useMasterOS } from "@/lib/masteros/store";
@@ -19,7 +19,7 @@ const DEFAULT_SECTIONS: { type: LessonSectionType; title: string; content: strin
 
 function LessonsInner() {
   const { state, addLesson, deleteLesson } = useMasterOS();
-  const params = useSearchParams();
+  const params = useMosSearchParams();
   const [open, setOpen] = useState(params.get("new") === "1");
   const [title, setTitle] = useState("");
   const [objective, setObjective] = useState("");

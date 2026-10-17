@@ -24,6 +24,41 @@ export function eventOccursOnDate(event: CalendarEventRange, dateKey: string): b
   return true;
 }
 
+function clockMinutes(value: string): number {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 0;
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+/** True when start/end encode a repeating daily window across a date range (work blocks). */
+export function usesDailyTimeWindow(event: CalendarEventRange): boolean {
+  const { startKey, endKey } = getEventDateRange(event);
+  if (startKey === endKey) return false;
+  if (event.weekdaysOnly) return true;
+  const startTod = clockMinutes(event.start);
+  const endTod = event.end ? clockMinutes(event.end) : startTod + 45;
+  // Overnight continuous spans keep endTod <= startTod; daily windows keep endTod > startTod.
+  return endTod > startTod;
+}
+
+/** Day-timeline placement for an event on a specific date key. */
+export function getEventDayBlockMinutes(event: CalendarEventRange, selectedDateKey: string): { startMinutes: number; endMinutes: number } {
+  const startTod = clockMinutes(event.start);
+  const endTod = event.end ? clockMinutes(event.end) : startTod + 45;
+  const { startKey, endKey } = getEventDateRange(event);
+
+  if (usesDailyTimeWindow(event)) {
+    return {
+      startMinutes: startTod,
+      endMinutes: Math.max(startTod + 20, endTod),
+    };
+  }
+
+  const startMinutes = selectedDateKey === startKey ? startTod : 0;
+  const endMinutes = selectedDateKey === endKey ? Math.max(startMinutes + 20, endTod || 1440) : 1440;
+  return { startMinutes, endMinutes };
+}
+
 export type MonthEventSegment<T extends CalendarEventRange = CalendarEventRange> = {
   event: T;
   week: number;

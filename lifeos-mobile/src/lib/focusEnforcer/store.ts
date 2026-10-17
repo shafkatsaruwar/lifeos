@@ -2,6 +2,7 @@ import { get, onValue, ref, remove, set, update, type Unsubscribe } from "fireba
 import { database } from "../firebase";
 import {
   DEFAULT_FOCUS_ENFORCER_PREFS,
+  normalizeFocusEnforcerRepeat,
   type FocusEnforcerPrefs,
   type FocusEnforcerSession,
 } from "./shared";
@@ -119,6 +120,7 @@ function normalizeSession(value: unknown, fallbackId: string): FocusEnforcerSess
   if (!value || typeof value !== "object") return null;
   const raw = value as Partial<FocusEnforcerSession>;
   if (!raw.taskTitle || !raw.scheduledStartAt) return null;
+  const repeat = normalizeFocusEnforcerRepeat(raw.repeat);
   return {
     id: typeof raw.id === "string" && raw.id ? raw.id : fallbackId,
     taskId: Number(raw.taskId) || 0,
@@ -128,6 +130,8 @@ function normalizeSession(value: unknown, fallbackId: string): FocusEnforcerSess
     proofRequired: Boolean(raw.proofRequired),
     status: (raw.status as FocusEnforcerSession["status"]) || "scheduled",
     escalationLevel: raw.escalationLevel ?? null,
+    repeat,
+    seriesId: typeof raw.seriesId === "string" && raw.seriesId ? raw.seriesId : undefined,
     actualStartAt: raw.actualStartAt,
     completedAt: raw.completedAt,
     startDelayMin: raw.startDelayMin,

@@ -1,7 +1,9 @@
 import {
   computeFocusEnforcerMetrics,
   escalationFireTimes,
+  focusEnforcerRepeatLabel,
   isOnTimeStart,
+  nextFocusEnforcerStart,
   type FocusEnforcerSession,
 } from "@/lib/focusEnforcer";
 
@@ -112,5 +114,54 @@ describe("Focus Enforcer metrics", () => {
     const metrics = computeFocusEnforcerMetrics(sessions, 30, new Date("2026-08-23T12:00:00.000Z"));
     // 5 of 7 started ≈ 71.428 → round 71
     expect(metrics.onTimeAmongStartedPercent).toBe(71);
+  });
+});
+
+describe("Focus Enforcer recurrence", () => {
+  it("labels repeat options", () => {
+    expect(focusEnforcerRepeatLabel("never")).toBe("Does not repeat");
+    expect(focusEnforcerRepeatLabel("daily")).toBe("Every day");
+    expect(focusEnforcerRepeatLabel("weekdays")).toBe("Weekdays (Mon–Fri)");
+    expect(focusEnforcerRepeatLabel("weekly")).toBe("Every week");
+  });
+
+  it("never returns null", () => {
+    expect(nextFocusEnforcerStart("2026-10-06T23:55:00", "never")).toBeNull();
+  });
+
+  it("daily advances one calendar day at the same clock time", () => {
+    const start = new Date(2026, 9, 6, 23, 55, 0); // Oct 6 local
+    const now = new Date(2026, 9, 6, 12, 0, 0);
+    const next = nextFocusEnforcerStart(start, "daily", now);
+    expect(next).not.toBeNull();
+    expect(next!.getFullYear()).toBe(2026);
+    expect(next!.getMonth()).toBe(9);
+    expect(next!.getDate()).toBe(7);
+    expect(next!.getHours()).toBe(23);
+    expect(next!.getMinutes()).toBe(55);
+  });
+
+  it("weekly advances seven days", () => {
+    const start = new Date(2026, 9, 6, 23, 55, 0); // Tuesday
+    const now = new Date(2026, 9, 6, 12, 0, 0);
+    const next = nextFocusEnforcerStart(start, "weekly", now);
+    expect(next!.getDate()).toBe(13);
+    expect(next!.getDay()).toBe(start.getDay());
+  });
+
+  it("weekdays skips Saturday and Sunday", () => {
+    const friday = new Date(2026, 9, 9, 11, 0, 0); // Fri Oct 9
+    const now = new Date(2026, 9, 9, 8, 0, 0);
+    const next = nextFocusEnforcerStart(friday, "weekdays", now);
+    expect(next!.getDay()).toBe(1); // Monday
+    expect(next!.getDate()).toBe(12);
+  });
+
+  it("skips forward when the next slot is already past", () => {
+    const start = new Date(2026, 9, 1, 8, 0, 0);
+    const now = new Date(2026, 9, 5, 9, 0, 0); // past several daily slots
+    const next = nextFocusEnforcerStart(start, "daily", now);
+    expect(next!.getDate()).toBe(6);
+    expect(next!.getHours()).toBe(8);
   });
 });
