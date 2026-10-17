@@ -3193,31 +3193,32 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   };
   return <div className="now-view">
     {showOnboarding && (
-      <div className="onboarding-overlay">
-        <div className="onboarding-modal">
-          <button className="onboarding-close" onClick={closeOnboarding}>✕</button>
-          <div className="onboarding-content">
-            <h2>Welcome to LifeOS</h2>
-            <p className="onboarding-subtitle">Your life, in focus.</p>
-            <div className="onboarding-tips">
-              <div className="tip">
-                <strong>📝 Capture Commands</strong>
-                <p>Type <code>/t</code> to add tasks, <code>/proj</code> for projects, <code>/asg</code> for assignments</p>
-              </div>
-              <div className="tip">
-                <strong>🎯 Current Task</strong>
-                <p>Click any task to focus on it. Your active task shows here with focus features.</p>
-              </div>
-              <div className="tip">
-                <strong>✨ LifeOS Copilot</strong>
-                <p>Your AI assistant suggests what to do next based on your priorities and context.</p>
-              </div>
-              <div className="tip">
-                <strong>⌨️ Capture bar</strong>
-                <p>Click the capture bar on Now to see commands like <code>/t</code>, <code>/break</code>, and <code>/focus</code>.</p>
-              </div>
+      <div className="ob-overlay" role="dialog" aria-modal="true" aria-labelledby="postauth-onboarding-title">
+        <div className="ob-card">
+          <button type="button" className="ob-close" onClick={closeOnboarding} aria-label="Close onboarding"><X size={18} /></button>
+          <div className="ob-visual" aria-hidden>
+            <svg className="ob-illus" viewBox="0 0 280 280" fill="none">
+              <circle cx="140" cy="150" r="78" stroke="currentColor" strokeWidth="3" />
+              <path d="M96 168c12-28 28-42 44-42s32 14 44 42" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              <circle cx="140" cy="112" r="22" stroke="currentColor" strokeWidth="3" />
+              <path d="M70 214h140" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              <rect x="88" y="190" width="104" height="14" rx="4" stroke="currentColor" strokeWidth="3" />
+            </svg>
+          </div>
+          <div className="ob-panel">
+            <div className="ob-brand">LifeOS</div>
+            <p className="ob-eyebrow">You&apos;re in</p>
+            <h2 id="postauth-onboarding-title" className="ob-title">Ready to start your week?</h2>
+            <p className="ob-body">A few habits that keep Now clear — capture fast, focus on one thing, let Copilot suggest the next move.</p>
+            <div className="ob-tips">
+              <div className="ob-tip"><span className="ob-tip-icon"><Command size={16} /></span><div><strong>Capture commands</strong><p>Type <code>/t</code> for tasks, <code>/proj</code> for projects, <code>/asg</code> for assignments.</p></div></div>
+              <div className="ob-tip"><span className="ob-tip-icon"><Focus size={16} /></span><div><strong>Current task</strong><p>Click any task to focus on it. Your active work shows here with focus tools.</p></div></div>
+              <div className="ob-tip"><span className="ob-tip-icon"><Sparkles size={16} /></span><div><strong>LifeOS Copilot</strong><p>Suggestions based on your priorities and context — you decide what runs.</p></div></div>
             </div>
-            <button className="onboarding-button" onClick={closeOnboarding}>Let&apos;s go!</button>
+            <div className="ob-actions">
+              <button type="button" className="ob-primary" onClick={closeOnboarding}>Continue</button>
+              <button type="button" className="ob-skip" onClick={closeOnboarding}>Skip</button>
+            </div>
           </div>
         </div>
       </div>
@@ -4794,9 +4795,11 @@ function AuthEntry({ onLoginSuccess }: { onLoginSuccess: () => void }) {
 
   if (showLogin === null) {
     return (
-      <div className="preauth-shell" aria-busy="true">
-        <div className="preauth-card">
-          <div className="preauth-brand">LifeOS</div>
+      <div className="ob-shell" aria-busy="true">
+        <div className="ob-card" style={{ gridTemplateColumns: "1fr", maxWidth: 420 }}>
+          <div className="ob-panel">
+            <div className="ob-brand">LifeOS</div>
+          </div>
         </div>
       </div>
     );
@@ -5524,7 +5527,56 @@ function AmbientWrapupModal({ activity, close, finish }: { activity: AmbientActi
 function WelcomeNameModal({ suggestedName, save }: { suggestedName?: string | null; save: (name: string) => void }) {
   const [name, setName] = useState(suggestedName?.trim() || "");
   const trimmedName = name.trim();
-  return <motion.div className="modal-layer welcome-name-layer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="presentation"><motion.form className="capture-modal welcome-name-modal" role="dialog" aria-modal="true" aria-labelledby="welcome-name-title" onSubmit={event => { event.preventDefault(); if (trimmedName) save(trimmedName); }} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><UserRound size={16} /></div><div><strong id="welcome-name-title">What should we call you?</strong><span>Use the name that feels right inside your LifeOS.</span></div></div><label className="welcome-name-field" htmlFor="preferred-name">YOUR NAME<input id="preferred-name" autoFocus autoComplete="name" maxLength={40} value={name} onChange={event => setName(event.target.value)} placeholder="Your name" /></label><div className="capture-footer"><span>Private to your workspace.</span><button type="submit" disabled={!trimmedName}>Continue <ArrowRight size={14} /></button></div></motion.form></motion.div>;
+  return (
+    <motion.div className="modal-layer welcome-name-layer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="presentation">
+      <motion.form
+        className="welcome-name-modal ob-welcome"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="welcome-name-title"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (trimmedName) save(trimmedName);
+        }}
+        initial={{ scale: 0.98, y: 8 }}
+        animate={{ scale: 1, y: 0 }}
+      >
+        <div className="ob-card">
+          <div className="ob-visual" aria-hidden>
+            <svg className="ob-illus" viewBox="0 0 280 280" fill="none">
+              <circle cx="140" cy="132" r="36" stroke="currentColor" strokeWidth="3" />
+              <path d="M86 208c18-36 40-54 54-54s36 18 54 54" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              <rect x="72" y="64" width="136" height="18" rx="6" stroke="currentColor" strokeWidth="3" />
+              <path d="M96 96h88" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          </div>
+          <div className="ob-panel">
+            <div className="ob-brand">LifeOS</div>
+            <p className="ob-eyebrow">Personal workspace</p>
+            <h2 id="welcome-name-title" className="ob-title">What should we call you?</h2>
+            <p className="ob-body">Use the name that feels right inside your LifeOS. It stays private to your workspace.</p>
+            <div className="ob-field">
+              <label htmlFor="preferred-name">Your name</label>
+              <input
+                id="preferred-name"
+                autoFocus
+                autoComplete="name"
+                maxLength={40}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Your name"
+              />
+            </div>
+            <div className="ob-actions">
+              <button type="submit" className="ob-primary" disabled={!trimmedName}>
+                Continue <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </motion.form>
+    </motion.div>
+  );
 }
 
 function CaptureModal({ close, add }: { close: () => void; add: (s: string) => void }) {
