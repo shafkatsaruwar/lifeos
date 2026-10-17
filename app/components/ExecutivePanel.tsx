@@ -368,6 +368,12 @@ export function ExecutiveActiveStrip({
             Open
           </button>
         ) : null}
+        <button
+          type="button"
+          onClick={() => apply(acknowledgeRun(hub, run.id, "decline"), onChange, flash, COPY.declineAck)}
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );
