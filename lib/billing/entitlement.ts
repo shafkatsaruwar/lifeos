@@ -202,7 +202,7 @@ export function isHubVisibleInNav(
   now: Date = new Date(),
 ): boolean {
   const unlocked = canAccessPaidHubs(options.entitlement, now);
-  if (name === "Life" || name === "Dashboard") return options.enableLifeOS !== false;
+  if (name === "Life" || name === "Home" || name === "Dashboard") return options.enableLifeOS !== false;
   if (name === "School") return options.enableSchoolOS !== false;
   if (name === "Career") return options.enableCareerOS !== false;
   if (name === "Work") return unlocked && options.enableWorkOS !== false;
