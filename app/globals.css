@@ -779,9 +779,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 /* ——— Atelier 2.0: shell + Now ——— */
 .sidebar{background:color-mix(in srgb,var(--panel) 78%,transparent);border-right:1px solid color-mix(in srgb,var(--line) 80%,transparent);backdrop-filter:blur(18px)}
 .brand{font-weight:750;letter-spacing:-.03em}
-.brand-mark{width:28px;height:28px;border-radius:9px;background:color-mix(in srgb,var(--accent) 12%,var(--panel));display:grid;grid-template-columns:repeat(3,4px);gap:3px;place-content:center;place-items:end;padding:6px}
-.brand-mark span{width:4px;border-radius:2px;background:var(--accent);display:block}
-.brand-mark span:nth-child(1){height:8px}.brand-mark span:nth-child(2){height:12px}.brand-mark span:nth-child(3){height:16px}
+/* Keep the LifeOS mark: dark tile + white bars (short / tall / mid). Do not recolor without permission. */
 .search-trigger{border-radius:12px;background:var(--surface-2);border-color:transparent;box-shadow:none}
 .nav-label{opacity:.7}
 .topbar{border-bottom-color:transparent;background:color-mix(in srgb,var(--canvas) 72%,transparent)}
@@ -805,7 +803,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .atelier-quote-widget p{margin:0;font-family:var(--font-display),serif;font-size:18px;line-height:1.25;color:var(--ink);max-width:16ch}
 .atelier-quote-widget svg{color:var(--accent);flex:0 0 auto}
 .atelier-now-main{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1.2fr);gap:16px;align-items:stretch}
-.atelier-today-panel,.atelier-focus-panel,.atelier-capture-panel{border-radius:20px}
+.atelier-today-panel,.atelier-focus-panel{border-radius:20px}
 .atelier-today-panel{min-height:340px;display:flex;flex-direction:column}
 .atelier-today-panel .now-today-list{flex:1}
 .atelier-now-mid{display:grid;grid-template-rows:1fr auto;gap:12px;min-height:340px}
@@ -840,16 +838,9 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .dark .tile-life svg{background:#134E4A55;color:#5EEAD4}
 .dark .tile-school svg{background:#4C1D9555;color:#C4B5FD}
 .dark .tile-tasks svg{background:#88133755;color:#FDA4AF}
-.atelier-now-bottom{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.15fr);gap:16px;align-items:stretch}
-.atelier-capture-panel{min-height:180px}
-.atelier-capture-body{display:flex;gap:10px;padding:4px 18px 8px;align-items:center}
-.atelier-capture-body input{flex:1;height:48px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2);padding:0 14px;font-size:14px;outline:0;color:var(--ink)}
-.atelier-capture-body input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
-.atelier-capture-add{width:48px;height:48px;border:0;border-radius:14px;background:var(--accent);color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 8px 18px color-mix(in srgb,var(--accent) 30%,transparent)}
-.atelier-capture-hint{margin:0 18px 16px;font-size:11px;color:var(--muted)}
+.atelier-now-bottom{display:grid;grid-template-columns:1fr;gap:16px;align-items:stretch}
 .atelier-now-bottom .copilot-card{min-height:180px;border-radius:20px;background:linear-gradient(160deg,color-mix(in srgb,var(--panel) 88%,var(--accent-2) 12%),var(--panel));border-color:color-mix(in srgb,var(--accent-2) 18%,var(--line))}
 .atelier-now-utility{display:grid;gap:12px;margin-top:4px}
-.atelier-utility-actions{display:flex;flex-wrap:wrap;gap:8px}
 .now-today-list{padding:6px 0 10px}
 .now-today-row{display:grid;grid-template-columns:56px 16px 1fr;gap:10px;padding:10px 18px;align-items:stretch}
 .now-today-row time{font-size:12px;font-weight:650;color:var(--muted);padding-top:3px;text-align:right;font-variant-numeric:tabular-nums}

@@ -3380,67 +3380,10 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       </div>
 
       <div className="atelier-now-bottom">
-        <section className="card atelier-capture-panel">
-          <div className="card-head"><div><h2>Quick capture</h2></div></div>
-          <div className="atelier-capture-body">
-            <input
-              ref={captureInputRef}
-              type="text"
-              placeholder="Drop a thought, task, or idea…"
-              value={captureInput}
-              onChange={(e) => { setCaptureInput(e.currentTarget.value); setSuggestedCommandIndex(-1); }}
-              onFocus={handleCaptureFocus}
-              onClick={handleCaptureFocus}
-              onBlur={handleCaptureBlur}
-              onKeyDown={handleCaptureKeyDown}
-            />
-            <button type="button" className="atelier-capture-add" onClick={onCapture} aria-label="Capture"><Plus size={18} /></button>
-          </div>
-          {showSuggestions ? (
-            <div className="capture-suggestions" onMouseDown={(e) => e.preventDefault()}>
-              <div className="capture-suggestions-list">
-                {filtered.map((cmd, idx) => (
-                  <button
-                    key={cmd.shortcut}
-                    type="button"
-                    className={idx === suggestedCommandIndex ? "suggested" : ""}
-                    onClick={() => {
-                      if (['/w', '/break', '/a', '/focus', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
-                        runInstantCommand(cmd.shortcut);
-                        finishCaptureCommand();
-                      } else {
-                        setCaptureInput(cmd.shortcut + " ");
-                        setSuggestedCommandIndex(-1);
-                        captureInputRef.current?.focus();
-                      }
-                    }}
-                  >
-                    <strong>{cmd.shortcut}</strong>
-                    <span>{cmd.desc}</span>
-                  </button>
-                ))}
-              </div>
-              {showCaptureCommands ? (
-                <div className="capture-suggestions-footer">
-                  <button type="button" className="capture-dismiss" onClick={() => { onDismissCaptureCommands(); setCaptureFocused(false); }}>
-                    Don&apos;t show again
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <p className="atelier-capture-hint">/t · /tm · /break · /focus · /clock{enableMasterOS ? " · /mos" : ""}</p>
-          )}
-        </section>
         <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} studyAbroadContext={enableStudyAbroad ? buildStudyAbroadCopilotContext(studyAbroadHub) : null} />
       </div>
 
       <div className="atelier-now-utility">
-        <div className="atelier-utility-actions">
-          <button type="button" className="atelier-chip" onClick={onDailyReset}>Daily reset</button>
-          <button type="button" className="atelier-chip" onClick={onWeeklyReview}>Weekly review</button>
-          <button type="button" className="atelier-chip primary" onClick={() => onGo("Today")}><CalendarDays size={15} /> Plan today</button>
-        </div>
         <ExecutiveActiveStrip hub={guidedHub} onChange={onGuidedChange} flash={flash} onOpen={onOpenGuided} />
         <TimesheetNowStrip
           timeTracking={timeTracking}
