@@ -18,7 +18,7 @@ function TypeTester({ reduceMotion }: { reduceMotion?: boolean }) {
   return (
     <div className="flex h-full items-center justify-center">
       <motion.span
-        className="font-serif text-6xl font-medium text-zinc-900 md:text-8xl"
+        className="text-6xl font-medium text-zinc-900 md:text-8xl"
         animate={reduceMotion ? undefined : { scale }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
       >
@@ -91,7 +91,7 @@ function SpeedIndicator({ reduceMotion }: { reduceMotion?: boolean }) {
               key="text"
               initial={reduceMotion ? false : { y: 20, opacity: 0, filter: "blur(5px)" }}
               animate={{ y: 0, opacity: 1, filter: "blur(0px)" }}
-              className="font-sans text-3xl font-medium text-zinc-900 md:text-4xl"
+              className="text-3xl font-medium text-zinc-900 md:text-4xl"
             >
               45m
             </motion.span>
@@ -225,7 +225,7 @@ export function SettingsBentoGrid({ reduceMotion, onSelect }: SettingsBentoGridP
               <TypeTester reduceMotion={reduceMotion} />
             </div>
             <div className="mt-4">
-              <h3 className="font-serif text-xl font-medium text-zinc-900">Appearance</h3>
+              <h3 className="text-xl font-medium text-zinc-900">Appearance</h3>
               <p className="mt-1 text-sm text-zinc-500">Theme, accent, and density for LifeOS.</p>
             </div>
           </motion.div>
@@ -246,7 +246,7 @@ export function SettingsBentoGrid({ reduceMotion, onSelect }: SettingsBentoGridP
               <LayoutAnimation reduceMotion={reduceMotion} />
             </div>
             <div className="mt-4">
-              <h3 className="font-serif text-xl font-medium text-zinc-900">Hubs</h3>
+              <h3 className="text-xl font-medium text-zinc-900">Hubs</h3>
               <p className="mt-1 text-sm text-zinc-500">Choose which spaces show in the sidebar.</p>
             </div>
           </motion.div>
@@ -273,7 +273,7 @@ export function SettingsBentoGrid({ reduceMotion, onSelect }: SettingsBentoGridP
               </div>
             </div>
             <div className="relative z-20 mt-auto rounded-lg bg-zinc-50/90 p-2 backdrop-blur-sm">
-              <h3 className="flex items-center gap-2 font-serif text-xl font-medium text-zinc-900">
+              <h3 className="flex items-center gap-2 text-xl font-medium text-zinc-900">
                 <Globe className="h-5 w-5" />
                 Connections
               </h3>
@@ -297,7 +297,7 @@ export function SettingsBentoGrid({ reduceMotion, onSelect }: SettingsBentoGridP
               <SpeedIndicator reduceMotion={reduceMotion} />
             </div>
             <div className="mt-4">
-              <h3 className="font-serif text-xl font-medium text-zinc-900">Focus</h3>
+              <h3 className="text-xl font-medium text-zinc-900">Focus</h3>
               <p className="mt-1 text-sm text-zinc-500">Default session length and energy.</p>
             </div>
           </motion.div>
@@ -318,7 +318,7 @@ export function SettingsBentoGrid({ reduceMotion, onSelect }: SettingsBentoGridP
               <SecurityBadge reduceMotion={reduceMotion} />
             </div>
             <div className="mt-4">
-              <h3 className="flex items-center gap-2 font-serif text-xl font-medium text-zinc-900">
+              <h3 className="flex items-center gap-2 text-xl font-medium text-zinc-900">
                 <Lock className="h-5 w-5" />
                 Privacy &amp; data
               </h3>
@@ -342,7 +342,7 @@ export function SettingsBentoGrid({ reduceMotion, onSelect }: SettingsBentoGridP
               <Smartphone className="h-16 w-16 text-zinc-900" />
             </div>
             <div className="mt-4">
-              <h3 className="font-serif text-xl font-medium text-zinc-900">Notifications</h3>
+              <h3 className="text-xl font-medium text-zinc-900">Notifications</h3>
               <p className="mt-1 text-sm text-zinc-500">Digest, focus nudges, and calendar alerts.</p>
             </div>
           </motion.div>
