@@ -908,9 +908,9 @@ export function computeCareerAnalytics(hub: CareerHub, now = new Date()): Career
     submittedCount,
     definitions: {
       responseRate:
-        "Applications with a recorded employer response (stage past Applied, or last contact) ÷ applications submitted (excludes Saved-only).",
-      interviewConversionRate: "Applications with an interview stage or interview record ÷ submitted applications.",
-      offerConversionRate: "Applications in Offer/Accepted ÷ submitted applications.",
+        "Applications with a recorded employer response (stage past Applied, or last contact) / applications submitted (excludes Saved-only).",
+      interviewConversionRate: "Applications with an interview stage or interview record / submitted applications.",
+      offerConversionRate: "Applications in Offer/Accepted / submitted applications.",
       averageDaysToFirstResponse:
         "Mean days from applied date to first recorded stage change beyond Applied, when history exists.",
       averageDaysInCurrentStage: "Mean days since each application's latest stage change.",
