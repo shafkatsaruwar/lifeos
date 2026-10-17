@@ -769,9 +769,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 /* ——— Atelier 2.0: shell + Now ——— */
 .sidebar{background:color-mix(in srgb,var(--panel) 78%,transparent);border-right:1px solid color-mix(in srgb,var(--line) 80%,transparent);backdrop-filter:blur(18px)}
 .brand{font-weight:750;letter-spacing:-.03em}
-.brand-mark{width:28px;height:28px;border-radius:9px;background:color-mix(in srgb,var(--accent) 12%,var(--panel));display:grid;grid-template-columns:repeat(3,4px);gap:3px;place-content:center;place-items:end;padding:6px}
-.brand-mark span{width:4px;border-radius:2px;background:var(--accent);display:block}
-.brand-mark span:nth-child(1){height:8px}.brand-mark span:nth-child(2){height:12px}.brand-mark span:nth-child(3){height:16px}
+/* Keep the LifeOS mark: dark tile + white bars (short / tall / mid). Do not recolor without permission. */
 .search-trigger{border-radius:12px;background:var(--surface-2);border-color:transparent;box-shadow:none}
 .nav-label{opacity:.7}
 .topbar{border-bottom-color:transparent;background:color-mix(in srgb,var(--canvas) 72%,transparent)}
@@ -795,7 +793,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .atelier-quote-widget p{margin:0;font-family:var(--font-display),serif;font-size:18px;line-height:1.25;color:var(--ink);max-width:16ch}
 .atelier-quote-widget svg{color:var(--accent);flex:0 0 auto}
 .atelier-now-main{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1.2fr);gap:16px;align-items:stretch}
-.atelier-today-panel,.atelier-focus-panel,.atelier-capture-panel{border-radius:20px}
+.atelier-today-panel,.atelier-focus-panel{border-radius:20px}
 .atelier-today-panel{min-height:340px;display:flex;flex-direction:column}
 .atelier-today-panel .now-today-list{flex:1}
 .atelier-now-mid{display:grid;grid-template-rows:1fr auto;gap:12px;min-height:340px}
@@ -825,17 +823,27 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .tile-career svg{background:#DBEAFE;color:#2563EB}
 .tile-life svg{background:#D1FAE5;color:#0D9488}
 .tile-school svg{background:#EDE9FE;color:#7C3AED}
+.tile-work svg{background:#E0E7FF;color:#4338CA}
+.tile-study svg{background:#CFFAFE;color:#0E7490}
+.tile-treasury svg{background:#FEF3C7;color:#B45309}
+.tile-mastery svg{background:#F3E8FF;color:#7E22CE}
+.tile-calendar svg{background:#E0F2FE;color:#0284C7}
 .tile-tasks svg{background:#FFE4E6;color:#F43F5E}
+.tile-library svg{background:#F1F5F9;color:#475569}
 .dark .tile-career svg{background:#1E3A8A55;color:#93C5FD}
 .dark .tile-life svg{background:#134E4A55;color:#5EEAD4}
 .dark .tile-school svg{background:#4C1D9555;color:#C4B5FD}
+.dark .tile-work svg{background:#312E8155;color:#A5B4FC}
+.dark .tile-study svg{background:#164E6355;color:#67E8F9}
+.dark .tile-treasury svg{background:#78350F55;color:#FCD34D}
+.dark .tile-mastery svg{background:#581C8755;color:#D8B4FE}
+.dark .tile-calendar svg{background:#0C4A6E55;color:#7DD3FC}
 .dark .tile-tasks svg{background:#88133755;color:#FDA4AF}
-.atelier-now-bottom{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.15fr);gap:16px;align-items:stretch}
-.atelier-now-bottom-solo{grid-template-columns:1fr}
+.dark .tile-library svg{background:#1E293B55;color:#CBD5E1}
+.atelier-now-bottom{display:grid;grid-template-columns:1fr;gap:16px;align-items:stretch}
 .atelier-now-bottom .copilot-card{min-height:180px;border-radius:20px;background:linear-gradient(160deg,color-mix(in srgb,var(--panel) 88%,var(--accent-2) 12%),var(--panel));border-color:color-mix(in srgb,var(--accent-2) 18%,var(--line))}
 .command-results>button.suggested{background:color-mix(in srgb,var(--accent) 10%,var(--canvas))}
 .atelier-now-utility{display:grid;gap:12px;margin-top:4px}
-.atelier-utility-actions{display:flex;flex-wrap:wrap;gap:8px}
 .now-today-list{padding:6px 0 10px}
 .now-today-row{display:grid;grid-template-columns:56px 16px 1fr;gap:10px;padding:10px 18px;align-items:stretch}
 .now-today-row time{font-size:12px;font-weight:650;color:var(--muted);padding-top:3px;text-align:right;font-variant-numeric:tabular-nums}
