@@ -79,6 +79,11 @@ export const CalendarEventSchema = z.object({
   url: z.string().optional(),
   /** When true, a multi-day range only appears Mon–Fri. */
   weekdaysOnly: z.boolean().optional(),
+  /**
+   * Optional reverse link to a LifeOS task for scheduled work sessions.
+   * Complements Task.calendarEventId (primary Route-to-Task link).
+   */
+  linkedTaskId: z.number().optional(),
 });
 
 export const SettingsSchema = z.object({
@@ -133,6 +138,12 @@ export const SettingsSchema = z.object({
   enableMasterOS: z.boolean().optional(),
   preferredName: z.string().optional(),
   defaultCalendarView: z.enum(['upcoming', 'month', 'day']).optional(),
+  /** Calendar layer visibility (events / task deadlines / scheduled tasks). */
+  calendarLayerVisibility: z.object({
+    events: z.boolean().optional(),
+    deadlines: z.boolean().optional(),
+    scheduledTasks: z.boolean().optional(),
+  }).optional(),
   /** Mobile first-run onboarding — preserve across web sync. */
   onboardingStartedAt: z.string().optional(),
   onboardingCompletedAt: z.string().optional(),
