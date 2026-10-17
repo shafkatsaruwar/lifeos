@@ -3223,9 +3223,25 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
         </div>
       </div>
     )}
-    <div className="page-title">
-      <div><p className="eyebrow">{new Date(now).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p><h1>Now</h1><p>LifeOS can suggest the next move. You decide what gets your attention.</p></div>
-      <div className="now-header-actions"><button onClick={onSmartCapture}><Sparkles size={16} /> Add naturally</button><button onClick={onDailyReset}>Daily reset</button><button onClick={onWeeklyReview}>Weekly review</button><button className="primary" onClick={() => onGo("Today")}><CalendarDays size={16} /> Plan today</button></div>
+    <div className="atelier-hero">
+      <div>
+        <p className="eyebrow">{new Date(now).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
+        <h1 className="atelier-greeting">{(() => {
+          const raw = getGreeting(new Date(now), workspaceName);
+          const needle = workspaceName.trim();
+          if (!needle || needle === "there") return raw;
+          const idx = raw.lastIndexOf(needle);
+          if (idx < 0) return raw;
+          return <>{raw.slice(0, idx)}<span className="atelier-name">{needle}</span>{raw.slice(idx + needle.length)}</>;
+        })()}</h1>
+        <p className="atelier-hero-copy">LifeOS can suggest the next move. You decide what gets your attention.</p>
+      </div>
+      <div className="atelier-hero-meta">
+        <button type="button" className="atelier-chip" onClick={onSmartCapture}><Sparkles size={15} /> Add naturally</button>
+        <button type="button" className="atelier-chip" onClick={onDailyReset}>Daily reset</button>
+        <button type="button" className="atelier-chip" onClick={onWeeklyReview}>Weekly review</button>
+        <button type="button" className="atelier-chip primary" onClick={() => onGo("Today")}><CalendarDays size={15} /> Plan today</button>
+      </div>
     </div>
     {ambientActivity ? (
       <section className="ambient-active-strip">
@@ -3294,7 +3310,26 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       workTitle={current?.title}
       onFlash={flash}
     />
-    <div className="now-layout">
+    <div className="now-atelier-grid">
+      <section className="card now-today-card" aria-label="Today">
+        <div className="card-head"><div><span className="section-icon blue"><CalendarDays size={14} /></span><h2>Today</h2></div><span className="count">{todayEvents.length}</span></div>
+        <div className="now-today-list">
+          {todayEvents.length ? todayEvents.map((event, index) => {
+            const start = new Date(event.start);
+            const time = Number.isNaN(start.getTime()) ? "—" : start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+            return (
+              <div key={event.id} className="now-today-row">
+                <time dateTime={event.start}>{time}</time>
+                <div>
+                  <strong><i style={{ background: event.color || "var(--accent)" }} aria-hidden />{event.title}</strong>
+                  <span>{event.source}{event.location ? ` · ${event.location}` : ""}</span>
+                </div>
+              </div>
+            );
+          }) : <div className="now-today-empty">No events on the calendar for today. Protect a block when you’re ready.</div>}
+        </div>
+        <div className="now-today-footer"><button type="button" onClick={() => onGo("Today")}>View full day</button></div>
+      </section>
       <section className="card now-current-card" title="Your focused task. Click any task to focus on it here.">
         <div className="card-head"><div><span className="section-icon violet"><Focus size={14} /></span><h2>Current task</h2></div><div className="now-current-head-actions"><button type="button" className="text-button" onClick={() => setQueueOpen(value => !value)}>{queueOpen ? "Hide queue" : "Open Queue"}</button>{current && <button className="text-button" onClick={() => onChoose(null)}>Clear</button>}</div></div>
         {queueOpen && (
