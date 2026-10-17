@@ -77,6 +77,14 @@ const VIEWS: { id: CareerView; label: string; icon: typeof LayoutGrid }[] = [
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
+const METRIC_DEFINITION_LABELS: Record<string, string> = {
+  responseRate: "Response rate",
+  interviewConversionRate: "Interview conversion",
+  offerConversionRate: "Offer conversion",
+  averageDaysToFirstResponse: "Avg. days to first response",
+  averageDaysInCurrentStage: "Avg. days in current stage",
+};
+
 function Section({
   icon: Icon,
   title,
@@ -1197,7 +1205,7 @@ function AnalyticsPanel({
         <dl className="career-definitions">
           {Object.entries(analytics.definitions).map(([key, value]) => (
             <div key={key}>
-              <dt>{key}</dt>
+              <dt>{METRIC_DEFINITION_LABELS[key] ?? key}</dt>
               <dd>{value}</dd>
             </div>
           ))}

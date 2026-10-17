@@ -94,6 +94,7 @@ import {
 import { normalizeCareerHub } from "@/lib/careerHelpers";
 import { ExecutiveActiveStrip, ExecutivePanel } from "@/app/components/ExecutivePanel";
 import { NowWeatherWidget } from "@/app/components/NowWeatherWidget";
+<<<<<<< HEAD
 import {
   executeCaptureCommand,
   filterCaptureCommands,
@@ -101,6 +102,8 @@ import {
   listCaptureCommands,
   type CaptureCommand,
 } from "@/lib/captureCommands";
+=======
+>>>>>>> origin/main
 import { SettingsBentoGrid, type SettingsBentoSection } from "@/components/ui/bento-grid-01";
 import { emptyExecutiveHub, normalizeExecutiveHub } from "@/lib/executive/hub";
 import { tickExecutiveSchedules } from "@/lib/executive/engine";
@@ -114,7 +117,7 @@ import {
   nowIso,
   studyAbroadToCalendarEvents,
 } from "@/lib/studyAbroadHelpers";
-import { mergeSynapseCalendarEvents, parseSynapseDayPlan, type SynapseCalendarEvent } from "@/lib/synapseImport";
+import { mergeSynapseCalendarEvents, type SynapseCalendarEvent } from "@/lib/synapseImport";
 import type { ParsedTask } from "@/lib/useNLTaskCreation";
 import { useTaskBreakdown } from "@/lib/useTaskBreakdown";
 import {
@@ -2852,10 +2855,7 @@ export default function LifeOS() {
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onCreateTask={createTaskFromNote} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} onConvertToTask={(index, text) => { addTask(text, undefined, "", { flashLabel: "Task created from brain" }); setBrainItems(items => items.filter((_, i) => i !== index)); }} />}
-            {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} />}
-            {view === "Settings" && <AssistantAccessPanel user={user} userId={cloudUserId} flash={flash} />}
-            {view === "Settings" && <CalendarConnections user={user} flash={flash} />}
-            {view === "Settings" && <SynapseDayPlanImport flash={flash} />}
+            {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} />}
             {!["Life", "School", "Work", "Career", "Study Abroad", "Treasury", "Mastery", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
         </AnimatePresence>
@@ -3191,6 +3191,11 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               const calendar: StripTile = { key: "calendar", label: "Calendar", sub: "Schedule", view: "Calendar", className: "tile-calendar", Icon: CalendarDays };
               const tasks: StripTile = { key: "tasks", label: "Tasks", sub: `${active.length} open`, view: "Tasks", className: "tile-tasks", Icon: CheckCircle2 };
               const library: StripTile = { key: "library", label: "Library", sub: "Notes & files", view: "Library", className: "tile-library", Icon: Library };
+<<<<<<< HEAD
+=======
+              // Always Home first. Calendar + Tasks keep the last two slots (extra hubs are replaced).
+              // If no extra hubs are on, Library takes the last place.
+>>>>>>> origin/main
               const tiles: StripTile[] = hubCandidates.length === 0
                 ? [home, calendar, tasks, library]
                 : [home, ...hubCandidates.slice(0, 1), calendar, tasks];
@@ -3425,7 +3430,7 @@ function Dashboard({ tasks, projects, classes, brainCount, user, onComplete, onF
           const notes = eventNotesLabel(event.notes);
           const subtitle = place || notes || (event.source === "LifeOS" ? "Focus block" : event.source);
           return <div className="event" key={event.id}><div><strong>{startTime}</strong><span>{endTime}</span></div><i className={`event-line e${i % 3}`} style={{ background: event.color }} /><div><strong>{event.title}</strong>{meeting ? <a className="event-join-link" href={meeting.url} target="_blank" rel="noopener noreferrer" onClick={clickEvent => clickEvent.stopPropagation()}>{meeting.label}</a> : <span>{subtitle}</span>}</div></div>;
-        }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p><p style={{ marginTop: 6 }}>Share a day plan from Synapse → Settings → LifeOS to see meds and appointments here.</p></div>}
+        }) : <div style={{ padding: "20px 18px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}><p>No events scheduled for today</p><p style={{ marginTop: 6 }}>Import a calendar or add an event to fill this view.</p></div>}
       </section>
       <DashboardGmailCard user={user} onSettings={() => onGo("Settings")} />
       <section className="card projects-card">
@@ -4279,58 +4284,6 @@ function CalendarConnections({ user, flash }: { user?: any; flash: (message: str
     { id: "google" as const, number: "2", name: "Google", detail: "Google Calendar" },
   ];
   return <section className="card settings-card calendar-hub"><div className="card-head"><div><span className="section-icon violet"><CalendarDays size={14} /></span><h2>Calendar connections</h2></div><span className="calendar-hub-note">Read-only imports</span></div><div className="calendar-auto-refresh"><span><CheckCircle2 size={14} /> Automatic refresh is on</span><small>Connected calendars update every 5 minutes while LifeOS is open.</small></div><div className="calendar-provider-tabs" role="tablist" aria-label="Calendar providers">{choices.map(choice => <button key={choice.id} role="tab" aria-selected={provider === choice.id} className={provider === choice.id ? "selected" : ""} onClick={() => setProvider(choice.id)}><b>{choice.number}</b><span>{choice.name}<small>{choice.detail}</small></span></button>)}</div><div className="calendar-provider-content">{provider === "apple" && <ICloudCalendarIntegration user={user} flash={flash} />}{provider === "google" && <GoogleCalendarIntegration user={user} flash={flash} />}</div></section>;
-}
-
-function SynapseDayPlanImport({ flash }: { flash: (message: string) => void }) {
-  const [text, setText] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const importPlan = () => {
-    try {
-      setBusy(true);
-      setError("");
-      const events = parseSynapseDayPlan(text);
-      if (!events.length) throw new Error("No Synapse events found in that paste.");
-      window.dispatchEvent(new CustomEvent("lifeos:synapse-calendar-events", { detail: events }));
-      setText("");
-      flash(`${events.length} Synapse event${events.length === 1 ? "" : "s"} imported into your calendar`);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not import Synapse day plan.");
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <section className="card settings-card">
-      <div className="card-head">
-        <div>
-          <span className="section-icon blue"><HeartPulse size={14} /></span>
-          <h2>Synapse health day plan</h2>
-        </div>
-      </div>
-      <div className="settings-body">
-        <div className="integration-empty">
-          <strong>See upcoming meds and appointments beside your LifeOS day.</strong>
-          <p>In Synapse → Settings → LifeOS, tap Share day plan. Then paste the JSON here. Each import replaces earlier Synapse events so the plan stays current.</p>
-        </div>
-        <label htmlFor="synapse-day-plan">Synapse day-plan JSON</label>
-        <textarea
-          id="synapse-day-plan"
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          placeholder='{"v":1,"events":[...]}'
-          rows={5}
-        />
-        <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-          <button className="primary" type="button" disabled={busy || !text.trim()} onClick={importPlan}>
-            {busy ? "Importing…" : "Import Synapse plan"}
-          </button>
-        </div>
-        {error ? <p className="gmail-error" role="alert">{error}</p> : null}
-        <p className="settings-note">Read-only planning view. Log doses and change appointments in Synapse.</p>
-      </div>
-    </section>
-  );
 }
 
 function GoogleCalendarIntegration({ user, flash }: { user?: any; flash: (message: string) => void }) {
