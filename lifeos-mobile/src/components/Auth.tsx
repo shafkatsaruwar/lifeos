@@ -19,7 +19,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { GoogleAuthProvider, OAuthProvider, signInWithCredential } from "firebase/auth";
+import { GoogleAuthProvider, OAuthProvider, getAdditionalUserInfo, signInWithCredential } from "firebase/auth";
 import { auth, firebaseConfigured } from "../lib/firebase";
 import { LIGHT, DARK } from "../lib/theme";
 import { ActionButton } from "./UI";
@@ -142,7 +142,24 @@ function AppleSignInButton() {
         idToken: apple.identityToken,
         rawNonce: nonce,
       });
-      await signInWithCredential(auth, credential);
+      const result = await signInWithCredential(auth, credential);
+      const info = getAdditionalUserInfo(result);
+      if (info?.isNewUser) {
+        Alert.alert(
+          "This is a new Apple account",
+          "LifeOS stores Google and Apple as separate accounts. If you already use LifeOS on the web with Google, sign out and tap Continue with Google to open that workspace.",
+          [
+            { text: "Stay on Apple", style: "cancel" },
+            {
+              text: "Sign out",
+              style: "destructive",
+              onPress: () => {
+                void auth.signOut();
+              },
+            },
+          ],
+        );
+      }
     } catch (reason: any) {
       if (reason?.code === "ERR_REQUEST_CANCELED") return;
       const code = typeof reason?.code === "string" ? reason.code : "";
@@ -190,6 +207,9 @@ export function SignIn() {
         <Text style={styles.signInTitle}>LifeOS</Text>
         <Text style={styles.signInCopy}>
           Your life, in focus. Native iPhone & iPad app — same private cloud data as the web.
+        </Text>
+        <Text style={styles.accountHint}>
+          Already on LifeOS with Google? Use Continue with Google here too — Apple signs into a separate empty account.
         </Text>
         <Pressable
           accessibilityRole="checkbox"
@@ -275,7 +295,8 @@ const styles = StyleSheet.create({
   signInInner: { flex: 1, justifyContent: "center", padding: 28, gap: 14, width: "100%", maxWidth: 480, alignSelf: "center" },
   logo: { width: 56, height: 56, borderRadius: 16, marginBottom: 8 },
   signInTitle: { color: "#FFF", fontSize: 40, fontWeight: "800", letterSpacing: -1 },
-  signInCopy: { color: "#A1A1AA", fontSize: 16, lineHeight: 24, marginBottom: 12, maxWidth: 320 },
+  signInCopy: { color: "#A1A1AA", fontSize: 16, lineHeight: 24, marginBottom: 4, maxWidth: 320 },
+  accountHint: { color: "#71717A", fontSize: 13, lineHeight: 18, marginBottom: 12, maxWidth: 340 },
   ageGateRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 4 },
   ageGateBox: {
     width: 22,
