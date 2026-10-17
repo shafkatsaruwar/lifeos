@@ -152,7 +152,7 @@ type WeeklyPlan = { [dayOfWeek: number]: WeeklyPlanItem[] }; // 0=Sunday through
 // Work OS types imported from OSDashboards
 
 const routedViews: Record<string, View> = {
-  life: "Life", school: "School", work: "Work", career: "Career", "study-abroad": "Study Abroad", studyabroad: "Study Abroad",
+  life: "Life", home: "Life", school: "School", work: "Work", career: "Career", "study-abroad": "Study Abroad", studyabroad: "Study Abroad",
   now: "Now", flow: "Now", dashboard: "Life", today: "Calendar", calendar: "Calendar", spaces: "Spaces",
   library: "Library", notes: "Library", resources: "Library", brain: "Library", knowledge: "Library",
   settings: "Settings", tasks: "Tasks", budget: "Treasury", treasuryos: "Treasury", "treasury-os": "Treasury", treasury: "Treasury",
@@ -276,7 +276,7 @@ const accentForView = (view: string, settings: SettingsState) => {
 };
 
 const dataEnvForNav = (name: string) =>
-  WORKSPACE_COLOR_OPTIONS.find(option => option.navName === name)?.dataEnv;
+  WORKSPACE_COLOR_OPTIONS.find(option => option.navName === name || (name === "Home" && option.navName === "Life"))?.dataEnv;
 
 const projectIconOptions: { value: ProjectIcon; label: string; icon: typeof Home }[] = [
   { value: "FolderKanban", label: "Project", icon: FolderKanban }, { value: "BriefcaseBusiness", label: "Career", icon: BriefcaseBusiness },
@@ -297,13 +297,19 @@ function ColorSwatches({ value, onChange, label = "Color" }: { value: string; on
   </>;
 }
 
-type NavItem = { category?: string; name: string; icon: typeof Home; href?: string; action?: "openGuided" };
+type NavItem = { category?: string; name: string; icon: typeof Home; href?: string; action?: "openGuided"; view?: View };
 
+/** Sidebar / breadcrumb label. Internal route view stays `Life`. */
 const navDisplayName = (name: string) => (name === "Life" ? "Home" : name);
+
+const navTargetView = (item: NavItem): View | null => {
+  if (item.action || item.href) return null;
+  return item.view ?? (item.name as View);
+};
 
 const nav: NavItem[] = [
   { name: "Now", icon: TimerReset },
-  { category: "ENVIRONMENTS", name: "Life", icon: Home },
+  { category: "ENVIRONMENTS", name: "Home", view: "Life", icon: Home },
   { category: "ENVIRONMENTS", name: "Work", icon: BriefcaseBusiness },
   { category: "ENVIRONMENTS", name: "Career", icon: Target },
   { category: "ENVIRONMENTS", name: "School", icon: GraduationCap },
@@ -2464,8 +2470,10 @@ export default function LifeOS() {
   const visibleNav = useMemo(
     () =>
       nav.filter((item) => {
+        if (item.action || item.href) return true;
+        const target = navTargetView(item);
         // Same rules as Settings → Hubs toggles (Pro hubs need unlock + enable).
-        return isEnvironmentEnabled(item.name as View);
+        return target ? isEnvironmentEnabled(target) : true;
       }),
     [isEnvironmentEnabled],
   );
@@ -2715,8 +2723,9 @@ export default function LifeOS() {
           {visibleNav.map((item, idx) => {
             const Icon = item.icon;
             const showCategory = Boolean(item.category && (idx === 0 || visibleNav[idx - 1].category !== item.category));
-            const label = navDisplayName(item.name);
-            const isActive = item.action === "openGuided" ? guidedPanelOpen : view === item.name;
+            const label = item.name === "Life" ? "Home" : item.name;
+            const target = navTargetView(item);
+            const isActive = item.action === "openGuided" ? guidedPanelOpen : Boolean(target && view === target);
             return (
               <div key={item.name}>
                 {showCategory && <p className="nav-label">{item.category}</p>}
@@ -2732,7 +2741,7 @@ export default function LifeOS() {
                         setSidebar(false);
                         return;
                       }
-                      go(item.name as View);
+                      if (target) go(target);
                     }}
                   >
                     <Icon size={17} strokeWidth={1.8} /><span>{label}</span>{item.name === "Brain" && <em>{brainItems.length}</em>}{item.name === "Spaces" && projectItems.length + classes.length > 0 && <em>{projectItems.length + classes.length}</em>}
