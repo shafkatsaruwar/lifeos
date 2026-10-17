@@ -853,10 +853,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .dark .tile-library svg{background:#1E293B55;color:#CBD5E1}
 .atelier-now-bottom{display:grid;grid-template-columns:1fr;gap:16px;align-items:stretch}
 .atelier-now-bottom .copilot-card{min-height:180px;border-radius:20px;background:linear-gradient(160deg,color-mix(in srgb,var(--panel) 88%,var(--accent-2) 12%),var(--panel));border-color:color-mix(in srgb,var(--accent-2) 18%,var(--line))}
-<<<<<<< HEAD
 .command-results>button.suggested{background:color-mix(in srgb,var(--accent) 10%,var(--canvas))}
-=======
->>>>>>> origin/main
 .atelier-now-utility{display:grid;gap:12px;margin-top:4px}
 .now-today-list{padding:6px 0 10px}
 .now-today-row{display:grid;grid-template-columns:56px 16px 1fr;gap:10px;padding:10px 18px;align-items:stretch}

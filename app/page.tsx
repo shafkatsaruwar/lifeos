@@ -94,7 +94,6 @@ import {
 import { normalizeCareerHub } from "@/lib/careerHelpers";
 import { ExecutiveActiveStrip, ExecutivePanel } from "@/app/components/ExecutivePanel";
 import { NowWeatherWidget } from "@/app/components/NowWeatherWidget";
-<<<<<<< HEAD
 import {
   executeCaptureCommand,
   filterCaptureCommands,
@@ -102,8 +101,6 @@ import {
   listCaptureCommands,
   type CaptureCommand,
 } from "@/lib/captureCommands";
-=======
->>>>>>> origin/main
 import { SettingsBentoGrid, type SettingsBentoSection } from "@/components/ui/bento-grid-01";
 import { emptyExecutiveHub, normalizeExecutiveHub } from "@/lib/executive/hub";
 import { tickExecutiveSchedules } from "@/lib/executive/engine";
@@ -3191,11 +3188,8 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               const calendar: StripTile = { key: "calendar", label: "Calendar", sub: "Schedule", view: "Calendar", className: "tile-calendar", Icon: CalendarDays };
               const tasks: StripTile = { key: "tasks", label: "Tasks", sub: `${active.length} open`, view: "Tasks", className: "tile-tasks", Icon: CheckCircle2 };
               const library: StripTile = { key: "library", label: "Library", sub: "Notes & files", view: "Library", className: "tile-library", Icon: Library };
-<<<<<<< HEAD
-=======
               // Always Home first. Calendar + Tasks keep the last two slots (extra hubs are replaced).
               // If no extra hubs are on, Library takes the last place.
->>>>>>> origin/main
               const tiles: StripTile[] = hubCandidates.length === 0
                 ? [home, calendar, tasks, library]
                 : [home, ...hubCandidates.slice(0, 1), calendar, tasks];
