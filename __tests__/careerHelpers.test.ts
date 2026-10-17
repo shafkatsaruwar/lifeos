@@ -72,6 +72,9 @@ describe("career / Job Seeker OS", () => {
     expect(analytics.submittedCount).toBe(1);
     expect(analytics.offerConversionRate).toBe(1);
     expect(analytics.bySource[0].source).toBe("Referral");
+    expect(analytics.definitions.responseRate).toContain(" / applications submitted");
+    expect(analytics.definitions.interviewConversionRate).toContain(" / submitted applications");
+    expect(analytics.definitions.offerConversionRate).toContain(" / submitted applications");
   });
 
   it("schedules interviews and follow-ups with observations", () => {
