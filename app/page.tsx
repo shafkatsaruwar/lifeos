@@ -44,6 +44,7 @@ import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrge
 import { buildMonthEventSegments, eventOccursOnDate, getEventDateRange, getEventDayBlockMinutes, usesDailyTimeWindow, type MonthEventSegment } from "@/lib/calendarEvents";
 import { coalesceEventMeetingUrl, detectMeetingProvider, eventNotesLabel, eventPlaceLabel, extractMeetingUrl, meetingJoinLabel, resolveEventMeeting } from "@/lib/meetingLinks";
 import { formatFocusMinutesShort, formatFocusSessionLabel, formatFocusTime } from "@/lib/focusTime";
+import { buildFocusStripKeys } from "@/lib/focusStrip";
 import { buildTasksFromNote } from "@/lib/noteToTask";
 import { emptyTimeTracking, normalizeTimeTracking, clockIn, clockOut, getActiveEntry } from "@/lib/timeTracking";
 import type { TimeTrackingState } from "@/lib/timeTracking";
@@ -3216,23 +3217,27 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           <div className="atelier-hub-tiles" aria-label="Spaces">
             {(() => {
               type StripTile = { key: string; label: string; sub: string; view: View; className: string; Icon: typeof Home };
-              const home: StripTile = { key: "home", label: "Home", sub: `${lifeOpen} open`, view: "Life", className: "tile-life", Icon: Home };
-              const hubCandidates: StripTile[] = [
-                ...(enableCareerOS ? [{ key: "career", label: "Career", sub: "Pipeline", view: "Career" as View, className: "tile-career", Icon: Target }] : []),
-                ...(enableSchoolOS ? [{ key: "school", label: "School", sub: `${schoolOpen} open`, view: "School" as View, className: "tile-school", Icon: GraduationCap }] : []),
-                ...(enableWorkOS ? [{ key: "work", label: "Work", sub: "Workspace", view: "Work" as View, className: "tile-work", Icon: BriefcaseBusiness }] : []),
-                ...(enableStudyAbroad ? [{ key: "study-abroad", label: "Study Abroad", sub: "Paths", view: "Study Abroad" as View, className: "tile-study", Icon: Globe2 }] : []),
-                ...(enableTreasuryOS ? [{ key: "treasury", label: "Treasury", sub: "Money", view: "Treasury" as View, className: "tile-treasury", Icon: WalletCards }] : []),
-                ...(enableMasterOS ? [{ key: "mastery", label: "Mastery", sub: "Teaching", view: "Mastery" as View, className: "tile-mastery", Icon: NotebookPen }] : []),
-              ];
-              const calendar: StripTile = { key: "calendar", label: "Calendar", sub: "Schedule", view: "Calendar", className: "tile-calendar", Icon: CalendarDays };
-              const tasks: StripTile = { key: "tasks", label: "Tasks", sub: `${active.length} open`, view: "Tasks", className: "tile-tasks", Icon: CheckCircle2 };
-              const library: StripTile = { key: "library", label: "Library", sub: "Notes & files", view: "Library", className: "tile-library", Icon: Library };
-              // Always Home first. Calendar + Tasks keep the last two slots (extra hubs are replaced).
-              // If no extra hubs are on, Library takes the last place.
-              const tiles: StripTile[] = hubCandidates.length === 0
-                ? [home, calendar, tasks, library]
-                : [home, ...hubCandidates.slice(0, 1), calendar, tasks];
+              const byKey: Record<string, StripTile> = {
+                home: { key: "home", label: "Home", sub: `${lifeOpen} open`, view: "Life", className: "tile-life", Icon: Home },
+                work: { key: "work", label: "Work", sub: "Workspace", view: "Work", className: "tile-work", Icon: BriefcaseBusiness },
+                career: { key: "career", label: "Career", sub: "Pipeline", view: "Career", className: "tile-career", Icon: Target },
+                school: { key: "school", label: "School", sub: `${schoolOpen} open`, view: "School", className: "tile-school", Icon: GraduationCap },
+                "study-abroad": { key: "study-abroad", label: "Study Abroad", sub: "Paths", view: "Study Abroad", className: "tile-study", Icon: Globe2 },
+                treasury: { key: "treasury", label: "Treasury", sub: "Money", view: "Treasury", className: "tile-treasury", Icon: WalletCards },
+                mastery: { key: "mastery", label: "Mastery", sub: "Teaching", view: "Mastery", className: "tile-mastery", Icon: NotebookPen },
+                calendar: { key: "calendar", label: "Calendar", sub: "Schedule", view: "Calendar", className: "tile-calendar", Icon: CalendarDays },
+                tasks: { key: "tasks", label: "Tasks", sub: `${active.length} open`, view: "Tasks", className: "tile-tasks", Icon: CheckCircle2 },
+                library: { key: "library", label: "Library", sub: "Notes & files", view: "Library", className: "tile-library", Icon: Library },
+              };
+              // Home → all enabled hubs (sidebar order) → Calendar → Tasks; Library if no hubs.
+              const tiles = buildFocusStripKeys({
+                enableWorkOS,
+                enableCareerOS,
+                enableSchoolOS,
+                enableStudyAbroad,
+                enableTreasuryOS,
+                enableMasterOS,
+              }).map((key) => byKey[key]);
               return tiles.map((tile) => (
                 <button key={tile.key} type="button" className={`atelier-hub-tile ${tile.className}`} onClick={() => onGo(tile.view)}>
                   <tile.Icon size={18} /><strong>{tile.label}</strong><span>{tile.sub}</span>

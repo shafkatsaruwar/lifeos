@@ -843,7 +843,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .atelier-focus-tools{display:flex;gap:10px;margin-top:10px}
 .atelier-focus-tools .text-button{color:#CBD5E1;background:transparent;border:0;font-size:11px;cursor:pointer}
 .atelier-focus-panel .now-queue-panel{grid-column:1/-1;border-radius:12px;background:rgba(15,23,42,.45);border-top:1px solid rgba(248,250,252,.08)}
-.atelier-hub-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.atelier-hub-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:10px}
 .atelier-hub-tile{border:1px solid var(--line);border-radius:16px;background:var(--panel);box-shadow:var(--shadow-card);padding:14px 12px;display:grid;gap:6px;justify-items:start;text-align:left;cursor:pointer;transition:transform .15s ease,border-color .15s ease}
 .atelier-hub-tile:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
 .atelier-hub-tile strong{font-size:13px;color:var(--ink)}.atelier-hub-tile span{font-size:11px;color:var(--muted)}
