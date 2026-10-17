@@ -17,9 +17,8 @@ Always start from **`lifeos-mobile/`** (not the repo root — that Next.js `app/
 ```bash
 cd lifeos-mobile
 cp .env.example .env
-# Optional: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID (direct OAuth). Without it, Google
-# still works via the production /shell-auth bridge.
-# Firebase defaults are baked in (same project as web). Override only if needed.
+# Set EXPO_PUBLIC_LIFEOS_URL + EXPO_PUBLIC_FIREBASE_* (required for cloud sign-in).
+# Optional: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for faster /shell-auth OAuth.
 rm -rf node_modules .expo
 npm install
 npx expo start -c
@@ -27,10 +26,10 @@ npx expo start -c
 
 1. Use **Expo Go compatible with SDK 54** (same major as this project)
 2. Force-quit Expo Go, then scan QR (or press `i` for Simulator)
-3. Sign in with Google or **Sign in with Apple** (iOS — enable the Apple provider in Firebase Console + Apple Developer)
-4. Land on **Now** — Tasks, Calendar, Life, School, Work, Library in the tab bar
+3. Confirm age gate (13+), then sign in with Google or **Sign in with Apple**
+4. Land on **Now** — new users see **Life** + **School** (enable Work etc. in Settings)
 5. Settings is the gear on Now
-6. Home-screen widgets: copy `native/LifeOSWidgets` into the iOS project after prebuild (see that folder’s README)
+6. Product walkthrough: [docs/STARTUP.md](../docs/STARTUP.md)
 
 ### If you see `PlatformConstants` / TurboModuleRegistry errors
 
@@ -48,7 +47,7 @@ Confirm Expo Go is the SDK 54 build. Do **not** run `expo start` from the monore
 ## Required `.env`
 
 ```bash
-EXPO_PUBLIC_LIFEOS_URL=https://lifeos-mu-three.vercel.app
+EXPO_PUBLIC_LIFEOS_URL=http://localhost:3000
 EXPO_PUBLIC_FIREBASE_API_KEY=...
 EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=...
 EXPO_PUBLIC_FIREBASE_DATABASE_URL=...
@@ -58,7 +57,7 @@ EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=....apps.googleusercontent.com
 
 Google sign-in uses the HTTPS `/shell-auth` bridge (Expo Go cannot use `exp://` redirects), then signs into Firebase natively with the Google ID token.
 
-iOS bundle ID: `com.shafkatsaruwar.lifeos`
+iOS bundle ID: `com.example.lifeos`
 
 ## Tabs
 

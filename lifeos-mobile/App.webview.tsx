@@ -16,26 +16,28 @@ import { WebView, type WebViewMessageEvent, type WebViewNavigation } from "react
 
 WebBrowser.maybeCompleteAuthSession();
 
-/** Production LifeOS. Override with EXPO_PUBLIC_LIFEOS_URL for local testing. */
-const DEFAULT_LIFEOS_URL = "https://lifeos-mu-three.vercel.app";
+/** Production/local LifeOS web origin. Override with EXPO_PUBLIC_LIFEOS_URL. */
+const DEFAULT_LIFEOS_URL = process.env.EXPO_PUBLIC_LIFEOS_URL?.trim() || (__DEV__ ? "http://localhost:3000" : "");
 
 function resolveLifeOSUrl() {
   const raw = process.env.EXPO_PUBLIC_LIFEOS_URL?.trim() || DEFAULT_LIFEOS_URL;
+  if (!raw) return "";
   try {
     const url = new URL(raw);
     url.searchParams.set("app", "ios");
     return url.toString();
   } catch {
-    return DEFAULT_LIFEOS_URL;
+    return raw;
   }
 }
 
 function resolveLifeOSOrigin() {
   const raw = process.env.EXPO_PUBLIC_LIFEOS_URL?.trim() || DEFAULT_LIFEOS_URL;
+  if (!raw) return "";
   try {
     return new URL(raw).origin;
   } catch {
-    return "https://lifeos-mu-three.vercel.app";
+    return "";
   }
 }
 

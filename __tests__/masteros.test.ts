@@ -39,14 +39,14 @@ describe("MasterOS demo seed", () => {
   it("seeds a multi-student SAT Saturday class", () => {
     const group = state.classes.find((item) => item.id === "cls-sat-saturday");
     expect(group?.name).toBe("SAT Saturday Group");
-    expect(studentsForClass(state, "cls-sat-saturday").map((item) => item.name)).toEqual(["Wafia", "Omar", "Layla"]);
+    expect(studentsForClass(state, "cls-sat-saturday").map((item) => item.name)).toEqual(["Alex", "Jordan", "Sam"]);
     expect(classesForStudent(state, DEMO_STUDENT_ID)).toHaveLength(1);
   });
 
-  it("seeds Wafia and a generic SAT Prep course configuration", () => {
+  it("seeds Alex and a generic SAT Prep course configuration", () => {
     const student = state.students.find((item) => item.id === DEMO_STUDENT_ID);
     const course = state.courses.find((item) => item.id === DEMO_COURSE_ID);
-    expect(student?.name).toBe("Wafia");
+    expect(student?.name).toBe("Alex");
     expect(student?.gradeLevel).toBe("11");
     expect(course?.name).toBe("SAT Prep");
     expect(state.units.filter((item) => item.courseId === DEMO_COURSE_ID)).toHaveLength(10);

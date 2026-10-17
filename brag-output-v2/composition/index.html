@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>LifeOS Trailer V2</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="assets/audio-data.js"></script>
+    <style>
+      @font-face { font-family: "Inter Local"; src: url("assets/fonts/Inter-400.woff2") format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Inter Local"; src: url("assets/fonts/Inter-700.woff2") format("woff2"); font-weight: 700; }
+      @font-face { font-family: "EB Garamond Local"; src: url("assets/fonts/EBGaramond-400.woff2") format("woff2"); font-weight: 400; }
+      @font-face { font-family: "EB Garamond Local"; src: url("assets/fonts/EBGaramond-700.woff2") format("woff2"); font-weight: 700; }
+
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #050507; }
+      #root {
+        position: relative; width: 100%; height: 100%; overflow: hidden;
+        font-family: "Inter Local", ui-sans-serif, system-ui, sans-serif; color: #202124;
+      }
+      .clip { position: absolute; inset: 0; overflow: hidden; }
+      .scene-inner { position: absolute; inset: 0; will-change: transform, opacity; }
+
+      .void {
+        position: absolute; inset: 0;
+        background:
+          radial-gradient(ellipse 55% 45% at 50% 35%, rgba(98,90,246,.18), transparent 62%),
+          linear-gradient(165deg, #050507 0%, #0e0e14 50%, #07070a 100%);
+      }
+      .paper {
+        position: absolute; inset: 0;
+        background:
+          radial-gradient(ellipse 50% 35% at 80% 0%, rgba(98,90,246,.08), transparent 55%),
+          #f4f5f8;
+      }
+      .focus-bg { position: absolute; inset: 0; background: #101014; }
+      .atmos {
+        position: absolute; width: 1100px; height: 700px; left: 50%; top: 10%; margin-left: -550px;
+        border-radius: 50%; background: radial-gradient(circle, rgba(139,131,255,.22), transparent 70%);
+        pointer-events: none; filter: blur(2px);
+      }
+      .cut-flash {
+        position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 80;
+        mix-blend-mode: soft-light;
+      }
+
+      .display {
+        font-family: "Inter Local", ui-sans-serif, system-ui, sans-serif;
+        font-weight: 700; letter-spacing: -.03em; color: #f2f2f5; line-height: 1.02;
+      }
+      .display.xl { font-size: 86px; max-width: 15ch; }
+      .display.lg { font-size: 52px; }
+      .display.md { font-size: 34px; letter-spacing: -.02em; }
+      .display.ink { color: #141418; }
+      .serif {
+        font-family: "EB Garamond Local", "Times New Roman", serif;
+        font-weight: 400; letter-spacing: -.02em; line-height: 1.1; color: #e8e8ee;
+      }
+      .eyebrow {
+        font-size: 13px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #a59cff;
+      }
+      .eyebrow.ink { color: #5f636b; }
+
+      .brand-mark {
+        width: 56px; height: 56px; border-radius: 14px; background: #242428;
+        display: flex; align-items: flex-end; justify-content: center; gap: 4px; padding: 12px 11px;
+        box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 18px 50px rgba(98,90,246,.28);
+      }
+      .brand-mark span { width: 6px; background: #fff; border-radius: 3px; display: block; }
+      .brand-mark span:nth-child(1) { height: 12px; }
+      .brand-mark span:nth-child(2) { height: 24px; }
+      .brand-mark span:nth-child(3) { height: 16px; }
+      .brand-mark.lg { width: 80px; height: 80px; border-radius: 20px; padding: 16px 14px; gap: 6px; }
+      .brand-mark.lg span { width: 9px; }
+      .brand-mark.lg span:nth-child(1) { height: 18px; }
+      .brand-mark.lg span:nth-child(2) { height: 34px; }
+      .brand-mark.lg span:nth-child(3) { height: 22px; }
+      .brand-mark.light { background: rgba(255,255,255,.08); }
+
+      /* Fragment cards — opening */
+      .frag {
+        position: absolute; min-width: 340px; padding: 22px 24px; border-radius: 16px;
+        background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12);
+        backdrop-filter: blur(8px); color: #e8e8ee; box-shadow: 0 20px 50px rgba(0,0,0,.35);
+      }
+      .frag .k { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #a59cff; margin-bottom: 8px; }
+      .frag strong { display: block; font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+      .frag span { display: block; margin-top: 6px; font-size: 14px; font-weight: 600; color: #9a9aa6; }
+      #frag1 { left: 120px; top: 120px; }
+      #frag2 { left: 1380px; top: 150px; }
+      #frag3 { left: 160px; top: 780px; }
+      #frag4 { left: 1320px; top: 760px; }
+
+      /* Large app shell */
+      .app-shell {
+        position: absolute; left: 90px; top: 70px; width: 1740px; height: 940px;
+        border-radius: 24px; background: #fff; border: 1px solid #e4e5ea;
+        box-shadow: 0 40px 100px rgba(12,14,24,.28); overflow: hidden;
+        display: grid; grid-template-columns: 220px 1fr;
+      }
+      .app-nav {
+        background: #121218; color: #f1f1f2; padding: 28px 20px; display: flex; flex-direction: column; gap: 8px;
+      }
+      .app-nav .nav-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; padding: 0 8px; }
+      .app-nav .nav-brand strong { font-size: 18px; letter-spacing: -.02em; }
+      .app-nav .nav-item {
+        display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px;
+        font-size: 15px; font-weight: 600; color: #b8b8c2;
+      }
+      .app-nav .nav-item.on { background: rgba(139,131,255,.18); color: #fff; }
+      .app-nav .nav-item i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .7; }
+      .app-main { padding: 32px 44px; background: linear-gradient(180deg, #f7f8fb 0%, #f2f3f7 100%); }
+      .app-main h2 { font-size: 34px; font-weight: 700; letter-spacing: -.03em; color: #141418; margin: 8px 0 6px; }
+      .app-main .sub { font-size: 16px; font-weight: 600; color: #5f636b; margin-bottom: 22px; }
+      .choice-label {
+        margin-top: 28px; font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5f636b;
+      }
+      .choice-row {
+        margin-top: 12px; display: flex; align-items: center; gap: 14px; padding: 16px 18px;
+        border: 1px solid #e4e5ea; border-radius: 14px; background: #fff;
+      }
+      .choice-row i { width: 10px; height: 10px; border-radius: 50%; background: #625af6; }
+      .choice-row strong { display: block; font-size: 17px; font-weight: 700; }
+      .choice-row span { display: block; margin-top: 4px; font-size: 13px; font-weight: 600; color: #5f636b; }
+
+      .capture {
+        display: flex; align-items: center; gap: 14px; height: 68px; border: 2px solid #4f47d4;
+        border-radius: 14px; background: #fff; padding: 0 20px;
+        box-shadow: 0 0 0 6px rgba(98,90,246,.12);
+      }
+      .capture kbd {
+        font-family: "Inter Local", ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 700;
+        color: #3b34b0; background: rgba(98,90,246,.14); border-radius: 8px; padding: 7px 10px;
+      }
+      .capture-text { font-size: 24px; font-weight: 700; color: #202124; white-space: nowrap; }
+      .caret {
+        display: inline-block; width: 3px; height: 1.15em; background: #625af6; margin-left: 2px; vertical-align: -3px;
+      }
+      .task-row {
+        margin-top: 18px; display: flex; align-items: center; gap: 16px; min-height: 84px;
+        padding: 18px 22px; border: 1px solid #e4e5ea; border-radius: 16px; background: #fff;
+        box-shadow: 0 16px 40px rgba(20,24,35,.08);
+      }
+      .check { width: 30px; height: 30px; border: 2px solid #4f47d4; border-radius: 8px; }
+      .task-row strong { display: block; font-size: 22px; font-weight: 700; }
+      .task-row span { display: block; margin-top: 6px; font-size: 14px; font-weight: 600; color: #5f636b; }
+      .pill {
+        margin-left: auto; background: #3b34b0; color: #fff; font-size: 12px; font-weight: 700;
+        letter-spacing: .06em; text-transform: uppercase; border-radius: 999px; padding: 10px 14px;
+      }
+
+      /* Connected env panels */
+      .env-stage { position: absolute; left: 80px; top: 100px; width: 1760px; }
+      .env-title { margin-bottom: 28px; }
+      .env-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; position: relative; }
+      .env-card {
+        background: #fff; border: 1px solid #e4e5ea; border-radius: 20px; padding: 28px 26px; min-height: 520px;
+        box-shadow: 0 28px 70px rgba(16,18,28,.12); position: relative;
+      }
+      .env-card .dot { width: 12px; height: 12px; border-radius: 50%; margin-bottom: 18px; }
+      .env-card h3 { font-size: 28px; font-weight: 700; letter-spacing: -.02em; margin-bottom: 8px; }
+      .env-card .role { font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #5f636b; margin-bottom: 22px; }
+      .env-card .block {
+        background: #f7f8fb; border: 1px solid #e8e9ed; border-radius: 14px; padding: 16px; margin-bottom: 12px;
+      }
+      .env-card .block strong { display: block; font-size: 17px; font-weight: 700; }
+      .env-card .block span { display: block; margin-top: 4px; font-size: 13px; font-weight: 600; color: #5f636b; }
+      .link-line {
+        position: absolute; height: 3px; background: linear-gradient(90deg, transparent, rgba(98,90,246,.45), transparent);
+        top: -2px; left: 0; right: 0; z-index: 2; opacity: 0; border-radius: 99px;
+      }
+      .env-bridge {
+        position: absolute; top: 46%; height: 3px; z-index: 0; opacity: 0; pointer-events: none;
+        background: linear-gradient(90deg, rgba(98,90,246,.15), rgba(98,90,246,.55), rgba(98,90,246,.15));
+        border-radius: 99px;
+      }
+      .env-card { position: relative; z-index: 1; }
+      #bridge1 { left: 32.2%; width: 3.2%; }
+      #bridge2 { left: 65.2%; width: 3.2%; }
+
+      /* Context centerpiece */
+      .ctx-stage { position: absolute; inset: 0; }
+      .ctx-label {
+        position: absolute; left: 100px; top: 70px; display: flex; flex-direction: column; gap: 8px;
+      }
+      .obs-col {
+        position: absolute; left: 90px; top: 180px; width: 420px; display: flex; flex-direction: column; gap: 14px;
+      }
+      .obs {
+        background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); border-radius: 14px;
+        padding: 16px 18px; color: #ececf2;
+      }
+      .obs .k { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #a59cff; margin-bottom: 6px; }
+      .obs strong { display: block; font-size: 18px; font-weight: 700; }
+      .obs span { display: block; margin-top: 4px; font-size: 13px; font-weight: 600; color: #9a9aa6; }
+      .ctx-card {
+        position: absolute; left: 560px; top: 180px; width: 520px; min-height: 520px;
+        background: rgba(255,255,255,.06); border: 1px solid rgba(165,156,255,.35); border-radius: 22px;
+        padding: 28px; color: #f2f2f5; box-shadow: 0 30px 80px rgba(98,90,246,.2);
+      }
+      .ctx-card h3 { font-size: 28px; font-weight: 700; margin: 10px 0 18px; letter-spacing: -.02em; }
+      .ctx-row {
+        display: flex; justify-content: space-between; gap: 12px; padding: 14px 0;
+        border-top: 1px solid rgba(255,255,255,.08); font-size: 15px; font-weight: 600;
+      }
+      .ctx-row span { color: #9a9aa6; }
+      .ctx-row strong { color: #f2f2f5; }
+      .rec-card {
+        position: absolute; left: 1140px; top: 220px; width: 640px;
+        background: #fff; border-radius: 22px; padding: 28px; color: #141418;
+        box-shadow: 0 40px 100px rgba(0,0,0,.45);
+      }
+      .rec-card .k { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #3b34b0; margin-bottom: 12px; }
+      .rec-card h3 { font-size: 32px; font-weight: 700; letter-spacing: -.03em; margin-bottom: 12px; }
+      .rec-card p { font-size: 16px; font-weight: 600; color: #5f636b; line-height: 1.45; margin-bottom: 22px; }
+      .rec-btn {
+        display: inline-flex; align-items: center; gap: 8px; height: 52px; padding: 0 22px;
+        background: #625af6; color: #fff; border-radius: 12px; font-size: 16px; font-weight: 700;
+      }
+      .flow-arrow {
+        position: absolute; font-size: 28px; font-weight: 700; color: rgba(165,156,255,.7); opacity: 0;
+      }
+      #arrow1 { left: 510px; top: 400px; }
+      #arrow2 { left: 1090px; top: 400px; }
+
+      /* Focus + rails */
+      .split {
+        position: absolute; left: 80px; top: 90px; width: 1760px; height: 900px;
+        display: grid; grid-template-columns: 1.15fr .85fr; gap: 22px;
+      }
+      .focus-panel {
+        border-radius: 22px; background: #16161c; border: 1px solid rgba(255,255,255,.08);
+        padding: 36px 40px; color: #f2f2f5; box-shadow: 0 30px 80px rgba(0,0,0,.35);
+      }
+      .check-list { margin-top: 28px; list-style: none; }
+      .check-list li {
+        display: flex; align-items: center; gap: 12px; padding: 14px 0;
+        border-top: 1px solid rgba(255,255,255,.08); font-size: 16px; font-weight: 600; color: #d0d0d8;
+      }
+      .check-list li .box {
+        width: 18px; height: 18px; border-radius: 5px; border: 2px solid rgba(165,156,255,.7);
+      }
+      .focus-panel .live {
+        display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700;
+        letter-spacing: .12em; text-transform: uppercase; color: #9a9aa6; margin-bottom: 28px;
+      }
+      .focus-panel .live i { width: 8px; height: 8px; border-radius: 50%; background: #47a47b; }
+      .focus-panel .proj { font-size: 14px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #a59cff; margin-bottom: 12px; }
+      .focus-panel h2 { font-size: 42px; font-weight: 700; letter-spacing: -.03em; margin-bottom: 18px; }
+      .focus-panel .timer { font-size: 72px; font-weight: 700; letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
+      .focus-panel .hint { margin-top: 16px; font-size: 16px; font-weight: 600; color: #9a9aa6; }
+      .rail-stack { display: flex; flex-direction: column; gap: 18px; }
+      .rail-card {
+        flex: 1; background: #fff; border-radius: 20px; border: 1px solid #e4e5ea; padding: 28px;
+        box-shadow: 0 20px 50px rgba(16,18,28,.1);
+      }
+      .rail-card .bar { width: 36px; height: 6px; border-radius: 99px; margin-bottom: 16px; }
+      .rail-card h3 { font-size: 26px; font-weight: 700; margin-bottom: 8px; letter-spacing: -.02em; }
+      .rail-card p { font-size: 15px; font-weight: 600; color: #5f636b; line-height: 1.4; }
+      .rail-card ul { list-style: none; margin-top: 14px; }
+      .rail-card li { font-size: 15px; font-weight: 700; padding: 8px 0; border-top: 1px solid #eceef2; }
+
+      /* Convergence */
+      .conv-stage {
+        position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      }
+      .conv-chip {
+        position: absolute; height: 48px; padding: 0 18px; border-radius: 999px;
+        background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14);
+        color: #ececf2; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px;
+      }
+      .conv-chip i { width: 8px; height: 8px; border-radius: 50%; }
+
+      /* Outro */
+      .outro {
+        position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 18px; text-align: center;
+      }
+      .outro-name { color: #fff; font-size: 78px; font-weight: 700; letter-spacing: -.04em; }
+      .outro-line {
+        font-family: "EB Garamond Local", "Times New Roman", serif; font-size: 36px; font-weight: 400; color: #c8c8d2;
+      }
+      .blackout { position: absolute; inset: 0; background: #000; opacity: 0; z-index: 40; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="34" data-width="1920" data-height="1080">
+      <div class="cut-flash" id="cut-flash"></div>
+
+      <!-- 1 Fragmented opening -->
+      <section class="clip" data-start="0" data-duration="3.3" data-track-index="1">
+        <div class="scene-inner" id="s1">
+          <div class="void"></div>
+          <div class="atmos" id="s1-glow"></div>
+          <div class="frag" id="frag1"><div class="k">Task</div><strong>Finish reading chapter 3</strong><span>School · Due today</span></div>
+          <div class="frag" id="frag2"><div class="k">Deadline</div><strong>Essay draft · Friday</strong><span>20% of grade</span></div>
+          <div class="frag" id="frag3"><div class="k">Project</div><strong>Client portal</strong><span>Work · Deliverable</span></div>
+          <div class="frag" id="frag4"><div class="k">Budget</div><strong>Rent · $1,200</strong><span>Treasury · This month</span></div>
+          <div style="position:absolute;left:120px;top:400px;width:1680px;z-index:5">
+            <h1 class="display xl" id="s1-line">Your life was<br/>split across apps.</h1>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2 Brand -->
+      <section class="clip" data-start="3.1" data-duration="2.6" data-track-index="2">
+        <div class="scene-inner" id="s2">
+          <div class="void"></div>
+          <div class="atmos" id="s2-glow"></div>
+          <div style="position:absolute;left:120px;top:320px;width:1600px">
+            <div style="display:flex;align-items:center;gap:16px;margin-bottom:28px" id="s2-brand">
+              <div class="brand-mark" id="s2-mark"><span></span><span></span><span></span></div>
+              <div class="display md" id="s2-word">LifeOS</div>
+            </div>
+            <h1 class="serif" id="s2-title" style="font-size:78px">Your life, in focus.</h1>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3 Now interface hero -->
+      <section class="clip" data-start="5.5" data-duration="4.2" data-track-index="3">
+        <div class="scene-inner" id="s3">
+          <div class="void"></div>
+          <div class="app-shell" id="s3-shell">
+            <aside class="app-nav">
+              <div class="nav-brand"><div class="brand-mark light" style="width:36px;height:36px;padding:8px;border-radius:10px;gap:3px"><span style="width:4px;height:8px"></span><span style="width:4px;height:16px"></span><span style="width:4px;height:11px"></span></div><strong>LifeOS</strong></div>
+              <div class="nav-item on"><i></i>Now</div>
+              <div class="nav-item"><i></i>Tasks</div>
+              <div class="nav-item"><i></i>Calendar</div>
+              <div class="nav-item"><i></i>School</div>
+              <div class="nav-item"><i></i>Library</div>
+            </aside>
+            <div class="app-main">
+              <p class="eyebrow ink">Life · command bar</p>
+              <h2>Capture what matters.</h2>
+              <p class="sub">One place for the next right move.</p>
+              <div class="capture" id="s3-capture">
+                <kbd>/</kbd>
+                <div class="capture-text"><span id="s3-chars"></span><span class="caret" id="s3-caret"></span></div>
+              </div>
+              <div class="task-row" id="s3-task">
+                <div class="check"></div>
+                <div>
+                  <strong>Finish reading chapter 3</strong>
+                  <span>School · Due today · Medium · 45m</span>
+                </div>
+                <div class="pill">Open</div>
+              </div>
+              <p class="choice-label" id="s3-choices-label">Good next choices</p>
+              <div class="choice-row" id="s3-c1"><i></i><div><strong>Essay draft · HIST 110</strong><span>Due Friday · High · 90m</span></div></div>
+              <div class="choice-row" id="s3-c2"><i style="background:#4338ca"></i><div><strong>Client portal · deliverable</strong><span>Work · Medium · 60m</span></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4 Connected environments -->
+      <section class="clip" data-start="9.5" data-duration="4.2" data-track-index="4">
+        <div class="scene-inner" id="s4">
+          <div class="paper"></div>
+          <div class="env-stage">
+            <div class="env-title" id="s4-title">
+              <p class="eyebrow ink">One workspace</p>
+              <h2 class="display lg ink" style="margin-top:10px">Environments that stay connected.</h2>
+            </div>
+            <div class="env-grid">
+              <div class="env-bridge" id="bridge1"></div>
+              <div class="env-bridge" id="bridge2"></div>
+              <div class="env-card" id="s4-a">
+                <div class="dot" style="background:#2563eb"></div>
+                <h3>School</h3>
+                <div class="role">Classes · coursework · grades</div>
+                <div class="block"><strong>HIST 110 · Essay draft</strong><span>Due Friday · 20% of grade</span></div>
+                <div class="block"><strong>Term GPA 3.7</strong><span>What-if grades stay with the class</span></div>
+                <div class="block"><strong>CS 240 · Algorithms</strong><span>Reading due today</span></div>
+              </div>
+              <div class="env-card" id="s4-b">
+                <div class="dot" style="background:#4338ca"></div>
+                <h3>Work</h3>
+                <div class="role">Projects · meetings · time</div>
+                <div class="block"><strong>Client portal</strong><span>Deliverable · In progress</span></div>
+                <div class="block"><strong>Standup · 9:30</strong><span>4.5h logged today</span></div>
+                <div class="block"><strong>Timesheet</strong><span>Track focus against projects</span></div>
+              </div>
+              <div class="env-card" id="s4-c">
+                <div class="dot" style="background:#0d9488"></div>
+                <h3>Study Abroad</h3>
+                <div class="role">Programs · apps · funding</div>
+                <div class="block"><strong>Tokyo · Spring</strong><span>Application · Docs ready</span></div>
+                <div class="block"><strong>Funding deadline</strong><span>May 1 · Tracked task</span></div>
+                <div class="block"><strong>Documents</strong><span>Reusable across applications</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5 Personal Context centerpiece -->
+      <section class="clip" data-start="13.5" data-duration="7.4" data-track-index="5">
+        <div class="scene-inner" id="s5">
+          <div class="void"></div>
+          <div class="atmos" id="s5-glow"></div>
+          <div class="ctx-label" id="s5-label">
+            <p class="eyebrow">The kernel</p>
+            <h2 class="display lg">Observations → Context → Recommendation</h2>
+          </div>
+          <div class="obs-col" id="s5-obs">
+            <div class="obs" id="obs1"><div class="k">Observation · School</div><strong>Essay draft due in 2 days</strong><span>HIST 110 · 20% of grade</span></div>
+            <div class="obs" id="obs2"><div class="k">Observation · Work</div><strong>Standup at 9:30</strong><span>1h fixed commitment</span></div>
+            <div class="obs" id="obs3"><div class="k">Observation · Treasury</div><strong>Rent target $1,200</strong><span>Monthly category budget</span></div>
+          </div>
+          <div class="flow-arrow" id="arrow1">→</div>
+          <div class="ctx-card" id="s5-ctx">
+            <p class="eyebrow">Personal Context</p>
+            <h3>Today</h3>
+            <div class="ctx-row"><span>Available</span><strong>6.5 hours</strong></div>
+            <div class="ctx-row"><span>Energy</span><strong>Moderate</strong></div>
+            <div class="ctx-row"><span>Concern</span><strong>Essay draft · Friday</strong></div>
+            <div class="ctx-row"><span>Commitment</span><strong>Standup · 9:30</strong></div>
+            <div class="ctx-row"><span>Also notice</span><strong>Rent target this month</strong></div>
+          </div>
+          <div class="flow-arrow" id="arrow2">→</div>
+          <div class="rec-card" id="s5-rec">
+            <div class="k">Good next choice</div>
+            <h3>Finish reading chapter 3</h3>
+            <p>School deadline is close, you still have focus time before standup, and nothing starts automatically — you choose.</p>
+            <div class="rec-btn">Start Focus →</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 Focus + rails -->
+      <section class="clip" data-start="20.7" data-duration="4.4" data-track-index="6">
+        <div class="scene-inner" id="s6">
+          <div class="void"></div>
+          <div class="split" id="s6-split">
+            <div class="focus-panel" id="s6-focus">
+              <div class="live"><i></i>In session</div>
+              <div class="proj">School · Focus</div>
+              <h2>Finish reading chapter 3</h2>
+              <div class="timer" id="s6-timer">45:00</div>
+              <p class="hint">Timer, checklist, and notes stay with you.</p>
+              <ul class="check-list">
+                <li><div class="box"></div>Skim section 3.1–3.4</li>
+                <li><div class="box"></div>Highlight open questions</li>
+                <li><div class="box"></div>Capture notes in Library</li>
+              </ul>
+            </div>
+            <div class="rail-stack">
+              <div class="rail-card" id="s6-cal">
+                <div class="bar" style="background:#2563eb"></div>
+                <h3>Calendar</h3>
+                <p>Events and due markers in one view.</p>
+                <ul>
+                  <li>Standup · 9:30</li>
+                  <li>Essay draft due · Friday</li>
+                  <li>Google · Outlook · iCloud</li>
+                </ul>
+              </div>
+              <div class="rail-card" id="s6-lib">
+                <div class="bar" style="background:#0d9488"></div>
+                <h3>Library</h3>
+                <p>Notes, Brain inbox, resources.</p>
+                <ul>
+                  <li>/tm → Brain inbox</li>
+                  <li>Chapter 3 notes</li>
+                  <li>Typed notes · notebooks</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7 Convergence -->
+      <section class="clip" data-start="24.9" data-duration="3.4" data-track-index="7">
+        <div class="scene-inner" id="s7">
+          <div class="void"></div>
+          <div class="atmos" id="s7-glow"></div>
+          <div class="conv-stage">
+            <div class="conv-chip" id="c-life" style="left:320px;top:280px"><i style="background:#625af6"></i>Life</div>
+            <div class="conv-chip" id="c-school" style="left:1480px;top:260px"><i style="background:#2563eb"></i>School</div>
+            <div class="conv-chip" id="c-work" style="left:260px;top:700px"><i style="background:#4338ca"></i>Work</div>
+            <div class="conv-chip" id="c-abroad" style="left:1520px;top:680px"><i style="background:#0d9488"></i>Abroad</div>
+            <div class="conv-chip" id="c-treasury" style="left:520px;top:820px"><i style="background:#47a47b"></i>Treasury</div>
+            <div class="conv-chip" id="c-mastery" style="left:1280px;top:820px"><i style="background:#7c3aed"></i>Mastery</div>
+            <div id="s7-center" style="display:flex;flex-direction:column;align-items:center;gap:16px">
+              <div class="brand-mark lg" id="s7-mark"><span></span><span></span><span></span></div>
+              <div class="display md" id="s7-word">LifeOS</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8 Outro hold -->
+      <section class="clip" data-start="28.1" data-duration="5.9" data-track-index="8">
+        <div class="scene-inner" id="s8">
+          <div class="void"></div>
+          <div class="atmos" id="s8-glow"></div>
+          <div class="outro">
+            <div class="brand-mark lg" id="s8-mark"><span></span><span></span><span></span></div>
+            <div class="outro-name" id="s8-name">LifeOS</div>
+            <div class="outro-line" id="s8-line">One OS. Every part of life.</div>
+          </div>
+          <div class="blackout" id="s8-black"></div>
+        </div>
+      </section>
+
+      <audio id="music" src="assets/music/bed-34s.mp3" data-start="0" data-duration="34" data-track-index="20" data-volume="0.26"></audio>
+      <audio id="sfx1" src="assets/sfx/impact/impactSoft_heavy_000.ogg" data-start="0.2" data-duration="0.5" data-track-index="21" data-volume="0.32"></audio>
+      <audio id="sfx2" src="assets/sfx/interface/bong_001.ogg" data-start="3.4" data-duration="0.2" data-track-index="21" data-volume="0.28"></audio>
+      <audio id="sfx3" src="assets/sfx/keyboard/keypress-001.wav" data-start="6.4" data-duration="0.1" data-track-index="22" data-volume="0.22"></audio>
+      <audio id="sfx4" src="assets/sfx/keyboard/keypress-009.wav" data-start="6.9" data-duration="0.1" data-track-index="22" data-volume="0.22"></audio>
+      <audio id="sfx5" src="assets/sfx/interface/click_001.ogg" data-start="7.9" data-duration="0.08" data-track-index="22" data-volume="0.35"></audio>
+      <audio id="sfx6" src="assets/sfx/impact/impactSoft_medium_001.ogg" data-start="8.1" data-duration="0.25" data-track-index="22" data-volume="0.3"></audio>
+      <audio id="sfx7" src="assets/sfx/interface/switch_002.ogg" data-start="9.8" data-duration="0.25" data-track-index="23" data-volume="0.3"></audio>
+      <audio id="sfx8" src="assets/sfx/impact/impactSoft_heavy_002.ogg" data-start="14.0" data-duration="0.4" data-track-index="24" data-volume="0.3"></audio>
+      <audio id="sfx9" src="assets/sfx/interface/drop_001.ogg" data-start="16.4" data-duration="0.15" data-track-index="24" data-volume="0.28"></audio>
+      <audio id="sfx10" src="assets/sfx/impact/impactSoft_medium_004.ogg" data-start="18.2" data-duration="0.25" data-track-index="24" data-volume="0.32"></audio>
+      <audio id="sfx11" src="assets/sfx/interface/switch_002.ogg" data-start="21.0" data-duration="0.25" data-track-index="25" data-volume="0.3"></audio>
+      <audio id="sfx12" src="assets/sfx/impact/impactSoft_heavy_000.ogg" data-start="25.3" data-duration="0.45" data-track-index="25" data-volume="0.34"></audio>
+      <audio id="sfx13" src="assets/sfx/impact/impactSoft_heavy_000.ogg" data-start="28.5" data-duration="0.5" data-track-index="26" data-volume="0.36"></audio>
+    </div>
+
+    <script>
+      const CAPTURE = "/t Finish reading chapter 3";
+      const charsEl = document.getElementById("s3-chars");
+      for (let i = 0; i < CAPTURE.length; i++) {
+        const span = document.createElement("span");
+        span.textContent = CAPTURE[i];
+        span.style.opacity = "0";
+        span.className = "ch";
+        charsEl.appendChild(span);
+      }
+      const charSpans = charsEl.querySelectorAll(".ch");
+
+      gsap.set("#cut-flash", { opacity: 0 });
+      const tl = gsap.timeline({ paused: true });
+
+      const softCut = (t) => {
+        tl.fromTo("#cut-flash", { opacity: 0 }, { opacity: 0.28, duration: 0.05, ease: "power1.in", immediateRender: false }, t);
+        tl.to("#cut-flash", { opacity: 0, duration: 0.28, ease: "power2.out" }, t + 0.05);
+      };
+      const enter = (id, t, from = 1.04) => {
+        gsap.set(id, { opacity: 0 });
+        tl.fromTo(id, { opacity: 0, scale: from }, { opacity: 1, scale: 1, duration: 0.55, ease: "power3.out" }, t);
+      };
+      const exit = (id, t) => {
+        tl.to(id, { opacity: 0, scale: 1.015, duration: 0.35, ease: "power2.inOut" }, t);
+        softCut(t + 0.1);
+      };
+
+      // 1 Opening fragments + line
+      enter("#s1", 0, 1.02);
+      gsap.set(["#frag1", "#frag2", "#frag3", "#frag4"], { opacity: 0, scale: 0.96 });
+      tl.fromTo("#frag1", { opacity: 0, x: -40, y: -20 }, { opacity: 0.95, x: 0, y: 0, duration: 0.9, ease: "power3.out" }, 0.15);
+      tl.fromTo("#frag2", { opacity: 0, x: 40, y: -16 }, { opacity: 0.95, x: 0, y: 0, duration: 0.9, ease: "power3.out" }, 0.28);
+      tl.fromTo("#frag3", { opacity: 0, x: -30, y: 24 }, { opacity: 0.95, x: 0, y: 0, duration: 0.9, ease: "power3.out" }, 0.4);
+      tl.fromTo("#frag4", { opacity: 0, x: 36, y: 20 }, { opacity: 0.95, x: 0, y: 0, duration: 0.9, ease: "power3.out" }, 0.5);
+      gsap.set("#s1-line", { opacity: 0, y: 24 });
+      tl.fromTo("#s1-line", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 0.85);
+      tl.to(["#frag1", "#frag2", "#frag3", "#frag4"], { opacity: 0.35, duration: 0.5, ease: "power2.inOut" }, 2.4);
+      exit("#s1", 2.95);
+
+      // 2 Brand
+      enter("#s2", 3.1, 1.03);
+      gsap.set(["#s2-brand", "#s2-title"], { opacity: 0, y: 20 });
+      tl.fromTo("#s2-brand", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 3.3);
+      tl.fromTo("#s2-mark", { scale: 0.92 }, { scale: 1, duration: 0.6, ease: "power2.out" }, 3.35);
+      tl.fromTo("#s2-title", { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.85, ease: "power3.out" }, 3.75);
+      exit("#s2", 5.35);
+
+      // 3 Now hero — large UI + slow push
+      enter("#s3", 5.5, 1.02);
+      gsap.set("#s3-shell", { opacity: 0, y: 40, scale: 0.94 });
+      tl.fromTo("#s3-shell", { opacity: 0, y: 40, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 0.9, ease: "power3.out" }, 5.65);
+      tl.to("#s3-shell", { scale: 1.03, y: -12, duration: 3.2, ease: "sine.inOut" }, 6.4);
+      const typeStart = 6.35;
+      charSpans.forEach((span, i) => {
+        tl.fromTo(span, { opacity: 0 }, { opacity: 1, duration: 0.03 }, typeStart + i * 0.04);
+      });
+      tl.fromTo("#s3-caret", { opacity: 1 }, { opacity: 0.2, duration: 0.22, yoyo: true, repeat: 6, ease: "sine.inOut" }, 6.3);
+      gsap.set(["#s3-task", "#s3-choices-label", "#s3-c1", "#s3-c2"], { opacity: 0, y: 20 });
+      tl.fromTo("#s3-task", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 7.85);
+      tl.fromTo("#s3-choices-label", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 8.15);
+      tl.fromTo("#s3-c1", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 8.25);
+      tl.fromTo("#s3-c2", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 8.4);
+      exit("#s3", 9.35);
+
+      // 4 Connected envs
+      enter("#s4", 9.5, 1.02);
+      gsap.set(["#s4-title", "#s4-a", "#s4-b", "#s4-c", "#bridge1", "#bridge2"], { opacity: 0, y: 28 });
+      tl.fromTo("#s4-title", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 9.65);
+      tl.fromTo("#s4-a", { opacity: 0, y: 36 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 9.95);
+      tl.fromTo("#s4-b", { opacity: 0, y: 36 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 10.15);
+      tl.fromTo("#s4-c", { opacity: 0, y: 36 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 10.35);
+      tl.fromTo("#bridge1", { opacity: 0, scaleX: 0.3 }, { opacity: 1, scaleX: 1, duration: 0.55, ease: "power2.out" }, 10.7);
+      tl.fromTo("#bridge2", { opacity: 0, scaleX: 0.3 }, { opacity: 1, scaleX: 1, duration: 0.55, ease: "power2.out" }, 10.85);
+      tl.to(["#s4-a", "#s4-b", "#s4-c"], { y: -8, duration: 2.2, ease: "sine.inOut" }, 11.0);
+      exit("#s4", 13.35);
+
+      // 5 Personal Context centerpiece
+      enter("#s5", 13.5, 1.02);
+      gsap.set(["#s5-label", "#obs1", "#obs2", "#obs3", "#s5-ctx", "#s5-rec", "#arrow1", "#arrow2"], { opacity: 0 });
+      tl.fromTo("#s5-label", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 13.7);
+      tl.fromTo("#obs1", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, 14.2);
+      tl.fromTo("#obs2", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, 14.55);
+      tl.fromTo("#obs3", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, 14.9);
+      tl.fromTo("#arrow1", { opacity: 0 }, { opacity: 1, duration: 0.35 }, 15.3);
+      tl.fromTo("#s5-ctx", { opacity: 0, scale: 0.96 }, { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" }, 15.5);
+      tl.fromTo("#arrow2", { opacity: 0 }, { opacity: 1, duration: 0.35 }, 17.0);
+      tl.fromTo("#s5-rec", { opacity: 0, x: 40, scale: 0.97 }, { opacity: 1, x: 0, scale: 1, duration: 0.75, ease: "power3.out" }, 17.2);
+      tl.to("#s5-rec", { boxShadow: "0 40px 100px rgba(98,90,246,0.35)", duration: 0.8, ease: "sine.inOut" }, 18.2);
+      exit("#s5", 20.55);
+
+      // 6 Focus + rails
+      enter("#s6", 20.7, 1.02);
+      gsap.set(["#s6-focus", "#s6-cal", "#s6-lib"], { opacity: 0, y: 30 });
+      tl.fromTo("#s6-focus", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 20.9);
+      tl.fromTo("#s6-cal", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 21.2);
+      tl.fromTo("#s6-lib", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 21.45);
+      tl.call(() => { document.getElementById("s6-timer").textContent = "44:59"; }, null, 22.4);
+      tl.call(() => { document.getElementById("s6-timer").textContent = "44:58"; }, null, 23.5);
+      tl.to("#s6-split", { scale: 1.02, duration: 2.4, ease: "sine.inOut" }, 21.8);
+      exit("#s6", 24.75);
+
+      // 7 Convergence — x/y transforms only (no left/top motion)
+      enter("#s7", 24.9, 1.02);
+      gsap.set(["#s7-center", "#c-life", "#c-school", "#c-work", "#c-abroad", "#c-treasury", "#c-mastery"], { opacity: 0 });
+      tl.fromTo("#s7-center", { opacity: 0, scale: 0.92 }, { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" }, 25.1);
+      ["#c-life", "#c-school", "#c-work", "#c-abroad", "#c-treasury", "#c-mastery"].forEach((sel, i) => {
+        tl.fromTo(sel, { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.4, ease: "power2.out" }, 25.3 + i * 0.08);
+      });
+      // Start positions in CSS; move toward center via x/y deltas
+      tl.to("#c-life", { x: 460, y: 80, duration: 1.1, ease: "power3.inOut" }, 26.0);
+      tl.to("#c-school", { x: -460, y: 100, duration: 1.1, ease: "power3.inOut" }, 26.0);
+      tl.to("#c-work", { x: 460, y: -180, duration: 1.1, ease: "power3.inOut" }, 26.05);
+      tl.to("#c-abroad", { x: -440, y: -160, duration: 1.1, ease: "power3.inOut" }, 26.05);
+      tl.to("#c-treasury", { x: 280, y: -180, duration: 1.1, ease: "power3.inOut" }, 26.1);
+      tl.to("#c-mastery", { x: -280, y: -180, duration: 1.1, ease: "power3.inOut" }, 26.1);
+      tl.to(["#c-life", "#c-school", "#c-work", "#c-abroad", "#c-treasury", "#c-mastery"], { opacity: 0.25, duration: 0.5 }, 27.5);
+      exit("#s7", 27.95);
+
+      // 8 Outro hold
+      enter("#s8", 28.1, 1.03);
+      gsap.set(["#s8-mark", "#s8-name", "#s8-line"], { opacity: 0, y: 18 });
+      tl.fromTo("#s8-mark", { opacity: 0, y: 14, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power3.out" }, 28.35);
+      tl.fromTo("#s8-name", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 28.7);
+      tl.fromTo("#s8-line", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 29.2);
+      tl.to("#s8-black", { opacity: 1, duration: 0.45, ease: "power2.inOut" }, 33.3);
+
+      // Subtle audio-reactive glow only
+      const AUDIO_DATA = window.AUDIO_DATA;
+      if (AUDIO_DATA && AUDIO_DATA.frames) {
+        const glows = ["s1-glow", "s2-glow", "s5-glow", "s7-glow", "s8-glow"].map((id) => document.getElementById(id));
+        for (let f = 0; f < AUDIO_DATA.totalFrames; f += 3) {
+          const frame = AUDIO_DATA.frames[f];
+          const t = f / AUDIO_DATA.fps;
+          tl.call(
+            ((bands) => () => {
+              const o = 0.55 + (bands[0] || 0) * 0.35;
+              glows.forEach((el) => { if (el) el.style.opacity = String(o); });
+            })(frame.bands),
+            null,
+            t,
+          );
+        }
+      }
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

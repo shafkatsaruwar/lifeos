@@ -12,31 +12,74 @@ export function TaskRow({
   onToggleDone,
   onDelete,
   onRestore,
+  selectionMode = false,
+  selected = false,
+  onToggleSelect,
 }: {
   task: Task;
   onPress: () => void;
   onToggleDone: () => void;
   onDelete?: () => void;
   onRestore?: () => void;
+  selectionMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }) {
   const { theme } = useLifeOS();
   const open = taskIsOpen(task);
   const priorityColor = PRIORITY_COLOR[task.priority ?? "Medium"];
   const row = (
-    <Pressable onPress={onPress} style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <Pressable
-        onPress={onToggleDone}
-        hitSlop={10}
-        style={[
-          styles.check,
-          {
-            borderColor: open ? theme.border : theme.accent,
-            backgroundColor: open ? "transparent" : theme.accent,
-          },
-        ]}
-      >
-        {!open ? <Feather name="check" size={13} color={theme.surface} /> : null}
-      </Pressable>
+    <Pressable
+      onPress={selectionMode ? onToggleSelect : onPress}
+      accessibilityRole={selectionMode ? "checkbox" : "button"}
+      accessibilityState={selectionMode ? { checked: selected } : undefined}
+      accessibilityLabel={
+        selectionMode
+          ? selected
+            ? `Deselect ${task.title}`
+            : `Select ${task.title}`
+          : undefined
+      }
+      style={[
+        styles.row,
+        {
+          backgroundColor: selected ? `${theme.accent}14` : theme.surface,
+          borderColor: selected ? theme.accent : theme.border,
+        },
+      ]}
+    >
+      {selectionMode ? (
+        <Pressable
+          onPress={onToggleSelect}
+          hitSlop={10}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: selected }}
+          accessibilityLabel={selected ? `Deselect ${task.title}` : `Select ${task.title}`}
+          style={[
+            styles.selectCheck,
+            {
+              borderColor: selected ? theme.accent : theme.border,
+              backgroundColor: selected ? theme.accent : "transparent",
+            },
+          ]}
+        >
+          {selected ? <Feather name="check" size={13} color={theme.surface} /> : null}
+        </Pressable>
+      ) : (
+        <Pressable
+          onPress={onToggleDone}
+          hitSlop={10}
+          style={[
+            styles.check,
+            {
+              borderColor: open ? theme.border : theme.accent,
+              backgroundColor: open ? "transparent" : theme.accent,
+            },
+          ]}
+        >
+          {!open ? <Feather name="check" size={13} color={theme.surface} /> : null}
+        </Pressable>
+      )}
       <View style={styles.grow}>
         <Text
           numberOfLines={1}
@@ -65,7 +108,7 @@ export function TaskRow({
         </View>
       </View>
       <View style={[styles.priorityDot, { backgroundColor: priorityColor }]} />
-      {onRestore ? (
+      {selectionMode ? null : onRestore ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Restore ${task.title}`}
@@ -82,7 +125,7 @@ export function TaskRow({
     </Pressable>
   );
 
-  if (!onDelete) return row;
+  if (!onDelete || selectionMode) return row;
 
   return (
     <SwipeDeleteRow label={task.title || "task"} onDelete={onDelete} confirmTitle="Delete task">
@@ -95,6 +138,14 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 13 },
   grow: { flex: 1, minWidth: 0 },
   check: { width: 24, height: 24, borderRadius: 8, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  selectCheck: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   title: { fontSize: 15, fontWeight: "700" },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3, flexWrap: "wrap" },
   metaChip: { fontSize: 12 },

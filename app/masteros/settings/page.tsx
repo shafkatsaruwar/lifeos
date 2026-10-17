@@ -30,7 +30,7 @@ export default function SettingsPage() {
             className="mos-ghost"
             type="button"
             onClick={() => {
-              if (confirm("Reset Mastery to the Wafia / SAT Prep demo?")) resetDemo();
+              if (confirm("Reset Mastery to the SAT Prep demo?")) resetDemo();
             }}
           >
             Reset demo data

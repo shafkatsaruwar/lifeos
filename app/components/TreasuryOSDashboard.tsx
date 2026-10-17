@@ -95,8 +95,8 @@ type MonthlyState = {
 };
 
 const defaultCategories: TreasuryCategory[] = [
-  { id: "parents", name: "Parents / Project Retire Baba", emoji: "❤️", kind: "expense", target: 1100, betweenTarget: 0 },
-  { id: "masters", name: "Master's", emoji: "🎓", kind: "savings", target: 350, betweenTarget: 0 },
+  { id: "family", name: "Family support", emoji: "❤️", kind: "expense", target: 500, betweenTarget: 0 },
+  { id: "education", name: "Education", emoji: "🎓", kind: "savings", target: 300, betweenTarget: 0 },
   { id: "emergency", name: "Emergency Fund", emoji: "🛡️", kind: "savings", target: 200, betweenTarget: 50 },
   { id: "travel", name: "Travel", emoji: "✈️", kind: "savings", target: 150, betweenTarget: 0 },
   { id: "debt", name: "Debt", emoji: "💳", kind: "expense", target: 400, betweenTarget: 400 },
@@ -120,19 +120,19 @@ const defaultSettings: TreasurySettings = {
     budgetModeTitle: "Budget mode",
     employedHelp: "Use each category’s normal target.",
     betweenContractsHelp: "Use each category’s between-contract target.",
-    retireBabaTitle: "Project Retire Baba",
+    retireBabaTitle: "Spotlight goal",
     retireBabaMetricLabel: "This month",
-    retireBabaImpactPrefix: "That replaces about",
-    retireBabaImpactMiddle: "evening DoorDash shifts at",
-    retireBabaImpactSuffix: "/shift.",
-    retireBabaMissing: "Add or restore a category with the built-in Parents role to show this tracker.",
+    retireBabaImpactPrefix: "That covers about",
+    retireBabaImpactMiddle: "hours of focused work at",
+    retireBabaImpactSuffix: "/hour.",
+    retireBabaMissing: "Pick a category for the spotlight tracker in Settings.",
     savingsTitle: "Savings buckets",
     savingsHelp: "Total entered this month across categories marked as savings.",
-    savingsCallout: "Create buckets like Emergency Fund, Tuition, Camera Gear, Travel, or anything else you want to save toward.",
+    savingsCallout: "Create buckets like Emergency Fund, Tuition, Travel, or anything else you want to save toward.",
     moneyMapTitle: "money map",
     incomeInputLabel: "Actual take-home income this month",
     incomeHintPrefix: "Leave this at $0 to use your editable baseline of",
-    monthNotePlaceholder: "Month note, e.g. transit was prepaid last month; phone came from birthday money…",
+    monthNotePlaceholder: "Month note, e.g. transit was prepaid last month…",
     categoriesTitle: "Custom categories",
     categoriesHelp: "Add, rename, delete, or retarget anything. Between-contract targets let the same category automatically shrink or pause when you switch modes.",
     incomeSetupTitle: "Income setup",
@@ -143,17 +143,17 @@ const defaultSettings: TreasurySettings = {
   weeklyHours: 37.5,
   withholdingRate: 20.3,
   monthlyBaseline: 3200,
-  babaEveningShiftValue: 75,
-  contractEnd: "2026-10-31",
+  babaEveningShiftValue: 25,
+  contractEnd: "",
   categories: defaultCategories,
   spotlight: {
-    categoryId: "parents",
-    title: "Project Retire Baba",
+    categoryId: "family",
+    title: "Spotlight goal",
     metricLabel: "This month",
-    impactPrefix: "That replaces about",
-    unitNoun: "evening DoorDash shifts at",
-    unitValue: 75,
-    unitSuffix: "/shift.",
+    impactPrefix: "That covers about",
+    unitNoun: "hours of focused work at",
+    unitValue: 25,
+    unitSuffix: "/hour.",
   },
 };
 
@@ -180,8 +180,8 @@ function createDemoMonthState(monthKey = currentMonthKey()): MonthlyState {
     month: monthKey,
     mode: "employed",
     categoryValues: {
-      parents: 1100,
-      masters: 350,
+      family: 500,
+      education: 300,
       emergency: 200,
       travel: 75,
       debt: 400,
@@ -226,15 +226,17 @@ const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD
 const exactMoney = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 const clamp = (n: number, min = 0) => Math.max(min, Number.isFinite(n) ? n : 0);
 const makeId = () => `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-const LOCAL_SETTINGS_KEY = "shafkat-budget-settings";
+const LOCAL_SETTINGS_KEY = "lifeos-budget-settings";
+const LEGACY_SETTINGS_KEY = "shafkat-budget-settings";
+const monthStorageKey = (month: string) => `lifeos-budget-month-${month}`;
+const legacyMonthStorageKey = (month: string) => `shafkat-budget-month-${month}`;
 const LEGACY_MONTH_KEY = "shafkat-budget-month";
-const monthStorageKey = (month: string) => `shafkat-budget-month-${month}`;
 const lifeosTreasuryPath = (uid: string, suffix: string) => `users/${uid}/treasuryOS/${suffix}`;
 
 function resolveSpotlight(raw: any, categories: TreasuryCategory[]): SpotlightConfig {
-  const fallbackCategoryId = categories.some(c => c.id === "parents")
-    ? "parents"
-    : (categories[0]?.id ?? "parents");
+  const fallbackCategoryId = categories.some(c => c.id === "family")
+    ? "family"
+    : (categories[0]?.id ?? "family");
   const copy = raw?.copy ?? {};
   const spotlight = raw?.spotlight ?? {};
   return {
@@ -318,6 +320,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
   const [addingBucket, setAddingBucket] = useState(false);
   const [editingBucketId, setEditingBucketId] = useState<string | null>(null);
   const [spotlightEditing, setSpotlightEditing] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const skipNextCloudSave = useRef(false);
   const sessionEmail = lifeosUser?.email ?? null;
   const copy = settings.copy;
@@ -332,8 +335,13 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
       let nextSettings = defaultSettings;
       let nextMonth = defaultMonthState();
       try {
-        const localSettings = localStorage.getItem(LOCAL_SETTINGS_KEY);
-        const localMonth = localStorage.getItem(monthStorageKey(defaultMonthState().month)) ?? localStorage.getItem(LEGACY_MONTH_KEY);
+        const localSettings =
+          localStorage.getItem(LOCAL_SETTINGS_KEY) ?? localStorage.getItem(LEGACY_SETTINGS_KEY);
+        const monthKey = defaultMonthState().month;
+        const localMonth =
+          localStorage.getItem(monthStorageKey(monthKey)) ??
+          localStorage.getItem(legacyMonthStorageKey(monthKey)) ??
+          localStorage.getItem(LEGACY_MONTH_KEY);
         hadLocalSettings = Boolean(localSettings);
         hadLocalMonth = Boolean(localMonth);
         if (localSettings) nextSettings = migrateSettings(JSON.parse(localSettings));
@@ -522,18 +530,23 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
     setSettings(s => ({ ...s, categories: s.categories.map(c => c.id === id ? { ...c, ...patch } : c) }));
   }
 
-  function addCategory() {
+  function addCategory(seed?: Partial<TreasuryCategory>, opts?: { quiet?: boolean }) {
     const id = makeId();
-    setSettings(s => ({ ...s, categories: [...s.categories, { id, name: "New category", emoji: "💰", kind: "expense", target: 0, betweenTarget: 0 }] }));
+    const next: TreasuryCategory = {
+      id,
+      name: seed?.name ?? "New category",
+      emoji: seed?.emoji ?? "💰",
+      kind: seed?.kind ?? "expense",
+      target: seed?.target ?? 0,
+      betweenTarget: seed?.betweenTarget ?? 0,
+    };
+    setSettings(s => ({ ...s, categories: [...s.categories, next] }));
+    if (!opts?.quiet) setSyncMsg(`Added “${next.name}” to the money map`);
+    return id;
   }
 
   function addSavingsBucket(name = "New savings bucket", emoji = "🏦", target = 0) {
-    const id = makeId();
-    setSettings(s => ({
-      ...s,
-      categories: [...s.categories, { id, name, emoji, kind: "savings", target, betweenTarget: 0 }],
-    }));
-    return id;
+    return addCategory({ name, emoji, kind: "savings", target, betweenTarget: 0 }, { quiet: true });
   }
 
   function beginEditBucket(bucket: TreasuryCategory) {
@@ -571,10 +584,26 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
     setSyncMsg(`Deleted savings bucket “${cat.name}”`);
   }
 
-  function deleteCategory(id: string) {
+  function deleteCategory(id: string, opts?: { confirmed?: boolean }) {
     const cat = settings.categories.find(c => c.id === id);
-    if (!cat || !confirm(`Delete “${cat.name}”? Existing monthly amounts for it will no longer be counted.`)) return;
-    setSettings(s => ({ ...s, categories: s.categories.filter(c => c.id !== id) }));
+    if (!cat) return;
+    if (!opts?.confirmed) {
+      setPendingDeleteId(id);
+      return;
+    }
+    setSettings(s => {
+      const categories = s.categories.filter(c => c.id !== id);
+      const spotlight = s.spotlight.categoryId === id
+        ? { ...s.spotlight, categoryId: categories[0]?.id ?? "" }
+        : s.spotlight;
+      return { ...s, categories, spotlight };
+    });
+    setMonth(m => {
+      const { [id]: _removed, ...rest } = m.categoryValues;
+      return { ...m, categoryValues: rest };
+    });
+    setPendingDeleteId(null);
+    setSyncMsg(`Deleted “${cat.name}” from the money map`);
   }
 
   function resetMonth() {
@@ -730,7 +759,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
                     <input
                       value={settings.spotlight.title}
                       onChange={e => setSpotlight({ title: e.target.value })}
-                      placeholder="e.g. Emergency runway, Retire Baba, House deposit"
+                      placeholder="e.g. Emergency runway, House deposit, Family support"
                       aria-label="Big project name"
                     />
                   </label>
@@ -917,7 +946,12 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
                 <EditableText editing={copyEditing} value={copy.moneyMapTitle} onChange={v => setCopy("moneyMapTitle", v)} ariaLabel="Money map title" />
               </h2>
             </div>
-            <input className="treasury-month-picker" type="month" value={month.month} onChange={e => changeMonth(e.target.value)} />
+            <div className="treasury-map-head-actions">
+              <button type="button" className="os-profile-button" onClick={() => addCategory()} data-testid="treasury-add-map-field">
+                <Plus size={14} /> Add field
+              </button>
+              <input className="treasury-month-picker" type="month" value={month.month} onChange={e => changeMonth(e.target.value)} />
+            </div>
           </header>
           <div className="os-module-body treasury-pad">
             <div className="treasury-live-totals" aria-live="polite">
@@ -954,12 +988,25 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
             </div>
 
             <div className="treasury-category-list">
-              {settings.categories.map(c => {
+              {settings.categories.length === 0 ? (
+                <div className="treasury-map-empty">
+                  <p>No money-map fields yet.</p>
+                  <button type="button" className="os-now-button" onClick={() => addCategory()}>
+                    <Plus size={14} /> Add your first field
+                  </button>
+                </div>
+              ) : settings.categories.map(c => {
                 const target = month.mode === "employed" ? c.target : c.betweenTarget;
                 return (
                   <MoneyInput
                     key={c.id}
                     label={`${c.emoji} ${c.name}`}
+                    editable={{
+                      emoji: c.emoji,
+                      name: c.name,
+                      onEmojiChange: emoji => updateCategory(c.id, { emoji }),
+                      onNameChange: name => updateCategory(c.id, { name }),
+                    }}
                     value={month.categoryValues[c.id] ?? 0}
                     target={target}
                     onChange={v => setCategoryValue(c.id, v)}
@@ -967,6 +1014,9 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
                     savings={c.kind === "savings"}
                     amountLabel={`${c.name} this month`}
                     targetLabel={`${c.name} target`}
+                    onDelete={() => deleteCategory(c.id, { confirmed: pendingDeleteId === c.id })}
+                    deleteLabel={pendingDeleteId === c.id ? `Confirm delete ${c.name}` : `Delete ${c.name}`}
+                    deletePending={pendingDeleteId === c.id}
                   />
                 );
               })}
@@ -1006,7 +1056,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
               <Settings2 size={17} />
               <h2><EditableText editing={copyEditing} value={copy.categoriesTitle} onChange={v => setCopy("categoriesTitle", v)} ariaLabel="Categories section title" /></h2>
             </div>
-            <button type="button" onClick={addCategory}><Plus size={14} /> Add category</button>
+            <button type="button" onClick={() => addCategory()}><Plus size={14} /> Add category</button>
           </header>
           <div className="os-module-body treasury-pad">
             <p className="treasury-muted" style={{ marginBottom: 14 }}>
@@ -1023,7 +1073,7 @@ export function TreasuryOSDashboard({ lifeosUser = null }: { lifeosUser?: LifeOS
                   </select>
                   <label><span>Normal target</span><div className="mini-currency">$<input type="number" min="0" value={c.target} onChange={e => updateCategory(c.id, { target: clamp(Number(e.target.value)) })} /></div></label>
                   <label><span>Between contracts</span><div className="mini-currency">$<input type="number" min="0" value={c.betweenTarget} onChange={e => updateCategory(c.id, { betweenTarget: clamp(Number(e.target.value)) })} /></div></label>
-                  <button type="button" className="treasury-delete" aria-label={`Delete ${c.name}`} onClick={() => deleteCategory(c.id)}><Trash2 size={15} /></button>
+                  <button type="button" className="treasury-delete" aria-label={`Delete ${c.name}`} onClick={() => deleteCategory(c.id, { confirmed: true })}><Trash2 size={15} /></button>
                 </div>
               ))}
             </div>
@@ -1118,6 +1168,10 @@ function MoneyInput({
   savings = false,
   amountLabel,
   targetLabel,
+  editable,
+  onDelete,
+  deleteLabel,
+  deletePending = false,
 }: {
   label: ReactNode;
   value: number;
@@ -1128,11 +1182,39 @@ function MoneyInput({
   savings?: boolean;
   amountLabel?: string;
   targetLabel?: string;
+  editable?: {
+    emoji: string;
+    name: string;
+    onEmojiChange: (value: string) => void;
+    onNameChange: (value: string) => void;
+  };
+  onDelete?: () => void;
+  deleteLabel?: string;
+  deletePending?: boolean;
 }) {
   return (
-    <div className={`treasury-money-input${positive ? " positive" : ""}${savings ? " savings" : ""}`}>
+    <div className={`treasury-money-input${positive ? " positive" : ""}${savings ? " savings" : ""}${onDelete ? " editable-field" : ""}${deletePending ? " delete-pending" : ""}`}>
       <div className="treasury-money-meta">
-        <span className="treasury-money-label">{label}</span>
+        {editable ? (
+          <div className="treasury-money-edit-label">
+            <input
+              className="treasury-map-emoji"
+              aria-label="Field emoji"
+              value={editable.emoji}
+              maxLength={4}
+              onChange={e => editable.onEmojiChange(e.target.value)}
+            />
+            <input
+              className="treasury-map-name"
+              aria-label="Field name"
+              value={editable.name}
+              onChange={e => editable.onNameChange(e.target.value)}
+              placeholder="Field name"
+            />
+          </div>
+        ) : (
+          <span className="treasury-money-label">{label}</span>
+        )}
         {target != null && onTargetChange ? (
           <label className="treasury-target-field">
             <span>Target</span>
@@ -1153,19 +1235,33 @@ function MoneyInput({
           <small>Target {money.format(target)}</small>
         ) : null}
       </div>
-      <label className="currency">
-        <span>$</span>
-        <input
-          inputMode="decimal"
-          type="number"
-          min="0"
-          step="1"
-          value={value || ""}
-          placeholder="0"
-          aria-label={amountLabel || (typeof label === "string" ? label : "Amount")}
-          onChange={e => onChange(clamp(Number(e.target.value)))}
-        />
-      </label>
+      <div className="treasury-money-controls">
+        <label className="currency">
+          <span>$</span>
+          <input
+            inputMode="decimal"
+            type="number"
+            min="0"
+            step="1"
+            value={value || ""}
+            placeholder="0"
+            aria-label={amountLabel || (typeof label === "string" ? label : "Amount")}
+            onChange={e => onChange(clamp(Number(e.target.value)))}
+          />
+        </label>
+        {onDelete ? (
+          <button
+            type="button"
+            className={`treasury-icon-button danger${deletePending ? " confirm" : ""}`}
+            aria-label={deleteLabel || "Delete field"}
+            aria-pressed={deletePending}
+            onClick={onDelete}
+            title={deletePending ? "Click again to confirm delete" : "Delete field"}
+          >
+            {deletePending ? <span className="treasury-delete-confirm">Yes</span> : <Trash2 size={14} />}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

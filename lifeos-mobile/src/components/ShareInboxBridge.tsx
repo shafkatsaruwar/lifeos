@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
-import { Alert, AppState, Linking, type AppStateStatus } from "react-native";
+import { AppState, Linking, type AppStateStatus } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import { useLifeOS } from "../lib/LifeOSContext";
-import { fetchIcsFromUrl, mergeCalendarEvents } from "../lib/api";
+import { fetchIcsFromUrl } from "../lib/api";
 import { uid } from "../lib/helpers";
+import { stageIcsImport } from "../lib/icsImportQueue";
 import { navigationRef } from "../navigation/navigationRef";
 import {
   drainPendingShares,
@@ -13,20 +14,18 @@ import {
   type SharePayload,
 } from "../lib/shareInbox";
 
-/** Share sheet + Open In → calendar (ICS) or MindDump (text/URL). */
+/** Share sheet + Open In → ICS review queue, or MindDump for text/URL. */
 export function ShareInboxBridge() {
-  const { workspace, updateCalendar, updateBrain, updateSettings } = useLifeOS();
+  const { workspace, updateBrain, updateSettings } = useLifeOS();
   const workspaceRef = useRef(workspace);
-  const updateCalendarRef = useRef(updateCalendar);
   const updateBrainRef = useRef(updateBrain);
   const updateSettingsRef = useRef(updateSettings);
 
   useEffect(() => {
     workspaceRef.current = workspace;
-    updateCalendarRef.current = updateCalendar;
     updateBrainRef.current = updateBrain;
     updateSettingsRef.current = updateSettings;
-  }, [workspace, updateCalendar, updateBrain, updateSettings]);
+  }, [workspace, updateBrain, updateSettings]);
 
   useEffect(() => {
     const apply = async (item: SharePayload) => {
@@ -44,8 +43,11 @@ export function ShareInboxBridge() {
 
       const events = eventsFromShare(item);
       if (events.length) {
-        const next = mergeCalendarEvents(workspaceRef.current.calendar, events);
-        await updateCalendarRef.current(next);
+        const staged = stageIcsImport(events, {
+          sourceLabel: item.filename || "Shared calendar file",
+          existingIds: workspaceRef.current.calendar.map((event) => event.id),
+        });
+        if (!staged) return;
         const go = (attempt: number) => {
           if (navigationRef.isReady()) {
             navigationRef.navigate("CalendarTab" as never, { screen: "CalendarMain" } as never);
@@ -54,10 +56,6 @@ export function ShareInboxBridge() {
           if (attempt < 12) setTimeout(() => go(attempt + 1), 80);
         };
         go(0);
-        Alert.alert(
-          "Calendar imported",
-          `Added ${events.length} event${events.length === 1 ? "" : "s"} from the share.`,
-        );
         return;
       }
 

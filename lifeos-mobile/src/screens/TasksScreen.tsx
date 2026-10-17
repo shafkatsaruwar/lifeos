@@ -1,6 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
-import { useMemo, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Empty, Eyebrow, Page, SegmentedControl, Subtitle, Title } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
@@ -26,6 +26,8 @@ export function TasksScreen() {
   const [filter, setFilter] = useState<Filter>("Open");
   const [sort, setSort] = useState<Sort>("Due");
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<number[]>([]);
 
   const tasks = useMemo(() => {
     if (filter === "Done") {
@@ -39,6 +41,22 @@ export function TasksScreen() {
     if (sort === "Space") sorted.sort((a, b) => (a.project ?? "").localeCompare(b.project ?? ""));
     return sorted;
   }, [workspace.tasks, filter, sort]);
+
+  const taskIds = useMemo(() => tasks.map((task) => task.id), [tasks]);
+  const visibleSelected = selected.filter((id) => taskIds.includes(id));
+  const allSelected = tasks.length > 0 && visibleSelected.length === tasks.length;
+
+  useEffect(() => {
+    setSelected((current) => {
+      const next = current.filter((id) => taskIds.includes(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [taskIds]);
+
+  useEffect(() => {
+    setSelecting(false);
+    setSelected([]);
+  }, [filter]);
 
   const activeSort = SORT_OPTIONS.find((option) => option.key === sort) ?? SORT_OPTIONS[0];
 
@@ -85,23 +103,126 @@ export function TasksScreen() {
     if (openEditor) navigation.navigate("TaskDetail", { taskId: id });
   };
 
+  const enterSelect = () => {
+    setSelecting(true);
+    setSelected([]);
+  };
+
+  const exitSelect = () => {
+    setSelecting(false);
+    setSelected([]);
+  };
+
+  const toggleOne = (id: number) => {
+    setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+  };
+
+  const toggleAll = () => {
+    setSelected(allSelected ? [] : taskIds);
+  };
+
+  const deleteSelected = () => {
+    if (!visibleSelected.length) return;
+    const count = visibleSelected.length;
+    Alert.alert(
+      `Delete ${count} task${count === 1 ? "" : "s"}?`,
+      "This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            const doomed = new Set(visibleSelected);
+            void updateTasks(workspace.tasks.filter((task) => !doomed.has(task.id)));
+            exitSelect();
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <Page>
       <View style={styles.header}>
         <View style={styles.grow}>
           <Eyebrow>MAKE IT HAPPEN</Eyebrow>
           <Title>Tasks</Title>
-          <Subtitle>A clear list of what needs your attention.</Subtitle>
+          <Subtitle>
+            {selecting
+              ? visibleSelected.length
+                ? `${visibleSelected.length} selected`
+                : "Tap tasks to select them."
+              : "A clear list of what needs your attention."}
+          </Subtitle>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="New task"
-          onPress={() => setCaptureOpen(true)}
-          style={[styles.addButton, { backgroundColor: theme.text }]}
-        >
-          <Feather name="plus" size={18} color={theme.surface} />
-        </Pressable>
+        {selecting ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Done selecting"
+            onPress={exitSelect}
+            style={[styles.headerChip, { backgroundColor: theme.surface, borderColor: theme.border }]}
+          >
+            <Text style={[styles.headerChipLabel, { color: theme.text }]}>Done</Text>
+          </Pressable>
+        ) : (
+          <>
+            {tasks.length > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Select tasks"
+                onPress={enterSelect}
+                style={[styles.headerChip, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              >
+                <Text style={[styles.headerChipLabel, { color: theme.text }]}>Select</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="New task"
+              onPress={() => setCaptureOpen(true)}
+              style={[styles.addButton, { backgroundColor: theme.text }]}
+            >
+              <Feather name="plus" size={18} color={theme.surface} />
+            </Pressable>
+          </>
+        )}
       </View>
+
+      {selecting && tasks.length > 0 ? (
+        <View style={styles.batchBar}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={allSelected ? "Deselect all tasks" : "Select all tasks"}
+            onPress={toggleAll}
+            style={({ pressed }) => [
+              styles.batchChip,
+              { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.75 : 1 },
+            ]}
+          >
+            <Feather name={allSelected ? "check-square" : "square"} size={15} color={theme.text} />
+            <Text style={[styles.batchChipLabel, { color: theme.text }]}>
+              {allSelected ? "Deselect all" : "Select all"}
+            </Text>
+          </Pressable>
+          {visibleSelected.length > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Delete ${visibleSelected.length} selected tasks`}
+              onPress={deleteSelected}
+              style={({ pressed }) => [
+                styles.deleteChip,
+                { backgroundColor: `${theme.danger}18`, borderColor: `${theme.danger}55`, opacity: pressed ? 0.75 : 1 },
+              ]}
+            >
+              <Feather name="trash-2" size={15} color={theme.danger} />
+              <Text style={[styles.deleteChipLabel, { color: theme.danger }]}>
+                Delete {visibleSelected.length}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
 
       <View style={styles.controlsRow}>
         <View style={styles.filterGrow}>
@@ -111,7 +232,7 @@ export function TasksScreen() {
             options={[{ key: "Open", label: "Open" }, { key: "Done", label: "Done" }]}
           />
         </View>
-        {filter !== "Done" ? (
+        {filter !== "Done" && !selecting ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Sort by ${activeSort.label}. Tap to change.`}
@@ -135,6 +256,9 @@ export function TasksScreen() {
         renderItem={({ item }) => (
           <TaskRow
             task={item}
+            selectionMode={selecting}
+            selected={visibleSelected.includes(item.id)}
+            onToggleSelect={() => toggleOne(item.id)}
             onPress={() => navigation.navigate("TaskDetail", { taskId: item.id })}
             onToggleDone={() => toggleDone(item.id)}
             onRestore={filter === "Done" ? () => restoreTask(item.id) : undefined}
@@ -169,9 +293,46 @@ export function TasksScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, paddingTop: 12, gap: 12 },
+  header: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, paddingTop: 12, gap: 10 },
   grow: { flex: 1 },
   addButton: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  headerChip: {
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerChipLabel: { fontSize: 14, fontWeight: "700" },
+  batchBar: {
+    paddingHorizontal: 20,
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  batchChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    minHeight: 40,
+  },
+  batchChipLabel: { fontSize: 13, fontWeight: "700" },
+  deleteChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    minHeight: 40,
+  },
+  deleteChipLabel: { fontSize: 13, fontWeight: "800" },
   controlsRow: { paddingHorizontal: 20, marginTop: 12, flexDirection: "row", alignItems: "center", gap: 10 },
   filterGrow: { flex: 1, minWidth: 0 },
   sortChip: {

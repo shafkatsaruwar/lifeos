@@ -3,9 +3,12 @@ import {
   DEFAULT_FOCUS_ENFORCER_PREFS,
   ESCALATION_LEVELS,
   buildChecksForSession,
+  nextFocusEnforcerStart,
+  normalizeFocusEnforcerRepeat,
   startDelayMinutes,
   type FocusCheck,
   type FocusEnforcerPrefs,
+  type FocusEnforcerRepeat,
   type FocusEnforcerSession,
   type FocusProofResult,
 } from "./shared";
@@ -19,6 +22,9 @@ export type CreateFocusEnforcerSessionInput = {
   scheduledStartAt: Date;
   expectedDurationMin: number;
   proofRequired: boolean;
+  repeat?: FocusEnforcerRepeat;
+  /** When continuing a series, pass the existing series id. */
+  seriesId?: string;
 };
 
 export async function createFocusEnforcerSession(
@@ -28,8 +34,10 @@ export async function createFocusEnforcerSession(
   preferredName?: string,
 ): Promise<FocusEnforcerSession> {
   const now = new Date().toISOString();
+  const id = newFocusEnforcerSessionId();
+  const repeat = normalizeFocusEnforcerRepeat(input.repeat);
   const session: FocusEnforcerSession = {
-    id: newFocusEnforcerSessionId(),
+    id,
     taskId: input.taskId,
     taskTitle: input.taskTitle,
     scheduledStartAt: input.scheduledStartAt.toISOString(),
@@ -37,6 +45,8 @@ export async function createFocusEnforcerSession(
     proofRequired: input.proofRequired,
     status: "scheduled",
     escalationLevel: null,
+    repeat,
+    seriesId: input.seriesId || (repeat !== "never" ? id : undefined),
     checks: [],
     createdAt: now,
     updatedAt: now,
@@ -44,6 +54,33 @@ export async function createFocusEnforcerSession(
   await saveFocusEnforcerSession(userId, session);
   await reconcileSessionNotifications(session, prefs, preferredName);
   return session;
+}
+
+/** After complete/abandon, spawn the next occurrence when repeat is set. */
+export async function spawnNextFocusEnforcerSession(
+  userId: string,
+  ended: FocusEnforcerSession,
+  prefs: FocusEnforcerPrefs = DEFAULT_FOCUS_ENFORCER_PREFS,
+  preferredName?: string,
+  now: Date = new Date(),
+): Promise<FocusEnforcerSession | null> {
+  const repeat = normalizeFocusEnforcerRepeat(ended.repeat);
+  const nextStart = nextFocusEnforcerStart(ended.scheduledStartAt, repeat, now);
+  if (!nextStart) return null;
+  return createFocusEnforcerSession(
+    userId,
+    {
+      taskId: ended.taskId,
+      taskTitle: ended.taskTitle,
+      scheduledStartAt: nextStart,
+      expectedDurationMin: ended.expectedDurationMin,
+      proofRequired: ended.proofRequired,
+      repeat,
+      seriesId: ended.seriesId || ended.id,
+    },
+    prefs,
+    preferredName,
+  );
 }
 
 export async function markSessionEscalating(
@@ -108,7 +145,9 @@ export async function completeFocusEnforcerSession(
   userId: string,
   session: FocusEnforcerSession,
   completionProof?: FocusProofResult,
-) {
+  prefs: FocusEnforcerPrefs = DEFAULT_FOCUS_ENFORCER_PREFS,
+  preferredName?: string,
+): Promise<{ session: FocusEnforcerSession; nextSession: FocusEnforcerSession | null }> {
   const next: FocusEnforcerSession = {
     ...session,
     status: "completed",
@@ -118,10 +157,16 @@ export async function completeFocusEnforcerSession(
   };
   await cancelNotificationIds(idsToCancelOnComplete(session));
   await saveFocusEnforcerSession(userId, next);
-  return next;
+  const nextSession = await spawnNextFocusEnforcerSession(userId, next, prefs, preferredName);
+  return { session: next, nextSession };
 }
 
-export async function abandonFocusEnforcerSession(userId: string, session: FocusEnforcerSession) {
+export async function abandonFocusEnforcerSession(
+  userId: string,
+  session: FocusEnforcerSession,
+  prefs: FocusEnforcerPrefs = DEFAULT_FOCUS_ENFORCER_PREFS,
+  preferredName?: string,
+): Promise<{ session: FocusEnforcerSession; nextSession: FocusEnforcerSession | null }> {
   const next: FocusEnforcerSession = {
     ...session,
     status: "abandoned",
@@ -129,7 +174,8 @@ export async function abandonFocusEnforcerSession(userId: string, session: Focus
   };
   await cancelNotificationIds(idsToCancelOnComplete(session));
   await saveFocusEnforcerSession(userId, next);
-  return next;
+  const nextSession = await spawnNextFocusEnforcerSession(userId, next, prefs, preferredName);
+  return { session: next, nextSession };
 }
 
 /** Rebuild notification schedule from Firebase after cold start / crash. */

@@ -9,7 +9,9 @@ import { useLifeOS } from "../lib/LifeOSContext";
 import {
   abandonFocusEnforcerSession,
   completeFocusEnforcerSession,
+  focusEnforcerRepeatLabel,
   loadFocusEnforcerPrefs,
+  normalizeFocusEnforcerRepeat,
   respondToCheck,
   startFocusEnforcerSession,
   subscribeFocusEnforcerSession,
@@ -20,6 +22,10 @@ import {
   type FocusProofResult,
 } from "../lib/focusEnforcer";
 import { DEFAULT_FOCUS_ENFORCER_PREFS } from "../lib/focusEnforcer/shared";
+
+function describeNextSession(next: FocusEnforcerSession) {
+  return `Next: ${new Date(next.scheduledStartAt).toLocaleString()}`;
+}
 
 type ProofIntent =
   | { kind: "start" }
@@ -71,7 +77,22 @@ export function FocusEnforcerSessionScreen() {
     if (!user?.uid || !session || busy) return;
     setBusy(true);
     try {
-      await completeFocusEnforcerSession(user.uid, session, proof);
+      const { nextSession } = await completeFocusEnforcerSession(
+        user.uid,
+        session,
+        proof,
+        prefs,
+        preferredName,
+      );
+      if (nextSession) {
+        Alert.alert("Session complete", describeNextSession(nextSession), [
+          { text: "Stay here", style: "cancel" },
+          {
+            text: "Open next",
+            onPress: () => navigation.replace("FocusEnforcerSession", { sessionId: nextSession.id }),
+          },
+        ]);
+      }
     } catch (error) {
       Alert.alert("Focus Enforcer", error instanceof Error ? error.message : "Could not complete.");
     } finally {
@@ -154,16 +175,38 @@ export function FocusEnforcerSessionScreen() {
 
   const abandon = () => {
     if (!user?.uid || !session) return;
-    Alert.alert("Abandon session?", "Escalations and checks will stop.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Abandon",
-        style: "destructive",
-        onPress: () => {
-          void abandonFocusEnforcerSession(user.uid, session).then(() => navigation.goBack());
+    const repeats = normalizeFocusEnforcerRepeat(session.repeat) !== "never";
+    Alert.alert(
+      "Abandon session?",
+      repeats
+        ? "Escalations and checks will stop. The next occurrence will still be scheduled."
+        : "Escalations and checks will stop.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Abandon",
+          style: "destructive",
+          onPress: () => {
+            void abandonFocusEnforcerSession(user.uid, session, prefs, preferredName).then(
+              ({ nextSession }) => {
+                if (nextSession) {
+                  Alert.alert("Session abandoned", describeNextSession(nextSession), [
+                    { text: "Done", style: "cancel", onPress: () => navigation.goBack() },
+                    {
+                      text: "Open next",
+                      onPress: () =>
+                        navigation.replace("FocusEnforcerSession", { sessionId: nextSession.id }),
+                    },
+                  ]);
+                  return;
+                }
+                navigation.goBack();
+              },
+            );
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const proofPhase: FocusProofPhase =
@@ -207,6 +250,9 @@ export function FocusEnforcerSessionScreen() {
           <Text style={{ color: theme.muted, fontSize: 13 }}>
             Start {new Date(session.scheduledStartAt).toLocaleString()} · {session.expectedDurationMin} min
             {session.proofRequired ? " · proof on" : ""}
+            {normalizeFocusEnforcerRepeat(session.repeat) !== "never"
+              ? ` · ${focusEnforcerRepeatLabel(session.repeat)}`
+              : ""}
           </Text>
           {session.actualStartAt ? (
             <Text style={{ color: theme.muted, fontSize: 13 }}>

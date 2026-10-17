@@ -6,6 +6,8 @@ import {
   consumeShellBridgeGoogleRedirect,
   googleIdTokenFromAuthResult,
 } from "@/lib/firebase";
+import { AgeGateCheckbox, AGE_GATE_BLOCKED_MESSAGE } from "@/app/components/AgeGateCheckbox";
+import { readStoredAgeConfirmation } from "@/lib/legal/ageGate";
 
 const REDIRECT_KEY = "lifeos_shell_auth_redirect";
 const NONCE_KEY = "lifeos_shell_auth_nonce";
@@ -109,17 +111,31 @@ function readGoogleIdTokenFromHash() {
   if (expectedState && state && expectedState !== state) {
     throw new Error("Google sign-in state mismatch. Close this window and try Sign in again.");
   }
-  // Drop the token from the URL bar before hopping back to Expo.
   window.history.replaceState({}, "", window.location.pathname + window.location.search);
   return idToken;
 }
 
 export default function ShellAuthPage() {
-  const [status, setStatus] = useState("Starting Google sign-in…");
+  const [status, setStatus] = useState("Confirm your age to continue…");
   const [error, setError] = useState("");
   const [canRetry, setCanRetry] = useState(false);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [readyToAuth, setReadyToAuth] = useState(false);
 
   useEffect(() => {
+    const stored = readStoredAgeConfirmation();
+    setAgeConfirmed(stored);
+    if (stored) setReadyToAuth(true);
+  }, []);
+
+  useEffect(() => {
+    if (!readyToAuth && !ageConfirmed) return;
+    // Returning from Google with a token should complete even if age was confirmed earlier in-session.
+    const hasReturnToken =
+      typeof window !== "undefined" &&
+      (Boolean(window.location.hash.includes("id_token")) || window.location.search.includes("apiKey"));
+    if (!ageConfirmed && !hasReturnToken) return;
+
     let cancelled = false;
 
     async function run() {
@@ -143,7 +159,6 @@ export default function ShellAuthPage() {
       remember(REDIRECT_KEY, redirect);
 
       try {
-        // 1) Direct Google OAuth return (id_token in hash) — avoids firebaseapp.com entirely.
         const directToken = readGoogleIdTokenFromHash();
         if (cancelled) return;
         if (directToken) {
@@ -153,7 +168,6 @@ export default function ShellAuthPage() {
           return;
         }
 
-        // 2) Firebase redirect return (same-origin authDomain via /__/auth proxy).
         const result = await consumeShellBridgeGoogleRedirect();
         if (cancelled) return;
         if (result?.user) {
@@ -170,7 +184,11 @@ export default function ShellAuthPage() {
           return;
         }
 
-        // 3) Start auth. Prefer direct Google OAuth when we have a web client ID.
+        if (!ageConfirmed) {
+          setStatus("Confirm you are 13 or older, then continue.");
+          return;
+        }
+
         const clientId = read(CLIENT_KEY, clientParam || envClient);
         if (clientId && isGoogleClientId(clientId)) {
           setStatus("Opening Google…");
@@ -183,7 +201,7 @@ export default function ShellAuthPage() {
       } catch (reason) {
         if (cancelled) return;
         const message = reason instanceof Error ? reason.message : "Google sign-in failed.";
-        const redirectUri = typeof window !== "undefined" ? shellAuthRedirectUri() : "https://lifeos-mu-three.vercel.app/shell-auth";
+        const redirectUri = typeof window !== "undefined" ? shellAuthRedirectUri() : "(your LifeOS origin)/shell-auth";
         if (/redirect_uri_mismatch/i.test(message) || /invalid_request/i.test(message)) {
           setError(
             `Add this Authorized redirect URI to your Google Web client, then try again:\n${redirectUri}`,
@@ -200,7 +218,7 @@ export default function ShellAuthPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [ageConfirmed, readyToAuth]);
 
   return (
     <main
@@ -216,7 +234,47 @@ export default function ShellAuthPage() {
     >
       <div style={{ width: "min(400px, 100%)", textAlign: "center" }}>
         <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", marginBottom: 8 }}>LifeOS</div>
-        {status ? <p style={{ margin: 0, color: "#777b84", fontSize: 14 }}>{status}</p> : null}
+        {!ageConfirmed ? (
+          <div style={{ textAlign: "left", marginTop: 12 }}>
+            <AgeGateCheckbox
+              tone="light"
+              onChange={(confirmed) => {
+                setAgeConfirmed(confirmed);
+                if (confirmed) {
+                  setReadyToAuth(true);
+                  setError("");
+                  setStatus("Starting Google sign-in…");
+                }
+              }}
+            />
+            <button
+              type="button"
+              disabled={!ageConfirmed}
+              onClick={() => {
+                if (!ageConfirmed) {
+                  setError(AGE_GATE_BLOCKED_MESSAGE);
+                  return;
+                }
+                setReadyToAuth(true);
+              }}
+              style={{
+                width: "100%",
+                marginTop: 8,
+                border: 0,
+                borderRadius: 10,
+                background: ageConfirmed ? "#202124" : "#c5c7ce",
+                color: "#fff",
+                fontWeight: 700,
+                fontSize: 13,
+                padding: "12px 16px",
+                cursor: ageConfirmed ? "pointer" : "not-allowed",
+              }}
+            >
+              Continue with Google
+            </button>
+          </div>
+        ) : null}
+        {status ? <p style={{ margin: "12px 0 0", color: "#777b84", fontSize: 14 }}>{status}</p> : null}
         {error ? (
           <p
             role="alert"

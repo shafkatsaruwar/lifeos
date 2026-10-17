@@ -24,6 +24,30 @@ describe('parseTasksFromCloud', () => {
     expect(parsed.data).toHaveLength(1);
     expect(parsed.data[0].focusMinutes).toBeGreaterThanOrEqual(5);
   });
+
+  it('keeps school assignment fields so SchoolOS does not go empty on reload', () => {
+    const parsed = parseTasksFromCloud([{
+      ...valid,
+      classId: 'it-520',
+      academicType: 'Assignment',
+      gradeWeight: 15,
+      gradeCategoryId: 'assignments',
+      status: 'Not started',
+      notes: 'Module 1',
+      submission: 'Brightspace',
+    }]);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toHaveLength(1);
+    expect(parsed.data[0]).toMatchObject({
+      classId: 'it-520',
+      academicType: 'Assignment',
+      gradeWeight: 15,
+      gradeCategoryId: 'assignments',
+      status: 'Not started',
+      notes: 'Module 1',
+      submission: 'Brightspace',
+    });
+  });
 });
 
 describe('taskBackup', () => {

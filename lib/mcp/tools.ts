@@ -1,3 +1,6 @@
+import { companyName, filterApplications, stageLabel } from "../careerHelpers";
+import { CAREER_STAGES, type CareerStageId } from "../careerTypes";
+import { parseCareerStage } from "./careerModel";
 import { EXTERNAL_EVENT_SOURCES } from "./types";
 import { deriveTaskStatus, summarizeTask } from "./workspace";
 import type { LifeOSWorkspace } from "./types";
@@ -43,11 +46,11 @@ function matchesQuery(query: string | undefined, ...fields: Array<string | undef
   return fields.some((field) => field && field.toLowerCase().includes(needle));
 }
 
-function jsonResult(data: unknown): ToolResult {
+export function jsonResult(data: unknown): ToolResult {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 }
 
-function errorResult(message: string): ToolResult {
+export function errorResult(message: string): ToolResult {
   return { content: [{ type: "text", text: message }], isError: true };
 }
 
@@ -159,8 +162,32 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     },
   },
   {
+    name: "list_career",
+    description:
+      "List job applications from the Career hub (users/{uid}/career). Filter by status (stage), company, and date applied. Sort the same way the Career screen does: updated, applied, company, title, next_action, or status (pipeline order).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", description: "Stage id or label, such as applied, rejected, Phone Screen, Offer." },
+        stageId: { type: "string", description: "Same as status." },
+        company: { type: "string", description: "Company name substring, case-insensitive." },
+        companyId: { type: "string" },
+        appliedAfter: { type: "string", description: "Inclusive YYYY-MM-DD lower bound on appliedAt." },
+        appliedBefore: { type: "string", description: "Inclusive YYYY-MM-DD upper bound on appliedAt." },
+        priority: { type: "string", description: "high, medium, or low" },
+        query: { type: "string", description: "Search title, company, location, notes." },
+        sort: {
+          type: "string",
+          description: "updated (default), applied, company, title, next_action, or status",
+        },
+        limit: { type: "number", description: "Max results (default 200, max 500)" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "search_lifeos",
-    description: "Search tasks, projects, classes, notes, calendar events, and work items.",
+    description: "Search tasks, projects, classes, notes, calendar events, work items, and career applications.",
     inputSchema: {
       type: "object",
       properties: {
@@ -177,7 +204,7 @@ export function callTool(
   name: string,
   args: Record<string, unknown> | undefined,
   workspace: LifeOSWorkspace,
-  extra?: { warning?: string },
+  extra?: { warning?: string; writesEnabled?: boolean },
 ): ToolResult {
   const input = args ?? {};
   switch (name) {
@@ -198,15 +225,15 @@ export function callTool(
           workProjects: workspace.work.projects.length,
           workTasks: workspace.work.tasks.length,
           workMeetings: workspace.work.meetings.length,
+          careerApplications: workspace.career?.applications.length ?? 0,
         },
         settings: workspace.settings,
-        limitations: [
-          "Read-only. Does not write tasks or events.",
-          "Does not read browser localStorage or iOS AsyncStorage directly.",
-          "Does not scrape Apple Calendar, Gmail, or Outlook — those are separate connectors.",
-          "Encrypted gmail/outlook/icloud connection blobs under the Firebase user node are never returned.",
-          "When Firebase env is complete, live RTDB wins over a leftover ~/.lifeos/export.json.",
-        ],
+        writes: {
+          enabled: extra?.writesEnabled === true,
+          flag: "LIFEOS_ALLOW_WRITES",
+          liveFirebase: workspace.source === "firebase",
+        },
+        limitations: writeLimitations(workspace, extra?.writesEnabled === true),
       });
     case "list_tasks":
       return listTasks(workspace, input);
@@ -222,11 +249,30 @@ export function callTool(
       return listWork(workspace, input);
     case "list_events":
       return listEvents(workspace, input);
+    case "list_career":
+      return listCareer(workspace, input);
     case "search_lifeos":
       return searchLifeOS(workspace, input);
     default:
       return errorResult(`Unknown tool: ${name}`);
   }
+}
+
+function writeLimitations(workspace: LifeOSWorkspace, writesEnabled: boolean): string[] {
+  const writes = !writesEnabled
+    ? "Writes are off. Set LIFEOS_ALLOW_WRITES=1 and restart the MCP server to create, update, and delete tasks, events, projects, notes, and career applications."
+    : workspace.source === "firebase"
+      ? "Writes are on. create/update/complete/delete tasks, create/update/delete events, create/update projects, create/update/delete notes, and career tools write only to live Firebase users/{uid}/{tasks,projects,calendar,notes,career}."
+      : "Write tools are enabled, but this process is not on live Firebase, so they will refuse. Unset LIFEOS_DATA_PATH and configure Firebase. Export files are never edited.";
+  return [
+    writes,
+    "Export files are never edited. Writes require live Firebase.",
+    "Does not read browser localStorage or iOS AsyncStorage directly.",
+    "Does not scrape Apple Calendar, Gmail, or Outlook — those are separate connectors.",
+    "Encrypted gmail/outlook/icloud connection blobs under the Firebase user node are never read or written.",
+    "When Firebase env is complete, live RTDB wins over a leftover ~/.lifeos/export.json.",
+    "Career applications live at users/{uid}/career. Turn on Career in Settings if that section is hidden.",
+  ];
 }
 
 function listTasks(workspace: LifeOSWorkspace, input: Record<string, unknown>): ToolResult {
@@ -351,6 +397,103 @@ function listWork(workspace: LifeOSWorkspace, input: Record<string, unknown>): T
   return jsonResult(payload);
 }
 
+function careerLimit(value: unknown): number {
+  if (value == null || value === "") return 200;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return 200;
+  return Math.min(500, Math.max(1, Math.floor(n)));
+}
+
+function listCareer(workspace: LifeOSWorkspace, input: Record<string, unknown>): ToolResult {
+  const hub = workspace.career;
+  const statusText = asString(input.status) || asString(input.stageId);
+  let stageId: CareerStageId | "all" | undefined;
+  if (statusText) {
+    const parsed = parseCareerStage(statusText);
+    if (!parsed) {
+      return errorResult(
+        `Unknown status "${statusText}". Use one of: ${CAREER_STAGES.map((stage) => stage.id).join(", ")}.`,
+      );
+    }
+    stageId = parsed;
+  }
+  const sortText = asString(input.sort) || "updated";
+  const allowedSorts = new Set(["updated", "applied", "company", "title", "next_action", "status"]);
+  if (!allowedSorts.has(sortText)) {
+    return errorResult("sort must be updated, applied, company, title, next_action, or status.");
+  }
+  const priority = asString(input.priority);
+  if (priority && priority !== "high" && priority !== "medium" && priority !== "low") {
+    return errorResult("priority must be high, medium, or low.");
+  }
+  const appliedAfter = asString(input.appliedAfter);
+  const appliedBefore = asString(input.appliedBefore);
+  if ((appliedAfter && !/^\d{4}-\d{2}-\d{2}$/.test(appliedAfter)) || (appliedBefore && !/^\d{4}-\d{2}-\d{2}$/.test(appliedBefore))) {
+    return errorResult("appliedAfter and appliedBefore must be YYYY-MM-DD.");
+  }
+  const company = asString(input.company)?.toLowerCase();
+  const appSort = sortText === "status" ? "updated" : (sortText as "updated" | "applied" | "company" | "title" | "next_action");
+  let items = filterApplications(hub, {
+    query: asString(input.query),
+    stageId,
+    companyId: asString(input.companyId),
+    priority: priority as "high" | "medium" | "low" | undefined,
+    sort: appSort,
+  });
+  if (company) {
+    items = items.filter((app) => companyName(hub, app.companyId).toLowerCase().includes(company));
+  }
+  if (appliedAfter || appliedBefore) {
+    items = items.filter((app) => {
+      const day = app.appliedAt?.slice(0, 10);
+      if (!day) return false;
+      if (appliedAfter && day < appliedAfter) return false;
+      if (appliedBefore && day > appliedBefore) return false;
+      return true;
+    });
+  }
+  if (sortText === "status") {
+    const rank = new Map(CAREER_STAGES.map((stage) => [stage.id, stage.position]));
+    items.sort((a, b) => {
+      const byStage = (rank.get(a.stageId) ?? 99) - (rank.get(b.stageId) ?? 99);
+      if (byStage !== 0) return byStage;
+      return companyName(hub, a.companyId).localeCompare(companyName(hub, b.companyId));
+    });
+  }
+  const limit = careerLimit(input.limit);
+  return jsonResult({
+    total: items.length,
+    shown: Math.min(items.length, limit),
+    sort: sortText,
+    applications: items.slice(0, limit).map((app) => ({
+      id: app.id,
+      companyId: app.companyId,
+      company: companyName(hub, app.companyId),
+      jobTitle: app.jobTitle,
+      stageId: app.stageId,
+      stage: stageLabel(app.stageId),
+      appliedAt: app.appliedAt || null,
+      jobUrl: app.jobUrl || null,
+      location: app.location || null,
+      workArrangement: app.workArrangement || null,
+      employmentType: app.employmentType || null,
+      salaryMin: app.salaryMin ?? null,
+      salaryMax: app.salaryMax ?? null,
+      salaryCurrency: app.salaryCurrency || null,
+      salaryPeriod: app.salaryPeriod || null,
+      source: app.source || null,
+      priority: app.priority || null,
+      notes: app.notes || null,
+      description: app.description || null,
+      outcome: app.outcome || null,
+      nextAction: app.nextAction || null,
+      nextActionDueAt: app.nextActionDueAt || null,
+      createdAt: app.createdAt,
+      updatedAt: app.updatedAt,
+    })),
+  });
+}
+
 function listEvents(workspace: LifeOSWorkspace, input: Record<string, unknown>): ToolResult {
   const from = asString(input.from);
   const to = asString(input.to);
@@ -403,6 +546,12 @@ function searchLifeOS(workspace: LifeOSWorkspace, input: Record<string, unknown>
   for (const event of workspace.calendar) {
     if (matchesQuery(query, event.title, event.notes, event.location)) {
       hits.push({ type: "event", id: event.id, title: event.title, extra: event.start });
+    }
+  }
+  for (const app of workspace.career?.applications ?? []) {
+    const company = companyName(workspace.career, app.companyId);
+    if (matchesQuery(query, app.jobTitle, company, app.notes, app.location, app.stageId)) {
+      hits.push({ type: "career_application", id: app.id, title: app.jobTitle, extra: company });
     }
   }
   for (const item of workspace.work.projects) {

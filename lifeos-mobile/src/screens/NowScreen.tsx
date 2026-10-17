@@ -4,6 +4,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { ActionButton, Eyebrow, IconButton, Page, Title } from "../components/UI";
 import { TimesheetNowStrip } from "../components/TimesheetNowStrip";
+import { ExecutiveStrip } from "../components/ExecutiveStrip";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { SearchModal } from "../components/SearchModal";
 import { useLifeOS } from "../lib/LifeOSContext";
@@ -217,6 +218,9 @@ export function NowScreen() {
           if (isTablet) navigation.navigate("MasterOS");
           else Alert.alert("MasterOS", "MasterOS is available on iPad and at lifeos web /masteros.");
           break;
+        case "executive":
+          navigation.navigate("ExecutiveHome");
+          break;
       }
       finishCaptureCommand();
       return true;
@@ -388,6 +392,8 @@ export function NowScreen() {
             ) : null}
           </View>
         ) : null}
+
+        <ExecutiveStrip />
 
         <TimesheetNowStrip
           theme={theme}

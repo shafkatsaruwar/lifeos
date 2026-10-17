@@ -4,15 +4,17 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef } from "react";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OnboardingFlow } from "../components/OnboardingFlow";
-import { FloatingTabBar, FLOATING_TAB_BAR_HEIGHT } from "../components/FloatingTabBar";
+import { PaywallGate } from "../components/PaywallGate";
+import { FloatingTabBar } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { canAccessPaidHubs, isHubVisibleInNav } from "../lib/entitlement";
 import { shouldPersistOnboardingComplete, shouldShowOnboarding } from "../lib/onboardingGate";
 import { useLayout } from "../lib/layout";
 import { linking } from "../lib/notifications";
 import type { OnboardingDestination } from "../types";
 import { navigationRef } from "./navigationRef";
+import { useNavigation } from "@react-navigation/native";
 
 import { LifeDashboardScreen } from "../screens/LifeDashboardScreen";
 import { LifeDayScreen } from "../screens/LifeDayScreen";
@@ -42,6 +44,7 @@ import { WorkDashboardScreen } from "../screens/WorkDashboardScreen";
 import { FocusEnforcerSetupScreen } from "../screens/FocusEnforcerSetupScreen";
 import { FocusEnforcerSessionScreen } from "../screens/FocusEnforcerSessionScreen";
 import { FocusEnforcerHistoryScreen } from "../screens/FocusEnforcerHistoryScreen";
+import { ExecutiveHomeScreen } from "../screens/ExecutiveHomeScreen";
 import { MasterOSNavigator } from "./MasterOSNavigator";
 
 const Tab = createBottomTabNavigator();
@@ -85,6 +88,7 @@ function NowStackNavigator() {
       <NowStack.Screen name="FocusEnforcerSetup" component={FocusEnforcerSetupScreen} />
       <NowStack.Screen name="FocusEnforcerSession" component={FocusEnforcerSessionScreen} />
       <NowStack.Screen name="FocusEnforcerHistory" component={FocusEnforcerHistoryScreen} />
+      <NowStack.Screen name="ExecutiveHome" component={ExecutiveHomeScreen} />
       <NowStack.Screen
         name="MasterOS"
         component={MasterOSNavigator}
@@ -139,6 +143,18 @@ function SchoolStackNavigator() {
 
 function WorkStackNavigator() {
   const screenOptions = useStackScreenOptions();
+  const { workspace, updateSettings } = useLifeOS();
+  const navigation = useNavigation<any>();
+  if (!canAccessPaidHubs(workspace.settings.entitlement)) {
+    return (
+      <PaywallGate
+        onUnlock={(entitlement) => {
+          void updateSettings({ ...workspace.settings, entitlement, enableWorkOS: true });
+        }}
+        onClose={() => navigation.navigate("NowTab")}
+      />
+    );
+  }
   return (
     <WorkStack.Navigator screenOptions={screenOptions}>
       <WorkStack.Screen name="WorkDashboard" component={WorkDashboardScreen} />
@@ -202,7 +218,6 @@ function navigateAfterOnboarding(dest: OnboardingDestination) {
 
 export function RootNavigator() {
   const { theme, dark, workspace, updateSettings, onboardingReplay, clearOnboardingReplay } = useLifeOS();
-  const insets = useSafeAreaInsets();
   const { isTablet } = useLayout();
   const pendingDest = useRef<OnboardingDestination | null>(null);
   const migrated = useRef(false);
@@ -215,7 +230,6 @@ export function RootNavigator() {
     settings,
     workspace,
   });
-
   // Heal a missing Firebase flag for returning accounts (web once stripped
   // onboardingCompletedAt on save). Never run during an explicit replay.
   useEffect(() => {
@@ -239,9 +253,9 @@ export function RootNavigator() {
     return () => clearTimeout(timer);
   }, [needsOnboarding]);
 
-  const showLife = settings.enableLifeOS !== false;
-  const showSchool = settings.enableSchoolOS !== false;
-  const showWork = settings.enableWorkOS !== false;
+  const showLife = isHubVisibleInNav("Life", settings);
+  const showSchool = isHubVisibleInNav("School", settings);
+  const showWork = isHubVisibleInNav("Work", settings);
 
   const base = dark ? DarkTheme : DefaultTheme;
   const navTheme = {
@@ -274,11 +288,10 @@ export function RootNavigator() {
             tabBarShowLabel: true,
             tabBarHideOnKeyboard: true,
             tabBarStyle: {
-              position: "absolute",
-              backgroundColor: "transparent",
+              backgroundColor: theme.bg,
               borderTopWidth: 0,
               elevation: 0,
-              height: FLOATING_TAB_BAR_HEIGHT + insets.bottom,
+              shadowOpacity: 0,
             },
             tabBarActiveTintColor: theme.accent,
             tabBarInactiveTintColor: "#8E8E93",

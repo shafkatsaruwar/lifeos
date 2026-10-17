@@ -1,8 +1,8 @@
 import { toDateKey } from "@/lib/helpers";
 import type { WorkHubState, WorkView } from "@/app/components/OSDashboards";
 
-export type NotificationSource = "work" | "life" | "school" | "calendar";
-export type NotificationKind = "task" | "project" | "assignment" | "deliverable" | "meeting" | "event";
+export type NotificationSource = "work" | "life" | "school" | "calendar" | "guided";
+export type NotificationKind = "task" | "project" | "assignment" | "deliverable" | "meeting" | "event" | "guided";
 export type NotificationUrgency = "overdue" | "today" | "soon";
 
 export type NotificationAction =
@@ -11,7 +11,8 @@ export type NotificationAction =
   | { type: "life-project"; projectName: string }
   | { type: "school-task"; taskId: number }
   | { type: "calendar"; eventId?: string }
-  | { type: "now" };
+  | { type: "now" }
+  | { type: "guided"; runId?: string };
 
 export type LifeOSNotification = {
   id: string;
@@ -113,6 +114,19 @@ const isSchoolEnabled = (settings: NotificationSettings) => settings.enableSchoo
 const schoolKind = (academicType?: string): NotificationKind =>
   academicType === "Project" ? "project" : "assignment";
 
+type GuidedRunInput = {
+  id: string;
+  status: string;
+  routineId: string;
+  currentStepId?: string | null;
+  followUpOfferedAt?: string;
+};
+
+type GuidedRoutineInput = {
+  id: string;
+  name: string;
+};
+
 export function generateLifeOSNotifications(input: {
   now?: Date;
   workHub: WorkHubState;
@@ -121,6 +135,8 @@ export function generateLifeOSNotifications(input: {
   classes?: ClassInput[];
   events: CalendarEventInput[];
   settings?: NotificationSettings;
+  guidedRuns?: GuidedRunInput[];
+  guidedRoutines?: GuidedRoutineInput[];
 }): LifeOSNotification[] {
   const now = input.now ?? new Date();
   const nowMs = now.getTime();
@@ -132,6 +148,25 @@ export function generateLifeOSNotifications(input: {
   const projects = input.projects ?? [];
   const classes = input.classes ?? [];
   const classFor = (classId?: string) => classes.find(item => item.id === classId && !item.archived);
+
+  // Soft guided follow-ups (client-side while app is open — not a closed-tab worker).
+  for (const run of input.guidedRuns ?? []) {
+    const state = (run as { state?: string; status?: string }).state || run.status;
+    if (!["waiting", "paused", "pending", "scheduled"].includes(String(state))) continue;
+    const routineName =
+      (input.guidedRoutines ?? []).find((r) => r.id === run.routineId)?.name || "Guided routine";
+    pushUnique(notifications, {
+      id: `guided-followup-${run.id}`,
+      title: routineName,
+      subtitle: "Still here when you are — resume when ready",
+      source: "guided",
+      kind: "guided",
+      urgency: "today",
+      dueIn: "Waiting on you",
+      sortAt: run.followUpOfferedAt ? Date.parse(run.followUpOfferedAt) || nowMs : nowMs,
+      action: { type: "guided", runId: run.id },
+    });
+  }
 
   const knownProjectNames = new Set(projects.map(project => project.name));
 
@@ -349,6 +384,7 @@ export const notificationSourceLabel: Record<NotificationSource, string> = {
   life: "Life",
   school: "School",
   calendar: "Calendar",
+  guided: "Guided",
 };
 
 export const notificationKindLabel: Record<NotificationKind, string> = {
@@ -358,9 +394,10 @@ export const notificationKindLabel: Record<NotificationKind, string> = {
   deliverable: "Deliverable",
   meeting: "Meeting",
   event: "Event",
+  guided: "Guided",
 };
 
-export const notificationSourceOrder: NotificationSource[] = ["calendar", "work", "school", "life"];
+export const notificationSourceOrder: NotificationSource[] = ["guided", "calendar", "work", "school", "life"];
 
 export const notificationEnvironmentSources: NotificationSource[] = ["work", "life", "school"];
 
@@ -369,6 +406,7 @@ export const notificationSourceAccent: Record<NotificationSource, string> = {
   life: "#47a47b",
   school: "#4b8bdc",
   calendar: "#e48b6b",
+  guided: "#4b8bdc",
 };
 
 export function groupNotificationsBySource(notifications: LifeOSNotification[]) {
@@ -394,6 +432,7 @@ const kindPlural: Record<NotificationKind, [string, string]> = {
   deliverable: ["deliverable", "deliverables"],
   meeting: ["meeting", "meetings"],
   event: ["event", "events"],
+  guided: ["guided routine", "guided routines"],
 };
 
 export function summarizeNotificationGroup(items: LifeOSNotification[]): NotificationGroupSummary {

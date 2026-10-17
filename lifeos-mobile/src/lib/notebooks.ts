@@ -360,6 +360,48 @@ export function setNotebookStarred(hub: NotebookHub, notebookId: string, starred
   };
 }
 
+/** Patch name / cover / color (and optional subtitle) on one notebook. */
+export function patchNotebook(
+  hub: NotebookHub,
+  notebookId: string,
+  patch: Partial<Pick<Notebook, "name" | "color" | "cover" | "coverSubtitle">>,
+): NotebookHub {
+  const now = new Date().toISOString();
+  return {
+    ...hub,
+    notebooks: hub.notebooks.map((notebook) => {
+      if (notebook.id !== notebookId) return notebook;
+      const next = { ...notebook, ...patch, updatedAt: now };
+      if (patch.name !== undefined) next.name = patch.name.trim() || notebook.name;
+      return next;
+    }),
+  };
+}
+
+/**
+ * Duplicate a notebook + its pages into new ids.
+ * Ink / overlays are copied; recognition is cleared so it can re-run.
+ */
+export function duplicateNotebookBundle(
+  notebook: Notebook,
+  pages: NotebookPage[],
+): { notebook: Notebook; pages: NotebookPage[] } {
+  const now = new Date().toISOString();
+  const copy: Notebook = {
+    ...notebook,
+    id: uid(),
+    name: / copy$/i.test(notebook.name) ? `${notebook.name} ${Date.now() % 1000}` : `${notebook.name} copy`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  delete copy.trashedAt;
+  const copiedPages = pages.map((page, index) =>
+    cloneNotebookPage(page, index, { notebookId: copy.id, keepTitle: true }),
+  );
+  copy.pageCount = Math.max(1, copiedPages.length);
+  return { notebook: copy, pages: copiedPages };
+}
+
 export function trashNotebook(hub: NotebookHub, notebookId: string): NotebookHub {
   const now = new Date().toISOString();
   return {
@@ -431,12 +473,22 @@ export function createPage(notebookId: string, index: number, paper: PaperStyle 
 }
 
 /** Deep-ish copy for Duplicate — new ids on overlays so edits don't alias. */
-export function cloneNotebookPage(source: NotebookPage, index: number): NotebookPage {
-  const base = createPage(source.notebookId, index, source.paper);
+export function cloneNotebookPage(
+  source: NotebookPage,
+  index: number,
+  opts?: { notebookId?: string; keepTitle?: boolean },
+): NotebookPage {
+  const notebookId = opts?.notebookId ?? source.notebookId;
+  const base = createPage(notebookId, index, source.paper);
   return {
     ...base,
+    notebookId,
+    paperColor: source.paperColor,
+    paperOrientation: source.paperOrientation,
+    paperSize: source.paperSize,
+    pdfRef: source.pdfRef ? { ...source.pdfRef } : undefined,
     ink: source.ink ? { ...source.ink } : undefined,
-    title: source.title ? `${source.title} copy` : undefined,
+    title: opts?.keepTitle ? source.title : source.title ? `${source.title} copy` : undefined,
     textElements: (source.textElements ?? []).map((t) => ({ ...t, id: uid() })),
     imageElements: (source.imageElements ?? []).map((img) => ({ ...img, id: uid() })),
     recognition: undefined,

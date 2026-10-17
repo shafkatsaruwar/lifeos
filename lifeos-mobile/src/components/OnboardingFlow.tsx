@@ -61,10 +61,19 @@ export function OnboardingFlow({ onFinished }: Props) {
   const [name, setName] = useState(workspace.settings.preferredName ?? "");
   const [interests, setInterests] = useState<Set<Interest>>(() => {
     const next = new Set<Interest>();
-    if (workspace.settings.enableLifeOS !== false) next.add("life");
-    if (workspace.settings.enableSchoolOS !== false) next.add("school");
-    if (workspace.settings.enableWorkOS !== false) next.add("work");
-    return next.size ? next : new Set<Interest>(["life", "today"]);
+    // Prefer explicit saved flags; otherwise default new users to Life + School only.
+    if (typeof workspace.settings.enableLifeOS === "boolean") {
+      if (workspace.settings.enableLifeOS) next.add("life");
+    } else {
+      next.add("life");
+    }
+    if (typeof workspace.settings.enableSchoolOS === "boolean") {
+      if (workspace.settings.enableSchoolOS) next.add("school");
+    } else {
+      next.add("school");
+    }
+    if (workspace.settings.enableWorkOS === true) next.add("work");
+    return next.size ? next : new Set<Interest>(["life", "school"]);
   });
   const [busy, setBusy] = useState(false);
   const [pendingDest, setPendingDest] = useState<OnboardingDestination>({ tab: "NowTab" });
@@ -130,6 +139,9 @@ export function OnboardingFlow({ onFinished }: Props) {
     enableLifeOS: interests.has("life"),
     enableSchoolOS: interests.has("school"),
     enableWorkOS: interests.has("work"),
+    // New accounts start without optional packs; Settings can turn them on later.
+    enableStudyAbroad: false,
+    enableMasterOS: false,
   });
 
   const goNextFromInterests = () => {

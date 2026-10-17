@@ -18,8 +18,11 @@ import { ActionButton, Card, Page, Title } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import {
+  FOCUS_ENFORCER_REPEAT_OPTIONS,
   createFocusEnforcerSession,
+  focusEnforcerRepeatLabel,
   loadFocusEnforcerPrefs,
+  type FocusEnforcerRepeat,
 } from "../lib/focusEnforcer";
 
 function roundToNextFiveMinutes(date: Date) {
@@ -47,8 +50,23 @@ export function FocusEnforcerSetupScreen() {
     String(task?.focusMinutes || workspace.settings.defaultFocusMinutes || 60),
   );
   const [proofRequired, setProofRequired] = useState(true);
+  const [repeat, setRepeat] = useState<FocusEnforcerRepeat>("never");
   const [showAndroidPicker, setShowAndroidPicker] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const pickRepeat = () => {
+    Alert.alert(
+      "Repeat",
+      "After you complete or abandon, schedule the next occurrence.",
+      [
+        ...FOCUS_ENFORCER_REPEAT_OPTIONS.map((option) => ({
+          text: option.label,
+          onPress: () => setRepeat(option.key),
+        })),
+        { text: "Cancel", style: "cancel" as const },
+      ],
+    );
+  };
 
   if (!task) {
     return (
@@ -83,6 +101,7 @@ export function FocusEnforcerSetupScreen() {
           scheduledStartAt: startAt,
           expectedDurationMin: duration,
           proofRequired,
+          repeat,
         },
         prefs,
         workspace.settings.preferredName,
@@ -165,6 +184,22 @@ export function FocusEnforcerSetupScreen() {
             placeholderTextColor={theme.muted}
           />
           <Text style={{ color: theme.muted, fontSize: 12 }}>Default ~60. Clamped 5–240.</Text>
+        </Card>
+
+        <Card>
+          <Text style={[styles.label, { color: theme.text }]}>Repeat</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Pick repeat frequency"
+            onPress={pickRepeat}
+            style={[styles.pickerButton, { borderColor: theme.border }]}
+          >
+            <Feather name="repeat" size={16} color={theme.accent} />
+            <Text style={{ color: theme.text, fontWeight: "600" }}>{focusEnforcerRepeatLabel(repeat)}</Text>
+          </Pressable>
+          <Text style={{ color: theme.muted, fontSize: 12, marginTop: 6 }}>
+            Keeps the same task, duration, proof setting, and clock time.
+          </Text>
         </Card>
 
         <Card>

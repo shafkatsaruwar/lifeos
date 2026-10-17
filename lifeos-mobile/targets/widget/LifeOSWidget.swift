@@ -244,7 +244,7 @@ func decodeLifeOSSnapshot(_ data: Data) -> WidgetSnapshot? {
 }
 
 func loadLifeOSSnapshot() -> WidgetSnapshot? {
-  let groupId = "group.com.shafkatsaruwar.lifeos"
+  let groupId = "group.com.example.lifeos"
   let defaults = UserDefaults(suiteName: groupId)
   if let json = defaults?.string(forKey: "lifeosWidgetSnapshot"),
      let data = json.data(using: .utf8),
