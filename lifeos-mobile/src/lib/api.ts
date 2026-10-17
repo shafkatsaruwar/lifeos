@@ -97,9 +97,27 @@ const parseIcsDate = (value: string) => {
   return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
 };
 
-export function parseIcsEvents(ics: string): CalendarEvent[] {
+/** Stable id for a subscription URL — mirrors web `hashIcalUrl` in app/page.tsx. */
+export function hashIcalUrl(url: string) {
+  let hash = 2166136261;
+  for (let i = 0; i < url.length; i += 1) {
+    hash ^= url.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `f${(hash >>> 0).toString(36)}`;
+}
+
+const icalEventPrefix = (subscriptionId?: string) =>
+  subscriptionId ? `ical-${subscriptionId}-` : "ical-";
+
+export function parseIcsEvents(
+  ics: string,
+  options?: { subscriptionId?: string; color?: string },
+): CalendarEvent[] {
   const text = unfoldIcs(ics);
   const blocks = text.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g) ?? [];
+  const prefix = icalEventPrefix(options?.subscriptionId);
+  const color = options?.color || "#47a47b";
   return blocks
     .map((block, index) => {
       const start = parseIcsDate(getIcsValue(block, "DTSTART"));
@@ -117,18 +135,35 @@ export function parseIcsEvents(ics: string): CalendarEvent[] {
         eventPlaceLabel(locationRaw) ||
         (locationRaw && !locationLooksLikeMeetingUrl(locationRaw) ? locationRaw : undefined);
       return {
-        id: `ical-${uidValue}`,
+        id: `${prefix}${uidValue}`,
         title: getIcsValue(block, "SUMMARY") || "Untitled calendar event",
         start,
         end: parseIcsDate(getIcsValue(block, "DTEND")) || undefined,
         source: "iCal" as const,
-        color: "#47a47b",
+        color,
         location: place || undefined,
         url: meetingUrl || (urlRaw.startsWith("http") ? urlRaw : undefined),
         notes: description || undefined,
       };
     })
     .filter(Boolean) as CalendarEvent[];
+}
+
+export function replaceIcalSubscriptionEvents(
+  calendar: CalendarEvent[],
+  subscriptionId: string,
+  events: CalendarEvent[],
+): CalendarEvent[] {
+  const prefix = icalEventPrefix(subscriptionId);
+  return [...calendar.filter((event) => !event.id.startsWith(prefix)), ...events];
+}
+
+export function removeIcalSubscriptionEvents(
+  calendar: CalendarEvent[],
+  subscriptionId: string,
+): CalendarEvent[] {
+  const prefix = icalEventPrefix(subscriptionId);
+  return calendar.filter((event) => !event.id.startsWith(prefix));
 }
 
 export function mergeCalendarEvents(existing: CalendarEvent[], incoming: CalendarEvent[]): CalendarEvent[] {

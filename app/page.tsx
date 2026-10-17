@@ -44,6 +44,7 @@ import { checkDoubleBooking, formatDueDate, toDateKey, getCountdownText, getUrge
 import { buildMonthEventSegments, eventOccursOnDate, getEventDateRange, getEventDayBlockMinutes, usesDailyTimeWindow, type MonthEventSegment } from "@/lib/calendarEvents";
 import { coalesceEventMeetingUrl, detectMeetingProvider, eventNotesLabel, eventPlaceLabel, extractMeetingUrl, meetingJoinLabel, resolveEventMeeting } from "@/lib/meetingLinks";
 import { formatFocusMinutesShort, formatFocusSessionLabel, formatFocusTime } from "@/lib/focusTime";
+import { buildFocusStripKeys } from "@/lib/focusStrip";
 import { buildTasksFromNote } from "@/lib/noteToTask";
 import { emptyTimeTracking, normalizeTimeTracking, clockIn, clockOut, getActiveEntry } from "@/lib/timeTracking";
 import type { TimeTrackingState } from "@/lib/timeTracking";
@@ -115,7 +116,7 @@ import {
   nowIso,
   studyAbroadToCalendarEvents,
 } from "@/lib/studyAbroadHelpers";
-import { mergeSynapseCalendarEvents, type SynapseCalendarEvent } from "@/lib/synapseImport";
+import { mergeSynapseCalendarEvents, parseSynapseDayPlan, type SynapseCalendarEvent } from "@/lib/synapseImport";
 import type { ParsedTask } from "@/lib/useNLTaskCreation";
 import { useTaskBreakdown } from "@/lib/useTaskBreakdown";
 import {
@@ -216,6 +217,8 @@ type SettingsState = {
   /** ISO timestamp when first-run onboarding finished. Synced with mobile. */
   onboardingCompletedAt?: string;
   onboardingVersion?: number;
+  /** Saved webcal / .ics feeds — subscribe to multiple calendars. */
+  icalSubscriptions?: IcalSubscription[];
   /** Access entitlement — promo year or paid Pro (synced with mobile). */
   entitlement?: {
     status: "none" | "promo" | "pro";
@@ -224,6 +227,15 @@ type SettingsState = {
     source?: "promo" | "stripe" | "app_store";
     promoCode?: string;
   } | null;
+};
+
+type IcalSubscription = {
+  id: string;
+  url: string;
+  name: string;
+  color: string;
+  lastSyncedAt?: string;
+  lastError?: string;
 };
 
 const projectIcons: Record<ProjectIcon, typeof Home> = { Zap, Aperture, Sparkles, FileText, UserRound, FolderKanban, BriefcaseBusiness, Camera, Code2, HeartPulse, Utensils, BookOpen };
@@ -357,6 +369,7 @@ const initialSettings: SettingsState = {
   enableMasterOS: false,
   showCaptureCommands: true,
   nowQueueIds: [],
+  icalSubscriptions: [],
 };
 
 // New users start with three empty project templates to explore the product
@@ -575,9 +588,26 @@ const parseIcsDate = (value: string) => {
   if (Number.isNaN(parsed.getTime())) return `${year}-${month}-${day}T${hour}:${minute}`;
   return toDateKey(parsed) + `T${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`;
 };
-const parseIcsEvents = (ics: string): CalendarEvent[] => {
+const hashIcalUrl = (url: string) => {
+  let hash = 2166136261;
+  for (let i = 0; i < url.length; i += 1) {
+    hash ^= url.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `f${(hash >>> 0).toString(36)}`;
+};
+
+const icalEventPrefix = (subscriptionId?: string) =>
+  subscriptionId ? `ical-${subscriptionId}-` : "ical-";
+
+const parseIcsEvents = (
+  ics: string,
+  options?: { subscriptionId?: string; color?: string },
+): CalendarEvent[] => {
   const text = unfoldIcs(ics);
   const blocks = text.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g) ?? [];
+  const prefix = icalEventPrefix(options?.subscriptionId);
+  const color = options?.color || "#47a47b";
   return blocks.map((block, index) => {
     const start = parseIcsDate(getIcsValue(block, "DTSTART"));
     if (!start) return null;
@@ -587,17 +617,30 @@ const parseIcsEvents = (ics: string): CalendarEvent[] => {
     const urlRaw = getIcsValue(block, "URL");
     const meetingUrl = extractMeetingUrl(urlRaw) || extractMeetingUrl(locationRaw) || extractMeetingUrl(description) || undefined;
     return {
-      id: `ical-${uid}`,
+      id: `${prefix}${uid}`,
       title: getIcsValue(block, "SUMMARY") || "Untitled calendar event",
       start,
       end: parseIcsDate(getIcsValue(block, "DTEND")) || undefined,
       source: "iCal" as const,
-      color: "#47a47b",
+      color,
       location: eventPlaceLabel(locationRaw) || undefined,
       url: meetingUrl || (urlRaw.startsWith("http") ? urlRaw : undefined),
       notes: description || undefined,
     };
   }).filter(Boolean) as CalendarEvent[];
+};
+
+const fetchIcalFeed = async (url: string) => {
+  const response = await fetch("/api/ical", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || typeof payload.ics !== "string") {
+    throw new Error(typeof payload.error === "string" ? payload.error : "LifeOS could not read that calendar link.");
+  }
+  return payload.ics as string;
 };
 
 function IconButton({ children, onClick, label }: { children: React.ReactNode; onClick?: () => void; label: string }) {
@@ -2193,6 +2236,50 @@ export default function LifeOS() {
     setCalendarImporter(false);
     flash(`${events.length} iCal event${events.length === 1 ? "" : "s"} imported`);
   };
+  const replaceIcalSubscriptionEvents = (subscriptionId: string, events: CalendarEvent[]) => {
+    const prefix = icalEventPrefix(subscriptionId);
+    setCalendarEvents((items) => [...items.filter((event) => !event.id.startsWith(prefix)), ...events]);
+  };
+  const removeIcalSubscriptionEvents = (subscriptionId: string) => {
+    const prefix = icalEventPrefix(subscriptionId);
+    setCalendarEvents((items) => items.filter((event) => !event.id.startsWith(prefix)));
+  };
+  const syncIcalSubscriptions = useCallback(async (subscriptions?: IcalSubscription[]) => {
+    const feeds = subscriptions ?? settingsState.icalSubscriptions ?? [];
+    if (!feeds.length) return;
+    const nextFeeds: IcalSubscription[] = [];
+    for (const feed of feeds) {
+      try {
+        const ics = await fetchIcalFeed(feed.url);
+        const events = parseIcsEvents(ics, { subscriptionId: feed.id, color: feed.color });
+        replaceIcalSubscriptionEvents(feed.id, events);
+        nextFeeds.push({ ...feed, lastSyncedAt: new Date().toISOString(), lastError: undefined });
+      } catch (error) {
+        nextFeeds.push({
+          ...feed,
+          lastError: error instanceof Error ? error.message : "Could not refresh this calendar feed.",
+        });
+      }
+    }
+    setSettingsState((current) => ({ ...current, icalSubscriptions: nextFeeds }));
+  }, [settingsState.icalSubscriptions]);
+  useEffect(() => {
+    const feeds = settingsState.icalSubscriptions ?? [];
+    if (!feeds.length || !settingsHydrated) return;
+    let cancelled = false;
+    const run = () => {
+      if (!cancelled) void syncIcalSubscriptions(feeds);
+    };
+    const first = window.setTimeout(run, 1200);
+    const interval = window.setInterval(run, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(first);
+      window.clearInterval(interval);
+    };
+    // Refresh when the subscription list identity changes (ids/urls), not on every metadata tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsHydrated, JSON.stringify((settingsState.icalSubscriptions ?? []).map((feed) => `${feed.id}|${feed.url}|${feed.color}`))]);
   const updateTask = (id: number, updates: Pick<Task, "title" | "focusMinutes" | "energy" | "project" | "classId" | "academicType" | "color" | "due" | "startTime">) => {
     setTasks(items => items.map(task => task.id === id ? { ...task, ...updates } : task));
     setEditingTaskId(null);
@@ -2890,7 +2977,8 @@ export default function LifeOS() {
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onCreateTask={createTaskFromNote} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} onConvertToTask={(index, text) => { addTask(text, undefined, "", { flashLabel: "Task created from brain" }); setBrainItems(items => items.filter((_, i) => i !== index)); }} />}
-            {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} />}
+            {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} icalSubscriptions={settingsState.icalSubscriptions ?? []} onIcalSubscriptionsChange={(icalSubscriptions) => updateSettings({ icalSubscriptions })} onReplaceIcalSubscriptionEvents={replaceIcalSubscriptionEvents} onRemoveIcalSubscriptionEvents={removeIcalSubscriptionEvents} onSyncIcalSubscriptions={() => void syncIcalSubscriptions()} />}
+            {view === "Settings" && <SynapseDayPlanImport flash={flash} />}
             {!["Life", "School", "Work", "Career", "Study Abroad", "Treasury", "Mastery", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Navigation", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
         </AnimatePresence>
@@ -2965,7 +3053,19 @@ export default function LifeOS() {
         {academicComposerClassId && classes.find(item => item.id === academicComposerClassId) && <AcademicItemModal key={`academic-${academicComposerClassId}`} classRecord={classes.find(item => item.id === academicComposerClassId)!} close={() => setAcademicComposerClassId(null)} add={(task) => addAcademicTask(academicComposerClassId, task)} defaults={{ focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy }} />}
         {calendarComposer && <CalendarEventModal key="calendar-event-modal" close={() => { setCalendarComposer(false); setDefaultEventDate(null); }} add={addCalendarEvent} defaultDate={defaultEventDate} />}
         {editingCalendarEventId && calendarEvents.find(event => event.id === editingCalendarEventId) && <CalendarEventModal key={`calendar-edit-${editingCalendarEventId}`} event={calendarEvents.find(event => event.id === editingCalendarEventId)!} close={() => setEditingCalendarEventId(null)} add={updateCalendarEvent} remove={deleteCalendarEvent} tasks={activeTasks} linkedTaskId={tasks.find(task => task.calendarEventId === editingCalendarEventId)?.id} onOpenLinkedTask={openLinkedCalendarTask} onRouteToTask={routeCalendarEventToTask} />}
-        {calendarImporter && <CalendarImportModal key="calendar-import-modal" close={() => setCalendarImporter(false)} add={importCalendarEvents} />}
+        {calendarImporter && (
+          <CalendarImportModal
+            key="calendar-import-modal"
+            close={() => setCalendarImporter(false)}
+            add={importCalendarEvents}
+            subscriptions={settingsState.icalSubscriptions ?? []}
+            onSubscriptionsChange={(icalSubscriptions) => updateSettings({ icalSubscriptions })}
+            onReplaceSubscriptionEvents={replaceIcalSubscriptionEvents}
+            onRemoveSubscriptionEvents={removeIcalSubscriptionEvents}
+            onSyncAll={() => void syncIcalSubscriptions()}
+            flash={flash}
+          />
+        )}
         {breakOpen && <BreakModal key="break-modal" close={() => setBreakOpen(false)} done={() => { setBreakOpen(false); flash("Break complete — ease back in"); }} />}
         {actionTaskId !== null && tasks.find(task => task.id === actionTaskId) && <TaskActionsModal key={`task-actions-${actionTaskId}`} task={tasks.find(task => task.id === actionTaskId)!} close={() => setActionTaskId(null)} open={() => { openTaskPage(actionTaskId); setActionTaskId(null); }} edit={() => { setEditingTaskId(actionTaskId); setActionTaskId(null); }} toggleCanceled={() => toggleCanceled(actionTaskId)} remove={() => deleteTask(actionTaskId)} />}
         {actionClassId && classes.find(item => item.id === actionClassId) && <ClassActionsModal key={`class-actions-${actionClassId}`} classRecord={classes.find(item => item.id === actionClassId)!} close={() => setActionClassId(null)} edit={() => { setEditingClassId(actionClassId); setActionClassId(null); }} remove={() => { deleteClass(actionClassId); setActionClassId(null); }} />}
@@ -3216,23 +3316,27 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           <div className="atelier-hub-tiles" aria-label="Spaces">
             {(() => {
               type StripTile = { key: string; label: string; sub: string; view: View; className: string; Icon: typeof Home };
-              const home: StripTile = { key: "home", label: "Home", sub: `${lifeOpen} open`, view: "Life", className: "tile-life", Icon: Home };
-              const hubCandidates: StripTile[] = [
-                ...(enableCareerOS ? [{ key: "career", label: "Career", sub: "Pipeline", view: "Career" as View, className: "tile-career", Icon: Target }] : []),
-                ...(enableSchoolOS ? [{ key: "school", label: "School", sub: `${schoolOpen} open`, view: "School" as View, className: "tile-school", Icon: GraduationCap }] : []),
-                ...(enableWorkOS ? [{ key: "work", label: "Work", sub: "Workspace", view: "Work" as View, className: "tile-work", Icon: BriefcaseBusiness }] : []),
-                ...(enableStudyAbroad ? [{ key: "study-abroad", label: "Study Abroad", sub: "Paths", view: "Study Abroad" as View, className: "tile-study", Icon: Globe2 }] : []),
-                ...(enableTreasuryOS ? [{ key: "treasury", label: "Treasury", sub: "Money", view: "Treasury" as View, className: "tile-treasury", Icon: WalletCards }] : []),
-                ...(enableMasterOS ? [{ key: "mastery", label: "Mastery", sub: "Teaching", view: "Mastery" as View, className: "tile-mastery", Icon: NotebookPen }] : []),
-              ];
-              const calendar: StripTile = { key: "calendar", label: "Calendar", sub: "Schedule", view: "Calendar", className: "tile-calendar", Icon: CalendarDays };
-              const tasks: StripTile = { key: "tasks", label: "Tasks", sub: `${active.length} open`, view: "Tasks", className: "tile-tasks", Icon: CheckCircle2 };
-              const library: StripTile = { key: "library", label: "Library", sub: "Notes & files", view: "Library", className: "tile-library", Icon: Library };
-              // Always Home first. Calendar + Tasks keep the last two slots (extra hubs are replaced).
-              // If no extra hubs are on, Library takes the last place.
-              const tiles: StripTile[] = hubCandidates.length === 0
-                ? [home, calendar, tasks, library]
-                : [home, ...hubCandidates.slice(0, 1), calendar, tasks];
+              const byKey: Record<string, StripTile> = {
+                home: { key: "home", label: "Home", sub: `${lifeOpen} open`, view: "Life", className: "tile-life", Icon: Home },
+                work: { key: "work", label: "Work", sub: "Workspace", view: "Work", className: "tile-work", Icon: BriefcaseBusiness },
+                career: { key: "career", label: "Career", sub: "Pipeline", view: "Career", className: "tile-career", Icon: Target },
+                school: { key: "school", label: "School", sub: `${schoolOpen} open`, view: "School", className: "tile-school", Icon: GraduationCap },
+                "study-abroad": { key: "study-abroad", label: "Study Abroad", sub: "Paths", view: "Study Abroad", className: "tile-study", Icon: Globe2 },
+                treasury: { key: "treasury", label: "Treasury", sub: "Money", view: "Treasury", className: "tile-treasury", Icon: WalletCards },
+                mastery: { key: "mastery", label: "Mastery", sub: "Teaching", view: "Mastery", className: "tile-mastery", Icon: NotebookPen },
+                calendar: { key: "calendar", label: "Calendar", sub: "Schedule", view: "Calendar", className: "tile-calendar", Icon: CalendarDays },
+                tasks: { key: "tasks", label: "Tasks", sub: `${active.length} open`, view: "Tasks", className: "tile-tasks", Icon: CheckCircle2 },
+                library: { key: "library", label: "Library", sub: "Notes & files", view: "Library", className: "tile-library", Icon: Library },
+              };
+              // Home → all enabled hubs (sidebar order) → Calendar → Tasks; Library if no hubs.
+              const tiles = buildFocusStripKeys({
+                enableWorkOS,
+                enableCareerOS,
+                enableSchoolOS,
+                enableStudyAbroad,
+                enableTreasuryOS,
+                enableMasterOS,
+              }).map((key) => byKey[key]);
               return tiles.map((tile) => (
                 <button key={tile.key} type="button" className={`atelier-hub-tile ${tile.className}`} onClick={() => onGo(tile.view)}>
                   <tile.Icon size={18} /><strong>{tile.label}</strong><span>{tile.sub}</span>
@@ -4310,13 +4414,289 @@ function GoogleCalendarAutoSync({ user }: { user: any }) {
   }, [user]);
   return null;
 }
-function CalendarConnections({ user, flash }: { user?: any; flash: (message: string) => void }) {
-  const [provider, setProvider] = useState<"apple" | "google">("apple");
+function SynapseDayPlanImport({ flash }: { flash: (message: string) => void }) {
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const importPlan = () => {
+    try {
+      setBusy(true);
+      setError("");
+      const events = parseSynapseDayPlan(text);
+      if (!events.length) throw new Error("No Synapse events found in that paste.");
+      window.dispatchEvent(new CustomEvent("lifeos:synapse-calendar-events", { detail: events }));
+      setText("");
+      flash(`${events.length} Synapse event${events.length === 1 ? "" : "s"} imported into your calendar`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not import Synapse day plan.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="card settings-card">
+      <div className="card-head">
+        <div>
+          <span className="section-icon blue"><HeartPulse size={14} /></span>
+          <h2>Synapse health day plan</h2>
+        </div>
+      </div>
+      <div className="settings-body">
+        <div className="integration-empty">
+          <strong>See upcoming meds and appointments beside your LifeOS day.</strong>
+          <p>In Synapse → Settings → LifeOS, tap Share day plan. Then paste the JSON here. Each import replaces earlier Synapse events so the plan stays current.</p>
+        </div>
+        <label htmlFor="synapse-day-plan">Synapse day-plan JSON</label>
+        <textarea
+          id="synapse-day-plan"
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          placeholder='{"v":1,"events":[...]}'
+          rows={5}
+        />
+        <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+          <button className="primary" type="button" disabled={busy || !text.trim()} onClick={importPlan}>
+            {busy ? "Importing…" : "Import Synapse plan"}
+          </button>
+        </div>
+        {error ? <p className="gmail-error" role="alert">{error}</p> : null}
+        <p className="settings-note">Read-only planning view. Log doses and change appointments in Synapse.</p>
+      </div>
+    </section>
+  );
+}
+
+function CalendarConnections({
+  user,
+  flash,
+  subscriptions,
+  onSubscriptionsChange,
+  onReplaceSubscriptionEvents,
+  onRemoveSubscriptionEvents,
+  onSyncAll,
+}: {
+  user?: any;
+  flash: (message: string) => void;
+  subscriptions: IcalSubscription[];
+  onSubscriptionsChange: (subscriptions: IcalSubscription[]) => void;
+  onReplaceSubscriptionEvents: (subscriptionId: string, events: CalendarEvent[]) => void;
+  onRemoveSubscriptionEvents: (subscriptionId: string) => void;
+  onSyncAll: () => void;
+}) {
+  const [provider, setProvider] = useState<"apple" | "google" | "feeds">("apple");
   const choices = [
     { id: "apple" as const, number: "1", name: "Apple", detail: "iCloud Calendar" },
     { id: "google" as const, number: "2", name: "Google", detail: "Google Calendar" },
+    { id: "feeds" as const, number: "3", name: "Feeds", detail: "webcal / .ics links" },
   ];
-  return <section className="card settings-card calendar-hub"><div className="card-head"><div><span className="section-icon violet"><CalendarDays size={14} /></span><h2>Calendar connections</h2></div><span className="calendar-hub-note">Read-only imports</span></div><div className="calendar-auto-refresh"><span><CheckCircle2 size={14} /> Automatic refresh is on</span><small>Connected calendars update every 5 minutes while LifeOS is open.</small></div><div className="calendar-provider-tabs" role="tablist" aria-label="Calendar providers">{choices.map(choice => <button key={choice.id} role="tab" aria-selected={provider === choice.id} className={provider === choice.id ? "selected" : ""} onClick={() => setProvider(choice.id)}><b>{choice.number}</b><span>{choice.name}<small>{choice.detail}</small></span></button>)}</div><div className="calendar-provider-content">{provider === "apple" && <ICloudCalendarIntegration user={user} flash={flash} />}{provider === "google" && <GoogleCalendarIntegration user={user} flash={flash} />}</div></section>;
+  return (
+    <section className="card settings-card calendar-hub">
+      <div className="card-head">
+        <div>
+          <span className="section-icon violet"><CalendarDays size={14} /></span>
+          <h2>Calendar connections</h2>
+        </div>
+        <span className="calendar-hub-note">Read-only imports</span>
+      </div>
+      <div className="calendar-auto-refresh">
+        <span><CheckCircle2 size={14} /> Automatic refresh is on</span>
+        <small>Connected calendars and feeds update every few minutes while LifeOS is open.</small>
+      </div>
+      <div className="calendar-provider-tabs" role="tablist" aria-label="Calendar providers">
+        {choices.map((choice) => (
+          <button
+            key={choice.id}
+            role="tab"
+            aria-selected={provider === choice.id}
+            className={provider === choice.id ? "selected" : ""}
+            onClick={() => setProvider(choice.id)}
+          >
+            <b>{choice.number}</b>
+            <span>{choice.name}<small>{choice.detail}</small></span>
+          </button>
+        ))}
+      </div>
+      <div className="calendar-provider-content">
+        {provider === "apple" && <ICloudCalendarIntegration user={user} flash={flash} />}
+        {provider === "google" && <GoogleCalendarIntegration user={user} flash={flash} />}
+        {provider === "feeds" && (
+          <IcalFeedsPanel
+            subscriptions={subscriptions}
+            onSubscriptionsChange={onSubscriptionsChange}
+            onReplaceSubscriptionEvents={onReplaceSubscriptionEvents}
+            onRemoveSubscriptionEvents={onRemoveSubscriptionEvents}
+            onSyncAll={onSyncAll}
+            flash={flash}
+          />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function IcalFeedsPanel({
+  subscriptions,
+  onSubscriptionsChange,
+  onReplaceSubscriptionEvents,
+  onRemoveSubscriptionEvents,
+  onSyncAll,
+  flash,
+  compact = false,
+}: {
+  subscriptions: IcalSubscription[];
+  onSubscriptionsChange: (subscriptions: IcalSubscription[]) => void;
+  onReplaceSubscriptionEvents: (subscriptionId: string, events: CalendarEvent[]) => void;
+  onRemoveSubscriptionEvents: (subscriptionId: string) => void;
+  onSyncAll: () => void;
+  flash: (message: string) => void;
+  compact?: boolean;
+}) {
+  const [url, setUrl] = useState("");
+  const [name, setName] = useState("");
+  const [color, setColor] = useState<string>(SPACE_COLORS[3]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+
+  const addFeed = async () => {
+    if (!url.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      const normalized = url.trim();
+      const id = hashIcalUrl(normalized);
+      if (subscriptions.some((feed) => feed.id === id || feed.url === normalized)) {
+        throw new Error("That calendar feed is already subscribed.");
+      }
+      const ics = await fetchIcalFeed(normalized);
+      const feed: IcalSubscription = {
+        id,
+        url: normalized,
+        name: name.trim() || "Calendar feed",
+        color,
+        lastSyncedAt: new Date().toISOString(),
+      };
+      const events = parseIcsEvents(ics, { subscriptionId: feed.id, color: feed.color });
+      onReplaceSubscriptionEvents(feed.id, events);
+      onSubscriptionsChange([...subscriptions, feed]);
+      setUrl("");
+      setName("");
+      flash(`Subscribed · ${events.length} event${events.length === 1 ? "" : "s"}`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not subscribe to that calendar.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const syncOne = async (feed: IcalSubscription) => {
+    setSyncingId(feed.id);
+    setError("");
+    try {
+      const ics = await fetchIcalFeed(feed.url);
+      const events = parseIcsEvents(ics, { subscriptionId: feed.id, color: feed.color });
+      onReplaceSubscriptionEvents(feed.id, events);
+      onSubscriptionsChange(
+        subscriptions.map((item) =>
+          item.id === feed.id
+            ? { ...item, lastSyncedAt: new Date().toISOString(), lastError: undefined }
+            : item,
+        ),
+      );
+      flash(`Synced ${feed.name}`);
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Could not refresh this feed.";
+      onSubscriptionsChange(
+        subscriptions.map((item) => (item.id === feed.id ? { ...item, lastError: message } : item)),
+      );
+      setError(message);
+    } finally {
+      setSyncingId(null);
+    }
+  };
+
+  const removeFeed = (feed: IcalSubscription) => {
+    if (!window.confirm(`Unsubscribe from ${feed.name}? Its imported events will be removed.`)) return;
+    onRemoveSubscriptionEvents(feed.id);
+    onSubscriptionsChange(subscriptions.filter((item) => item.id !== feed.id));
+    flash(`Unsubscribed from ${feed.name}`);
+  };
+
+  return (
+    <div className={`ical-feeds-panel${compact ? " is-compact" : ""}`}>
+      {!compact ? (
+        <div className="integration-empty" style={{ paddingTop: 8 }}>
+          <strong>Subscribe to multiple calendar feeds.</strong>
+          <p>Add school, club, Coursera, or any public webcal / .ics link. Each feed syncs on its own and can be removed later.</p>
+        </div>
+      ) : null}
+      {subscriptions.length ? (
+        <div className="ical-feed-list" data-testid="ical-feed-list">
+          {subscriptions.map((feed) => (
+            <div key={feed.id} className="ical-feed-row">
+              <i style={{ background: feed.color }} />
+              <div>
+                <strong>{feed.name}</strong>
+                <p>{feed.url}</p>
+                <small>
+                  {feed.lastError
+                    ? feed.lastError
+                    : feed.lastSyncedAt
+                      ? `Last synced ${new Date(feed.lastSyncedAt).toLocaleString()}`
+                      : "Not synced yet"}
+                </small>
+              </div>
+              <div className="ical-feed-actions">
+                <button type="button" onClick={() => void syncOne(feed)} disabled={syncingId === feed.id}>
+                  {syncingId === feed.id ? "Syncing…" : "Sync"}
+                </button>
+                <button type="button" onClick={() => removeFeed(feed)}>Remove</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="settings-note">No feeds yet. Add as many subscription links as you need.</p>
+      )}
+      <div className="ical-feed-form">
+        <label>
+          Name
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="School timetable" />
+        </label>
+        <label>
+          Subscription link
+          <input
+            data-testid="ical-feed-url"
+            inputMode="url"
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="webcal://… or https://….ics"
+          />
+        </label>
+        <div className="accent-picker" role="group" aria-label="Feed color">
+          {SPACE_COLORS.map((swatch) => (
+            <button
+              key={swatch}
+              type="button"
+              className={color.toLowerCase() === swatch.toLowerCase() ? "selected" : ""}
+              style={{ background: swatch }}
+              onClick={() => setColor(swatch)}
+              aria-label={`Feed color ${swatch}`}
+            />
+          ))}
+        </div>
+        <div className="ical-feed-form-actions">
+          <button type="button" className="primary" disabled={!url.trim() || busy} onClick={() => void addFeed()} data-testid="ical-feed-add">
+            {busy ? "Subscribing…" : "Subscribe"}
+          </button>
+          {subscriptions.length ? (
+            <button type="button" onClick={onSyncAll} disabled={busy}>Sync all</button>
+          ) : null}
+        </div>
+      </div>
+      {error ? <p className="gmail-error" role="alert">{error}</p> : null}
+    </div>
+  );
 }
 
 function GoogleCalendarIntegration({ user, flash }: { user?: any; flash: (message: string) => void }) {
@@ -4566,7 +4946,7 @@ function WorkspaceHubsEditor({
   );
 }
 
-function SettingsView({ dark, setDark, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport, user, userId, onLogout, onOpenTask, onRestoreTask, onRequestPaywall }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; userId?: string | null; onLogout?: () => void; onOpenTask?: (id: number) => void; onRestoreTask?: (id: number) => void; onRequestPaywall?: (hub: View) => void }) {
+function SettingsView({ dark, setDark, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport, user, userId, onLogout, onOpenTask, onRestoreTask, onRequestPaywall, icalSubscriptions = [], onIcalSubscriptionsChange, onReplaceIcalSubscriptionEvents, onRemoveIcalSubscriptionEvents, onSyncIcalSubscriptions }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; userId?: string | null; onLogout?: () => void; onOpenTask?: (id: number) => void; onRestoreTask?: (id: number) => void; onRequestPaywall?: (hub: View) => void; icalSubscriptions?: IcalSubscription[]; onIcalSubscriptionsChange?: (subscriptions: IcalSubscription[]) => void; onReplaceIcalSubscriptionEvents?: (subscriptionId: string, events: CalendarEvent[]) => void; onRemoveIcalSubscriptionEvents?: (subscriptionId: string) => void; onSyncIcalSubscriptions?: () => void }) {
   const archivedTasks = tasks.filter((task) => task.done || task.canceled || task.status === "Done" || task.status === "Canceled");
   const [archivesOpen, setArchivesOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsBentoSection | "account" | null>(null);
@@ -4703,7 +5083,15 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
                 </div>
               </section>
               <GmailIntegration user={user} flash={flash} />
-              <CalendarConnections user={user} flash={flash} />
+              <CalendarConnections
+                user={user}
+                flash={flash}
+                subscriptions={icalSubscriptions}
+                onSubscriptionsChange={onIcalSubscriptionsChange ?? (() => {})}
+                onReplaceSubscriptionEvents={onReplaceIcalSubscriptionEvents ?? (() => {})}
+                onRemoveSubscriptionEvents={onRemoveIcalSubscriptionEvents ?? (() => {})}
+                onSyncAll={onSyncIcalSubscriptions ?? (() => {})}
+              />
               <AssistantAccessPanel user={user} userId={userId} flash={flash} />
             </div>
           )}
@@ -6060,8 +6448,25 @@ function CalendarEventModal({ close, add, event, remove, defaultDate, tasks = []
   </motion.div>;
 }
 
-function CalendarImportModal({ close, add }: { close: () => void; add: (events: CalendarEvent[]) => void }) {
-  const [url, setUrl] = useState("");
+function CalendarImportModal({
+  close,
+  add,
+  subscriptions,
+  onSubscriptionsChange,
+  onReplaceSubscriptionEvents,
+  onRemoveSubscriptionEvents,
+  onSyncAll,
+  flash,
+}: {
+  close: () => void;
+  add: (events: CalendarEvent[]) => void;
+  subscriptions: IcalSubscription[];
+  onSubscriptionsChange: (subscriptions: IcalSubscription[]) => void;
+  onReplaceSubscriptionEvents: (subscriptionId: string, events: CalendarEvent[]) => void;
+  onRemoveSubscriptionEvents: (subscriptionId: string) => void;
+  onSyncAll: () => void;
+  flash: (message: string) => void;
+}) {
   const [ics, setIcs] = useState("");
   const [status, setStatus] = useState("");
   const [isImporting, setIsImporting] = useState(false);
@@ -6075,22 +6480,42 @@ function CalendarImportModal({ close, add }: { close: () => void; add: (events: 
     setStatus(`${events.length} event${events.length === 1 ? "" : "s"} imported.`);
     window.setTimeout(close, 650);
   };
-  const importUrl = async () => {
-    if (!url.trim()) return;
-    setIsImporting(true);
-    setStatus("Importing the calendar…");
-    try {
-      const response = await fetch("/api/ical", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }) });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || typeof payload.ics !== "string") throw new Error(typeof payload.error === "string" ? payload.error : "LifeOS could not import that calendar link.");
-      importText(payload.ics);
-    } catch (error) {
-      setStatus(error instanceof Error ? `${error.message} Try copying the subscription link again, or paste an exported .ics file below.` : "LifeOS could not import that link. Try again or paste an exported .ics file below.");
-    } finally {
-      setIsImporting(false);
-    }
-  };
-  return <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="capture-modal import-modal" onMouseDown={event => event.stopPropagation()} initial={{ scale: .98, y: 8 }} animate={{ scale: 1, y: 0 }}><div className="capture-head"><div className="brain-dot"><Link2 size={16} /></div><div><strong>Import a calendar</strong><span>Paste a Coursera `webcal://` link, an `.ics` link, or exported calendar text.</span></div><button onClick={close} aria-label="Close"><X size={18} /></button></div><label htmlFor="ical-url">Calendar subscription link</label><div className="import-url-row"><input id="ical-url" inputMode="url" placeholder="webcal://… or https://…" value={url} onChange={event => setUrl(event.target.value)} /><button disabled={!url.trim() || isImporting} onClick={importUrl}>{isImporting ? "Importing…" : "Import link"}</button></div><label htmlFor="ical-text">Or paste .ics text</label><textarea id="ical-text" placeholder={"BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:Example\nDTSTART:20260709T090000Z\nEND:VEVENT\nEND:VCALENDAR"} value={ics} onChange={event => setIcs(event.target.value)} /><div className="capture-footer"><span role="status">{status || "Coursera links starting with webcal:// work here. The import uses LifeOS, not your browser."}</span><button disabled={!ics.trim() || isImporting} onClick={() => importText(ics)}>Import pasted iCal</button></div></motion.div></motion.div>;
+  return (
+    <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.div className="capture-modal import-modal" onMouseDown={(event) => event.stopPropagation()} initial={{ scale: 0.98, y: 8 }} animate={{ scale: 1, y: 0 }}>
+        <div className="capture-head">
+          <div className="brain-dot"><Link2 size={16} /></div>
+          <div>
+            <strong>Subscribe to calendars</strong>
+            <span>Add multiple webcal / .ics feeds, or paste a one-time export.</span>
+          </div>
+          <button onClick={close} aria-label="Close"><X size={18} /></button>
+        </div>
+        <IcalFeedsPanel
+          compact
+          subscriptions={subscriptions}
+          onSubscriptionsChange={onSubscriptionsChange}
+          onReplaceSubscriptionEvents={onReplaceSubscriptionEvents}
+          onRemoveSubscriptionEvents={onRemoveSubscriptionEvents}
+          onSyncAll={onSyncAll}
+          flash={flash}
+        />
+        <label htmlFor="ical-text">Or paste .ics text (one-time import)</label>
+        <textarea
+          id="ical-text"
+          placeholder={"BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:Example\nDTSTART:20260709T090000Z\nEND:VEVENT\nEND:VCALENDAR"}
+          value={ics}
+          onChange={(event) => setIcs(event.target.value)}
+        />
+        <div className="capture-footer">
+          <span role="status">{status || "Saved feeds keep syncing. Pasted .ics is a one-time import."}</span>
+          <button disabled={!ics.trim() || isImporting} onClick={() => { setIsImporting(true); importText(ics); setIsImporting(false); }}>
+            Import pasted iCal
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
 }
 
 function TaskActionsModal({ task, close, open, edit, toggleCanceled, remove }: { task: Task; close: () => void; open: () => void; edit: () => void; toggleCanceled: () => void; remove: () => void }) {

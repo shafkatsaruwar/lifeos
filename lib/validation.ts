@@ -138,6 +138,15 @@ export const SettingsSchema = z.object({
   onboardingCompletedAt: z.string().optional(),
   onboardingVersion: z.number().optional(),
   themeMode: z.enum(['system', 'light', 'dark']).optional(),
+  /** Saved webcal / .ics subscription feeds (multi-calendar subscribe). */
+  icalSubscriptions: z.array(z.object({
+    id: z.string(),
+    url: z.string(),
+    name: z.string(),
+    color: z.string(),
+    lastSyncedAt: z.string().optional(),
+    lastError: z.string().optional(),
+  })).optional(),
   /** Access entitlement — promo year or paid Pro. */
   entitlement: z.object({
     status: z.enum(['none', 'promo', 'pro']),
