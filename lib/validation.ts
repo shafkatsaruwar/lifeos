@@ -151,6 +151,10 @@ export const SettingsSchema = z.object({
   themeMode: z.enum(['system', 'light', 'dark']).optional(),
   /** Named Atelier personality (Studio-ready). Optional; UX may still say Light/Dark. */
   personality: z.enum(['atelier-light', 'atelier-dark']).optional(),
+  /** Appearance Studio wallpaper (Phase 3). */
+  wallpaperId: z.enum(['none', 'solid', 'midnight', 'aurora', 'ember', 'mist']).optional(),
+  wallpaperSolid: z.string().optional(),
+  glassLevel: z.enum(['off', 'subtle', 'balanced', 'high']).optional(),
   /** Saved webcal / .ics subscription feeds (multi-calendar subscribe). */
   icalSubscriptions: z.array(z.object({
     id: z.string(),

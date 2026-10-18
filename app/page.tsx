@@ -44,6 +44,14 @@ import {
   type Personality,
   type ThemeMode,
 } from "@/lib/appearancePrefs";
+import {
+  applyAppearanceChrome,
+  appearanceStudioFromSettings,
+  type AppearanceStudioCommitPatch,
+  type GlassLevel,
+  type WallpaperId,
+} from "@/lib/appearanceStudio";
+import { AppearanceStudio } from "@/app/components/AppearanceStudio";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { isNavigationOwner } from "@/lib/navigationOwner";
@@ -231,6 +239,12 @@ type SettingsState = {
   themeMode?: ThemeMode;
   /** Named Atelier personality for Studio later. Optional; UX may still say Light/Dark. */
   personality?: Personality;
+  /** Appearance Studio — wallpaper preset id (Phase 3). */
+  wallpaperId?: WallpaperId;
+  /** Solid wallpaper hex when wallpaperId === "solid". */
+  wallpaperSolid?: string;
+  /** Glass intensity for chrome (Phase 3). */
+  glassLevel?: GlassLevel;
   nowTaskId?: number | null;
   spaceContext?: Record<string, { lastTaskId?: number; lastFilter?: string; updatedAt?: string }>;
   ambientActivity?: AmbientActivity | null;
@@ -396,6 +410,9 @@ const initialSettings: SettingsState = {
   reduceMotion: false,
   themeMode: "light",
   personality: "atelier-light",
+  wallpaperId: "none",
+  wallpaperSolid: "#0B1020",
+  glassLevel: "off",
   nowTaskId: null,
   spaceContext: {},
   ambientActivity: null,
@@ -1339,6 +1356,27 @@ export default function LifeOS() {
     document.documentElement.classList.toggle("dark", dark);
     document.documentElement.dataset.personality = dark ? "atelier-dark" : "atelier-light";
   }, [dark]);
+  /** Follow OS theme when Appearance Studio commits `themeMode: system`. */
+  useEffect(() => {
+    if (settingsState.themeMode !== "system" || typeof window === "undefined") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => {
+      const next = mq.matches;
+      setDark(prev => (prev === next ? prev : next));
+    };
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, [settingsState.themeMode]);
+  /** Committed wallpaper / glass chrome (Studio draft previews separately). */
+  useEffect(() => {
+    applyAppearanceChrome(appearanceStudioFromSettings(settingsState));
+  }, [
+    settingsState.wallpaperId,
+    settingsState.wallpaperSolid,
+    settingsState.glassLevel,
+    settingsState.accent,
+  ]);
   const applyDark = useCallback((next: boolean | ((value: boolean) => boolean)) => {
     setDark(prev => {
       const resolved = typeof next === "function" ? next(prev) : next;
@@ -1351,6 +1389,21 @@ export default function LifeOS() {
       });
       return resolved;
     });
+  }, []);
+  /** Appearance Studio Apply — preserves `themeMode: system` (do not route through applyDark). */
+  const commitAppearanceStudio = useCallback((patch: AppearanceStudioCommitPatch) => {
+    setSettingsState((current) => ({
+      ...current,
+      themeMode: patch.themeMode,
+      personality: patch.personality,
+      accent: patch.accent,
+      wallpaperId: patch.wallpaperId,
+      wallpaperSolid: patch.wallpaperSolid,
+      glassLevel: patch.glassLevel,
+      compactMode: patch.compactMode,
+      reduceMotion: patch.reduceMotion,
+    }));
+    setDark(patch.dark);
   }, []);
   useEffect(() => {
     if (!cloudUserId) return;
@@ -3183,7 +3236,7 @@ export default function LifeOS() {
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onCreateTask={createTaskFromNote} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} onConvertToTask={(index, text) => { addTask(text, undefined, "", { flashLabel: "Task created from brain" }); setBrainItems(items => items.filter((_, i) => i !== index)); }} />}
-            {view === "Settings" && <SettingsView dark={dark} setDark={applyDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} icalSubscriptions={settingsState.icalSubscriptions ?? []} onIcalSubscriptionsChange={(icalSubscriptions) => updateSettings({ icalSubscriptions })} onReplaceIcalSubscriptionEvents={replaceIcalSubscriptionEvents} onRemoveIcalSubscriptionEvents={removeIcalSubscriptionEvents} onSyncIcalSubscriptions={() => void syncIcalSubscriptions()} />}
+            {view === "Settings" && <SettingsView dark={dark} setDark={applyDark} onCommitAppearance={commitAppearanceStudio} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} icalSubscriptions={settingsState.icalSubscriptions ?? []} onIcalSubscriptionsChange={(icalSubscriptions) => updateSettings({ icalSubscriptions })} onReplaceIcalSubscriptionEvents={replaceIcalSubscriptionEvents} onRemoveIcalSubscriptionEvents={removeIcalSubscriptionEvents} onSyncIcalSubscriptions={() => void syncIcalSubscriptions()} />}
             {view === "Settings" && <SynapseDayPlanImport flash={flash} />}
             {!["Life", "School", "Work", "Career", "Study Abroad", "Treasury", "Mastery", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Navigation", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
@@ -5192,7 +5245,7 @@ function WorkspaceHubsEditor({
   );
 }
 
-function SettingsView({ dark, setDark, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport, user, userId, onLogout, onOpenTask, onRestoreTask, onRequestPaywall, icalSubscriptions = [], onIcalSubscriptionsChange, onReplaceIcalSubscriptionEvents, onRemoveIcalSubscriptionEvents, onSyncIcalSubscriptions }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; userId?: string | null; onLogout?: () => void; onOpenTask?: (id: number) => void; onRestoreTask?: (id: number) => void; onRequestPaywall?: (hub: View) => void; icalSubscriptions?: IcalSubscription[]; onIcalSubscriptionsChange?: (subscriptions: IcalSubscription[]) => void; onReplaceIcalSubscriptionEvents?: (subscriptionId: string, events: CalendarEvent[]) => void; onRemoveIcalSubscriptionEvents?: (subscriptionId: string) => void; onSyncIcalSubscriptions?: () => void }) {
+function SettingsView({ dark: _dark, setDark: _setDark, onCommitAppearance, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport, user, userId, onLogout, onOpenTask, onRestoreTask, onRequestPaywall, icalSubscriptions = [], onIcalSubscriptionsChange, onReplaceIcalSubscriptionEvents, onRemoveIcalSubscriptionEvents, onSyncIcalSubscriptions }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; onCommitAppearance: (patch: AppearanceStudioCommitPatch) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; userId?: string | null; onLogout?: () => void; onOpenTask?: (id: number) => void; onRestoreTask?: (id: number) => void; onRequestPaywall?: (hub: View) => void; icalSubscriptions?: IcalSubscription[]; onIcalSubscriptionsChange?: (subscriptions: IcalSubscription[]) => void; onReplaceIcalSubscriptionEvents?: (subscriptionId: string, events: CalendarEvent[]) => void; onRemoveIcalSubscriptionEvents?: (subscriptionId: string) => void; onSyncIcalSubscriptions?: () => void }) {
   const archivedTasks = tasks.filter((task) => task.done || task.canceled || task.status === "Done" || task.status === "Canceled");
   const [archivesOpen, setArchivesOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsBentoSection | "account" | null>(null);
@@ -5205,7 +5258,7 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
     flash(permission === "granted" ? "Browser notifications enabled" : "Notifications not enabled");
   };
   const sectionMeta: Record<SettingsBentoSection | "account", { title: string; blurb: string }> = {
-    appearance: { title: "Appearance", blurb: "Theme, accent, density, and capture shortcuts." },
+    appearance: { title: "Appearance", blurb: "Appearance Studio — theme, accent, wallpaper, glass, and density." },
     hubs: { title: "Hubs", blurb: "Choose which spaces show in the sidebar." },
     connections: { title: "Connections", blurb: "Gmail, calendars, assistant access, and calendar defaults." },
     focus: { title: "Focus", blurb: "Default session length and energy." },
@@ -5245,20 +5298,12 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
           {activeSection === "appearance" && (
             <section className="card settings-card">
               <div className="settings-body settings-body-dense">
-                <div className="theme-options">
-                  <button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button>
-                  <button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button>
-                </div>
-                <div className="accent-picker">
-                  {SPACE_COLORS.map(color => (
-                    <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />
-                  ))}
-                </div>
-                <p className="settings-note">Default accent for Now, Tasks, and the rest of LifeOS.</p>
-                <div className="settings-toggle-pair">
-                  <ToggleRow title="Compact" desc="Tighter spacing." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} />
-                  <ToggleRow title="Reduce motion" desc="Calmer transitions." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} />
-                </div>
+                <AppearanceStudio
+                  settings={settings}
+                  systemDark={typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches}
+                  flash={flash}
+                  onCommit={onCommitAppearance}
+                />
                 {settings.enableMasterOS !== false && <p className="settings-note">Mastery · type <code>/mos</code> on Now.</p>}
                 <div className="settings-panel-divider" />
                 <ToggleRow title="Show capture commands" desc="When you open Search anything (⌘K), show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} />
