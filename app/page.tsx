@@ -3594,47 +3594,6 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       ) : null}
 
       <div className="atelier-now-main">
-        {showWidget("today") && (
-        <section className="card atelier-today-panel" aria-label="Today" style={{ order: widgetLayout.order.indexOf("today") }}>
-          <div className="card-head"><div><h2>Today</h2></div></div>
-          <div className={`now-today-list${todayEvents.length ? " now-today-timeline" : ""}`}>
-            {todayEvents.length ? todayEvents.map((event, index) => {
-              const start = new Date(event.start);
-              const time = Number.isNaN(start.getTime()) ? "—" : start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-              const kind = classifyCalendarItem(event);
-              return (
-                <div key={event.id} className={`now-today-row now-today-${kind}`}>
-                  <time dateTime={event.start}>{time}</time>
-                  <div className="now-today-track" aria-hidden>
-                    <i style={{ background: event.color || "var(--accent)" }} />
-                    {index < todayEvents.length - 1 ? <span className="now-today-rail" /> : null}
-                  </div>
-                  <div className="now-today-body">
-                    <strong>{event.title}</strong>
-                    <span>{layerLabel(kind)}{event.location ? ` · ${event.location}` : ""}</span>
-                  </div>
-                </div>
-              );
-            }) : <div className="now-today-empty">No timed blocks for today. Protect a session when you’re ready.</div>}
-          </div>
-          {todayDeadlines.length ? (
-            <div className="now-today-deadlines" aria-label="Deadlines due today">
-              {todayDeadlines.map(event => (
-                <button type="button" key={event.id} className="now-deadline-chip" onClick={() => {
-                  const taskId = parseDeadlineEventId(event.id);
-                  if (taskId != null) onOpenTask(taskId);
-                }}>
-                  <i style={{ background: event.color || "var(--accent)" }} />
-                  <span>{event.title}</span>
-                  <em>Due today</em>
-                </button>
-              ))}
-            </div>
-          ) : null}
-          <div className="now-today-footer"><button type="button" onClick={() => onGo("Today")}>View full day</button></div>
-        </section>
-        )}
-
         <div className="atelier-now-mid">
           {showWidget("focus") && (
           <section className="card atelier-focus-panel" title="Your focused task" style={{ order: widgetLayout.order.indexOf("focus") }}>
@@ -3755,13 +3714,67 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           </div>
           )}
         </div>
-      </div>
 
-      {showWidget("copilot") && (
-      <div className="atelier-now-bottom" style={{ order: widgetLayout.order.indexOf("copilot") }}>
-        <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} studyAbroadContext={enableStudyAbroad ? buildStudyAbroadCopilotContext(studyAbroadHub) : null} />
+        {(showWidget("today") || showWidget("copilot")) && (
+        <div
+          className={`atelier-today-copilot-row${showWidget("today") && showWidget("copilot") ? " is-split" : " is-single"}`}
+          style={{
+            order: Math.min(
+              showWidget("today") ? widgetLayout.order.indexOf("today") : Number.POSITIVE_INFINITY,
+              showWidget("copilot") ? widgetLayout.order.indexOf("copilot") : Number.POSITIVE_INFINITY,
+            ),
+          }}
+          data-testid="today-copilot-row"
+        >
+          {showWidget("today") && (
+          <section className="card atelier-today-panel" aria-label="Today" style={{ order: widgetLayout.order.indexOf("today") }}>
+            <div className="card-head"><div><h2>Today</h2></div></div>
+            <div className={`now-today-list${todayEvents.length ? " now-today-timeline" : ""}`}>
+              {todayEvents.length ? todayEvents.map((event, index) => {
+                const start = new Date(event.start);
+                const time = Number.isNaN(start.getTime()) ? "—" : start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+                const kind = classifyCalendarItem(event);
+                return (
+                  <div key={event.id} className={`now-today-row now-today-${kind}`}>
+                    <time dateTime={event.start}>{time}</time>
+                    <div className="now-today-track" aria-hidden>
+                      <i style={{ background: event.color || "var(--accent)" }} />
+                      {index < todayEvents.length - 1 ? <span className="now-today-rail" /> : null}
+                    </div>
+                    <div className="now-today-body">
+                      <strong>{event.title}</strong>
+                      <span>{layerLabel(kind)}{event.location ? ` · ${event.location}` : ""}</span>
+                    </div>
+                  </div>
+                );
+              }) : <div className="now-today-empty">No timed blocks for today. Protect a session when you’re ready.</div>}
+            </div>
+            {todayDeadlines.length ? (
+              <div className="now-today-deadlines" aria-label="Deadlines due today">
+                {todayDeadlines.map(event => (
+                  <button type="button" key={event.id} className="now-deadline-chip" onClick={() => {
+                    const taskId = parseDeadlineEventId(event.id);
+                    if (taskId != null) onOpenTask(taskId);
+                  }}>
+                    <i style={{ background: event.color || "var(--accent)" }} />
+                    <span>{event.title}</span>
+                    <em>Due today</em>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="now-today-footer"><button type="button" onClick={() => onGo("Today")}>View full day</button></div>
+          </section>
+          )}
+
+          {showWidget("copilot") && (
+          <div className="atelier-copilot-slot" style={{ order: widgetLayout.order.indexOf("copilot") }}>
+            <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} studyAbroadContext={enableStudyAbroad ? buildStudyAbroadCopilotContext(studyAbroadHub) : null} />
+          </div>
+          )}
+        </div>
+        )}
       </div>
-      )}
 
       <div className="atelier-now-utility">
         <TimesheetNowStrip
