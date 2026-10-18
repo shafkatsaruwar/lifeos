@@ -1032,6 +1032,10 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .atelier-today-copilot-row.is-split .copilot-orb{width:32px;height:32px;border-radius:12px}
 .atelier-today-copilot-row.is-split .copilot-answer{min-height:40px}
 .atelier-today-copilot-row.is-split .copilot-answer strong{font-size:11px}
+.atelier-today-copilot-row.is-split .copilot-prompts{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.atelier-today-copilot-row.is-split .copilot-prompts button{width:100%;justify-content:center;text-align:center;min-height:30px;font-size:9px}
+.atelier-today-copilot-row.is-split .copilot-body{padding:12px;gap:8px}
+.atelier-today-copilot-row.is-split .card-head{padding:12px 14px 0}
 .atelier-today-copilot-row.is-split .now-today-row{padding:8px 14px;grid-template-columns:48px 14px 1fr;gap:8px}
 .atelier-today-copilot-row.is-split .now-today-empty{padding:16px 14px;font-size:12px}
 .atelier-today-copilot-row.is-split .now-today-footer{padding:10px 14px}
