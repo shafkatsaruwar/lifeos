@@ -47,7 +47,7 @@ import {
   formatEventRange,
   toDateKey,
 } from "../lib/helpers";
-import { fetchIcsFromUrl, hashIcalUrl, parseIcsEvents, removeIcalSubscriptionEvents, replaceIcalSubscriptionEvents } from "../lib/api";
+import { fetchIcsFromUrl, hashIcalUrl, parseIcsEvents, recolorIcalSubscriptionEvents, removeIcalSubscriptionEvents, replaceIcalSubscriptionEvents } from "../lib/api";
 import { stageIcsImport } from "../lib/icsImportQueue";
 import { looksLikeIcalFeedUrl } from "../lib/lifeosUrl";
 import {
@@ -678,6 +678,17 @@ export function CalendarScreen() {
         },
       },
     ]);
+  };
+
+  const changeFeedColor = async (feed: IcalSubscription, color: string) => {
+    if (feed.color.toLowerCase() === color.toLowerCase()) return;
+    await updateSettings({
+      ...workspace.settings,
+      icalSubscriptions: subscriptions.map((item) =>
+        item.id === feed.id ? { ...item, color } : item,
+      ),
+    });
+    await updateCalendar(recolorIcalSubscriptionEvents(workspace.calendar, feed.id, color));
   };
 
   const doImportFile = async () => {
@@ -1449,6 +1460,31 @@ export function CalendarScreen() {
                             ? `Last synced ${new Date(feed.lastSyncedAt).toLocaleString()}`
                             : "Not synced yet"}
                       </Text>
+                      <View
+                        style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 2 }}
+                        accessibilityLabel={`Color for ${feed.name}`}
+                      >
+                        {SPACE_COLORS.slice(0, 8).map((swatch) => {
+                          const selected = feed.color.toLowerCase() === swatch.toLowerCase();
+                          return (
+                            <Pressable
+                              key={`${feed.id}-${swatch}`}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Set ${feed.name} color to ${swatch}`}
+                              accessibilityState={{ selected }}
+                              onPress={() => void changeFeedColor(feed, swatch)}
+                              style={{
+                                width: 22,
+                                height: 22,
+                                borderRadius: 11,
+                                backgroundColor: swatch,
+                                borderWidth: selected ? 2 : 0,
+                                borderColor: theme.text,
+                              }}
+                            />
+                          );
+                        })}
+                      </View>
                       <View style={styles.row}>
                         <ActionButton
                           label={syncingId === feed.id ? "Syncing…" : "Sync"}

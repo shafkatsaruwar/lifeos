@@ -610,6 +610,8 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .ical-feed-row strong{display:block;font-size:13px;color:var(--ink)}
 .ical-feed-row p{margin:4px 0 0;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
 .ical-feed-row small{display:block;margin-top:6px;font-size:10px;color:var(--muted)}
+.ical-feed-recolor{margin:10px 0 0;max-width:100%}
+.ical-feed-recolor button{width:22px;height:22px}
 .ical-feed-actions{display:flex;gap:6px}
 .ical-feed-actions button{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:650;color:var(--ink)}
 .ical-feed-form{display:grid;gap:10px}
