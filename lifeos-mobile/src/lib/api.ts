@@ -1,17 +1,9 @@
 // Thin client for the deployed LifeOS Next.js backend.
-// Set EXPO_PUBLIC_LIFEOS_URL to your web app origin (local or production).
+// Prefer EXPO_PUBLIC_LIFEOS_URL; otherwise production / localhost fallbacks in lifeosUrl.ts.
 
-const rawBase = (process.env.EXPO_PUBLIC_LIFEOS_URL || "").trim().replace(/\/$/, "");
+import { resolveLifeosApiBase } from "./lifeosUrl";
 
-export const API_BASE =
-  rawBase ||
-  (typeof __DEV__ !== "undefined" && __DEV__ ? "http://localhost:3000" : "");
-
-if (!API_BASE && typeof console !== "undefined") {
-  console.warn(
-    "EXPO_PUBLIC_LIFEOS_URL is unset. AI/calendar API calls need your LifeOS web origin.",
-  );
-}
+export const API_BASE = resolveLifeosApiBase();
 
 export type AiParsedTask = {
   title: string;
@@ -199,7 +191,7 @@ export async function verifyFocusEnforcerProof(
   });
 
   if (!API_BASE) {
-    return softFail("Set EXPO_PUBLIC_LIFEOS_URL to enable photo verify.");
+    return softFail("LifeOS web URL unavailable for photo verify.");
   }
 
   try {
