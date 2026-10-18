@@ -8,6 +8,7 @@ export const NOW_WIDGET_IDS = [
   "quote",
   "today",
   "focus",
+  "rings",
   "hubs",
   "copilot",
 ] as const;
@@ -31,6 +32,7 @@ export const NOW_WIDGET_LABELS: Record<NowWidgetId, string> = {
   quote: "Quote",
   today: "Today",
   focus: "Focus",
+  rings: "Activity rings",
   hubs: "Hubs",
   copilot: "Copilot",
 };

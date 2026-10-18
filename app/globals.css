@@ -1018,7 +1018,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .atelier-today-panel,.atelier-focus-panel{border-radius:20px}
 .atelier-today-panel{min-height:340px;display:flex;flex-direction:column}
 .atelier-today-panel .now-today-list{flex:1}
-.atelier-now-mid{display:grid;grid-template-rows:1fr auto;gap:12px;min-height:340px}
+.atelier-now-mid{display:flex;flex-direction:column;gap:12px;min-height:340px}
 .atelier-focus-panel{background:linear-gradient(165deg,#0B1220 0%,#172554 48%,#111827 100%);border:0;color:#F8FAFC;padding:18px 18px 16px;display:grid;grid-template-columns:140px 1fr;gap:16px;align-items:center;min-height:220px}
 .atelier-focus-ring-wrap{position:relative;width:140px;height:140px;display:grid;place-items:center}
 .atelier-focus-ring{width:140px;height:140px;transform:rotate(-90deg)}
