@@ -1,7 +1,13 @@
 # LifeOS design archive
 
-Backup of how LifeOS looked before locking the current redesign.
+Frozen backups of LifeOS web design eras. Each archive is **independent** —
+do not overwrite or merge one into another.
 
-Start here: **[pre-lock-2026-10.md](./pre-lock-2026-10.md)**
+| Archive | Date / tip | Summary |
+|---------|------------|---------|
+| **[pre-lock-2026-10.md](./pre-lock-2026-10.md)** | Pre-lock Atelier | Chips-era Now, dark equalizer mark, Inter + Instrument Serif. Screenshots + `snapshots/pre-cleanup-now/` / `pre-branch-main/`. |
+| **[current-2026-10-18/](./current-2026-10-18/)** | 2026-10-18 · `a794703` | Current Atelier / LifeOS: SF Pro (LifeOS font), black-on-white mark, Home label, Settings bento, Focus strip hubs, owner-only Navigation. |
 
-Includes a Now screenshot, git restore SHAs, and frozen copies of `globals.css` / `page.tsx` / favicon from the pre-cleanup Atelier commit.
+Start with the README inside the era you need. File snapshots live under each
+archive’s `snapshots/` tree (or the shared pre-lock `snapshots/` folders
+documented in `pre-lock-2026-10.md`).
