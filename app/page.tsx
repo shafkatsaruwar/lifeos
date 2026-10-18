@@ -69,6 +69,16 @@ import {
   normalizeActivityRingsGoals,
   type ActivityRingsGoals,
 } from "@/lib/activityRings";
+import {
+  adjacentTaskStatus,
+  groupTasksByStatus,
+  normalizeTasksViewMode,
+  resolveTaskBoardStatus,
+  statusMutationPatch,
+  TASK_STATUS_COLUMNS,
+  type TaskStatusColumn,
+  type TasksViewMode,
+} from "@/lib/tasksView";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { isNavigationOwner } from "@/lib/navigationOwner";
@@ -266,6 +276,8 @@ type SettingsState = {
   nowWidgetLayout?: NowWidgetLayout;
   /** Activity rings goals (Phase 5). */
   activityRingsGoals?: ActivityRingsGoals;
+  /** Tasks page view mode (Phase 6). */
+  tasksViewMode?: TasksViewMode;
   nowTaskId?: number | null;
   spaceContext?: Record<string, { lastTaskId?: number; lastFilter?: string; updatedAt?: string }>;
   ambientActivity?: AmbientActivity | null;
@@ -436,6 +448,7 @@ const initialSettings: SettingsState = {
   glassLevel: "off",
   nowWidgetLayout: { ...DEFAULT_NOW_WIDGET_LAYOUT, order: [...DEFAULT_NOW_WIDGET_LAYOUT.order], hidden: [] },
   activityRingsGoals: { ...DEFAULT_ACTIVITY_RINGS_GOALS },
+  tasksViewMode: "list" as TasksViewMode,
   nowTaskId: null,
   spaceContext: {},
   ambientActivity: null,
@@ -3248,7 +3261,7 @@ export default function LifeOS() {
             {view === "Mastery" && <MasterOSDashboard />}
             {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onOpenTimesheet={() => { setWorkView("timesheet"); go("Work"); }} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableCareerOS={settingsState.enableCareerOS !== false} enableSchoolOS={settingsState.enableSchoolOS !== false} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableTreasuryOS={settingsState.enableTreasuryOS !== false} enableMasterOS={settingsState.enableMasterOS !== false} onboardingCompletedAt={settingsState.onboardingCompletedAt} onMarkOnboarded={() => setSettingsState(current => ({ ...current, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} flash={flash} activityRingsGoals={settingsState.activityRingsGoals} reduceMotion={settingsState.reduceMotion} weekStartsMonday={settingsState.weekStartsMonday} nowWidgetLayout={settingsState.nowWidgetLayout} onNowWidgetLayoutChange={(nowWidgetLayout) => updateSettings({ nowWidgetLayout })} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
-            {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} onDeleteMany={deleteTasks} />}
+            {view === "Tasks" && <Tasks tasks={tasks} classes={classes} viewMode={normalizeTasksViewMode(settingsState.tasksViewMode)} onViewModeChange={(tasksViewMode) => { if (tasksViewMode === "calendar") { go("Calendar"); return; } updateSettings({ tasksViewMode }); }} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} onDeleteMany={deleteTasks} onUpdateStatus={(id, status) => updateTaskDetails(id, statusMutationPatch(status))} />}
             {view === "Navigation" && canAccessNavigation && (
               <div className="navigation-page">
                 <ExecutivePanel hub={guidedHub} onChange={setGuidedHub} flash={flash} />
@@ -4120,13 +4133,17 @@ function SpaceModal({ initialKind, close, addProject, addClass }: { initialKind:
   </motion.form></motion.div>;
 }
 
-function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDeleteMany }: { tasks: Task[]; classes: ClassRecord[]; onComplete: (id: number) => void; onNew: () => void; onTaskMenu: (id: number) => void; onOpenTask: (id: number) => void; onDeleteMany: (ids: number[]) => void }) {
+function Tasks({ tasks, classes, viewMode = "list", onViewModeChange, onComplete, onNew, onTaskMenu, onOpenTask, onDeleteMany, onUpdateStatus }: { tasks: Task[]; classes: ClassRecord[]; viewMode?: TasksViewMode; onViewModeChange?: (mode: TasksViewMode) => void; onComplete: (id: number) => void; onNew: () => void; onTaskMenu: (id: number) => void; onOpenTask: (id: number) => void; onDeleteMany: (ids: number[]) => void; onUpdateStatus?: (id: number, status: TaskStatusColumn) => void }) {
+  const mode = normalizeTasksViewMode(viewMode);
+  const listTasks = tasks.filter((task) => !task.done && !task.canceled);
   const [selected, setSelected] = useState<number[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const taskIds = tasks.map((task) => task.id);
+  const [dragTaskId, setDragTaskId] = useState<number | null>(null);
+  const taskIds = listTasks.map((task) => task.id);
   const visibleSelected = selected.filter((id) => taskIds.includes(id));
-  const allSelected = tasks.length > 0 && visibleSelected.length === tasks.length;
+  const allSelected = listTasks.length > 0 && visibleSelected.length === listTasks.length;
   const someSelected = visibleSelected.length > 0 && !allSelected;
+  const boardGroups = groupTasksByStatus(tasks);
 
   useEffect(() => {
     setSelected((current) => {
@@ -4161,6 +4178,19 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDe
     setSelected([]);
     setConfirmDelete(false);
   };
+  const spaceLabel = (t: Task) => classes.find(item => item.id === t.classId)?.code ?? t.project;
+  const moveStatus = (task: Task, direction: "prev" | "next") => {
+    if (!onUpdateStatus) return;
+    const current = resolveTaskBoardStatus(task);
+    const next = adjacentTaskStatus(current, direction);
+    if (next === current) return;
+    onUpdateStatus(task.id, next);
+  };
+  const dropOnColumn = (status: TaskStatusColumn) => {
+    if (dragTaskId == null || !onUpdateStatus) return;
+    onUpdateStatus(dragTaskId, status);
+    setDragTaskId(null);
+  };
 
   return (
     <>
@@ -4168,10 +4198,10 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDe
         <div>
           <p className="eyebrow">Make it happen</p>
           <h1>Tasks</h1>
-          <p>A clear list of what needs your attention.</p>
+          <p>{mode === "board" ? "Board view uses your existing task statuses." : "A clear list of what needs your attention."}</p>
         </div>
         <div className="page-title-actions">
-          {visibleSelected.length > 0 ? (
+          {mode === "list" && visibleSelected.length > 0 ? (
             confirmDelete ? (
               <>
                 <span className="batch-delete-prompt" data-testid="tasks-batch-delete-prompt">
@@ -4194,6 +4224,67 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDe
           <button className="primary" onClick={onNew}><Plus size={16} /> New task</button>
         </div>
       </div>
+
+      <div className="view-tabs tasks-view-tabs" role="tablist" aria-label="Tasks view">
+        <button type="button" role="tab" aria-selected={mode === "list"} className={mode === "list" ? "selected" : ""} data-testid="tasks-view-list" onClick={() => onViewModeChange?.("list")}>List</button>
+        <button type="button" role="tab" aria-selected={mode === "board"} className={mode === "board" ? "selected" : ""} data-testid="tasks-view-board" onClick={() => onViewModeChange?.("board")}>Board</button>
+        <button type="button" role="tab" aria-selected={false} className="" data-testid="tasks-view-calendar" onClick={() => onViewModeChange?.("calendar")} title="Opens the shared Calendar (task deadlines and scheduled sessions)">Calendar</button>
+      </div>
+
+      {mode === "board" ? (
+        <div className="tasks-kanban" data-testid="tasks-kanban" role="region" aria-label="Tasks board">
+          <p className="tasks-kanban-hint">Drag a card to another column, or use ← → on a focused card. Opening a card uses the full Task workspace.</p>
+          <div className="tasks-kanban-columns">
+            {TASK_STATUS_COLUMNS.map((status) => {
+              const columnTasks = boardGroups[status];
+              return (
+                <section
+                  key={status}
+                  className="tasks-kanban-column"
+                  aria-label={`${status} column`}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => dropOnColumn(status)}
+                >
+                  <header className="tasks-kanban-column-head">
+                    <strong>{status}</strong>
+                    <span>{columnTasks.length}</span>
+                  </header>
+                  <div className="tasks-kanban-cards">
+                    {columnTasks.length ? columnTasks.map((t) => (
+                      <article
+                        key={t.id}
+                        className="tasks-kanban-card"
+                        draggable={Boolean(onUpdateStatus)}
+                        onDragStart={() => setDragTaskId(t.id)}
+                        onDragEnd={() => setDragTaskId(null)}
+                        tabIndex={0}
+                        data-testid={`tasks-kanban-card-${t.id}`}
+                        onKeyDown={(event) => {
+                          if (event.key === "ArrowRight") { event.preventDefault(); moveStatus(t, "next"); }
+                          if (event.key === "ArrowLeft") { event.preventDefault(); moveStatus(t, "prev"); }
+                          if (event.key === "Enter") { event.preventDefault(); onOpenTask(t.id); }
+                        }}
+                      >
+                        <button type="button" className="tasks-kanban-card-open" onClick={() => onOpenTask(t.id)}>
+                          <strong>{t.title}</strong>
+                          <span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span>
+                          <span className="tasks-kanban-meta"><i style={{ background: t.color }} />{spaceLabel(t)}</span>
+                          <span className="tasks-kanban-meta">{t.canceled ? "Canceled" : formatDueDate(t.due)} · {t.focusMinutes}m</span>
+                        </button>
+                        <div className="tasks-kanban-card-actions" role="group" aria-label={`Move ${t.title}`}>
+                          <button type="button" aria-label={`Move ${t.title} to previous status`} onClick={() => moveStatus(t, "prev")}>←</button>
+                          <button type="button" aria-label={`Move ${t.title} to next status`} onClick={() => moveStatus(t, "next")}>→</button>
+                          <button type="button" aria-label={`Actions for ${t.title}`} onClick={() => onTaskMenu(t.id)}><MoreHorizontal size={14} /></button>
+                        </div>
+                      </article>
+                    )) : <div className="tasks-kanban-empty">Empty</div>}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
       <section className="card task-table" data-testid="tasks-table">
         <div className="table-view-label">List view{visibleSelected.length ? ` · ${visibleSelected.length} selected` : ""}</div>
         <div className="table-head table-head-selectable">
@@ -4212,7 +4303,7 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDe
           <span>Priority</span>
           <span>Focus</span>
         </div>
-        {tasks.map((t) => {
+        {listTasks.map((t) => {
           const isSelected = selected.includes(t.id);
           return (
             <div className={`table-row table-row-selectable ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""} ${isSelected ? "is-selected" : ""}`} key={t.id}>
@@ -4230,7 +4321,7 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDe
                 {t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}
               </button>
               <button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button>
-              <span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span>
+              <span className="project-pill"><i style={{ background: t.color }} />{spaceLabel(t)}</span>
               <span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span>
               <span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span>
               <span>{t.focusMinutes}m · {t.energy}</span>
@@ -4239,6 +4330,7 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDe
           );
         })}
       </section>
+      )}
     </>
   );
 }
