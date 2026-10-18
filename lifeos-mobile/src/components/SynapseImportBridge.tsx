@@ -22,7 +22,7 @@ export function SynapseImportBridge() {
         if (!events.length) {
           Alert.alert(
             "Synapse import",
-            "Opened from Synapse, but no events were in the link. Paste the day-plan JSON in Settings → Synapse.",
+            "Opened from Synapse, but no events were in the link. Try Share day plan again from Synapse.",
           );
           return;
         }
@@ -37,7 +37,7 @@ export function SynapseImportBridge() {
           "Synapse import",
           error instanceof Error
             ? error.message
-            : "Could not read that Synapse day plan. Paste the JSON in Settings → Synapse.",
+            : "Could not read that Synapse day plan. Try Share day plan again from Synapse.",
         );
       }
     };

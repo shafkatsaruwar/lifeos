@@ -189,7 +189,6 @@ import {
   nowIso,
   studyAbroadToCalendarEvents,
 } from "@/lib/studyAbroadHelpers";
-import { mergeSynapseCalendarEvents, parseSynapseDayPlan, type SynapseCalendarEvent } from "@/lib/synapseImport";
 import type { ParsedTask } from "@/lib/useNLTaskCreation";
 import { useTaskBreakdown } from "@/lib/useTaskBreakdown";
 import {
@@ -1285,15 +1284,6 @@ export default function LifeOS() {
     };
     window.addEventListener("lifeos:google-calendar-events", importGoogleEvents);
     return () => window.removeEventListener("lifeos:google-calendar-events", importGoogleEvents);
-  }, []);
-  useEffect(() => {
-    const importSynapseEvents = (event: Event) => {
-      const incoming = (event as CustomEvent<SynapseCalendarEvent[]>).detail;
-      if (!Array.isArray(incoming)) return;
-      setCalendarEvents((current) => mergeSynapseCalendarEvents(current, incoming) as CalendarEvent[]);
-    };
-    window.addEventListener("lifeos:synapse-calendar-events", importSynapseEvents);
-    return () => window.removeEventListener("lifeos:synapse-calendar-events", importSynapseEvents);
   }, []);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -3282,7 +3272,6 @@ export default function LifeOS() {
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onCreateTask={createTaskFromNote} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} onConvertToTask={(index, text) => { addTask(text, undefined, "", { flashLabel: "Task created from brain" }); setBrainItems(items => items.filter((_, i) => i !== index)); }} />}
             {view === "Settings" && <SettingsView dark={dark} setDark={applyDark} onCommitAppearance={commitAppearanceStudio} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} icalSubscriptions={settingsState.icalSubscriptions ?? []} onIcalSubscriptionsChange={(icalSubscriptions) => updateSettings({ icalSubscriptions })} onReplaceIcalSubscriptionEvents={replaceIcalSubscriptionEvents} onRemoveIcalSubscriptionEvents={removeIcalSubscriptionEvents} onSyncIcalSubscriptions={() => void syncIcalSubscriptions()} />}
-            {view === "Settings" && <SynapseDayPlanImport flash={flash} />}
             {!["Life", "School", "Work", "Career", "Study Abroad", "Treasury", "Mastery", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Navigation", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
         </AnimatePresence>
@@ -4928,58 +4917,6 @@ function GoogleCalendarAutoSync({ user }: { user: any }) {
   }, [user]);
   return null;
 }
-function SynapseDayPlanImport({ flash }: { flash: (message: string) => void }) {
-  const [text, setText] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const importPlan = () => {
-    try {
-      setBusy(true);
-      setError("");
-      const events = parseSynapseDayPlan(text);
-      if (!events.length) throw new Error("No Synapse events found in that paste.");
-      window.dispatchEvent(new CustomEvent("lifeos:synapse-calendar-events", { detail: events }));
-      setText("");
-      flash(`${events.length} Synapse event${events.length === 1 ? "" : "s"} imported into your calendar`);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not import Synapse day plan.");
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <section className="card settings-card">
-      <div className="card-head">
-        <div>
-          <span className="section-icon blue"><HeartPulse size={14} /></span>
-          <h2>Synapse health day plan</h2>
-        </div>
-      </div>
-      <div className="settings-body">
-        <div className="integration-empty">
-          <strong>See upcoming meds and appointments beside your LifeOS day.</strong>
-          <p>In Synapse → Settings → LifeOS, tap Share day plan. Then paste the JSON here. Each import replaces earlier Synapse events so the plan stays current.</p>
-        </div>
-        <label htmlFor="synapse-day-plan">Synapse day-plan JSON</label>
-        <textarea
-          id="synapse-day-plan"
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          placeholder='{"v":1,"events":[...]}'
-          rows={5}
-        />
-        <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-          <button className="primary" type="button" disabled={busy || !text.trim()} onClick={importPlan}>
-            {busy ? "Importing…" : "Import Synapse plan"}
-          </button>
-        </div>
-        {error ? <p className="gmail-error" role="alert">{error}</p> : null}
-        <p className="settings-note">Read-only planning view. Log doses and change appointments in Synapse.</p>
-      </div>
-    </section>
-  );
-}
-
 function CalendarConnections({
   user,
   flash,
