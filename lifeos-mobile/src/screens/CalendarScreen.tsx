@@ -17,9 +17,11 @@ import {
   Text,
   TextInput,
   useColorScheme,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActionButton, Card, Empty, Eyebrow, IconButton, Page, SegmentedControl, Subtitle, Title } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
@@ -117,6 +119,8 @@ function formatTimeLabel(time: string) {
 
 export function CalendarScreen() {
   const tabBarPad = useFloatingTabBarContentPadding(28);
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { theme, workspace, updateCalendar, updateCalendars, updateTasks, updateSettings } = useLifeOS();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -127,6 +131,9 @@ export function CalendarScreen() {
   const [cursor, setCursor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => toDateKey(new Date()));
   const [importOpen, setImportOpen] = useState(false);
+  /** Cap sheet to ~85% of the safe area; reserve space for fixed header + footer. */
+  const importSheetMaxHeight = Math.round((windowHeight - insets.top - insets.bottom) * 0.85);
+  const importBodyMaxHeight = Math.max(180, importSheetMaxHeight - 150);
   const openEventIdParam = typeof route.params?.openEventId === "string" ? route.params.openEventId : undefined;
   const [icalUrl, setIcalUrl] = useState("");
   const [icalName, setIcalName] = useState("");
@@ -1374,16 +1381,51 @@ export function CalendarScreen() {
       </Modal>
 
       <Modal visible={importOpen} transparent animationType="fade" onRequestClose={() => setImportOpen(false)}>
-        <View style={styles.modalBackdrop}>
-          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 20 }}>
-            <View style={[styles.importCard, { backgroundColor: theme.surface }]}>
-              <Text style={[styles.importTitle, { color: theme.text }]}>Calendars & import</Text>
+        <View
+          style={[
+            styles.modalBackdrop,
+            {
+              paddingTop: Math.max(insets.top, 12) + 8,
+              paddingBottom: Math.max(insets.bottom, 12) + 8,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.importCard,
+              {
+                backgroundColor: theme.surface,
+                maxHeight: importSheetMaxHeight,
+              },
+            ]}
+          >
+            <View style={styles.importHeader}>
+              <Text style={[styles.importTitle, { color: theme.text, flex: 1 }]} numberOfLines={1}>
+                Calendars & import
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close calendars and import"
+                hitSlop={12}
+                onPress={() => setImportOpen(false)}
+                style={({ pressed }) => [styles.importCloseBtn, { backgroundColor: theme.soft, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Feather name="x" size={20} color={theme.text} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              style={[styles.importBodyScroll, { maxHeight: importBodyMaxHeight }]}
+              contentContainerStyle={styles.importBodyContent}
+              showsVerticalScrollIndicator
+            >
               <Text style={[styles.importSub, { color: theme.muted }]}>
                 Subscribe to public webcal / .ics feeds, or preview a one-time .ics import before anything is added.
               </Text>
 
               {subscriptions.length ? (
-                <View style={{ gap: 10, marginBottom: 14 }}>
+                <View style={{ gap: 10, marginBottom: 4 }}>
                   {subscriptions.map((feed) => (
                     <View
                       key={feed.id}
@@ -1476,14 +1518,15 @@ export function CalendarScreen() {
                 disabled={importing}
               />
 
-              <View style={[styles.row, { marginTop: 12 }]}>
-                <ActionButton label="Close" quiet onPress={() => setImportOpen(false)} />
-              </View>
               <Pressable onPress={goConnectWeb}>
                 <Text style={[styles.connectWebLink, { color: theme.accent }]}>Connect Gmail / Outlook / iCloud on web →</Text>
               </Pressable>
+            </ScrollView>
+
+            <View style={[styles.importFooter, { borderTopColor: theme.border }]}>
+              <ActionButton label="Close" quiet onPress={() => setImportOpen(false)} />
             </View>
-          </ScrollView>
+          </View>
         </View>
       </Modal>
     </Page>
@@ -1576,8 +1619,31 @@ const styles = StyleSheet.create({
   joinRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4, alignSelf: "flex-start" },
   sectionLabel: { fontSize: 16, fontWeight: "800", marginTop: 10 },
   readyRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 12 },
-  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: 24 },
-  importCard: { width: "100%", maxHeight: "88%", borderRadius: 18, padding: 20, gap: 12 },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
+  importCard: {
+    width: "100%",
+    borderRadius: 18,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    gap: 10,
+    overflow: "hidden",
+  },
+  importHeader: { flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 0 },
+  importCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  importBodyScroll: { flexGrow: 0, flexShrink: 1 },
+  importBodyContent: { gap: 12, paddingBottom: 8 },
+  importFooter: {
+    flexShrink: 0,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
   composerScroll: { maxHeight: 420 },
   composerContent: { gap: 4, paddingBottom: 4 },
   importTitle: { fontSize: 17, fontWeight: "800" },
@@ -1599,6 +1665,6 @@ const styles = StyleSheet.create({
   },
   weekdayRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 8, marginBottom: 4 },
   row: { flexDirection: "row", gap: 10 },
-  connectWebLink: { fontSize: 12, fontWeight: "700", textAlign: "center", marginTop: 4 },
+  connectWebLink: { fontSize: 12, fontWeight: "700", textAlign: "center", marginTop: 8 },
   deleteLink: { fontSize: 13, fontWeight: "700", textAlign: "center", marginTop: 2 },
 });
