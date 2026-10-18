@@ -3,6 +3,8 @@
 Frozen reference of how LifeOS looked **before** locking further Atelier / Now chrome changes.
 Use this to restore or compare without guessing.
 
+> For the **current** (post–SF Pro / Home / Settings bento / Focus strip) look, see the separate archive: **[current-2026-10-18/](./current-2026-10-18/)**. Do not overwrite this pre-lock tree.
+
 ## How to restore
 
 | Goal | Git commit | Frozen files |
