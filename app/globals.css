@@ -11,7 +11,9 @@
   font-display: block;
 }
 
-:root {
+/* ─── Atelier Light (source of truth — freeze hexes; see docs/design-system.md) ─── */
+:root,
+[data-personality="atelier-light"] {
   --canvas:#F7F9FC;
   --panel:#FFFFFF;
   --surface-2:#EEF3FA;
@@ -29,17 +31,30 @@
   --font-display:"LifeOS";
   color-scheme:light;
 }
-.dark {
+
+/*
+ * ─── Atelier Dark — Phase 1 TOKEN SCAFFOLD ONLY ───
+ * Grouped for a future navy/charcoal command-center personality (Phase 2 visual pass).
+ * Do not treat this as finished Dark art. `.dark` remains the runtime class (Tailwind
+ * darkMode: "class"); `[data-personality="atelier-dark"]` is the Studio-ready alias
+ * with the same semantic token map.
+ */
+.dark,
+[data-personality="atelier-dark"] {
+  /* Surfaces — cool navy / charcoal command-center scaffold */
   --canvas:#0B1220;
   --panel:#111827;
   --surface-2:#1E293B;
+  /* Ink */
   --ink:#F8FAFC;
   --muted:#94A3B8;
   --line:#1E293B;
+  /* Accents (scaffold — Phase 2 may refine) */
   --accent:#3B82F6;
   --accent-2:#A78BFA;
   --accent-teal:#2DD4BF;
   --accent-coral:#FB7185;
+  /* Elevation */
   --shadow-card:0 1px 2px rgba(0,0,0,.35),0 12px 32px rgba(0,0,0,.28);
   color-scheme:dark;
 }
@@ -876,16 +891,27 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .tile-calendar svg{background:#E0F2FE;color:#0284C7}
 .tile-tasks svg{background:#FFE4E6;color:#F43F5E}
 .tile-library svg{background:#F1F5F9;color:#475569}
-.dark .tile-career svg{background:#1E3A8A55;color:#93C5FD}
-.dark .tile-life svg{background:#134E4A55;color:#5EEAD4}
-.dark .tile-school svg{background:#4C1D9555;color:#C4B5FD}
-.dark .tile-work svg{background:#312E8155;color:#A5B4FC}
-.dark .tile-study svg{background:#164E6355;color:#67E8F9}
-.dark .tile-treasury svg{background:#78350F55;color:#FCD34D}
-.dark .tile-mastery svg{background:#581C8755;color:#D8B4FE}
-.dark .tile-calendar svg{background:#0C4A6E55;color:#7DD3FC}
-.dark .tile-tasks svg{background:#88133755;color:#FDA4AF}
-.dark .tile-library svg{background:#1E293B55;color:#CBD5E1}
+/* Atelier Dark scaffold — hub tile tints (Phase 2 may restyle chrome; keep Light tiles above) */
+.dark .tile-career svg,
+[data-personality="atelier-dark"] .tile-career svg{background:#1E3A8A55;color:#93C5FD}
+.dark .tile-life svg,
+[data-personality="atelier-dark"] .tile-life svg{background:#134E4A55;color:#5EEAD4}
+.dark .tile-school svg,
+[data-personality="atelier-dark"] .tile-school svg{background:#4C1D9555;color:#C4B5FD}
+.dark .tile-work svg,
+[data-personality="atelier-dark"] .tile-work svg{background:#312E8155;color:#A5B4FC}
+.dark .tile-study svg,
+[data-personality="atelier-dark"] .tile-study svg{background:#164E6355;color:#67E8F9}
+.dark .tile-treasury svg,
+[data-personality="atelier-dark"] .tile-treasury svg{background:#78350F55;color:#FCD34D}
+.dark .tile-mastery svg,
+[data-personality="atelier-dark"] .tile-mastery svg{background:#581C8755;color:#D8B4FE}
+.dark .tile-calendar svg,
+[data-personality="atelier-dark"] .tile-calendar svg{background:#0C4A6E55;color:#7DD3FC}
+.dark .tile-tasks svg,
+[data-personality="atelier-dark"] .tile-tasks svg{background:#88133755;color:#FDA4AF}
+.dark .tile-library svg,
+[data-personality="atelier-dark"] .tile-library svg{background:#1E293B55;color:#CBD5E1}
 .atelier-now-bottom{display:grid;grid-template-columns:1fr;gap:16px;align-items:stretch}
 .atelier-now-bottom .copilot-card{min-height:180px;border-radius:20px;background:linear-gradient(160deg,color-mix(in srgb,var(--panel) 88%,var(--accent-2) 12%),var(--panel));border-color:color-mix(in srgb,var(--accent-2) 18%,var(--line))}
 .command-results>button.suggested{background:color-mix(in srgb,var(--accent) 10%,var(--canvas))}

@@ -9,6 +9,7 @@ import { normalizeTimeTracking } from "./src/lib/timeTracking";
 import { readOnboardingComplete, writeOnboardingComplete } from "./src/lib/onboardingCache";
 import { shouldPersistOnboardingComplete } from "./src/lib/onboardingGate";
 import { mergeSettingsWithEnvironmentDefaults } from "../lib/settingsDefaults";
+import { resolveDarkAppearance } from "../lib/appearancePrefs";
 import { clearCachedPageInk } from "./src/lib/inkCache";
 import type { NotebookPage, Task, Workspace } from "./src/types";
 import { LifeOSContext, type AppState } from "./src/lib/LifeOSContext";
@@ -49,8 +50,11 @@ export default function App() {
   const pendingWrites = useRef(0);
   /** Wall-clock of last successful local write — silent sync must not apply a fetch that started earlier. */
   const lastWriteAt = useRef(0);
-  const themeMode = workspace?.settings.themeMode ?? "system";
-  const dark = themeMode === "system" ? systemDark : themeMode === "dark";
+  const dark = resolveDarkAppearance({
+    themeMode: workspace?.settings.themeMode,
+    personality: workspace?.settings.personality,
+    systemDark,
+  });
   const theme = resolveTheme(dark, workspace?.settings.accent);
 
   useEffect(() => {

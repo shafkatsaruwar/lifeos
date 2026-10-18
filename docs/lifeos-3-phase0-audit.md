@@ -293,6 +293,6 @@ Firebase Auth + RTDB users/{uid}/{tasks,calendar,settings,dark,guided,…}
 - [x] Audit written to `docs/lifeos-3-phase0-audit.md`  
 - [x] Artifact copy under `/opt/cursor/artifacts/`  
 - [x] Docs-only branch + draft PR (no product code)  
-- [ ] User answers §8 and approves Phase 1 scope  
+- [x] User approved Phase 1 (2026-10-18) with §8 defaults — see `docs/lifeos-3-phase1.md`
 
-**STOP.** Do not implement Phases 1–8 until approval.
+**Phase 0 complete.** Phase 1 implementation: `docs/lifeos-3-phase1.md` / branch `cursor/lifeos-3-phase1-tokens-b1ae`.

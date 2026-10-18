@@ -1,13 +1,23 @@
 # LifeOS Design System
 
-**Status:** Living document (source of truth for UI)  
-**Last updated:** 2026-09-24  
+**Status:** Living document — **Atelier Light frozen as source of truth** (LifeOS 3.0 Phase 1)  
+**Last updated:** 2026-10-18  
 **Canonical implementations:**  
-- Web tokens → `app/globals.css` (`:root` / `.dark`)  
-- Mobile theme → `lifeos-mobile/src/lib/theme.ts`  
-- Mobile primitives → `lifeos-mobile/src/components/UI.tsx`  
+- Web tokens → `app/globals.css` (`:root` / `.dark` + `[data-personality]`)  
+- Mobile theme → `lifeos-mobile/src/lib/theme.ts` (Phase 1: preference parity only; hex drift OK until Phase 8)  
+- Preference helper → `lib/appearancePrefs.ts`  
+- Frozen snapshot → `docs/design-archive/current-2026-10-18`
 
 This document describes how LifeOS should look and feel. Prefer extending these tokens over inventing one-off colors or radii.
+
+**Personalities (Phase 1 naming):**
+
+| Personality id | UX label today | Status |
+|----------------|----------------|--------|
+| `atelier-light` | Light | **Shipped / frozen** |
+| `atelier-dark` | Dark | Token **scaffold only** — full command-center visual pass is Phase 2 |
+
+Preference SoT: `settings.themeMode` (`system` \| `light` \| `dark`). Web dual-writes legacy `users/{uid}/dark` boolean for one release.
 
 ---
 
@@ -15,11 +25,11 @@ This document describes how LifeOS should look and feel. Prefer extending these 
 
 1. **Calm density** — Information-rich without shouting. Small type is OK when hierarchy is clear.  
 2. **Paper + ink** — Surfaces read as soft paper (`canvas` / `panel`); primary text is near-black ink, not pure `#000`.  
-3. **Serif for moments, sans for work** — Display headings use a transitional serif; UI chrome stays Inter / system sans.  
+3. **Single UI font** — SF Pro Display Medium shipped as `LifeOS` for both chrome and display (no Inter / serif stack).  
 4. **Environment color as signal** — Life / School / Work / etc. tint icons and active nav, not the whole chrome.  
 5. **Cards, not dashboards of glass** — Prefer simple bordered panels with light shadow over heavy glassmorphism.  
-6. **One accent, many statuses** — Brand accent is violet by default; priority, success, warning, danger stay semantic.  
-7. **Cross-surface parity** — Mobile maps the same token names to RN styles; don’t drift hex values without updating both.
+6. **One accent, many statuses** — Default CSS accent is blue (`#2563EB`); user/workspace accents override `--accent`.  
+7. **Cross-surface parity** — Mobile maps the same token names to RN styles; don’t drift Light hexes without updating the archive.
 
 ---
 
@@ -29,38 +39,47 @@ This document describes how LifeOS should look and feel. Prefer extending these 
 |---------|------|
 | Product name | **LifeOS** |
 | Tagline (metadata) | “Your life, in focus” / “A calm personal operating system…” |
-| Mark | Dark rounded square (`#242428`) with three white bars (equalizer-style) — `.brand-mark` |
-| Wordmark | Sans, weight 700, tracking `-0.025em` |
+| Mark | White tile + black equalizer bars (6 / 11 / 8) — `.brand-mark` (+ light border `#e8e8e8`) |
+| Wordmark | LifeOS Medium, weight 700, tracking `-0.025em` |
 
-Do not replace the mark with a generic gradient logo blob.
+Do not restore the classic dark `#242428` mark unless explicitly redesigning brand.
 
 ---
 
 ## 3. Color
 
-### 3.1 Core semantic tokens
+### 3.1 Core semantic tokens (Atelier Light — frozen)
 
-| Token | Web CSS | Light | Dark | Mobile key |
-|-------|---------|-------|------|------------|
-| Canvas / page bg | `--canvas` | `#F6F7F9` | `#111214` | `theme.bg` |
-| Panel / surface | `--panel` | `#FFFFFF` | `#191A1D` | `theme.surface` |
-| Ink / text | `--ink` | `#202124` | `#F1F1F2` | `theme.text` |
-| Muted | `--muted` | `#777B84` | `#92959E` | `theme.muted` |
-| Line / border | `--line` | `#E8E9ED` | `#292B30` | `theme.border` |
-| Accent | `--accent` | `#625AF6` | `#8B83FF` | `theme.accent` |
+Values match shipped `app/globals.css` `:root`:
 
-User-selectable **accent** overrides `--accent` / `theme.accent` (and soft tints). Persist via Settings.
+| Token | Web CSS | Light (frozen) | Dark scaffold | Mobile key |
+|-------|---------|----------------|---------------|------------|
+| Canvas / page bg | `--canvas` | `#F7F9FC` | `#0B1220` | `theme.bg` |
+| Panel / surface | `--panel` | `#FFFFFF` | `#111827` | `theme.surface` |
+| Surface 2 | `--surface-2` | `#EEF3FA` | `#1E293B` | — |
+| Ink / text | `--ink` | `#111827` | `#F8FAFC` | `theme.text` |
+| Muted | `--muted` | `#64748B` | `#94A3B8` | `theme.muted` |
+| Line / border | `--line` | `#E2E8F0` | `#1E293B` | `theme.border` |
+| Accent | `--accent` | `#2563EB` | `#3B82F6` | `theme.accent` |
+| Accent 2 | `--accent-2` | `#7C3AED` | `#A78BFA` | — |
+| Accent teal | `--accent-teal` | `#0D9488` | `#2DD4BF` | — |
+| Accent coral | `--accent-coral` | `#F43F5E` | `#FB7185` | — |
+
+Dark values are a **scaffold** for a future navy/charcoal command center — not a finished Atelier Dark art direction.
+
+User-selectable **accent** and per-workspace colors override `--accent` at runtime. Persist via Settings.
 
 ### 3.2 Mobile-only convenience tokens
 
-| Token | Light | Dark | Use |
-|-------|-------|------|-----|
-| `soft` | `#EFEEFF` (or `{accent}18`) | `#26243A` | Icon button chips, selected soft fills |
-| `danger` | `#D95754` | `#FF7770` | Destructive actions |
-| `success` | `#31926A` | `#63C89A` | Positive / done accents |
-| `warning` | `#D38232` | `#E0A45A` | Caution / medium emphasis |
-| `blue` | `#3F7ED7` | `#74A8EA` | Info / calendar-adjacent |
-| `highlight` | `#F5E7DF` | `#302724` | Warm highlight surfaces |
+Mobile `LIGHT` / `DARK` in `theme.ts` may still list older hexes until Phase 8 parity. Prefer web Light values above when reconciling.
+
+| Token | Typical Light | Use |
+|-------|---------------|-----|
+| `soft` | Accent tint | Icon button chips, selected soft fills |
+| `danger` | `#D95754` family | Destructive actions |
+| `success` | `#31926A` family | Positive / done accents |
+| `warning` | `#D38232` family | Caution / medium emphasis |
+| `blue` | `#3F7ED7` family | Info / calendar-adjacent |
 
 ### 3.3 Section icon families (web + mobile)
 
@@ -82,21 +101,20 @@ Active nav gets an **inset 3px accent bar** in the environment color.
 | Life / Home | `#D99B38` | `--env-life` |
 | School | `#8B5CF6` | `--env-school` |
 | Work | `#4338CA` | `--env-work` |
+| Career | `#0F766E` | `--env-career` |
 | Study Abroad | `#0D9488` | `--env-study-abroad` |
 | Treasury | `#47A47B` | `--env-treasury` |
 | Mastery / MasterOS | `#625AF6` | `--env-master` |
 
-Users can override via Settings → workspace colors. Mobile tab tints follow the same map (`FloatingTabBar`).
+Users can override via Settings → workspace colors.
 
 ### 3.5 Priority colors
 
 | Priority | Hex | Notes |
 |----------|-----|--------|
-| High | `#D95754` | Aligns with danger |
-| Medium | `#D99B38` | Warm amber |
-| Low | `#4E8BD7` | Cool blue |
-
-On lists, prefer a **dot** or small label — not a full-row color wash.
+| High | `#D95754` / `#CF625A` | Aligns with danger |
+| Medium | `#D99B38` / `#CC8A25` | Warm amber |
+| Low | `#4E8BD7` / `#4F8BC4` | Cool blue |
 
 ### 3.6 Space / accent swatch palette
 
@@ -108,16 +126,16 @@ Shared picker (web Settings + mobile `SPACE_COLORS`):
 
 | Use | Spec |
 |-----|------|
-| Modal scrim | `#08090C` @ ~40% + light blur (`backdrop-filter: blur(5px)`) |
-| Primary button fill | `#27272B` (near-ink), white label — not pure accent (accent is for focus rings / selection) |
-| Toast | `#252529` fill, white text, subtle border |
+| Modal scrim | Near-ink @ ~40% + light blur |
+| Primary / capture CTA | `--accent` fill, white label |
 | Selection wash | `color-mix(in srgb, var(--accent) 8%, var(--panel))` |
 
 ### 3.8 Rules
 
 - Prefer `color-mix(in srgb, …)` or `{hex}15` / `{hex}22` tints over inventing new greys.  
 - Don’t use purple-on-white marketing gradients for in-app chrome.  
-- Danger actions: red text/border; never rely on color alone (also label “Delete”).
+- Danger actions: red text/border; never rely on color alone (also label “Delete”).  
+- **Do not change Atelier Light hexes** without an explicit design decision + archive bump.
 
 ---
 
@@ -127,36 +145,25 @@ Shared picker (web Settings + mobile `SPACE_COLORS`):
 
 | Role | Web | Mobile |
 |------|-----|--------|
-| UI / body | **Inter** (`--font-inter` via `next/font`) → `--font-sans` | System / San Francisco stacking |
-| Display | **Iowan Old Style / Baskerville / Times** → `--font-display` | Georgia (iOS notebook titles) or system |
+| UI + display | **LifeOS** → `/fonts/SFProDisplay-Medium.ttf` (`--font-sans` + `--font-display`) | System / San Francisco |
+
+Single face for LifeOS 3.0 Phase 1–2. No second display face without font licensing + files.
 
 ### 4.2 Type scale (web conventions)
 
 | Style | Size | Weight | Tracking | Notes |
 |-------|------|--------|----------|-------|
-| Page H1 | 38px (29–34 OS heroes; 26 mobile) | 400 | `-0.025em` | Display serif |
+| Page H1 | 38px (29–34 OS heroes; 26 mobile) | 400 | `-0.025em` | LifeOS Medium |
 | Eyebrow | 9px | 700 | `0.11em` | Uppercase muted |
-| Card H2 | 11–12px | 600–700 | — | Sans |
+| Card H2 | 11–12px | 600–700 | — | |
 | Body / task title | 10–13px | 600–700 | — | Dense by design |
 | Meta / captions | 8–11px | 600–700 | often `0.08em` uppercase | Muted |
 | Breadcrumb | 11px | — | — | Muted with strong ink segment |
 
-### 4.3 Mobile type conventions
-
-| Style | Approx | Weight |
-|-------|--------|--------|
-| `Eyebrow` | 10–11 | 800, uppercase, letterSpacing ~0.8 |
-| `Title` | 28–32 | 800 (sans; notebooks may use Georgia) |
-| `Subtitle` | 13–14 | 600 muted |
-| Row title | 15 | 700 |
-| Meta | 11–12 | 600 muted |
-| Tab label | 9 | 700 |
-
-### 4.4 Rules
+### 4.3 Rules
 
 - Eyebrows always muted + uppercase + wide tracking.  
-- Don’t set body copy in display serif.  
-- Avoid Inter for marketing-only hero lockups outside the app shell if a campaign page is added later — in-app stays Inter + display serif.
+- Keep one shipped font file (SF Pro / LifeOS Medium).
 
 ---
 
@@ -169,7 +176,7 @@ Shared picker (web Settings + mobile `SPACE_COLORS`):
 | Sidebar | Fixed, **236px**, pad `22px 14px 15px`, blur over canvas |
 | Main | `margin-left: 236px`, content pad typically `38px` (tighter on small screens) |
 | Topbar | Sticky, **65px** (56 mobile), blur |
-| Content max | OS pages ~**1440px**; mobile reading width cap ~**820pt** on large iPads |
+| Content max | OS pages ~**1240–1440px** |
 
 ### 5.2 Spacing scale (practical)
 
@@ -203,217 +210,55 @@ Common patterns:
 
 | Token | Value | Use |
 |-------|-------|-----|
-| Radius sm | 5–8px | Inputs, checks, small chips |
-| Radius md | 9–12px | Buttons, search, nav items |
-| Radius lg | **14px** | Cards, modals, focus cards |
-| Radius pill | **999px** | Chips, view mode tabs, tab bar pill |
+| Radius md | **12px** (`--radius-md`) | Buttons, search, nav items |
+| Radius lg | **16px** (`--radius-lg`) | Cards, modals |
+| Radius pill | **999px** | Chips, view mode tabs |
 | Border | `1px solid var(--line)` | Default |
-| Hairline | `StyleSheet.hairlineWidth` (RN) | Dense chrome |
-| Shadow card | `0 10px 35px rgba(20,24,35,.035)` | Panels |
-| Shadow hover | `0 16px 44px rgba(20,24,35,.06)` + 1px lift | Interactive cards |
-| Shadow modal | `0 25px 90px rgba(0,0,0,.25)` | Command / capture |
-| Shadow primary CTA | `0 3px 10px rgba(0,0,0,.12)` | Primary buttons |
+| Shadow card (Light) | `0 1px 2px rgba(15,23,42,.04), 0 10px 28px rgba(15,23,42,.06)` | Panels |
 
 ---
 
 ## 7. Iconography
 
-| Surface | Set |
-|---------|-----|
-| Web | **lucide-react** (stroke ~1.8, sizes 13–22) |
-| Mobile | **@expo/vector-icons/Feather** (16–22; tabs 20–22) |
-
-Rules:
-
-- Icon-only controls need `aria-label` / `accessibilityLabel`.  
-- Nav icons use muted; active uses ink or environment tint.  
-- Section icons sit in **25×25**, radius **7**, tinted soft fill.
+- Lucide on web; Feather / similar on mobile.  
+- Prefer 15–18px in dense chrome; 20–22px for primary actions.  
+- Environment-colored icons in sidebar via `--env-*`.
 
 ---
 
-## 8. Components
+## 8. Motion
 
-### 8.1 Buttons
+- `framer-motion` for view transitions / modals.  
+- Honor `settings.reduceMotion` → `.reduce-motion` on `html`.  
+- Prefer short fades / small lifts over bounce.
 
-| Variant | Appearance | When |
-|---------|------------|------|
-| **Primary** | `#27272B` fill, white text, h 34–36, radius 8, weight 600 | Main CTA (New task, Capture) |
-| **Ghost / quiet** | Panel or canvas + `line` border, muted text | Secondary |
-| **Danger** | Soft red fill/border, `#D45F5F` / `theme.danger` text | Delete / destructive |
-| **Break / secondary** | Panel + border, muted | Pause / cancel-adjacent |
-| **Icon button** | Transparent or `soft` chip, 8–14 radius | Topbar, mobile headers |
+---
 
-Press feedback: opacity ~0.75 or scale `0.96` on checks — keep subtle.
+## 9. Appearance preferences (Phase 1)
 
-### 8.2 Inputs
+| Field | Where | Values |
+|-------|-------|--------|
+| `settings.themeMode` | Firebase `settings` | `system` \| `light` \| `dark` (SoT) |
+| `settings.personality` | Firebase `settings` | `atelier-light` \| `atelier-dark` (optional) |
+| `dark` | Firebase top-level | boolean — **dual-write from web** for compatibility |
 
-- Height ~36–44  
-- Border `line`, radius 9–12  
-- Placeholder = muted  
-- Focus: accent border or soft accent ring (avoid thick glows)
+Resolution: `lib/appearancePrefs.ts` → `resolveDarkAppearance()`.
 
-### 8.3 Cards / modules
+Runtime DOM: `html.dark` class + `data-personality="atelier-light|atelier-dark"`.
 
-- Background `panel`, border `line`, radius **14**  
-- Optional header row with section icon + H2 + trailing action  
-- Dividers use `line`, not drop shadows between rows  
+---
 
-### 8.4 Lists & tables
+## 10. Archives
 
-- Row min-heights ~48–60  
-- Hover: canvas mix 50%  
-- Done: opacity ~0.5 + strikethrough (accent-tinted optional)  
-- Checkboxes: 18–25 box, radius 5–8; selected = accent fill  
-
-### 8.5 Tabs & segmented controls
-
-- Enclosed track with `line` border, padding 3  
-- Selected segment: canvas/panel fill + light shadow  
-- Used for Open/Done, calendar modes, notebook filters  
-
-### 8.6 Chips / pills
-
-- Pill radius 999  
-- Soft tint background `{color}20` + colored dot  
-- Meta chips stay muted without heavy borders  
-
-### 8.7 Eyebrow + title + subtitle
-
-Standard page header stack (web `.page-title`, mobile `Eyebrow`/`Title`/`Subtitle`):
-
-1. Eyebrow (uppercase muted)  
-2. Display H1  
-3. One-line muted subtitle  
-
-Right side: action cluster (`primary`, ghost, danger).
-
-### 8.8 Empty states
-
-- Centered title (strong) + short muted body  
-- Optional dashed capture zone for “add first item”  
-- Teach the next action; don’t only say “nothing here”
-
-### 8.9 Modals & sheets
-
-| Pattern | Spec |
+| Archive | Path |
 |---------|------|
-| Center modal | Scrim + panel, radius 14–20, max width ~400–560 |
-| Command palette | Top-biased (`padding-top: 14vh`), search row 58px |
-| Mobile action sheet | Bottom sheet, handle bar, quick icon row + list (notebooks) |
-| Confirm | Native `Alert` on iOS; in-app confirm on web for batch delete |
+| Current Atelier freeze (2026-10-18) | `docs/design-archive/current-2026-10-18/` |
+| Pre-lock / chips-era | `docs/design-archive/pre-lock-2026-10.md` |
 
-### 8.10 Toast
-
-Fixed bottom-right (web), dark surface, ~10px type, short copy (“Priority deleted”).
-
-### 8.11 Navigation
-
-**Web sidebar:** brand · search trigger · nav labels · env items · profile  
-**Mobile:** floating pill tab bar with per-tab tint highlight  
-
-Active web item: panel fill + shadow; env-active: inset color bar.
-
-### 8.12 Notebook covers (mobile)
-
-- Aspect ~**1 : 1.28**  
-- Cover styles: solid, minimal, colorful, academic, gradient, linen, slate, leather, band, sketch, midnight, mosaic, ribbon, kraft  
-- Accent color from `NOTEBOOK_COLORS` / space swatches  
-- ⋯ affordance on cover for Noteshelf-style actions  
+When Light tokens change intentionally, bump a new dated archive folder — do not overwrite `current-2026-10-18`.
 
 ---
 
-## 9. Motion
+## 11. Out of scope here (later phases)
 
-| Token | Guidance |
-|-------|----------|
-| Default transition | ~150–200ms on backgrounds / borders |
-| Reduce motion | Honor `settings.reduceMotion` — prefer fade / instant over spring |
-| Tab highlight | Spring (`damping ~18`, `stiffness ~220`) unless reduced |
-| Modal | Opacity + slight scale/y (`0.98` → `1`) |
-| Card hover | 1px translateY + shadow deepen |
-
-Avoid decorative infinite motion in productivity chrome.
-
----
-
-## 10. Content & voice in UI
-
-- Prefer short, direct labels: **New task**, **Move to Trash**, **Change Cover**.  
-- Eyebrows can be slightly poetic (“Make it happen”) — body stays practical.  
-- Errors explain the fix (“Allow site storage and reload…”).  
-- Don’t use emoji as primary iconography in core chrome.
-
----
-
-## 11. Accessibility
-
-| Rule | Detail |
-|------|--------|
-| Contrast | Ink on canvas/panel meets readable contrast; muted is secondary only |
-| Hit targets | Prefer ≥40–44pt on mobile primary controls |
-| Labels | Every icon-only button labeled |
-| Focus | Visible focus for keyboard users on web |
-| Color | Priority/environment never the only signal |
-| Safe area | Respect notches; tab bar includes bottom inset |
-
----
-
-## 12. Dark mode
-
-- Toggle via theme mode: system / light / dark  
-- Same component structure; swap tokens only  
-- Borders go darker (`#292B30`); accent lightens (`#8B83FF`)  
-- Avoid pure white text on pure black — use ink/canvas tokens  
-
-`theme-color` / viewport: light `#f6f7f9`, dark `#111214`.
-
----
-
-## 13. Do / Don’t
-
-**Do**
-
-- Use semantic tokens (`canvas`, `panel`, `ink`, `muted`, `line`, `accent`)  
-- Match environment colors to Settings defaults unless customized  
-- Keep cards at 14px radius and hairline borders  
-- Put primary actions in near-ink fills  
-
-**Don’t**
-
-- Introduce a second brand purple unrelated to `#625AF6` / `#8B83FF`  
-- Use multi-layer neon glows or glass stacks on core screens  
-- Stretch content edge-to-edge on large iPads without the reading width cap (except notebook canvas)  
-- Ship absolute overlay tab bars that cover list rows  
-- Mix Lucide and Feather metaphors for the same action across a single flow without reason  
-
----
-
-## 14. Implementation checklist
-
-When building UI:
-
-1. Pull colors from CSS vars or `useLifeOS().theme` — no raw greys.  
-2. Page = Eyebrow + Title + Subtitle + actions.  
-3. Group content in `card` / `Card`.  
-4. Destructive = danger variant + confirm.  
-5. Verify light **and** dark.  
-6. On mobile, account for in-layout tab bar (small content padding only).  
-7. If adding a token, update **both** `globals.css` and `theme.ts`, then this doc.
-
----
-
-## 15. File map
-
-| Concern | File |
-|---------|------|
-| Web tokens & component CSS | `app/globals.css` |
-| Web font load | `app/layout.tsx` |
-| Mobile palette | `lifeos-mobile/src/lib/theme.ts` |
-| Mobile primitives | `lifeos-mobile/src/components/UI.tsx` |
-| Mobile tab bar | `lifeos-mobile/src/components/FloatingTabBar.tsx` |
-| Notebook covers | `lifeos-mobile/src/components/NotebookCoverFace.tsx`, `lib/notebooks.ts` |
-| Product requirements | `docs/PRD.md` |
-
----
-
-*This design system mirrors the shipped product. When visual language changes in code, update this document in the same PR.*
+Appearance Studio UI, wallpaper/glass, widget layout engine, rings expansion, Tasks Kanban, immersive Focus redesign, full Atelier Dark visual pass, mobile Dark art direction.

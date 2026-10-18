@@ -37,6 +37,13 @@ import { readTaskBackup, writeTaskBackup } from "@/lib/taskBackup";
 import { signInWithGoogle, signOut, onAuthStateChanged, whenClientAuthReady } from "@/lib/firebase";
 import { shouldPersistOnboardingComplete } from "@/lib/onboardingGate";
 import { mergeSettingsWithEnvironmentDefaults } from "@/lib/settingsDefaults";
+import {
+  appearancePatchForDark,
+  backfillAppearanceSettings,
+  resolveDarkAppearance,
+  type Personality,
+  type ThemeMode,
+} from "@/lib/appearancePrefs";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { isNavigationOwner } from "@/lib/navigationOwner";
@@ -220,6 +227,10 @@ type SettingsState = {
   calendarLayerVisibility?: CalendarLayerVisibility;
   compactMode: boolean;
   reduceMotion: boolean;
+  /** Unified preference SoT (`system` | `light` | `dark`). Dual-written with legacy `dark`. */
+  themeMode?: ThemeMode;
+  /** Named Atelier personality for Studio later. Optional; UX may still say Light/Dark. */
+  personality?: Personality;
   nowTaskId?: number | null;
   spaceContext?: Record<string, { lastTaskId?: number; lastFilter?: string; updatedAt?: string }>;
   ambientActivity?: AmbientActivity | null;
@@ -383,6 +394,8 @@ const initialSettings: SettingsState = {
   calendarLayerVisibility: { ...DEFAULT_CALENDAR_LAYER_VISIBILITY },
   compactMode: false,
   reduceMotion: false,
+  themeMode: "light",
+  personality: "atelier-light",
   nowTaskId: null,
   spaceContext: {},
   ambientActivity: null,
@@ -1324,15 +1337,27 @@ export default function LifeOS() {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
+    document.documentElement.dataset.personality = dark ? "atelier-dark" : "atelier-light";
   }, [dark]);
+  const applyDark = useCallback((next: boolean | ((value: boolean) => boolean)) => {
+    setDark(prev => {
+      const resolved = typeof next === "function" ? next(prev) : next;
+      const patch = appearancePatchForDark(resolved);
+      setSettingsState(current => {
+        if (current.themeMode === patch.themeMode && current.personality === patch.personality) {
+          return current;
+        }
+        return { ...current, themeMode: patch.themeMode, personality: patch.personality };
+      });
+      return resolved;
+    });
+  }, []);
   useEffect(() => {
     if (!cloudUserId) return;
     setSettingsHydrated(false);
     (async () => {
       try {
         const firebaseDark = await loadDataFromFirebase('dark');
-        if (firebaseDark !== null && firebaseDark !== undefined) setDark(firebaseDark);
-
         const firebaseSettings = await loadDataFromFirebase('settings');
         const cachedAt = typeof window !== 'undefined' && cloudUserId
           ? window.localStorage.getItem(`lifeos-onboarding-complete:${cloudUserId}`)
@@ -1346,8 +1371,19 @@ export default function LifeOS() {
           stored.onboardingVersion = stored.onboardingVersion ?? 1;
         }
         const merged = mergeSettingsWithEnvironmentDefaults(initialSettings, stored);
-        if (firebaseSettings || merged.onboardingCompletedAt) {
-          setSettingsState(merged);
+        const systemDark =
+          typeof window !== "undefined" &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const resolvedDark = resolveDarkAppearance({
+          themeMode: merged.themeMode,
+          personality: merged.personality,
+          dark: typeof firebaseDark === "boolean" ? firebaseDark : null,
+          systemDark,
+        });
+        const withAppearance = backfillAppearanceSettings(merged, resolvedDark);
+        setDark(resolvedDark);
+        if (firebaseSettings || merged.onboardingCompletedAt || withAppearance.themeMode || withAppearance.personality) {
+          setSettingsState(withAppearance);
         }
       } catch (error) {
         console.error('Failed to load settings from Firebase:', error);
@@ -2499,8 +2535,25 @@ export default function LifeOS() {
       if (data.studyAbroad && typeof data.studyAbroad === "object") setStudyAbroadHub(ensureCountriesFromUniversities(normalizeStudyAbroadHub(data.studyAbroad)));
       if (data.career && typeof data.career === "object") setCareerHub(normalizeCareerHub(data.career));
       if (data.guided && typeof data.guided === "object") setGuidedHub(normalizeExecutiveHub(data.guided));
-      if (data.settings) setSettingsState(current => ({ ...current, ...data.settings }));
-      if (data.dark !== undefined) setDark(data.dark);
+      if (data.settings || data.dark !== undefined) {
+        const incomingSettings =
+          data.settings && typeof data.settings === "object" ? data.settings : {};
+        const systemDark =
+          typeof window !== "undefined" &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const resolvedDark = resolveDarkAppearance({
+          themeMode: incomingSettings.themeMode,
+          personality: incomingSettings.personality,
+          dark: typeof data.dark === "boolean" ? data.dark : null,
+          systemDark,
+        });
+        const patched = backfillAppearanceSettings(
+          { ...settingsState, ...incomingSettings },
+          resolvedDark,
+        );
+        setSettingsState(patched);
+        setDark(resolvedDark);
+      }
       flash("✓ Cloud data synced successfully");
     } catch (error) {
       flash("Error syncing from cloud");
@@ -2537,7 +2590,7 @@ export default function LifeOS() {
     setCareerHub(emptyCareerHub());
     setGuidedHub(emptyExecutiveHub());
     setSettingsState(initialSettings);
-    setDark(false);
+    setDark(false); // initialSettings already includes themeMode/personality light
     window.location.reload();
   };
 
@@ -2622,13 +2675,26 @@ export default function LifeOS() {
             setCareerHub(nextCareer);
             await syncDataToFirebase('career', nextCareer);
           }
-          if (data.settings) {
-            setSettingsState(current => ({ ...current, ...data.settings }));
-            await syncDataToFirebase('settings', data.settings);
-          }
-          if (data.dark !== undefined) {
-            setDark(data.dark);
-            await syncDataToFirebase('dark', data.dark);
+          if (data.settings || data.dark !== undefined) {
+            const incomingSettings =
+              data.settings && typeof data.settings === "object" ? data.settings : {};
+            const systemDark =
+              typeof window !== "undefined" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches;
+            const resolvedDark = resolveDarkAppearance({
+              themeMode: incomingSettings.themeMode,
+              personality: incomingSettings.personality,
+              dark: typeof data.dark === "boolean" ? data.dark : null,
+              systemDark,
+            });
+            const patched = backfillAppearanceSettings(
+              { ...settingsState, ...incomingSettings },
+              resolvedDark,
+            );
+            setSettingsState(patched);
+            setDark(resolvedDark);
+            await syncDataToFirebase('settings', patched);
+            await syncDataToFirebase('dark', resolvedDark);
           }
           flash("✓ LifeOS data imported and synced to cloud");
         } catch {
@@ -3004,7 +3070,7 @@ export default function LifeOS() {
           <IconButton label="Open navigation" onClick={() => setSidebar(true)}><Menu size={19} /></IconButton>
           <div className="breadcrumb"><span>LifeOS</span><span>/</span><strong>{navDisplayName(view)}</strong></div>
           <div className="top-actions">
-            <IconButton label="Toggle theme" onClick={() => setDark(v => !v)}>{dark ? <Sun size={18} /> : <Moon size={18} />}</IconButton>
+            <IconButton label="Toggle theme" onClick={() => applyDark(v => !v)}>{dark ? <Sun size={18} /> : <Moon size={18} />}</IconButton>
           </div>
         </header>
         <AnimatePresence mode="wait">
@@ -3117,7 +3183,7 @@ export default function LifeOS() {
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onCreateTask={createTaskFromNote} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} onConvertToTask={(index, text) => { addTask(text, undefined, "", { flashLabel: "Task created from brain" }); setBrainItems(items => items.filter((_, i) => i !== index)); }} />}
-            {view === "Settings" && <SettingsView dark={dark} setDark={setDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} icalSubscriptions={settingsState.icalSubscriptions ?? []} onIcalSubscriptionsChange={(icalSubscriptions) => updateSettings({ icalSubscriptions })} onReplaceIcalSubscriptionEvents={replaceIcalSubscriptionEvents} onRemoveIcalSubscriptionEvents={removeIcalSubscriptionEvents} onSyncIcalSubscriptions={() => void syncIcalSubscriptions()} />}
+            {view === "Settings" && <SettingsView dark={dark} setDark={applyDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} icalSubscriptions={settingsState.icalSubscriptions ?? []} onIcalSubscriptionsChange={(icalSubscriptions) => updateSettings({ icalSubscriptions })} onReplaceIcalSubscriptionEvents={replaceIcalSubscriptionEvents} onRemoveIcalSubscriptionEvents={removeIcalSubscriptionEvents} onSyncIcalSubscriptions={() => void syncIcalSubscriptions()} />}
             {view === "Settings" && <SynapseDayPlanImport flash={flash} />}
             {!["Life", "School", "Work", "Career", "Study Abroad", "Treasury", "Mastery", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Navigation", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>

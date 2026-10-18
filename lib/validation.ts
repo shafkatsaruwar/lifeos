@@ -149,6 +149,8 @@ export const SettingsSchema = z.object({
   onboardingCompletedAt: z.string().optional(),
   onboardingVersion: z.number().optional(),
   themeMode: z.enum(['system', 'light', 'dark']).optional(),
+  /** Named Atelier personality (Studio-ready). Optional; UX may still say Light/Dark. */
+  personality: z.enum(['atelier-light', 'atelier-dark']).optional(),
   /** Saved webcal / .ics subscription feeds (multi-calendar subscribe). */
   icalSubscriptions: z.array(z.object({
     id: z.string(),
