@@ -1,10 +1,12 @@
-// Reconciled against app/globals.css design tokens from the web app:
-//   :root  { --canvas:#f6f7f9; --panel:#fff;    --ink:#202124; --muted:#777b84; --line:#e8e9ed; --accent:#625af6; }
-//   .dark  { --canvas:#111214; --panel:#191a1d; --ink:#f1f1f2; --muted:#92959e; --line:#292b30; --accent:#8b83ff; }
-// Mapped onto the mobile theme shape (bg=canvas, surface=panel, text=ink, muted=muted,
-// border=line, accent=accent). "soft" and "danger" are mobile-only convenience tokens
-// not present as CSS vars on web; soft is derived from the accent tint used for
-// .section-icon.violet backgrounds, danger matches the web's error/danger red family.
+/**
+ * LifeOS 3.0 Phase 8 — mobile theme aligned to web Atelier personalities.
+ *
+ * Web source of truth: `app/globals.css` `:root` / `.dark` (+ `[data-personality]`).
+ * Expo ≠ CSS — do not pretend `backdrop-filter` / glass ports here.
+ *
+ * Mapped: bg=canvas, surface=panel, text=ink, muted=muted, border=line, accent=accent.
+ * Mobile-only convenience: soft, danger, success, warning, blue, highlight.
+ */
 
 /** Same swatches as web Settings → Appearance (spaces / accent picker). */
 export const SPACE_COLORS = [
@@ -45,37 +47,50 @@ export function workspaceColorFor(
   return settings.workspaceColors?.[key]?.trim() || DEFAULT_WORKSPACE_COLORS[key];
 }
 
+/** Atelier Light — matches web `:root` / `[data-personality="atelier-light"]`. */
 export const LIGHT = {
-  bg: "#F6F7F9",
+  bg: "#F7F9FC",
   surface: "#FFFFFF",
-  text: "#202124",
-  muted: "#777B84",
-  border: "#E8E9ED",
-  accent: "#625AF6",
+  text: "#111827",
+  muted: "#64748B",
+  border: "#E2E8F0",
+  /** Web Light default CSS accent; user accent still overrides via resolveTheme. */
+  accent: "#2563EB",
   danger: "#D95754",
-  soft: "#EFEEFF",
+  soft: "#EEF3FA",
   highlight: "#F5E7DF",
   success: "#31926A",
   warning: "#D38232",
   blue: "#3F7ED7",
 };
 
+/**
+ * Atelier Dark — matches web `.dark` / `[data-personality="atelier-dark"]`
+ * (navy/charcoal command center — not inverted Light).
+ */
 export const DARK = {
-  bg: "#111214",
-  surface: "#191A1D",
-  text: "#F1F1F2",
-  muted: "#92959E",
-  border: "#292B30",
-  accent: "#8B83FF",
-  danger: "#FF7770",
-  soft: "#26243A",
+  bg: "#0B1020",
+  surface: "#141C2E",
+  text: "#E8EEF8",
+  muted: "#8B9BB4",
+  border: "#1E2A3F",
+  accent: "#5B8DEF",
+  danger: "#E07A8A",
+  soft: "#1A2438",
   highlight: "#302724",
-  success: "#63C89A",
+  success: "#3DB8A8",
   warning: "#E0A45A",
-  blue: "#74A8EA",
+  blue: "#5B8DEF",
 };
 
 export type Theme = typeof LIGHT;
+
+/** Named personality ids shared with web (`settings.personality`). */
+export type MobilePersonality = "atelier-light" | "atelier-dark";
+
+export function personalityFromDark(dark: boolean): MobilePersonality {
+  return dark ? "atelier-dark" : "atelier-light";
+}
 
 /** Apply the user's saved accent (shared with web) onto the base light/dark palette. */
 export function resolveTheme(dark: boolean, accent?: string): Theme {
@@ -85,7 +100,7 @@ export function resolveTheme(dark: boolean, accent?: string): Theme {
   return {
     ...base,
     accent: next,
-    soft: dark ? "#26243A" : `${next}18`,
+    soft: dark ? "#1A2438" : `${next}18`,
   };
 }
 

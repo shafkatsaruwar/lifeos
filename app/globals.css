@@ -1309,3 +1309,38 @@ html[data-glass="high"] .topbar{
 @media (prefers-reduced-motion:reduce){
   .focus-immersive-ring,.focus-immersive-actions .timer-button{transition:none}
 }
+
+/* ——— LifeOS 3.0 Phase 8: a11y polish (contrast / focus / motion / transparency) ——— */
+:focus-visible{
+  outline:3px solid color-mix(in srgb,var(--accent) 55%,transparent);
+  outline-offset:2px;
+}
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+[tabindex]:focus:not(:focus-visible){
+  outline:none;
+}
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after{
+  animation-duration:0.01ms!important;
+  animation-iteration-count:1!important;
+  transition-duration:0.01ms!important;
+  scroll-behavior:auto!important;
+}
+html.reduce-transparency .sidebar,
+html.reduce-transparency .topbar,
+html.reduce-transparency .floating-focus-dock,
+html.reduce-transparency .focus-studio>header{
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+/* Ensure muted text stays readable on Light canvas */
+:root,
+[data-personality="atelier-light"]{
+  --muted:#64748B;
+}
+.dark,
+[data-personality="atelier-dark"]{
+  --muted:#8B9BB4;
+}
