@@ -17,8 +17,10 @@ type Props = {
   onOpenGoals?: () => void;
 };
 
+const RING_SIZE = 88;
 const RING_R = 36;
 const RING_C = 2 * Math.PI * RING_R;
+const RING_STROKE = 8;
 
 function RingSvg({
   percent,
@@ -31,23 +33,40 @@ function RingSvg({
   label: string;
   reduceMotion?: boolean;
 }) {
-  const dash = `${(percent / 100) * RING_C} ${RING_C}`;
+  const clamped = Math.max(0, Math.min(100, percent));
+  const progressLength = (clamped / 100) * RING_C;
   return (
-    <svg className="activity-ring-svg" viewBox="0 0 88 88" aria-hidden>
-      <circle className="activity-ring-track" cx="44" cy="44" r={RING_R} fill="none" strokeWidth="8" />
+    <svg
+      className="activity-ring-svg"
+      viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
+      width={RING_SIZE}
+      height={RING_SIZE}
+      fill="none"
+      aria-hidden
+    >
       <circle
-        className={`activity-ring-progress${reduceMotion ? " no-motion" : ""}`}
-        cx="44"
-        cy="44"
+        className="activity-ring-track"
+        cx={RING_SIZE / 2}
+        cy={RING_SIZE / 2}
         r={RING_R}
         fill="none"
-        stroke={stroke}
-        strokeWidth="8"
-        strokeLinecap="round"
-        strokeDasharray={dash}
-        transform="rotate(-90 44 44)"
-        style={{ transition: reduceMotion ? "none" : undefined }}
+        strokeWidth={RING_STROKE}
       />
+      {clamped > 0 ? (
+        <circle
+          className={`activity-ring-progress${reduceMotion ? " no-motion" : ""}`}
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          r={RING_R}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={RING_STROKE}
+          strokeLinecap="round"
+          strokeDasharray={`${progressLength} ${RING_C}`}
+          transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+          style={{ transition: reduceMotion ? "none" : undefined }}
+        />
+      ) : null}
       <title>{label}</title>
     </svg>
   );
@@ -113,7 +132,7 @@ export default function ActivityRingsWidget({
                 />
                 <div className="activity-ring-center">
                   <strong>{ring.percent}%</strong>
-                  <span>{ring.label}</span>
+                  <span className="activity-ring-center-label">{ring.label}</span>
                 </div>
               </div>
               <p className="activity-ring-value">{valueLabel}</p>
