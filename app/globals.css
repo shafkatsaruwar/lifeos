@@ -1018,7 +1018,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .atelier-today-panel,.atelier-focus-panel{border-radius:20px}
 .atelier-today-panel{min-height:340px;display:flex;flex-direction:column}
 .atelier-today-panel .now-today-list{flex:1}
-.atelier-now-mid{display:grid;grid-template-rows:1fr auto;gap:12px;min-height:340px}
+.atelier-now-mid{display:flex;flex-direction:column;gap:12px;min-height:340px}
 .atelier-focus-panel{background:linear-gradient(165deg,#0B1220 0%,#172554 48%,#111827 100%);border:0;color:#F8FAFC;padding:18px 18px 16px;display:grid;grid-template-columns:140px 1fr;gap:16px;align-items:center;min-height:220px}
 .atelier-focus-ring-wrap{position:relative;width:140px;height:140px;display:grid;place-items:center}
 .atelier-focus-ring{width:140px;height:140px;transform:rotate(-90deg)}
@@ -1238,3 +1238,18 @@ html[data-glass="high"] .topbar{
     backdrop-filter:none;
   }
 }
+
+/* ——— LifeOS 3.0 Phase 4: Now dashboard customize ——— */
+.now-customize-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
+.now-customize-bar button{height:32px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);padding:0 11px;font-size:11px;font-weight:650;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.now-customize-bar button.selected,.now-customize-bar button:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--line));color:var(--ink);background:color-mix(in srgb,var(--accent) 8%,var(--panel))}
+.now-customize-panel{margin-bottom:14px}
+.now-customize-list{display:grid;padding:6px 0}
+.now-customize-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;border-top:1px solid var(--line)}
+.now-customize-row:first-child{border-top:0}
+.now-customize-row.is-hidden{opacity:.55}
+.now-customize-row label{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px}
+.now-customize-row input{accent-color:var(--accent)}
+.now-customize-move{display:flex;gap:4px}
+.now-customize-move button{width:30px;height:30px;border:1px solid var(--line);border-radius:7px;background:var(--canvas);color:var(--muted);display:grid;place-items:center;cursor:pointer}
+.now-customize-move button:disabled{opacity:.35;cursor:default}
