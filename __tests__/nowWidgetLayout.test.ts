@@ -37,7 +37,7 @@ describe("nowWidgetLayout", () => {
     expect(layout.order[idx + 1]).toBe("today");
   });
 
-  it("defaults with Today and Copilot adjacent for the Now split row", () => {
+  it("defaults with Today and Copilot adjacent for the Now vertical stack", () => {
     const { order } = DEFAULT_NOW_WIDGET_LAYOUT;
     expect(order.indexOf("copilot")).toBe(order.indexOf("today") + 1);
   });

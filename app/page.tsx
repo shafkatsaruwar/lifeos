@@ -3717,14 +3717,14 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
 
         {(showWidget("today") || showWidget("copilot")) && (
         <div
-          className={`atelier-today-copilot-row${showWidget("today") && showWidget("copilot") ? " is-split" : " is-single"}`}
+          className={`atelier-today-copilot-stack${showWidget("today") && showWidget("copilot") ? " is-split" : " is-single"}`}
           style={{
             order: Math.min(
               showWidget("today") ? widgetLayout.order.indexOf("today") : Number.POSITIVE_INFINITY,
               showWidget("copilot") ? widgetLayout.order.indexOf("copilot") : Number.POSITIVE_INFINITY,
             ),
           }}
-          data-testid="today-copilot-row"
+          data-testid="today-copilot-stack"
         >
           {showWidget("today") && (
           <section className="card atelier-today-panel" aria-label="Today" style={{ order: widgetLayout.order.indexOf("today") }}>
