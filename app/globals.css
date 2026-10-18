@@ -33,29 +33,32 @@
 }
 
 /*
- * ─── Atelier Dark — Phase 1 TOKEN SCAFFOLD ONLY ───
- * Grouped for a future navy/charcoal command-center personality (Phase 2 visual pass).
- * Do not treat this as finished Dark art. `.dark` remains the runtime class (Tailwind
- * darkMode: "class"); `[data-personality="atelier-dark"]` is the Studio-ready alias
- * with the same semantic token map.
+ * ─── Atelier Dark — Phase 2 COMMAND CENTER ───
+ * Navy/charcoal personality (not inverted Light). `.dark` is the runtime class
+ * (Tailwind darkMode: "class"); `[data-personality="atelier-dark"]` is the alias.
+ * Light `:root` hexes above remain frozen — do not change them here.
  */
 .dark,
 [data-personality="atelier-dark"] {
-  /* Surfaces — cool navy / charcoal command-center scaffold */
-  --canvas:#0B1220;
-  --panel:#111827;
-  --surface-2:#1E293B;
+  /* Surfaces — deep navy canvas, charcoal sidebar, elevated panels */
+  --canvas:#0B1020;
+  --sidebar:#101729;
+  --panel:#141C2E;
+  --surface-2:#1A2438;
   /* Ink */
-  --ink:#F8FAFC;
-  --muted:#94A3B8;
-  --line:#1E293B;
-  /* Accents (scaffold — Phase 2 may refine) */
-  --accent:#3B82F6;
-  --accent-2:#A78BFA;
-  --accent-teal:#2DD4BF;
-  --accent-coral:#FB7185;
-  /* Elevation */
-  --shadow-card:0 1px 2px rgba(0,0,0,.35),0 12px 32px rgba(0,0,0,.28);
+  --ink:#E8EEF8;
+  --muted:#8B9BB4;
+  --line:#1E2A3F;
+  /* Accents — refined, not neon */
+  --accent:#5B8DEF;
+  --accent-2:#8B7EC8;
+  --accent-teal:#3DB8A8;
+  --accent-coral:#E07A8A;
+  /* Sparse atmosphere (used by chrome overrides; keep subtle) */
+  --glow-accent:rgba(91,141,239,.14);
+  --glow-violet:rgba(139,126,200,.10);
+  /* Elevation — soft depth, no harsh neon bloom */
+  --shadow-card:0 1px 2px rgba(0,0,0,.45),0 14px 36px rgba(0,0,0,.38);
   color-scheme:dark;
 }
 * { box-sizing:border-box; }
@@ -835,6 +838,164 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .nav-label{opacity:.7}
 .topbar{border-bottom-color:transparent;background:color-mix(in srgb,var(--canvas) 72%,transparent)}
 .page{padding:28px 36px 56px}
+
+/* ——— Atelier Dark Phase 2: command-center chrome (Light untouched) ——— */
+.dark body,
+[data-personality="atelier-dark"] body{
+  background:
+    radial-gradient(1200px 600px at 12% -10%,var(--glow-accent),transparent 55%),
+    radial-gradient(900px 500px at 88% 8%,var(--glow-violet),transparent 50%),
+    var(--canvas);
+}
+.dark .sidebar,
+[data-personality="atelier-dark"] .sidebar{
+  background:color-mix(in srgb,var(--sidebar,#101729) 92%,transparent);
+  border-right-color:color-mix(in srgb,var(--line) 70%,transparent);
+  box-shadow:inset -1px 0 0 rgba(255,255,255,.03);
+}
+.dark .topbar,
+[data-personality="atelier-dark"] .topbar{
+  background:color-mix(in srgb,var(--canvas) 78%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent);
+}
+.dark .search-trigger,
+[data-personality="atelier-dark"] .search-trigger{
+  background:color-mix(in srgb,var(--surface-2) 88%,transparent);
+  border:1px solid color-mix(in srgb,var(--line) 80%,transparent);
+  color:var(--muted);
+}
+.dark .nav-item:hover,
+[data-personality="atelier-dark"] .nav-item:hover{
+  background:color-mix(in srgb,var(--ink) 6%,transparent);
+}
+.dark .nav-item.active,
+[data-personality="atelier-dark"] .nav-item.active{
+  background:color-mix(in srgb,var(--accent) 14%,transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 18%,transparent);
+}
+.dark .card,
+.dark .focus-card:not(.atelier-focus-panel),
+.dark .project-card,
+.dark .settings-card,
+.dark .calendar-card,
+.dark .agenda-card,
+.dark .inbox-card,
+.dark .projects-card,
+.dark .schedule,
+[data-personality="atelier-dark"] .card,
+[data-personality="atelier-dark"] .project-card,
+[data-personality="atelier-dark"] .settings-card,
+[data-personality="atelier-dark"] .calendar-card,
+[data-personality="atelier-dark"] .agenda-card{
+  background:color-mix(in srgb,var(--panel) 96%,transparent);
+  border-color:color-mix(in srgb,var(--line) 90%,transparent);
+  box-shadow:var(--shadow-card);
+}
+.dark .atelier-glass-card,
+[data-personality="atelier-dark"] .atelier-glass-card{
+  background:color-mix(in srgb,var(--panel) 78%,transparent);
+  border-color:color-mix(in srgb,var(--line) 75%,transparent);
+  box-shadow:0 1px 0 rgba(255,255,255,.04) inset,var(--shadow-card);
+}
+.dark .atelier-chip,
+[data-personality="atelier-dark"] .atelier-chip{
+  background:color-mix(in srgb,var(--panel) 90%,transparent);
+  border-color:color-mix(in srgb,var(--line) 85%,transparent);
+}
+.dark .atelier-chip.primary,
+[data-personality="atelier-dark"] .atelier-chip.primary{
+  box-shadow:0 8px 22px color-mix(in srgb,var(--accent) 28%,transparent);
+}
+.dark .atelier-hub-tile,
+[data-personality="atelier-dark"] .atelier-hub-tile{
+  background:color-mix(in srgb,var(--panel) 94%,transparent);
+  border-color:color-mix(in srgb,var(--line) 85%,transparent);
+}
+.dark .atelier-hub-tile:hover,
+[data-personality="atelier-dark"] .atelier-hub-tile:hover{
+  border-color:color-mix(in srgb,var(--accent) 40%,var(--line));
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 12%,transparent),var(--shadow-card);
+}
+.dark .atelier-focus-panel,
+[data-personality="atelier-dark"] .atelier-focus-panel{
+  background:linear-gradient(165deg,#0B1020 0%,#152038 42%,#101729 100%);
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--line) 80%,transparent),0 18px 40px rgba(0,0,0,.35);
+}
+.dark .atelier-focus-ring circle:last-child,
+[data-personality="atelier-dark"] .atelier-focus-ring circle:last-child{
+  stroke:#7BA4F5;
+}
+.dark .atelier-now-bottom .copilot-card,
+[data-personality="atelier-dark"] .atelier-now-bottom .copilot-card,
+.dark .copilot-card,
+[data-personality="atelier-dark"] .copilot-card{
+  background:linear-gradient(160deg,color-mix(in srgb,var(--panel) 90%,var(--accent-2) 10%),var(--panel));
+  border-color:color-mix(in srgb,var(--accent-2) 22%,var(--line));
+  box-shadow:0 0 40px -18px var(--glow-violet),var(--shadow-card);
+}
+.dark .copilot-orb,
+[data-personality="atelier-dark"] .copilot-orb{
+  background:radial-gradient(circle at 30% 25%,#9B8FD4,#5A4F9A 72%);
+  box-shadow:0 8px 22px color-mix(in srgb,var(--accent-2) 35%,transparent);
+}
+.dark .theme-options button.selected,
+[data-personality="atelier-dark"] .theme-options button.selected{
+  background:color-mix(in srgb,var(--accent) 14%,var(--panel));
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 25%,transparent);
+}
+.dark .calendar-grid button.today>span,
+[data-personality="atelier-dark"] .calendar-grid button.today>span{
+  background:var(--accent);
+  color:#fff;
+}
+.dark .capture-button,
+.dark .primary,
+[data-personality="atelier-dark"] .capture-button,
+[data-personality="atelier-dark"] .primary{
+  box-shadow:0 8px 20px color-mix(in srgb,var(--accent) 32%,transparent);
+}
+.dark .command-modal,
+.dark .capture-modal,
+.dark .create-modal,
+.dark .break-modal,
+[data-personality="atelier-dark"] .command-modal,
+[data-personality="atelier-dark"] .capture-modal,
+[data-personality="atelier-dark"] .create-modal,
+[data-personality="atelier-dark"] .break-modal{
+  background:var(--panel);
+  border-color:color-mix(in srgb,var(--line) 90%,transparent);
+  box-shadow:0 28px 90px rgba(0,0,0,.55);
+}
+.dark .modal-layer,
+[data-personality="atelier-dark"] .modal-layer{
+  background:rgba(5,8,16,.72);
+}
+.dark .settings-bento,
+[data-personality="atelier-dark"] .settings-bento{
+  background:color-mix(in srgb,var(--panel) 94%,transparent);
+  border-color:color-mix(in srgb,var(--line) 85%,transparent);
+}
+.dark .settings-bento-tile,
+[data-personality="atelier-dark"] .settings-bento-tile{
+  background:color-mix(in srgb,var(--surface-2) 55%,var(--panel));
+  border-color:color-mix(in srgb,var(--line) 90%,transparent);
+}
+.dark .settings-bento-tile:hover,
+[data-personality="atelier-dark"] .settings-bento-tile:hover{
+  border-color:color-mix(in srgb,var(--accent) 35%,var(--line));
+  background:color-mix(in srgb,var(--accent) 6%,var(--panel));
+}
+.dark .mobile-os-nav,
+[data-personality="atelier-dark"] .mobile-os-nav{
+  background:color-mix(in srgb,var(--panel) 88%,transparent);
+  border-color:color-mix(in srgb,var(--line) 70%,transparent);
+  box-shadow:0 16px 48px rgba(0,0,0,.45);
+}
+.dark .mobile-os-nav button.active,
+[data-personality="atelier-dark"] .mobile-os-nav button.active{
+  background:color-mix(in srgb,var(--accent) 22%,var(--panel));
+  color:var(--ink);
+}
 .atelier-greeting{margin:0;font-family:var(--font-display);font-weight:400;font-size:clamp(36px,4.4vw,52px);line-height:1.05;letter-spacing:-.03em;color:var(--ink)}
 .atelier-greeting .atelier-name{color:var(--accent)}
 .atelier-hero-copy{margin:10px 0 0;font-size:14px;color:var(--muted);max-width:40ch;line-height:1.5}
@@ -891,7 +1052,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .tile-calendar svg{background:#E0F2FE;color:#0284C7}
 .tile-tasks svg{background:#FFE4E6;color:#F43F5E}
 .tile-library svg{background:#F1F5F9;color:#475569}
-/* Atelier Dark scaffold — hub tile tints (Phase 2 may restyle chrome; keep Light tiles above) */
+/* Atelier Dark — hub tile tints (Light tiles above stay frozen) */
 .dark .tile-career svg,
 [data-personality="atelier-dark"] .tile-career svg{background:#1E3A8A55;color:#93C5FD}
 .dark .tile-life svg,

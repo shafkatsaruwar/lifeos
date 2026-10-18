@@ -1,21 +1,21 @@
 # LifeOS Design System
 
-**Status:** Living document — **Atelier Light frozen as source of truth** (LifeOS 3.0 Phase 1)  
+**Status:** Living document — **Atelier Light frozen**; **Atelier Dark Phase 2 shipped** (command-center chrome)  
 **Last updated:** 2026-10-18  
 **Canonical implementations:**  
 - Web tokens → `app/globals.css` (`:root` / `.dark` + `[data-personality]`)  
-- Mobile theme → `lifeos-mobile/src/lib/theme.ts` (Phase 1: preference parity only; hex drift OK until Phase 8)  
+- Mobile theme → `lifeos-mobile/src/lib/theme.ts` (preference parity; hex drift OK until Phase 8)  
 - Preference helper → `lib/appearancePrefs.ts`  
-- Frozen snapshot → `docs/design-archive/current-2026-10-18`
+- Frozen Light snapshot → `docs/design-archive/current-2026-10-18`
 
 This document describes how LifeOS should look and feel. Prefer extending these tokens over inventing one-off colors or radii.
 
-**Personalities (Phase 1 naming):**
+**Personalities:**
 
 | Personality id | UX label today | Status |
 |----------------|----------------|--------|
 | `atelier-light` | Light | **Shipped / frozen** |
-| `atelier-dark` | Dark | Token **scaffold only** — full command-center visual pass is Phase 2 |
+| `atelier-dark` | Dark | **Phase 2 command center** — navy/charcoal, not inverted Light |
 
 Preference SoT: `settings.themeMode` (`system` \| `light` \| `dark`). Web dual-writes legacy `users/{uid}/dark` boolean for one release.
 
@@ -52,20 +52,21 @@ Do not restore the classic dark `#242428` mark unless explicitly redesigning bra
 
 Values match shipped `app/globals.css` `:root`:
 
-| Token | Web CSS | Light (frozen) | Dark scaffold | Mobile key |
-|-------|---------|----------------|---------------|------------|
-| Canvas / page bg | `--canvas` | `#F7F9FC` | `#0B1220` | `theme.bg` |
-| Panel / surface | `--panel` | `#FFFFFF` | `#111827` | `theme.surface` |
-| Surface 2 | `--surface-2` | `#EEF3FA` | `#1E293B` | — |
-| Ink / text | `--ink` | `#111827` | `#F8FAFC` | `theme.text` |
-| Muted | `--muted` | `#64748B` | `#94A3B8` | `theme.muted` |
-| Line / border | `--line` | `#E2E8F0` | `#1E293B` | `theme.border` |
-| Accent | `--accent` | `#2563EB` | `#3B82F6` | `theme.accent` |
-| Accent 2 | `--accent-2` | `#7C3AED` | `#A78BFA` | — |
-| Accent teal | `--accent-teal` | `#0D9488` | `#2DD4BF` | — |
-| Accent coral | `--accent-coral` | `#F43F5E` | `#FB7185` | — |
+| Token | Web CSS | Light (frozen) | Dark (Phase 2) | Mobile key |
+|-------|---------|----------------|----------------|------------|
+| Canvas / page bg | `--canvas` | `#F7F9FC` | `#0B1020` | `theme.bg` |
+| Sidebar | `--sidebar` | (uses panel mix) | `#101729` | — |
+| Panel / surface | `--panel` | `#FFFFFF` | `#141C2E` | `theme.surface` |
+| Surface 2 | `--surface-2` | `#EEF3FA` | `#1A2438` | — |
+| Ink / text | `--ink` | `#111827` | `#E8EEF8` | `theme.text` |
+| Muted | `--muted` | `#64748B` | `#8B9BB4` | `theme.muted` |
+| Line / border | `--line` | `#E2E8F0` | `#1E2A3F` | `theme.border` |
+| Accent | `--accent` | `#2563EB` | `#5B8DEF` | `theme.accent` |
+| Accent 2 | `--accent-2` | `#7C3AED` | `#8B7EC8` | — |
+| Accent teal | `--accent-teal` | `#0D9488` | `#3DB8A8` | — |
+| Accent coral | `--accent-coral` | `#F43F5E` | `#E07A8A` | — |
 
-Dark values are a **scaffold** for a future navy/charcoal command center — not a finished Atelier Dark art direction.
+Dark is a designed **command-center** personality (sparse glow, charcoal sidebar). Do not invert Light hexes to invent Dark. User accents still override `--accent` at runtime.
 
 User-selectable **accent** and per-workspace colors override `--accent` at runtime. Persist via Settings.
 
