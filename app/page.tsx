@@ -69,6 +69,22 @@ import {
   normalizeActivityRingsGoals,
   type ActivityRingsGoals,
 } from "@/lib/activityRings";
+import {
+  adjacentTaskStatus,
+  groupTasksByStatus,
+  normalizeTasksViewMode,
+  resolveTaskBoardStatus,
+  statusMutationPatch,
+  TASK_STATUS_COLUMNS,
+  type TaskStatusColumn,
+  type TasksViewMode,
+} from "@/lib/tasksView";
+import {
+  DEFAULT_FOCUS_APPEARANCE,
+  FOCUS_IMMERSIVE_SETTINGS_NOTE,
+  normalizeFocusAppearance,
+  type FocusAppearance,
+} from "@/lib/focusAppearance";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { isNavigationOwner } from "@/lib/navigationOwner";
@@ -266,6 +282,10 @@ type SettingsState = {
   nowWidgetLayout?: NowWidgetLayout;
   /** Activity rings goals (Phase 5). */
   activityRingsGoals?: ActivityRingsGoals;
+  /** Tasks page view mode (Phase 6). */
+  tasksViewMode?: TasksViewMode;
+  /** FocusMode appearance (Phase 7) — standard | immersive. */
+  focusAppearance?: FocusAppearance;
   nowTaskId?: number | null;
   spaceContext?: Record<string, { lastTaskId?: number; lastFilter?: string; updatedAt?: string }>;
   ambientActivity?: AmbientActivity | null;
@@ -436,6 +456,8 @@ const initialSettings: SettingsState = {
   glassLevel: "off",
   nowWidgetLayout: { ...DEFAULT_NOW_WIDGET_LAYOUT, order: [...DEFAULT_NOW_WIDGET_LAYOUT.order], hidden: [] },
   activityRingsGoals: { ...DEFAULT_ACTIVITY_RINGS_GOALS },
+  tasksViewMode: "list" as TasksViewMode,
+  focusAppearance: DEFAULT_FOCUS_APPEARANCE,
   nowTaskId: null,
   spaceContext: {},
   ambientActivity: null,
@@ -3045,7 +3067,7 @@ export default function LifeOS() {
     </>;
     return <>
       {notificationShell}
-      <FocusMode key={activeTask.id} task={activeTask} tasks={activeTasks} soundEffectsEnabled={settingsState.soundEffects} onUpdateNotes={(id, notes) => updateTaskDetails(id, { notes })} onSwitch={(id) => { setActiveTaskId(id); chooseNowTask(id); const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); }} onUpdateChecklist={updateTaskChecklist} onUpdateChecklistProgress={updateTaskChecklistProgress} onUpdateFocusSession={updateFocusSession} onComplete={complete} onExit={(destination) => { setFocus(false); setView(destination ?? "Now"); }} />
+      <FocusMode key={activeTask.id} task={activeTask} tasks={activeTasks} soundEffectsEnabled={settingsState.soundEffects} focusAppearance={normalizeFocusAppearance(settingsState.focusAppearance)} onFocusAppearanceChange={(focusAppearance) => updateSettings({ focusAppearance })} focusRemindersEnabled={settingsState.focusReminders} onUpdateNotes={(id, notes) => updateTaskDetails(id, { notes })} onSwitch={(id) => { setActiveTaskId(id); chooseNowTask(id); const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); }} onUpdateChecklist={updateTaskChecklist} onUpdateChecklistProgress={updateTaskChecklistProgress} onUpdateFocusSession={updateFocusSession} onComplete={complete} onExit={(destination) => { setFocus(false); setView(destination ?? "Now"); }} />
       {taskCalendarChoiceLayer}
     </>;
   }
@@ -3248,7 +3270,7 @@ export default function LifeOS() {
             {view === "Mastery" && <MasterOSDashboard />}
             {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onOpenTimesheet={() => { setWorkView("timesheet"); go("Work"); }} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableCareerOS={settingsState.enableCareerOS !== false} enableSchoolOS={settingsState.enableSchoolOS !== false} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableTreasuryOS={settingsState.enableTreasuryOS !== false} enableMasterOS={settingsState.enableMasterOS !== false} onboardingCompletedAt={settingsState.onboardingCompletedAt} onMarkOnboarded={() => setSettingsState(current => ({ ...current, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} flash={flash} activityRingsGoals={settingsState.activityRingsGoals} reduceMotion={settingsState.reduceMotion} weekStartsMonday={settingsState.weekStartsMonday} nowWidgetLayout={settingsState.nowWidgetLayout} onNowWidgetLayoutChange={(nowWidgetLayout) => updateSettings({ nowWidgetLayout })} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
-            {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} onDeleteMany={deleteTasks} />}
+            {view === "Tasks" && <Tasks tasks={tasks} classes={classes} viewMode={normalizeTasksViewMode(settingsState.tasksViewMode)} onViewModeChange={(tasksViewMode) => { if (tasksViewMode === "calendar") { go("Calendar"); return; } updateSettings({ tasksViewMode }); }} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} onDeleteMany={deleteTasks} onUpdateStatus={(id, status) => updateTaskDetails(id, statusMutationPatch(status))} />}
             {view === "Navigation" && canAccessNavigation && (
               <div className="navigation-page">
                 <ExecutivePanel hub={guidedHub} onChange={setGuidedHub} flash={flash} />
@@ -4120,13 +4142,17 @@ function SpaceModal({ initialKind, close, addProject, addClass }: { initialKind:
   </motion.form></motion.div>;
 }
 
-function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDeleteMany }: { tasks: Task[]; classes: ClassRecord[]; onComplete: (id: number) => void; onNew: () => void; onTaskMenu: (id: number) => void; onOpenTask: (id: number) => void; onDeleteMany: (ids: number[]) => void }) {
+function Tasks({ tasks, classes, viewMode = "list", onViewModeChange, onComplete, onNew, onTaskMenu, onOpenTask, onDeleteMany, onUpdateStatus }: { tasks: Task[]; classes: ClassRecord[]; viewMode?: TasksViewMode; onViewModeChange?: (mode: TasksViewMode) => void; onComplete: (id: number) => void; onNew: () => void; onTaskMenu: (id: number) => void; onOpenTask: (id: number) => void; onDeleteMany: (ids: number[]) => void; onUpdateStatus?: (id: number, status: TaskStatusColumn) => void }) {
+  const mode = normalizeTasksViewMode(viewMode);
+  const listTasks = tasks.filter((task) => !task.done && !task.canceled);
   const [selected, setSelected] = useState<number[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const taskIds = tasks.map((task) => task.id);
+  const [dragTaskId, setDragTaskId] = useState<number | null>(null);
+  const taskIds = listTasks.map((task) => task.id);
   const visibleSelected = selected.filter((id) => taskIds.includes(id));
-  const allSelected = tasks.length > 0 && visibleSelected.length === tasks.length;
+  const allSelected = listTasks.length > 0 && visibleSelected.length === listTasks.length;
   const someSelected = visibleSelected.length > 0 && !allSelected;
+  const boardGroups = groupTasksByStatus(tasks);
 
   useEffect(() => {
     setSelected((current) => {
@@ -4161,6 +4187,19 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDe
     setSelected([]);
     setConfirmDelete(false);
   };
+  const spaceLabel = (t: Task) => classes.find(item => item.id === t.classId)?.code ?? t.project;
+  const moveStatus = (task: Task, direction: "prev" | "next") => {
+    if (!onUpdateStatus) return;
+    const current = resolveTaskBoardStatus(task);
+    const next = adjacentTaskStatus(current, direction);
+    if (next === current) return;
+    onUpdateStatus(task.id, next);
+  };
+  const dropOnColumn = (status: TaskStatusColumn) => {
+    if (dragTaskId == null || !onUpdateStatus) return;
+    onUpdateStatus(dragTaskId, status);
+    setDragTaskId(null);
+  };
 
   return (
     <>
@@ -4168,10 +4207,10 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDe
         <div>
           <p className="eyebrow">Make it happen</p>
           <h1>Tasks</h1>
-          <p>A clear list of what needs your attention.</p>
+          <p>{mode === "board" ? "Board view uses your existing task statuses." : "A clear list of what needs your attention."}</p>
         </div>
         <div className="page-title-actions">
-          {visibleSelected.length > 0 ? (
+          {mode === "list" && visibleSelected.length > 0 ? (
             confirmDelete ? (
               <>
                 <span className="batch-delete-prompt" data-testid="tasks-batch-delete-prompt">
@@ -4194,6 +4233,67 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDe
           <button className="primary" onClick={onNew}><Plus size={16} /> New task</button>
         </div>
       </div>
+
+      <div className="view-tabs tasks-view-tabs" role="tablist" aria-label="Tasks view">
+        <button type="button" role="tab" aria-selected={mode === "list"} className={mode === "list" ? "selected" : ""} data-testid="tasks-view-list" onClick={() => onViewModeChange?.("list")}>List</button>
+        <button type="button" role="tab" aria-selected={mode === "board"} className={mode === "board" ? "selected" : ""} data-testid="tasks-view-board" onClick={() => onViewModeChange?.("board")}>Board</button>
+        <button type="button" role="tab" aria-selected={false} className="" data-testid="tasks-view-calendar" onClick={() => onViewModeChange?.("calendar")} title="Opens the shared Calendar (task deadlines and scheduled sessions)">Calendar</button>
+      </div>
+
+      {mode === "board" ? (
+        <div className="tasks-kanban" data-testid="tasks-kanban" role="region" aria-label="Tasks board">
+          <p className="tasks-kanban-hint">Drag a card to another column, or use ← → on a focused card. Opening a card uses the full Task workspace.</p>
+          <div className="tasks-kanban-columns">
+            {TASK_STATUS_COLUMNS.map((status) => {
+              const columnTasks = boardGroups[status];
+              return (
+                <section
+                  key={status}
+                  className="tasks-kanban-column"
+                  aria-label={`${status} column`}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => dropOnColumn(status)}
+                >
+                  <header className="tasks-kanban-column-head">
+                    <strong>{status}</strong>
+                    <span>{columnTasks.length}</span>
+                  </header>
+                  <div className="tasks-kanban-cards">
+                    {columnTasks.length ? columnTasks.map((t) => (
+                      <article
+                        key={t.id}
+                        className="tasks-kanban-card"
+                        draggable={Boolean(onUpdateStatus)}
+                        onDragStart={() => setDragTaskId(t.id)}
+                        onDragEnd={() => setDragTaskId(null)}
+                        tabIndex={0}
+                        data-testid={`tasks-kanban-card-${t.id}`}
+                        onKeyDown={(event) => {
+                          if (event.key === "ArrowRight") { event.preventDefault(); moveStatus(t, "next"); }
+                          if (event.key === "ArrowLeft") { event.preventDefault(); moveStatus(t, "prev"); }
+                          if (event.key === "Enter") { event.preventDefault(); onOpenTask(t.id); }
+                        }}
+                      >
+                        <button type="button" className="tasks-kanban-card-open" onClick={() => onOpenTask(t.id)}>
+                          <strong>{t.title}</strong>
+                          <span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span>
+                          <span className="tasks-kanban-meta"><i style={{ background: t.color }} />{spaceLabel(t)}</span>
+                          <span className="tasks-kanban-meta">{t.canceled ? "Canceled" : formatDueDate(t.due)} · {t.focusMinutes}m</span>
+                        </button>
+                        <div className="tasks-kanban-card-actions" role="group" aria-label={`Move ${t.title}`}>
+                          <button type="button" aria-label={`Move ${t.title} to previous status`} onClick={() => moveStatus(t, "prev")}>←</button>
+                          <button type="button" aria-label={`Move ${t.title} to next status`} onClick={() => moveStatus(t, "next")}>→</button>
+                          <button type="button" aria-label={`Actions for ${t.title}`} onClick={() => onTaskMenu(t.id)}><MoreHorizontal size={14} /></button>
+                        </div>
+                      </article>
+                    )) : <div className="tasks-kanban-empty">Empty</div>}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
       <section className="card task-table" data-testid="tasks-table">
         <div className="table-view-label">List view{visibleSelected.length ? ` · ${visibleSelected.length} selected` : ""}</div>
         <div className="table-head table-head-selectable">
@@ -4212,7 +4312,7 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDe
           <span>Priority</span>
           <span>Focus</span>
         </div>
-        {tasks.map((t) => {
+        {listTasks.map((t) => {
           const isSelected = selected.includes(t.id);
           return (
             <div className={`table-row table-row-selectable ${t.done ? "done" : ""} ${t.canceled ? "canceled" : ""} ${isSelected ? "is-selected" : ""}`} key={t.id}>
@@ -4230,7 +4330,7 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDe
                 {t.done ? <Check size={13} /> : t.canceled ? <X size={12} /> : null}
               </button>
               <button className="task-title-link" onClick={() => onOpenTask(t.id)}>{t.title}</button>
-              <span className="project-pill"><i style={{ background: t.color }} />{classes.find(item => item.id === t.classId)?.code ?? t.project}</span>
+              <span className="project-pill"><i style={{ background: t.color }} />{spaceLabel(t)}</span>
               <span>{t.canceled ? "Canceled" : formatDueDate(t.due)}</span>
               <span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span>
               <span>{t.focusMinutes}m · {t.energy}</span>
@@ -4239,6 +4339,7 @@ function Tasks({ tasks, classes, onComplete, onNew, onTaskMenu, onOpenTask, onDe
           );
         })}
       </section>
+      )}
     </>
   );
 }
@@ -5464,6 +5565,18 @@ function SettingsView({ dark: _dark, setDark: _setDark, onCommitAppearance, sett
                 </div>
                 <p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p>
                 <div className="settings-panel-divider" />
+                <span className="settings-field-label">Focus appearance</span>
+                <p className="settings-note" style={{ margin: "4px 0 10px" }}>{FOCUS_IMMERSIVE_SETTINGS_NOTE}</p>
+                {(() => {
+                  const appearance = normalizeFocusAppearance(settings.focusAppearance);
+                  return (
+                    <div className="calendar-mode-tabs" role="group" aria-label="Focus appearance">
+                      <button type="button" className={appearance === "standard" ? "selected" : ""} onClick={() => update({ focusAppearance: "standard" })}>Standard</button>
+                      <button type="button" className={appearance === "immersive" ? "selected" : ""} onClick={() => update({ focusAppearance: "immersive" })}>Immersive</button>
+                    </div>
+                  );
+                })()}
+                <div className="settings-panel-divider" />
                 <span className="settings-field-label">Activity rings</span>
                 <p className="settings-note" style={{ margin: "4px 0 10px" }}>Goals for the Now progress rings — completed tasks and focus minutes from real sessions. No streaks. Calendar attendance is not scored.</p>
                 {(() => {
@@ -6252,7 +6365,7 @@ function playFocusCue(frequency: number, duration = 0.12, volume = 0.04) {
   }
 }
 
-function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, onUpdateChecklist, onUpdateChecklistProgress, onUpdateFocusSession, onComplete, onExit }: { task: Task; tasks: Task[]; soundEffectsEnabled: boolean; onUpdateNotes: (id: number, notes: string) => void; onSwitch: (id: number) => void; onUpdateChecklist: (id: number, checklist: string[]) => void; onUpdateChecklistProgress: (id: number, progress: boolean[]) => void; onUpdateFocusSession: (id: number, session: FocusSessionUpdate) => void; onComplete: (id: number) => void; onExit: (destination?: View) => void }) {
+function FocusMode({ task, tasks, soundEffectsEnabled, focusAppearance = "standard", onFocusAppearanceChange, focusRemindersEnabled, onUpdateNotes, onSwitch, onUpdateChecklist, onUpdateChecklistProgress, onUpdateFocusSession, onComplete, onExit }: { task: Task; tasks: Task[]; soundEffectsEnabled: boolean; focusAppearance?: FocusAppearance; onFocusAppearanceChange?: (appearance: FocusAppearance) => void; focusRemindersEnabled?: boolean; onUpdateNotes: (id: number, notes: string) => void; onSwitch: (id: number) => void; onUpdateChecklist: (id: number, checklist: string[]) => void; onUpdateChecklistProgress: (id: number, progress: boolean[]) => void; onUpdateFocusSession: (id: number, session: FocusSessionUpdate) => void; onComplete: (id: number) => void; onExit: (destination?: View) => void }) {
   const totalSeconds = task.focusMinutes * 60;
   const savedSeconds = getTaskFocusSeconds(task);
   const [seconds, setSeconds] = useState(savedSeconds);
@@ -6461,11 +6574,46 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
     saveFocusSession();
     onExit(destination);
   };
-  return <motion.div className={`focus-mode focus-studio ${hasStarted ? "session-active" : ""}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+  const appearance = normalizeFocusAppearance(focusAppearance);
+  const immersive = appearance === "immersive";
+  const nextStepIndex = checks.findIndex((value) => !value);
+  const nextStepLabel = nextStepIndex >= 0 ? (checklist[nextStepIndex]?.trim() || `Step ${nextStepIndex + 1}`) : (checklist.length ? "All checklist steps done" : "Add a tiny next step when you need one");
+  const progressPct = Math.max(0, Math.min(100, Math.round(((totalSeconds - seconds) / Math.max(1, totalSeconds)) * 100)));
+  const setAppearance = (next: FocusAppearance) => onFocusAppearanceChange?.(normalizeFocusAppearance(next));
+  return <motion.div className={`focus-mode focus-studio ${hasStarted ? "session-active" : ""} ${immersive ? "focus-immersive" : "focus-standard"}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
     <AnimatePresence>{breakStage !== "hidden" && <motion.div className="focus-break-layer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="focus-break-card" initial={{ scale: .96, y: 12 }} animate={{ scale: 1, y: 0 }}>
       {breakStage === "suggested" ? <><div className="focus-break-icon"><Coffee size={22} /></div><p className="eyebrow">HALFWAY CHECK-IN</p><h2>You’ve earned a quick reset.</h2><p>You’re halfway through this {formatFocusMinutesShort(task.focusMinutes)} focus. Take five minutes to stand up, drink water, stretch, or take meds if they’re due.</p><div className="focus-break-actions"><button onClick={resumeFocus}>Keep going</button><button className="take-break" onClick={() => { setBreakSeconds(5 * 60); setBreakStage("running"); }}><Coffee size={15} /> Take a 5-minute break</button></div></> : <><div className="focus-break-countdown"><strong>{breakTime}</strong><span>5-minute reset</span></div><p className="eyebrow">BREAK IN PROGRESS</p><h2>Step away. LifeOS has the time.</h2><p>Your focus timer is paused. When this reaches zero, your session resumes automatically.</p><div className="focus-break-actions"><button onClick={resumeFocus}>Return to focus early</button></div></>}
     </motion.div></motion.div>}</AnimatePresence>
-    <header><div className="brand"><div className="brand-mark light"><span /><span /><span /></div><span>LifeOS</span></div><span className="focus-label"><i /> {running ? "In a focus session" : hasStarted ? "Paused — your time is saved" : "Ready when you are"}</span><div className="focus-top-actions"><button className="focus-note-link" onClick={() => exitFocus("Library")}><NotebookPen size={15} /> Take notes</button><button onClick={() => exitFocus()}><X size={16} /> Exit <kbd>Esc</kbd></button></div></header>
+    <header><div className="brand"><div className="brand-mark light"><span /><span /><span /></div><span>LifeOS</span></div><span className="focus-label"><i /> {running ? "In a focus session" : hasStarted ? "Paused — your time is saved" : "Ready when you are"}</span><div className="focus-top-actions"><div className="focus-appearance-toggle" role="group" aria-label="Focus appearance"><button type="button" className={!immersive ? "selected" : ""} aria-pressed={!immersive} onClick={() => setAppearance("standard")}>Standard</button><button type="button" className={immersive ? "selected" : ""} aria-pressed={immersive} onClick={() => setAppearance("immersive")}>Immersive</button></div>{!immersive && <button className="focus-note-link" onClick={() => exitFocus("Library")}><NotebookPen size={15} /> Take notes</button>}<button onClick={() => exitFocus()}><X size={16} /> Exit <kbd>Esc</kbd></button></div></header>
+    {immersive ? (
+      <main className="focus-immersive-main" data-testid="focus-immersive">
+        <div className="focus-immersive-stage">
+          <p className="focus-project"><i style={{ background: task.color }} />{task.project}</p>
+          <h1>{task.title}</h1>
+          <p className="focus-immersive-status">{running ? "Focus in progress" : hasStarted ? "Paused — progress saved" : "Ready when you are"}</p>
+          <div className="timer-ring focus-immersive-ring" style={{ "--progress": `${(seconds / totalSeconds) * 360}deg` } as React.CSSProperties} aria-label={`Timer ${time}, ${progressPct}% elapsed`}><div><strong>{time}</strong><span>{progressPct}% elapsed</span></div></div>
+          <div className="focus-immersive-actions">
+            <button className="timer-button" type="button" onClick={toggleTimer}>{running ? <><Circle size={15} fill="currentColor" /> Pause</> : <><Focus size={16} /> {hasStarted ? "Resume" : "Start"}</>}</button>
+            <button type="button" className="focus-immersive-end" onClick={() => exitFocus()}>End session</button>
+            <button type="button" className="mark-done-button" onClick={() => { if (soundEffectsEnabled) playFocusCue(660, 0.16); onComplete(task.id); setTimeout(() => onExit(), 300); }}><CheckCircle2 size={16} /> Done</button>
+          </div>
+          <div className="focus-immersive-next" aria-live="polite">
+            <span>Next step</span>
+            <strong>{nextStepLabel}</strong>
+            {nextStepIndex >= 0 && checklist[nextStepIndex] != null ? (
+              <button type="button" onClick={() => setChecks(current => current.map((value, index) => index === nextStepIndex ? true : value))}>Mark step done</button>
+            ) : null}
+          </div>
+          <p className="focus-immersive-context">{task.focusMinutes} min · {task.energy} energy · {completedSteps}/{checklist.length || 0} checklist</p>
+          <p className="focus-immersive-notice">{focusRemindersEnabled ? "Focus reminders stay on in Settings — Immersive does not mute your OS." : "Browser focus reminders are off. Immersive never claims OS-wide silence."}</p>
+          <div className="focus-immersive-switch">
+            <button type="button" onClick={() => switchBy(-1)}>← Prev task</button>
+            <button type="button" onClick={() => switchBy(1)}>Next task →</button>
+          </div>
+        </div>
+      </main>
+    ) : (
+    <>
     <main>
       <section className="focus-main"><div className="focus-hero"><p className="focus-project"><i style={{ background: task.color }} />{task.project} <span>·</span> {formatFocusMinutesShort(task.focusMinutes)} <span>·</span> {task.energy} energy</p><h1>{task.title}</h1><p className="focus-sub">{running ? "One gentle pass. You don’t need to do the whole thing at once." : "Choose a tiny next step, then press start when you’re ready."}</p></div>
         <div className="checklist"><div className="checklist-head"><span>SESSION CHECKLIST</span><div><label htmlFor="checklist-template">Switch checklist</label><select id="checklist-template" value={activeTemplateName} onChange={event => switchChecklist(event.target.value)}><option value="Custom" disabled>Custom checklist</option>{focusChecklistTemplates.map(template => <option key={template.name} value={template.name}>{template.name}</option>)}</select><button type="button" onClick={addChecklistItem}><Plus size={13} /> Add step</button></div></div>{checklist.length ? checklist.map((item, i) => <div className={`checklist-row ${checks[i] ? "checked" : ""}`} key={`${task.id}-${i}`}><button type="button" className="check-toggle" aria-label={`Toggle ${item}`} onClick={() => setChecks(current => current.map((value, index) => index === i ? !value : value))}>{checks[i] && <Check size={14} />}</button><input autoFocus={i === checklist.length - 1} value={item} placeholder="Write the next tiny step…" onChange={event => updateChecklistItem(i, event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); addChecklistItem(); } }} /><button type="button" className="delete-step" aria-label={`Delete ${item || "step"}`} onClick={() => deleteChecklistItem(i)}><Trash2 size={13} /></button></div>) : <div className="empty-checklist"><strong>No steps yet.</strong><button type="button" onClick={addChecklistItem}><Plus size={13} /> Add the first step</button></div>}</div>
@@ -6478,6 +6626,8 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
       </aside>
     </main>
     <footer><span>Session progress</span><div><i style={{ width: `${completedSteps / totalSteps * 100}%` }} /></div><strong>{completedSteps} of {checklist.length} complete</strong></footer>
+    </>
+    )}
   </motion.div>;
 }
 

@@ -178,6 +178,8 @@ export function applyAppearanceChrome(
 ): void {
   root.dataset.glass = draft.glassLevel;
   root.dataset.wallpaper = draft.wallpaperId;
+  // Phase 8: glass "off" opts out of backdrop blur for a11y / low-transparency preference.
+  root.classList.toggle("reduce-transparency", draft.glassLevel === "off");
   const wallpaper = wallpaperCssFor(draft);
   if (wallpaper) {
     root.style.setProperty("--wallpaper", wallpaper);

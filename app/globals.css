@@ -1253,3 +1253,94 @@ html[data-glass="high"] .topbar{
 .now-customize-move{display:flex;gap:4px}
 .now-customize-move button{width:30px;height:30px;border:1px solid var(--line);border-radius:7px;background:var(--canvas);color:var(--muted);display:grid;place-items:center;cursor:pointer}
 .now-customize-move button:disabled{opacity:.35;cursor:default}
+
+/* ——— LifeOS 3.0 Phase 6: Tasks Kanban ——— */
+.tasks-view-tabs{margin:0 0 14px}
+.tasks-kanban{display:grid;gap:10px}
+.tasks-kanban-hint{margin:0;color:var(--muted);font-size:11px;line-height:1.4}
+.tasks-kanban-columns{display:grid;grid-template-columns:repeat(6,minmax(180px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px}
+.tasks-kanban-column{min-height:280px;border:1px solid var(--line);border-radius:12px;background:var(--panel);display:flex;flex-direction:column;min-width:180px}
+.tasks-kanban-column-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line)}
+.tasks-kanban-column-head strong{font-size:11px;font-weight:700}
+.tasks-kanban-column-head span{font-size:10px;color:var(--muted);background:var(--surface-2);border-radius:999px;padding:2px 7px}
+.tasks-kanban-cards{display:grid;gap:8px;padding:10px;align-content:start;flex:1}
+.tasks-kanban-card{border:1px solid var(--line);border-radius:10px;background:var(--canvas);overflow:hidden}
+.tasks-kanban-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tasks-kanban-card-open{width:100%;border:0;background:transparent;text-align:left;padding:10px 10px 6px;display:grid;gap:4px;cursor:pointer;color:inherit}
+.tasks-kanban-card-open strong{font-size:12px;line-height:1.3}
+.tasks-kanban-meta{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted)}
+.tasks-kanban-meta i{width:7px;height:7px;border-radius:99px;display:inline-block}
+.tasks-kanban-card-actions{display:flex;gap:4px;padding:0 8px 8px}
+.tasks-kanban-card-actions button{height:26px;min-width:28px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--muted);font-size:11px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.tasks-kanban-card-actions button:hover{color:var(--ink);border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
+.tasks-kanban-empty{padding:18px 8px;text-align:center;color:var(--muted);font-size:11px}
+@media (max-width:1100px){
+  .tasks-kanban-columns{grid-template-columns:repeat(3,minmax(180px,1fr))}
+}
+@media (max-width:720px){
+  .tasks-kanban-columns{grid-template-columns:minmax(220px,1fr)}
+}
+
+/* ——— LifeOS 3.0 Phase 7: Immersive Focus (same timer engine) ——— */
+.focus-appearance-toggle{display:inline-flex;border:1px solid #ffffff22;border-radius:9px;overflow:hidden;margin-right:4px}
+.focus-appearance-toggle button{height:34px;padding:0 10px;border:0;background:transparent;color:#c8c5d2;font-size:10px;font-weight:700;cursor:pointer}
+.focus-appearance-toggle button.selected{background:#ffffff16;color:#fff}
+.focus-immersive-main{flex:1;display:grid;place-items:center;padding:clamp(24px,6vh,72px) 20px 40px;width:100%}
+.focus-immersive-stage{width:min(560px,100%);display:grid;justify-items:center;text-align:center;gap:14px}
+.focus-immersive-stage h1{margin:0;font-family:var(--font-display);font-size:clamp(28px,5vw,44px);font-weight:400;letter-spacing:-.03em;line-height:1.15;color:#fff}
+.focus-immersive-status{margin:0;color:#a7a3b4;font-size:12px}
+.focus-immersive-ring{width:260px;height:260px;margin:8px 0}
+.focus-immersive-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center}
+.focus-immersive-actions .timer-button{margin:0;min-width:160px}
+.focus-immersive-end{height:44px;padding:0 14px;border:1px solid #ffffff22;border-radius:10px;background:#ffffff0a;color:#e8e5f0;font-size:11px;font-weight:700;cursor:pointer}
+.focus-immersive-next{width:100%;padding:14px 16px;border-radius:14px;border:1px solid #ffffff14;background:#ffffff08;display:grid;gap:6px;text-align:left}
+.focus-immersive-next span{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#9b97a8;font-weight:700}
+.focus-immersive-next strong{font-size:15px;color:#f4f1ff;font-weight:650}
+.focus-immersive-next button{justify-self:start;height:30px;padding:0 10px;border-radius:8px;border:1px solid #ffffff22;background:#ffffff10;color:#ece8f8;font-size:11px;cursor:pointer}
+.focus-immersive-context{margin:0;font-size:11px;color:#9b97a8}
+.focus-immersive-notice{margin:0;max-width:420px;font-size:10px;line-height:1.4;color:#8a8696}
+.focus-immersive-switch{display:flex;gap:8px}
+.focus-immersive-switch button{height:32px;padding:0 12px;border:1px solid #ffffff18;border-radius:8px;background:transparent;color:#c8c4d4;font-size:11px;cursor:pointer}
+/* Light personality: immersive still uses Focus studio chrome but softens contrasts via tokens where possible */
+[data-personality="atelier-light"] .focus-mode.focus-immersive,
+:root:not(.dark) .focus-mode.focus-immersive{
+  /* Keep readable immersive stage; Light shell elsewhere unchanged */
+}
+@media (prefers-reduced-motion:reduce){
+  .focus-immersive-ring,.focus-immersive-actions .timer-button{transition:none}
+}
+
+/* ——— LifeOS 3.0 Phase 8: a11y polish (contrast / focus / motion / transparency) ——— */
+:focus-visible{
+  outline:3px solid color-mix(in srgb,var(--accent) 55%,transparent);
+  outline-offset:2px;
+}
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+[tabindex]:focus:not(:focus-visible){
+  outline:none;
+}
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after{
+  animation-duration:0.01ms!important;
+  animation-iteration-count:1!important;
+  transition-duration:0.01ms!important;
+  scroll-behavior:auto!important;
+}
+html.reduce-transparency .sidebar,
+html.reduce-transparency .topbar,
+html.reduce-transparency .floating-focus-dock,
+html.reduce-transparency .focus-studio>header{
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+/* Ensure muted text stays readable on Light canvas */
+:root,
+[data-personality="atelier-light"]{
+  --muted:#64748B;
+}
+.dark,
+[data-personality="atelier-dark"]{
+  --muted:#8B9BB4;
+}
