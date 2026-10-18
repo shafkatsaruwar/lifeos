@@ -33,6 +33,12 @@ describe("nowWidgetLayout", () => {
     expect(visibleNowWidgets(layout)).not.toContain("weather");
     layout = moveNowWidget(layout, "copilot", "up");
     const idx = layout.order.indexOf("copilot");
-    expect(layout.order[idx + 1]).toBe("hubs");
+    // Default order: … today, copilot, focus … — one step up places copilot before today.
+    expect(layout.order[idx + 1]).toBe("today");
+  });
+
+  it("defaults with Today and Copilot adjacent for the Now vertical stack", () => {
+    const { order } = DEFAULT_NOW_WIDGET_LAYOUT;
+    expect(order.indexOf("copilot")).toBe(order.indexOf("today") + 1);
   });
 });

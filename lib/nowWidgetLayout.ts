@@ -7,10 +7,10 @@ export const NOW_WIDGET_IDS = [
   "weather",
   "quote",
   "today",
+  "copilot",
   "focus",
   "rings",
   "hubs",
-  "copilot",
 ] as const;
 
 export type NowWidgetId = (typeof NOW_WIDGET_IDS)[number];
