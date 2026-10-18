@@ -11,7 +11,9 @@
   font-display: block;
 }
 
-:root {
+/* ─── Atelier Light (source of truth — freeze hexes; see docs/design-system.md) ─── */
+:root,
+[data-personality="atelier-light"] {
   --canvas:#F7F9FC;
   --panel:#FFFFFF;
   --surface-2:#EEF3FA;
@@ -29,18 +31,34 @@
   --font-display:"LifeOS";
   color-scheme:light;
 }
-.dark {
-  --canvas:#0B1220;
-  --panel:#111827;
-  --surface-2:#1E293B;
-  --ink:#F8FAFC;
-  --muted:#94A3B8;
-  --line:#1E293B;
-  --accent:#3B82F6;
-  --accent-2:#A78BFA;
-  --accent-teal:#2DD4BF;
-  --accent-coral:#FB7185;
-  --shadow-card:0 1px 2px rgba(0,0,0,.35),0 12px 32px rgba(0,0,0,.28);
+
+/*
+ * ─── Atelier Dark — Phase 2 COMMAND CENTER ───
+ * Navy/charcoal personality (not inverted Light). `.dark` is the runtime class
+ * (Tailwind darkMode: "class"); `[data-personality="atelier-dark"]` is the alias.
+ * Light `:root` hexes above remain frozen — do not change them here.
+ */
+.dark,
+[data-personality="atelier-dark"] {
+  /* Surfaces — deep navy canvas, charcoal sidebar, elevated panels */
+  --canvas:#0B1020;
+  --sidebar:#101729;
+  --panel:#141C2E;
+  --surface-2:#1A2438;
+  /* Ink */
+  --ink:#E8EEF8;
+  --muted:#8B9BB4;
+  --line:#1E2A3F;
+  /* Accents — refined, not neon */
+  --accent:#5B8DEF;
+  --accent-2:#8B7EC8;
+  --accent-teal:#3DB8A8;
+  --accent-coral:#E07A8A;
+  /* Sparse atmosphere (used by chrome overrides; keep subtle) */
+  --glow-accent:rgba(91,141,239,.14);
+  --glow-violet:rgba(139,126,200,.10);
+  /* Elevation — soft depth, no harsh neon bloom */
+  --shadow-card:0 1px 2px rgba(0,0,0,.45),0 14px 36px rgba(0,0,0,.38);
   color-scheme:dark;
 }
 * { box-sizing:border-box; }
@@ -820,6 +838,164 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .nav-label{opacity:.7}
 .topbar{border-bottom-color:transparent;background:color-mix(in srgb,var(--canvas) 72%,transparent)}
 .page{padding:28px 36px 56px}
+
+/* ——— Atelier Dark Phase 2: command-center chrome (Light untouched) ——— */
+.dark body,
+[data-personality="atelier-dark"] body{
+  background:
+    radial-gradient(1200px 600px at 12% -10%,var(--glow-accent),transparent 55%),
+    radial-gradient(900px 500px at 88% 8%,var(--glow-violet),transparent 50%),
+    var(--canvas);
+}
+.dark .sidebar,
+[data-personality="atelier-dark"] .sidebar{
+  background:color-mix(in srgb,var(--sidebar,#101729) 92%,transparent);
+  border-right-color:color-mix(in srgb,var(--line) 70%,transparent);
+  box-shadow:inset -1px 0 0 rgba(255,255,255,.03);
+}
+.dark .topbar,
+[data-personality="atelier-dark"] .topbar{
+  background:color-mix(in srgb,var(--canvas) 78%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent);
+}
+.dark .search-trigger,
+[data-personality="atelier-dark"] .search-trigger{
+  background:color-mix(in srgb,var(--surface-2) 88%,transparent);
+  border:1px solid color-mix(in srgb,var(--line) 80%,transparent);
+  color:var(--muted);
+}
+.dark .nav-item:hover,
+[data-personality="atelier-dark"] .nav-item:hover{
+  background:color-mix(in srgb,var(--ink) 6%,transparent);
+}
+.dark .nav-item.active,
+[data-personality="atelier-dark"] .nav-item.active{
+  background:color-mix(in srgb,var(--accent) 14%,transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 18%,transparent);
+}
+.dark .card,
+.dark .focus-card:not(.atelier-focus-panel),
+.dark .project-card,
+.dark .settings-card,
+.dark .calendar-card,
+.dark .agenda-card,
+.dark .inbox-card,
+.dark .projects-card,
+.dark .schedule,
+[data-personality="atelier-dark"] .card,
+[data-personality="atelier-dark"] .project-card,
+[data-personality="atelier-dark"] .settings-card,
+[data-personality="atelier-dark"] .calendar-card,
+[data-personality="atelier-dark"] .agenda-card{
+  background:color-mix(in srgb,var(--panel) 96%,transparent);
+  border-color:color-mix(in srgb,var(--line) 90%,transparent);
+  box-shadow:var(--shadow-card);
+}
+.dark .atelier-glass-card,
+[data-personality="atelier-dark"] .atelier-glass-card{
+  background:color-mix(in srgb,var(--panel) 78%,transparent);
+  border-color:color-mix(in srgb,var(--line) 75%,transparent);
+  box-shadow:0 1px 0 rgba(255,255,255,.04) inset,var(--shadow-card);
+}
+.dark .atelier-chip,
+[data-personality="atelier-dark"] .atelier-chip{
+  background:color-mix(in srgb,var(--panel) 90%,transparent);
+  border-color:color-mix(in srgb,var(--line) 85%,transparent);
+}
+.dark .atelier-chip.primary,
+[data-personality="atelier-dark"] .atelier-chip.primary{
+  box-shadow:0 8px 22px color-mix(in srgb,var(--accent) 28%,transparent);
+}
+.dark .atelier-hub-tile,
+[data-personality="atelier-dark"] .atelier-hub-tile{
+  background:color-mix(in srgb,var(--panel) 94%,transparent);
+  border-color:color-mix(in srgb,var(--line) 85%,transparent);
+}
+.dark .atelier-hub-tile:hover,
+[data-personality="atelier-dark"] .atelier-hub-tile:hover{
+  border-color:color-mix(in srgb,var(--accent) 40%,var(--line));
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 12%,transparent),var(--shadow-card);
+}
+.dark .atelier-focus-panel,
+[data-personality="atelier-dark"] .atelier-focus-panel{
+  background:linear-gradient(165deg,#0B1020 0%,#152038 42%,#101729 100%);
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--line) 80%,transparent),0 18px 40px rgba(0,0,0,.35);
+}
+.dark .atelier-focus-ring circle:last-child,
+[data-personality="atelier-dark"] .atelier-focus-ring circle:last-child{
+  stroke:#7BA4F5;
+}
+.dark .atelier-now-bottom .copilot-card,
+[data-personality="atelier-dark"] .atelier-now-bottom .copilot-card,
+.dark .copilot-card,
+[data-personality="atelier-dark"] .copilot-card{
+  background:linear-gradient(160deg,color-mix(in srgb,var(--panel) 90%,var(--accent-2) 10%),var(--panel));
+  border-color:color-mix(in srgb,var(--accent-2) 22%,var(--line));
+  box-shadow:0 0 40px -18px var(--glow-violet),var(--shadow-card);
+}
+.dark .copilot-orb,
+[data-personality="atelier-dark"] .copilot-orb{
+  background:radial-gradient(circle at 30% 25%,#9B8FD4,#5A4F9A 72%);
+  box-shadow:0 8px 22px color-mix(in srgb,var(--accent-2) 35%,transparent);
+}
+.dark .theme-options button.selected,
+[data-personality="atelier-dark"] .theme-options button.selected{
+  background:color-mix(in srgb,var(--accent) 14%,var(--panel));
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 25%,transparent);
+}
+.dark .calendar-grid button.today>span,
+[data-personality="atelier-dark"] .calendar-grid button.today>span{
+  background:var(--accent);
+  color:#fff;
+}
+.dark .capture-button,
+.dark .primary,
+[data-personality="atelier-dark"] .capture-button,
+[data-personality="atelier-dark"] .primary{
+  box-shadow:0 8px 20px color-mix(in srgb,var(--accent) 32%,transparent);
+}
+.dark .command-modal,
+.dark .capture-modal,
+.dark .create-modal,
+.dark .break-modal,
+[data-personality="atelier-dark"] .command-modal,
+[data-personality="atelier-dark"] .capture-modal,
+[data-personality="atelier-dark"] .create-modal,
+[data-personality="atelier-dark"] .break-modal{
+  background:var(--panel);
+  border-color:color-mix(in srgb,var(--line) 90%,transparent);
+  box-shadow:0 28px 90px rgba(0,0,0,.55);
+}
+.dark .modal-layer,
+[data-personality="atelier-dark"] .modal-layer{
+  background:rgba(5,8,16,.72);
+}
+.dark .settings-bento,
+[data-personality="atelier-dark"] .settings-bento{
+  background:color-mix(in srgb,var(--panel) 94%,transparent);
+  border-color:color-mix(in srgb,var(--line) 85%,transparent);
+}
+.dark .settings-bento-tile,
+[data-personality="atelier-dark"] .settings-bento-tile{
+  background:color-mix(in srgb,var(--surface-2) 55%,var(--panel));
+  border-color:color-mix(in srgb,var(--line) 90%,transparent);
+}
+.dark .settings-bento-tile:hover,
+[data-personality="atelier-dark"] .settings-bento-tile:hover{
+  border-color:color-mix(in srgb,var(--accent) 35%,var(--line));
+  background:color-mix(in srgb,var(--accent) 6%,var(--panel));
+}
+.dark .mobile-os-nav,
+[data-personality="atelier-dark"] .mobile-os-nav{
+  background:color-mix(in srgb,var(--panel) 88%,transparent);
+  border-color:color-mix(in srgb,var(--line) 70%,transparent);
+  box-shadow:0 16px 48px rgba(0,0,0,.45);
+}
+.dark .mobile-os-nav button.active,
+[data-personality="atelier-dark"] .mobile-os-nav button.active{
+  background:color-mix(in srgb,var(--accent) 22%,var(--panel));
+  color:var(--ink);
+}
 .atelier-greeting{margin:0;font-family:var(--font-display);font-weight:400;font-size:clamp(36px,4.4vw,52px);line-height:1.05;letter-spacing:-.03em;color:var(--ink)}
 .atelier-greeting .atelier-name{color:var(--accent)}
 .atelier-hero-copy{margin:10px 0 0;font-size:14px;color:var(--muted);max-width:40ch;line-height:1.5}
@@ -842,7 +1018,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .atelier-today-panel,.atelier-focus-panel{border-radius:20px}
 .atelier-today-panel{min-height:340px;display:flex;flex-direction:column}
 .atelier-today-panel .now-today-list{flex:1}
-.atelier-now-mid{display:grid;grid-template-rows:1fr auto;gap:12px;min-height:340px}
+.atelier-now-mid{display:flex;flex-direction:column;gap:12px;min-height:340px}
 .atelier-focus-panel{background:linear-gradient(165deg,#0B1220 0%,#172554 48%,#111827 100%);border:0;color:#F8FAFC;padding:18px 18px 16px;display:grid;grid-template-columns:140px 1fr;gap:16px;align-items:center;min-height:220px}
 .atelier-focus-ring-wrap{position:relative;width:140px;height:140px;display:grid;place-items:center}
 .atelier-focus-ring{width:140px;height:140px;transform:rotate(-90deg)}
@@ -876,16 +1052,27 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .tile-calendar svg{background:#E0F2FE;color:#0284C7}
 .tile-tasks svg{background:#FFE4E6;color:#F43F5E}
 .tile-library svg{background:#F1F5F9;color:#475569}
-.dark .tile-career svg{background:#1E3A8A55;color:#93C5FD}
-.dark .tile-life svg{background:#134E4A55;color:#5EEAD4}
-.dark .tile-school svg{background:#4C1D9555;color:#C4B5FD}
-.dark .tile-work svg{background:#312E8155;color:#A5B4FC}
-.dark .tile-study svg{background:#164E6355;color:#67E8F9}
-.dark .tile-treasury svg{background:#78350F55;color:#FCD34D}
-.dark .tile-mastery svg{background:#581C8755;color:#D8B4FE}
-.dark .tile-calendar svg{background:#0C4A6E55;color:#7DD3FC}
-.dark .tile-tasks svg{background:#88133755;color:#FDA4AF}
-.dark .tile-library svg{background:#1E293B55;color:#CBD5E1}
+/* Atelier Dark — hub tile tints (Light tiles above stay frozen) */
+.dark .tile-career svg,
+[data-personality="atelier-dark"] .tile-career svg{background:#1E3A8A55;color:#93C5FD}
+.dark .tile-life svg,
+[data-personality="atelier-dark"] .tile-life svg{background:#134E4A55;color:#5EEAD4}
+.dark .tile-school svg,
+[data-personality="atelier-dark"] .tile-school svg{background:#4C1D9555;color:#C4B5FD}
+.dark .tile-work svg,
+[data-personality="atelier-dark"] .tile-work svg{background:#312E8155;color:#A5B4FC}
+.dark .tile-study svg,
+[data-personality="atelier-dark"] .tile-study svg{background:#164E6355;color:#67E8F9}
+.dark .tile-treasury svg,
+[data-personality="atelier-dark"] .tile-treasury svg{background:#78350F55;color:#FCD34D}
+.dark .tile-mastery svg,
+[data-personality="atelier-dark"] .tile-mastery svg{background:#581C8755;color:#D8B4FE}
+.dark .tile-calendar svg,
+[data-personality="atelier-dark"] .tile-calendar svg{background:#0C4A6E55;color:#7DD3FC}
+.dark .tile-tasks svg,
+[data-personality="atelier-dark"] .tile-tasks svg{background:#88133755;color:#FDA4AF}
+.dark .tile-library svg,
+[data-personality="atelier-dark"] .tile-library svg{background:#1E293B55;color:#CBD5E1}
 .atelier-now-bottom{display:grid;grid-template-columns:1fr;gap:16px;align-items:stretch}
 .atelier-now-bottom .copilot-card{min-height:180px;border-radius:20px;background:linear-gradient(160deg,color-mix(in srgb,var(--panel) 88%,var(--accent-2) 12%),var(--panel));border-color:color-mix(in srgb,var(--accent-2) 18%,var(--line))}
 .command-results>button.suggested{background:color-mix(in srgb,var(--accent) 10%,var(--canvas))}
@@ -961,3 +1148,108 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
   .task-schedule-form{grid-template-columns:1fr}
   .calendar-actions{flex-wrap:wrap}
 }
+
+/* ——— LifeOS 3.0 Phase 3: Appearance Studio + wallpaper/glass chrome ——— */
+.appearance-studio{display:grid;gap:18px}
+.appearance-studio-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(220px,.85fr);gap:18px;align-items:start}
+.appearance-studio-controls{display:grid;gap:16px}
+.appearance-studio-block{display:grid;gap:8px}
+.theme-options-triple{grid-template-columns:repeat(3,minmax(0,1fr))}
+.appearance-custom-accent{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px;color:var(--muted);font-weight:650}
+.appearance-custom-accent input[type=color]{width:42px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--canvas);padding:2px;cursor:pointer}
+.appearance-wallpaper-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.appearance-wallpaper-grid button{border:1px solid var(--line);border-radius:10px;background:var(--canvas);padding:8px;display:grid;gap:6px;justify-items:center;font-size:10px;font-weight:650;color:var(--muted);cursor:pointer}
+.appearance-wallpaper-grid button.selected{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--panel));box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 22%,transparent)}
+.appearance-wallpaper-swatch{display:block;width:100%;height:36px;border-radius:8px;border:1px solid color-mix(in srgb,var(--line) 80%,transparent)}
+.appearance-wallpaper-none{background:repeating-linear-gradient(-45deg,var(--surface-2),var(--surface-2) 4px,var(--panel) 4px,var(--panel) 8px)}
+.appearance-glass-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.appearance-glass-options button{border:1px solid var(--line);border-radius:10px;background:var(--canvas);padding:10px 11px;text-align:left;display:grid;gap:3px;cursor:pointer}
+.appearance-glass-options button strong{font-size:11px;color:var(--ink)}
+.appearance-glass-options button span{font-size:9px;color:var(--muted);line-height:1.35}
+.appearance-glass-options button.selected{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--panel));box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 20%,transparent)}
+.appearance-toggle-row{cursor:pointer}
+.appearance-toggle-row input{width:16px;height:16px;accent-color:var(--accent)}
+.appearance-studio-preview{display:grid;gap:8px;position:sticky;top:84px}
+.appearance-preview-frame{min-height:220px;border-radius:16px;border:1px solid var(--line);overflow:hidden;padding:12px;background:var(--canvas);box-shadow:var(--shadow-card)}
+.appearance-preview-frame.is-dark{color:#E8EEF8;background:#0B1020}
+.appearance-preview-frame.is-light{color:#111827;background:#F7F9FC}
+.appearance-preview-chrome{display:grid;grid-template-columns:44px 1fr;gap:10px;min-height:190px}
+.appearance-preview-sidebar{border-radius:10px;background:color-mix(in srgb,var(--sidebar,#101729) 88%,#141C2E);border:1px solid color-mix(in srgb,var(--line) 70%,transparent)}
+.appearance-preview-frame.is-light .appearance-preview-sidebar{background:#FFFFFF;border-color:#E2E8F0}
+.appearance-preview-main{display:grid;gap:8px;align-content:start}
+.appearance-preview-card{border-radius:12px;border:1px solid color-mix(in srgb,var(--line) 80%,transparent);background:color-mix(in srgb,var(--panel,#141C2E) 92%,transparent);padding:12px;display:grid;gap:4px;position:relative;overflow:hidden}
+.appearance-preview-frame.is-light .appearance-preview-card{background:#fff;border-color:#E2E8F0}
+.appearance-preview-card strong{font-size:12px}
+.appearance-preview-card span{font-size:10px;opacity:.7}
+.appearance-preview-card em{position:absolute;right:10px;top:12px;width:8px;height:8px;border-radius:99px;font-style:normal}
+.appearance-preview-glass{backdrop-filter:blur(10px)}
+.appearance-preview-frame[data-glass="off"] .appearance-preview-glass{backdrop-filter:none;background:var(--panel,#141C2E)}
+.appearance-preview-frame[data-glass="subtle"] .appearance-preview-glass{background:color-mix(in srgb,var(--panel,#141C2E) 78%,transparent)}
+.appearance-preview-frame[data-glass="balanced"] .appearance-preview-glass{background:color-mix(in srgb,var(--panel,#141C2E) 62%,transparent);backdrop-filter:blur(14px)}
+.appearance-preview-frame[data-glass="high"] .appearance-preview-glass{background:color-mix(in srgb,var(--panel,#141C2E) 48%,transparent);backdrop-filter:blur(22px)}
+.appearance-studio-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding-top:4px;border-top:1px solid var(--line)}
+.appearance-studio-actions-end{display:flex;gap:8px}
+.appearance-studio-actions button{height:36px;border:1px solid var(--line);border-radius:9px;background:var(--canvas);color:var(--ink);padding:0 12px;font-size:11px;font-weight:650;cursor:pointer}
+.appearance-studio-actions button:disabled{opacity:.4;cursor:default}
+.appearance-studio-actions .primary{border-color:var(--accent);background:var(--accent);color:#fff}
+.appearance-restore{display:inline-flex;align-items:center;gap:6px}
+@media(max-width:900px){
+  .appearance-studio-layout{grid-template-columns:1fr}
+  .appearance-studio-preview{position:static}
+  .appearance-wallpaper-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .theme-options-triple{grid-template-columns:1fr}
+}
+
+/* Wallpaper layer on shell (committed + live Studio preview) */
+html[data-wallpaper]:not([data-wallpaper="none"]) body{
+  background:var(--wallpaper,var(--canvas));
+  background-attachment:fixed;
+}
+/* Glass levels — solid fallbacks when backdrop-filter unsupported */
+html[data-glass="subtle"] .atelier-glass-card,
+html[data-glass="subtle"] .sidebar,
+html[data-glass="subtle"] .topbar{
+  background:color-mix(in srgb,var(--panel) 82%,transparent);
+  backdrop-filter:blur(10px);
+}
+html[data-glass="balanced"] .atelier-glass-card,
+html[data-glass="balanced"] .sidebar,
+html[data-glass="balanced"] .topbar{
+  background:color-mix(in srgb,var(--panel) 68%,transparent);
+  backdrop-filter:blur(16px);
+}
+html[data-glass="high"] .atelier-glass-card,
+html[data-glass="high"] .sidebar,
+html[data-glass="high"] .topbar{
+  background:color-mix(in srgb,var(--panel) 52%,transparent);
+  backdrop-filter:blur(24px);
+}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  html[data-glass="subtle"] .atelier-glass-card,
+  html[data-glass="balanced"] .atelier-glass-card,
+  html[data-glass="high"] .atelier-glass-card,
+  html[data-glass="subtle"] .sidebar,
+  html[data-glass="balanced"] .sidebar,
+  html[data-glass="high"] .sidebar,
+  html[data-glass="subtle"] .topbar,
+  html[data-glass="balanced"] .topbar,
+  html[data-glass="high"] .topbar{
+    background:var(--panel);
+    backdrop-filter:none;
+  }
+}
+
+/* ——— LifeOS 3.0 Phase 4: Now dashboard customize ——— */
+.now-customize-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
+.now-customize-bar button{height:32px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);padding:0 11px;font-size:11px;font-weight:650;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.now-customize-bar button.selected,.now-customize-bar button:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--line));color:var(--ink);background:color-mix(in srgb,var(--accent) 8%,var(--panel))}
+.now-customize-panel{margin-bottom:14px}
+.now-customize-list{display:grid;padding:6px 0}
+.now-customize-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;border-top:1px solid var(--line)}
+.now-customize-row:first-child{border-top:0}
+.now-customize-row.is-hidden{opacity:.55}
+.now-customize-row label{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px}
+.now-customize-row input{accent-color:var(--accent)}
+.now-customize-move{display:flex;gap:4px}
+.now-customize-move button{width:30px;height:30px;border:1px solid var(--line);border-radius:7px;background:var(--canvas);color:var(--muted);display:grid;place-items:center;cursor:pointer}
+.now-customize-move button:disabled{opacity:.35;cursor:default}

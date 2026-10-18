@@ -2,7 +2,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useColorScheme, View } from "react-native";
 import { signOut } from "firebase/auth";
 import { ActionButton, Card, Eyebrow, Page, SegmentedControl, Title } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
@@ -25,6 +25,7 @@ import {
   redeemPromoCode,
 } from "../lib/entitlement";
 import { SPACE_COLORS, DEFAULT_WORKSPACE_COLORS, workspaceColorFor } from "../lib/theme";
+import { appearancePatchForThemeMode } from "../../../lib/appearancePrefs";
 import type { CalendarDefaultView, EnergyLevel, ThemeMode } from "../types";
 
 export function SettingsScreen() {
@@ -39,8 +40,13 @@ export function SettingsScreen() {
   const [fePrefs, setFePrefs] = useState<FocusEnforcerPrefs>(DEFAULT_FOCUS_ENFORCER_PREFS);
   const [editingWorkspaceColor, setEditingWorkspaceColor] = useState<keyof typeof DEFAULT_WORKSPACE_COLORS | null>(null);
   const [promo, setPromo] = useState("");
+  const systemDark = useColorScheme() === "dark";
   const themeMode = workspace.settings.themeMode ?? "system";
   const accent = workspace.settings.accent?.trim() || theme.accent;
+  const setThemeMode = (mode: ThemeMode) => {
+    const { themeMode: nextMode, personality } = appearancePatchForThemeMode(mode, systemDark);
+    patchSettings({ themeMode: nextMode, personality });
+  };
   const synapseEventCount = workspace.calendar.filter((event) => event.id.startsWith("synapse-")).length;
   const signedInWithApple = Boolean(user?.providerData?.some((p) => p.providerId === "apple.com"));
   const signedInWithGoogle = Boolean(user?.providerData?.some((p) => p.providerId === "google.com"));
@@ -140,7 +146,7 @@ export function SettingsScreen() {
               icon="sun"
               selected={themeMode === "light" || (themeMode === "system" && !dark)}
               activeColor={theme.accent}
-              onPress={() => patchSettings({ themeMode: "light" as ThemeMode })}
+              onPress={() => setThemeMode("light")}
               theme={theme}
             />
             <ThemeChoice
@@ -148,13 +154,13 @@ export function SettingsScreen() {
               icon="moon"
               selected={themeMode === "dark" || (themeMode === "system" && dark)}
               activeColor={theme.accent}
-              onPress={() => patchSettings({ themeMode: "dark" as ThemeMode })}
+              onPress={() => setThemeMode("dark")}
               theme={theme}
             />
           </View>
 
           <Pressable
-            onPress={() => patchSettings({ themeMode: "system" })}
+            onPress={() => setThemeMode("system")}
             style={[
               styles.deviceRow,
               {

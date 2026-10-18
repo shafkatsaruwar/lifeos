@@ -149,6 +149,23 @@ export const SettingsSchema = z.object({
   onboardingCompletedAt: z.string().optional(),
   onboardingVersion: z.number().optional(),
   themeMode: z.enum(['system', 'light', 'dark']).optional(),
+  /** Named Atelier personality (Studio-ready). Optional; UX may still say Light/Dark. */
+  personality: z.enum(['atelier-light', 'atelier-dark']).optional(),
+  /** Appearance Studio wallpaper (Phase 3). */
+  wallpaperId: z.enum(['none', 'solid', 'midnight', 'aurora', 'ember', 'mist']).optional(),
+  wallpaperSolid: z.string().optional(),
+  glassLevel: z.enum(['off', 'subtle', 'balanced', 'high']).optional(),
+  /** Now dashboard widget layout (Phase 4) — show/hide + order. */
+  nowWidgetLayout: z.object({
+    order: z.array(z.enum(['weather', 'quote', 'today', 'focus', 'rings', 'hubs', 'copilot'])).optional(),
+    hidden: z.array(z.enum(['weather', 'quote', 'today', 'focus', 'rings', 'hubs', 'copilot'])).optional(),
+  }).optional(),
+  /** Activity rings goals (Phase 5) — completed tasks + focus minutes vs targets. */
+  activityRingsGoals: z.object({
+    period: z.enum(['daily', 'weekly']).optional(),
+    tasksTarget: z.number().optional(),
+    focusMinutesTarget: z.number().optional(),
+  }).optional(),
   /** Saved webcal / .ics subscription feeds (multi-calendar subscribe). */
   icalSubscriptions: z.array(z.object({
     id: z.string(),

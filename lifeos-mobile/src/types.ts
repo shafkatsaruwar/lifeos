@@ -324,6 +324,8 @@ export type SettingsState = {
   compactMode?: boolean;
   reduceMotion?: boolean;
   themeMode?: ThemeMode;
+  /** Named Atelier personality (Studio-ready). Synced with web settings.personality. */
+  personality?: "atelier-light" | "atelier-dark";
   /** Continuous vertical pages vs one page at a time. Default: seamless. */
   notebookPageView?: NotebookPageView;
   /** Favorite paper templates for the Noteshelf-style picker. */
