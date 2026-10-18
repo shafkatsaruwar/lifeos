@@ -166,6 +166,8 @@ export const SettingsSchema = z.object({
     tasksTarget: z.number().optional(),
     focusMinutesTarget: z.number().optional(),
   }).optional(),
+  /** Tasks page view mode (Phase 6) — list | board; calendar hands off to Calendar view. */
+  tasksViewMode: z.enum(['list', 'board', 'calendar']).optional(),
   /** Saved webcal / .ics subscription feeds (multi-calendar subscribe). */
   icalSubscriptions: z.array(z.object({
     id: z.string(),
