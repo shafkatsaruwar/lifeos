@@ -238,7 +238,7 @@ export function SettingsBentoGrid({ reduceMotion, onSelect }: SettingsBentoGridP
             </div>
             <div className="mt-4">
               <h3 className="text-xl font-medium text-[var(--ink)]">Appearance</h3>
-              <p className="mt-1 text-sm text-[var(--muted)]">Theme, accent, and density for LifeOS.</p>
+              <p className="mt-1 text-sm text-[var(--muted)]">Appearance Studio — theme, wallpaper, glass, accent.</p>
             </div>
           </motion.div>
 
