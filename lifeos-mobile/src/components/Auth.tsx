@@ -21,6 +21,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GoogleAuthProvider, OAuthProvider, getAdditionalUserInfo, signInWithCredential } from "firebase/auth";
 import { auth, firebaseConfigured } from "../lib/firebase";
+import { resolveLifeosApiBase } from "../lib/lifeosUrl";
 import { LIGHT, DARK } from "../lib/theme";
 import { ActionButton } from "./UI";
 import { useLifeOS } from "../lib/LifeOSContext";
@@ -28,7 +29,7 @@ import { useLifeOS } from "../lib/LifeOSContext";
 WebBrowser.maybeCompleteAuthSession();
 
 const LIFEOS_ORIGIN = (() => {
-  const raw = process.env.EXPO_PUBLIC_LIFEOS_URL?.trim() || (__DEV__ ? "http://localhost:3000" : "");
+  const raw = resolveLifeosApiBase();
   if (!raw) return "";
   try {
     return new URL(raw).origin;
@@ -59,7 +60,7 @@ function GoogleSignInButton() {
     if (!LIFEOS_ORIGIN) {
       Alert.alert(
         "LifeOS URL missing",
-        "Set EXPO_PUBLIC_LIFEOS_URL in lifeos-mobile/.env to your web app origin (e.g. http://localhost:3000).",
+        "Set EXPO_PUBLIC_LIFEOS_URL to your web app origin, or rebuild so the production fallback applies.",
       );
       return;
     }

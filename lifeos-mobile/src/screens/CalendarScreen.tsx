@@ -47,6 +47,7 @@ import {
 } from "../lib/helpers";
 import { fetchIcsFromUrl, hashIcalUrl, parseIcsEvents, removeIcalSubscriptionEvents, replaceIcalSubscriptionEvents } from "../lib/api";
 import { stageIcsImport } from "../lib/icsImportQueue";
+import { looksLikeIcalFeedUrl } from "../lib/lifeosUrl";
 import {
   coalesceEventMeetingUrl,
   detectMeetingProvider,
@@ -561,9 +562,16 @@ export function CalendarScreen() {
 
   const doSubscribe = async () => {
     if (!icalUrl.trim()) return;
+    const normalized = icalUrl.trim();
+    if (!looksLikeIcalFeedUrl(normalized)) {
+      Alert.alert(
+        "Need a calendar URL",
+        "Paste a webcal:// or https://….ics feed link in the URL field. Use the Name field for a label like “Doctor’s Appointment”.",
+      );
+      return;
+    }
     setImporting(true);
     try {
-      const normalized = icalUrl.trim();
       const id = hashIcalUrl(normalized);
       if (subscriptions.some((feed) => feed.id === id || feed.url === normalized)) {
         Alert.alert("Already subscribed", "That calendar feed is already in your list.");
@@ -595,9 +603,17 @@ export function CalendarScreen() {
 
   const doImportUrl = async () => {
     if (!icalUrl.trim()) return;
+    const normalized = icalUrl.trim();
+    if (!looksLikeIcalFeedUrl(normalized)) {
+      Alert.alert(
+        "Need a calendar URL",
+        "Paste a webcal:// or https://….ics feed link. Names go in the Name field above.",
+      );
+      return;
+    }
     setImporting(true);
     try {
-      const ics = await fetchIcsFromUrl(icalUrl.trim());
+      const ics = await fetchIcsFromUrl(normalized);
       const parsed = parseIcsEvents(ics);
       if (stageParsed(parsed, "Calendar feed")) {
         setImportOpen(false);

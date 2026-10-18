@@ -13,14 +13,13 @@ import {
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { WebView, type WebViewMessageEvent, type WebViewNavigation } from "react-native-webview";
+import { resolveLifeosApiBase } from "./src/lib/lifeosUrl";
 
 WebBrowser.maybeCompleteAuthSession();
 
-/** Production/local LifeOS web origin. Override with EXPO_PUBLIC_LIFEOS_URL. */
-const DEFAULT_LIFEOS_URL = process.env.EXPO_PUBLIC_LIFEOS_URL?.trim() || (__DEV__ ? "http://localhost:3000" : "");
-
+/** Prefer EXPO_PUBLIC_LIFEOS_URL; otherwise production / localhost via resolveLifeosApiBase. */
 function resolveLifeOSUrl() {
-  const raw = process.env.EXPO_PUBLIC_LIFEOS_URL?.trim() || DEFAULT_LIFEOS_URL;
+  const raw = resolveLifeosApiBase();
   if (!raw) return "";
   try {
     const url = new URL(raw);
@@ -32,7 +31,7 @@ function resolveLifeOSUrl() {
 }
 
 function resolveLifeOSOrigin() {
-  const raw = process.env.EXPO_PUBLIC_LIFEOS_URL?.trim() || DEFAULT_LIFEOS_URL;
+  const raw = resolveLifeosApiBase();
   if (!raw) return "";
   try {
     return new URL(raw).origin;

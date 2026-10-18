@@ -17,7 +17,8 @@ Always start from **`lifeos-mobile/`** (not the repo root — that Next.js `app/
 ```bash
 cd lifeos-mobile
 cp .env.example .env
-# Set EXPO_PUBLIC_LIFEOS_URL + EXPO_PUBLIC_FIREBASE_* (required for cloud sign-in).
+# Set EXPO_PUBLIC_FIREBASE_* (required for cloud sign-in).
+# EXPO_PUBLIC_LIFEOS_URL is optional in release builds (falls back to lifeos-mu-three.vercel.app).
 # Optional: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for faster /shell-auth OAuth.
 rm -rf node_modules .expo
 npm install
