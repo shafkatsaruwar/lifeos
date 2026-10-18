@@ -158,6 +158,18 @@ export function removeIcalSubscriptionEvents(
   return calendar.filter((event) => !event.id.startsWith(prefix));
 }
 
+/** Update baked-in event colors for an existing feed without re-fetching ICS. */
+export function recolorIcalSubscriptionEvents(
+  calendar: CalendarEvent[],
+  subscriptionId: string,
+  color: string,
+): CalendarEvent[] {
+  const prefix = icalEventPrefix(subscriptionId);
+  return calendar.map((event) =>
+    event.id.startsWith(prefix) ? { ...event, color } : event,
+  );
+}
+
 export function mergeCalendarEvents(existing: CalendarEvent[], incoming: CalendarEvent[]): CalendarEvent[] {
   const byId = new Map<string, CalendarEvent>();
   for (const event of existing) byId.set(event.id, event);

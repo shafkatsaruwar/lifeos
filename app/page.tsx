@@ -2442,6 +2442,12 @@ export default function LifeOS() {
     const prefix = icalEventPrefix(subscriptionId);
     setCalendarEvents((items) => items.filter((event) => !event.id.startsWith(prefix)));
   };
+  const recolorIcalSubscriptionEvents = (subscriptionId: string, color: string) => {
+    const prefix = icalEventPrefix(subscriptionId);
+    setCalendarEvents((items) =>
+      items.map((event) => (event.id.startsWith(prefix) ? { ...event, color } : event)),
+    );
+  };
   const syncIcalSubscriptions = useCallback(async (subscriptions?: IcalSubscription[]) => {
     const feeds = subscriptions ?? settingsState.icalSubscriptions ?? [];
     if (!feeds.length) return;
@@ -3271,7 +3277,7 @@ export default function LifeOS() {
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onCreateTask={createTaskFromNote} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} onConvertToTask={(index, text) => { addTask(text, undefined, "", { flashLabel: "Task created from brain" }); setBrainItems(items => items.filter((_, i) => i !== index)); }} />}
-            {view === "Settings" && <SettingsView dark={dark} setDark={applyDark} onCommitAppearance={commitAppearanceStudio} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} icalSubscriptions={settingsState.icalSubscriptions ?? []} onIcalSubscriptionsChange={(icalSubscriptions) => updateSettings({ icalSubscriptions })} onReplaceIcalSubscriptionEvents={replaceIcalSubscriptionEvents} onRemoveIcalSubscriptionEvents={removeIcalSubscriptionEvents} onSyncIcalSubscriptions={() => void syncIcalSubscriptions()} />}
+            {view === "Settings" && <SettingsView dark={dark} setDark={applyDark} onCommitAppearance={commitAppearanceStudio} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} icalSubscriptions={settingsState.icalSubscriptions ?? []} onIcalSubscriptionsChange={(icalSubscriptions) => updateSettings({ icalSubscriptions })} onReplaceIcalSubscriptionEvents={replaceIcalSubscriptionEvents} onRemoveIcalSubscriptionEvents={removeIcalSubscriptionEvents} onRecolorIcalSubscriptionEvents={recolorIcalSubscriptionEvents} onSyncIcalSubscriptions={() => void syncIcalSubscriptions()} />}
             {!["Life", "School", "Work", "Career", "Study Abroad", "Treasury", "Mastery", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Navigation", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
         </AnimatePresence>
@@ -3355,6 +3361,7 @@ export default function LifeOS() {
             onSubscriptionsChange={(icalSubscriptions) => updateSettings({ icalSubscriptions })}
             onReplaceSubscriptionEvents={replaceIcalSubscriptionEvents}
             onRemoveSubscriptionEvents={removeIcalSubscriptionEvents}
+            onRecolorSubscriptionEvents={recolorIcalSubscriptionEvents}
             onSyncAll={() => void syncIcalSubscriptions()}
             flash={flash}
           />
@@ -4937,6 +4944,7 @@ function CalendarConnections({
   onSubscriptionsChange,
   onReplaceSubscriptionEvents,
   onRemoveSubscriptionEvents,
+  onRecolorSubscriptionEvents,
   onSyncAll,
 }: {
   user?: any;
@@ -4945,6 +4953,7 @@ function CalendarConnections({
   onSubscriptionsChange: (subscriptions: IcalSubscription[]) => void;
   onReplaceSubscriptionEvents: (subscriptionId: string, events: CalendarEvent[]) => void;
   onRemoveSubscriptionEvents: (subscriptionId: string) => void;
+  onRecolorSubscriptionEvents: (subscriptionId: string, color: string) => void;
   onSyncAll: () => void;
 }) {
   const [provider, setProvider] = useState<"apple" | "google" | "feeds">("apple");
@@ -4989,6 +4998,7 @@ function CalendarConnections({
             onSubscriptionsChange={onSubscriptionsChange}
             onReplaceSubscriptionEvents={onReplaceSubscriptionEvents}
             onRemoveSubscriptionEvents={onRemoveSubscriptionEvents}
+            onRecolorSubscriptionEvents={onRecolorSubscriptionEvents}
             onSyncAll={onSyncAll}
             flash={flash}
           />
@@ -5003,6 +5013,7 @@ function IcalFeedsPanel({
   onSubscriptionsChange,
   onReplaceSubscriptionEvents,
   onRemoveSubscriptionEvents,
+  onRecolorSubscriptionEvents,
   onSyncAll,
   flash,
   compact = false,
@@ -5011,6 +5022,7 @@ function IcalFeedsPanel({
   onSubscriptionsChange: (subscriptions: IcalSubscription[]) => void;
   onReplaceSubscriptionEvents: (subscriptionId: string, events: CalendarEvent[]) => void;
   onRemoveSubscriptionEvents: (subscriptionId: string) => void;
+  onRecolorSubscriptionEvents: (subscriptionId: string, color: string) => void;
   onSyncAll: () => void;
   flash: (message: string) => void;
   compact?: boolean;
@@ -5086,6 +5098,14 @@ function IcalFeedsPanel({
     flash(`Unsubscribed from ${feed.name}`);
   };
 
+  const changeFeedColor = (feed: IcalSubscription, nextColor: string) => {
+    if (feed.color.toLowerCase() === nextColor.toLowerCase()) return;
+    onSubscriptionsChange(
+      subscriptions.map((item) => (item.id === feed.id ? { ...item, color: nextColor } : item)),
+    );
+    onRecolorSubscriptionEvents(feed.id, nextColor);
+  };
+
   return (
     <div className={`ical-feeds-panel${compact ? " is-compact" : ""}`}>
       {!compact ? (
@@ -5109,6 +5129,18 @@ function IcalFeedsPanel({
                       ? `Last synced ${new Date(feed.lastSyncedAt).toLocaleString()}`
                       : "Not synced yet"}
                 </small>
+                <div className="accent-picker ical-feed-recolor" role="group" aria-label={`Color for ${feed.name}`}>
+                  {SPACE_COLORS.map((swatch) => (
+                    <button
+                      key={`${feed.id}-${swatch}`}
+                      type="button"
+                      className={feed.color.toLowerCase() === swatch.toLowerCase() ? "selected" : ""}
+                      style={{ background: swatch }}
+                      onClick={() => changeFeedColor(feed, swatch)}
+                      aria-label={`Set ${feed.name} color to ${swatch}`}
+                    />
+                  ))}
+                </div>
               </div>
               <div className="ical-feed-actions">
                 <button type="button" onClick={() => void syncOne(feed)} disabled={syncingId === feed.id}>
@@ -5410,7 +5442,7 @@ function WorkspaceHubsEditor({
   );
 }
 
-function SettingsView({ dark: _dark, setDark: _setDark, onCommitAppearance, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport, user, userId, onLogout, onOpenTask, onRestoreTask, onRequestPaywall, icalSubscriptions = [], onIcalSubscriptionsChange, onReplaceIcalSubscriptionEvents, onRemoveIcalSubscriptionEvents, onSyncIcalSubscriptions }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; onCommitAppearance: (patch: AppearanceStudioCommitPatch) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; userId?: string | null; onLogout?: () => void; onOpenTask?: (id: number) => void; onRestoreTask?: (id: number) => void; onRequestPaywall?: (hub: View) => void; icalSubscriptions?: IcalSubscription[]; onIcalSubscriptionsChange?: (subscriptions: IcalSubscription[]) => void; onReplaceIcalSubscriptionEvents?: (subscriptionId: string, events: CalendarEvent[]) => void; onRemoveIcalSubscriptionEvents?: (subscriptionId: string) => void; onSyncIcalSubscriptions?: () => void }) {
+function SettingsView({ dark: _dark, setDark: _setDark, onCommitAppearance, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport, user, userId, onLogout, onOpenTask, onRestoreTask, onRequestPaywall, icalSubscriptions = [], onIcalSubscriptionsChange, onReplaceIcalSubscriptionEvents, onRemoveIcalSubscriptionEvents, onRecolorIcalSubscriptionEvents, onSyncIcalSubscriptions }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; onCommitAppearance: (patch: AppearanceStudioCommitPatch) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; userId?: string | null; onLogout?: () => void; onOpenTask?: (id: number) => void; onRestoreTask?: (id: number) => void; onRequestPaywall?: (hub: View) => void; icalSubscriptions?: IcalSubscription[]; onIcalSubscriptionsChange?: (subscriptions: IcalSubscription[]) => void; onReplaceIcalSubscriptionEvents?: (subscriptionId: string, events: CalendarEvent[]) => void; onRemoveIcalSubscriptionEvents?: (subscriptionId: string) => void; onRecolorIcalSubscriptionEvents?: (subscriptionId: string, color: string) => void; onSyncIcalSubscriptions?: () => void }) {
   const archivedTasks = tasks.filter((task) => task.done || task.canceled || task.status === "Done" || task.status === "Canceled");
   const [archivesOpen, setArchivesOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsBentoSection | "account" | null>(null);
@@ -5592,6 +5624,7 @@ function SettingsView({ dark: _dark, setDark: _setDark, onCommitAppearance, sett
                 onSubscriptionsChange={onIcalSubscriptionsChange ?? (() => {})}
                 onReplaceSubscriptionEvents={onReplaceIcalSubscriptionEvents ?? (() => {})}
                 onRemoveSubscriptionEvents={onRemoveIcalSubscriptionEvents ?? (() => {})}
+                onRecolorSubscriptionEvents={onRecolorIcalSubscriptionEvents ?? (() => {})}
                 onSyncAll={onSyncIcalSubscriptions ?? (() => {})}
               />
               <AssistantAccessPanel user={user} userId={userId} flash={flash} />
@@ -7059,6 +7092,7 @@ function CalendarImportModal({
   onSubscriptionsChange,
   onReplaceSubscriptionEvents,
   onRemoveSubscriptionEvents,
+  onRecolorSubscriptionEvents,
   onSyncAll,
   flash,
 }: {
@@ -7068,6 +7102,7 @@ function CalendarImportModal({
   onSubscriptionsChange: (subscriptions: IcalSubscription[]) => void;
   onReplaceSubscriptionEvents: (subscriptionId: string, events: CalendarEvent[]) => void;
   onRemoveSubscriptionEvents: (subscriptionId: string) => void;
+  onRecolorSubscriptionEvents: (subscriptionId: string, color: string) => void;
   onSyncAll: () => void;
   flash: (message: string) => void;
 }) {
@@ -7101,6 +7136,7 @@ function CalendarImportModal({
           onSubscriptionsChange={onSubscriptionsChange}
           onReplaceSubscriptionEvents={onReplaceSubscriptionEvents}
           onRemoveSubscriptionEvents={onRemoveSubscriptionEvents}
+          onRecolorSubscriptionEvents={onRecolorSubscriptionEvents}
           onSyncAll={onSyncAll}
           flash={flash}
         />
