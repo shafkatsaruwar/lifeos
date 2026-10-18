@@ -79,6 +79,12 @@ import {
   type TaskStatusColumn,
   type TasksViewMode,
 } from "@/lib/tasksView";
+import {
+  DEFAULT_FOCUS_APPEARANCE,
+  FOCUS_IMMERSIVE_SETTINGS_NOTE,
+  normalizeFocusAppearance,
+  type FocusAppearance,
+} from "@/lib/focusAppearance";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { isNavigationOwner } from "@/lib/navigationOwner";
@@ -278,6 +284,8 @@ type SettingsState = {
   activityRingsGoals?: ActivityRingsGoals;
   /** Tasks page view mode (Phase 6). */
   tasksViewMode?: TasksViewMode;
+  /** FocusMode appearance (Phase 7) — standard | immersive. */
+  focusAppearance?: FocusAppearance;
   nowTaskId?: number | null;
   spaceContext?: Record<string, { lastTaskId?: number; lastFilter?: string; updatedAt?: string }>;
   ambientActivity?: AmbientActivity | null;
@@ -449,6 +457,7 @@ const initialSettings: SettingsState = {
   nowWidgetLayout: { ...DEFAULT_NOW_WIDGET_LAYOUT, order: [...DEFAULT_NOW_WIDGET_LAYOUT.order], hidden: [] },
   activityRingsGoals: { ...DEFAULT_ACTIVITY_RINGS_GOALS },
   tasksViewMode: "list" as TasksViewMode,
+  focusAppearance: DEFAULT_FOCUS_APPEARANCE,
   nowTaskId: null,
   spaceContext: {},
   ambientActivity: null,
@@ -3058,7 +3067,7 @@ export default function LifeOS() {
     </>;
     return <>
       {notificationShell}
-      <FocusMode key={activeTask.id} task={activeTask} tasks={activeTasks} soundEffectsEnabled={settingsState.soundEffects} onUpdateNotes={(id, notes) => updateTaskDetails(id, { notes })} onSwitch={(id) => { setActiveTaskId(id); chooseNowTask(id); const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); }} onUpdateChecklist={updateTaskChecklist} onUpdateChecklistProgress={updateTaskChecklistProgress} onUpdateFocusSession={updateFocusSession} onComplete={complete} onExit={(destination) => { setFocus(false); setView(destination ?? "Now"); }} />
+      <FocusMode key={activeTask.id} task={activeTask} tasks={activeTasks} soundEffectsEnabled={settingsState.soundEffects} focusAppearance={normalizeFocusAppearance(settingsState.focusAppearance)} onFocusAppearanceChange={(focusAppearance) => updateSettings({ focusAppearance })} focusRemindersEnabled={settingsState.focusReminders} onUpdateNotes={(id, notes) => updateTaskDetails(id, { notes })} onSwitch={(id) => { setActiveTaskId(id); chooseNowTask(id); const task = tasks.find(item => item.id === id); if (task) rememberSpaceTask(task); }} onUpdateChecklist={updateTaskChecklist} onUpdateChecklistProgress={updateTaskChecklistProgress} onUpdateFocusSession={updateFocusSession} onComplete={complete} onExit={(destination) => { setFocus(false); setView(destination ?? "Now"); }} />
       {taskCalendarChoiceLayer}
     </>;
   }
@@ -5556,6 +5565,18 @@ function SettingsView({ dark: _dark, setDark: _setDark, onCommitAppearance, sett
                 </div>
                 <p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p>
                 <div className="settings-panel-divider" />
+                <span className="settings-field-label">Focus appearance</span>
+                <p className="settings-note" style={{ margin: "4px 0 10px" }}>{FOCUS_IMMERSIVE_SETTINGS_NOTE}</p>
+                {(() => {
+                  const appearance = normalizeFocusAppearance(settings.focusAppearance);
+                  return (
+                    <div className="calendar-mode-tabs" role="group" aria-label="Focus appearance">
+                      <button type="button" className={appearance === "standard" ? "selected" : ""} onClick={() => update({ focusAppearance: "standard" })}>Standard</button>
+                      <button type="button" className={appearance === "immersive" ? "selected" : ""} onClick={() => update({ focusAppearance: "immersive" })}>Immersive</button>
+                    </div>
+                  );
+                })()}
+                <div className="settings-panel-divider" />
                 <span className="settings-field-label">Activity rings</span>
                 <p className="settings-note" style={{ margin: "4px 0 10px" }}>Goals for the Now progress rings — completed tasks and focus minutes from real sessions. No streaks. Calendar attendance is not scored.</p>
                 {(() => {
@@ -6344,7 +6365,7 @@ function playFocusCue(frequency: number, duration = 0.12, volume = 0.04) {
   }
 }
 
-function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, onUpdateChecklist, onUpdateChecklistProgress, onUpdateFocusSession, onComplete, onExit }: { task: Task; tasks: Task[]; soundEffectsEnabled: boolean; onUpdateNotes: (id: number, notes: string) => void; onSwitch: (id: number) => void; onUpdateChecklist: (id: number, checklist: string[]) => void; onUpdateChecklistProgress: (id: number, progress: boolean[]) => void; onUpdateFocusSession: (id: number, session: FocusSessionUpdate) => void; onComplete: (id: number) => void; onExit: (destination?: View) => void }) {
+function FocusMode({ task, tasks, soundEffectsEnabled, focusAppearance = "standard", onFocusAppearanceChange, focusRemindersEnabled, onUpdateNotes, onSwitch, onUpdateChecklist, onUpdateChecklistProgress, onUpdateFocusSession, onComplete, onExit }: { task: Task; tasks: Task[]; soundEffectsEnabled: boolean; focusAppearance?: FocusAppearance; onFocusAppearanceChange?: (appearance: FocusAppearance) => void; focusRemindersEnabled?: boolean; onUpdateNotes: (id: number, notes: string) => void; onSwitch: (id: number) => void; onUpdateChecklist: (id: number, checklist: string[]) => void; onUpdateChecklistProgress: (id: number, progress: boolean[]) => void; onUpdateFocusSession: (id: number, session: FocusSessionUpdate) => void; onComplete: (id: number) => void; onExit: (destination?: View) => void }) {
   const totalSeconds = task.focusMinutes * 60;
   const savedSeconds = getTaskFocusSeconds(task);
   const [seconds, setSeconds] = useState(savedSeconds);
@@ -6553,11 +6574,46 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
     saveFocusSession();
     onExit(destination);
   };
-  return <motion.div className={`focus-mode focus-studio ${hasStarted ? "session-active" : ""}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+  const appearance = normalizeFocusAppearance(focusAppearance);
+  const immersive = appearance === "immersive";
+  const nextStepIndex = checks.findIndex((value) => !value);
+  const nextStepLabel = nextStepIndex >= 0 ? (checklist[nextStepIndex]?.trim() || `Step ${nextStepIndex + 1}`) : (checklist.length ? "All checklist steps done" : "Add a tiny next step when you need one");
+  const progressPct = Math.max(0, Math.min(100, Math.round(((totalSeconds - seconds) / Math.max(1, totalSeconds)) * 100)));
+  const setAppearance = (next: FocusAppearance) => onFocusAppearanceChange?.(normalizeFocusAppearance(next));
+  return <motion.div className={`focus-mode focus-studio ${hasStarted ? "session-active" : ""} ${immersive ? "focus-immersive" : "focus-standard"}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
     <AnimatePresence>{breakStage !== "hidden" && <motion.div className="focus-break-layer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="focus-break-card" initial={{ scale: .96, y: 12 }} animate={{ scale: 1, y: 0 }}>
       {breakStage === "suggested" ? <><div className="focus-break-icon"><Coffee size={22} /></div><p className="eyebrow">HALFWAY CHECK-IN</p><h2>You’ve earned a quick reset.</h2><p>You’re halfway through this {formatFocusMinutesShort(task.focusMinutes)} focus. Take five minutes to stand up, drink water, stretch, or take meds if they’re due.</p><div className="focus-break-actions"><button onClick={resumeFocus}>Keep going</button><button className="take-break" onClick={() => { setBreakSeconds(5 * 60); setBreakStage("running"); }}><Coffee size={15} /> Take a 5-minute break</button></div></> : <><div className="focus-break-countdown"><strong>{breakTime}</strong><span>5-minute reset</span></div><p className="eyebrow">BREAK IN PROGRESS</p><h2>Step away. LifeOS has the time.</h2><p>Your focus timer is paused. When this reaches zero, your session resumes automatically.</p><div className="focus-break-actions"><button onClick={resumeFocus}>Return to focus early</button></div></>}
     </motion.div></motion.div>}</AnimatePresence>
-    <header><div className="brand"><div className="brand-mark light"><span /><span /><span /></div><span>LifeOS</span></div><span className="focus-label"><i /> {running ? "In a focus session" : hasStarted ? "Paused — your time is saved" : "Ready when you are"}</span><div className="focus-top-actions"><button className="focus-note-link" onClick={() => exitFocus("Library")}><NotebookPen size={15} /> Take notes</button><button onClick={() => exitFocus()}><X size={16} /> Exit <kbd>Esc</kbd></button></div></header>
+    <header><div className="brand"><div className="brand-mark light"><span /><span /><span /></div><span>LifeOS</span></div><span className="focus-label"><i /> {running ? "In a focus session" : hasStarted ? "Paused — your time is saved" : "Ready when you are"}</span><div className="focus-top-actions"><div className="focus-appearance-toggle" role="group" aria-label="Focus appearance"><button type="button" className={!immersive ? "selected" : ""} aria-pressed={!immersive} onClick={() => setAppearance("standard")}>Standard</button><button type="button" className={immersive ? "selected" : ""} aria-pressed={immersive} onClick={() => setAppearance("immersive")}>Immersive</button></div>{!immersive && <button className="focus-note-link" onClick={() => exitFocus("Library")}><NotebookPen size={15} /> Take notes</button>}<button onClick={() => exitFocus()}><X size={16} /> Exit <kbd>Esc</kbd></button></div></header>
+    {immersive ? (
+      <main className="focus-immersive-main" data-testid="focus-immersive">
+        <div className="focus-immersive-stage">
+          <p className="focus-project"><i style={{ background: task.color }} />{task.project}</p>
+          <h1>{task.title}</h1>
+          <p className="focus-immersive-status">{running ? "Focus in progress" : hasStarted ? "Paused — progress saved" : "Ready when you are"}</p>
+          <div className="timer-ring focus-immersive-ring" style={{ "--progress": `${(seconds / totalSeconds) * 360}deg` } as React.CSSProperties} aria-label={`Timer ${time}, ${progressPct}% elapsed`}><div><strong>{time}</strong><span>{progressPct}% elapsed</span></div></div>
+          <div className="focus-immersive-actions">
+            <button className="timer-button" type="button" onClick={toggleTimer}>{running ? <><Circle size={15} fill="currentColor" /> Pause</> : <><Focus size={16} /> {hasStarted ? "Resume" : "Start"}</>}</button>
+            <button type="button" className="focus-immersive-end" onClick={() => exitFocus()}>End session</button>
+            <button type="button" className="mark-done-button" onClick={() => { if (soundEffectsEnabled) playFocusCue(660, 0.16); onComplete(task.id); setTimeout(() => onExit(), 300); }}><CheckCircle2 size={16} /> Done</button>
+          </div>
+          <div className="focus-immersive-next" aria-live="polite">
+            <span>Next step</span>
+            <strong>{nextStepLabel}</strong>
+            {nextStepIndex >= 0 && checklist[nextStepIndex] != null ? (
+              <button type="button" onClick={() => setChecks(current => current.map((value, index) => index === nextStepIndex ? true : value))}>Mark step done</button>
+            ) : null}
+          </div>
+          <p className="focus-immersive-context">{task.focusMinutes} min · {task.energy} energy · {completedSteps}/{checklist.length || 0} checklist</p>
+          <p className="focus-immersive-notice">{focusRemindersEnabled ? "Focus reminders stay on in Settings — Immersive does not mute your OS." : "Browser focus reminders are off. Immersive never claims OS-wide silence."}</p>
+          <div className="focus-immersive-switch">
+            <button type="button" onClick={() => switchBy(-1)}>← Prev task</button>
+            <button type="button" onClick={() => switchBy(1)}>Next task →</button>
+          </div>
+        </div>
+      </main>
+    ) : (
+    <>
     <main>
       <section className="focus-main"><div className="focus-hero"><p className="focus-project"><i style={{ background: task.color }} />{task.project} <span>·</span> {formatFocusMinutesShort(task.focusMinutes)} <span>·</span> {task.energy} energy</p><h1>{task.title}</h1><p className="focus-sub">{running ? "One gentle pass. You don’t need to do the whole thing at once." : "Choose a tiny next step, then press start when you’re ready."}</p></div>
         <div className="checklist"><div className="checklist-head"><span>SESSION CHECKLIST</span><div><label htmlFor="checklist-template">Switch checklist</label><select id="checklist-template" value={activeTemplateName} onChange={event => switchChecklist(event.target.value)}><option value="Custom" disabled>Custom checklist</option>{focusChecklistTemplates.map(template => <option key={template.name} value={template.name}>{template.name}</option>)}</select><button type="button" onClick={addChecklistItem}><Plus size={13} /> Add step</button></div></div>{checklist.length ? checklist.map((item, i) => <div className={`checklist-row ${checks[i] ? "checked" : ""}`} key={`${task.id}-${i}`}><button type="button" className="check-toggle" aria-label={`Toggle ${item}`} onClick={() => setChecks(current => current.map((value, index) => index === i ? !value : value))}>{checks[i] && <Check size={14} />}</button><input autoFocus={i === checklist.length - 1} value={item} placeholder="Write the next tiny step…" onChange={event => updateChecklistItem(i, event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); addChecklistItem(); } }} /><button type="button" className="delete-step" aria-label={`Delete ${item || "step"}`} onClick={() => deleteChecklistItem(i)}><Trash2 size={13} /></button></div>) : <div className="empty-checklist"><strong>No steps yet.</strong><button type="button" onClick={addChecklistItem}><Plus size={13} /> Add the first step</button></div>}</div>
@@ -6570,6 +6626,8 @@ function FocusMode({ task, tasks, soundEffectsEnabled, onUpdateNotes, onSwitch, 
       </aside>
     </main>
     <footer><span>Session progress</span><div><i style={{ width: `${completedSteps / totalSteps * 100}%` }} /></div><strong>{completedSteps} of {checklist.length} complete</strong></footer>
+    </>
+    )}
   </motion.div>;
 }
 

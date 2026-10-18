@@ -1,10 +1,10 @@
 # LifeOS Design System
 
-**Status:** Living document — **Atelier Light frozen**; **Atelier Dark Phase 2 shipped** (command-center chrome)  
+**Status:** Living document — **Atelier Light frozen**; **Atelier Dark Phase 2+**; **Phases 5–8 shipped on stacked branches**  
 **Last updated:** 2026-10-18  
 **Canonical implementations:**  
 - Web tokens → `app/globals.css` (`:root` / `.dark` + `[data-personality]`)  
-- Mobile theme → `lifeos-mobile/src/lib/theme.ts` (preference parity; hex drift OK until Phase 8)  
+- Mobile theme → `lifeos-mobile/src/lib/theme.ts` (Phase 8: Atelier Light/Dark hex parity with web)  
 - Preference helper → `lib/appearancePrefs.ts`  
 - Frozen Light snapshot → `docs/design-archive/current-2026-10-18`
 
@@ -72,7 +72,7 @@ User-selectable **accent** and per-workspace colors override `--accent` at runti
 
 ### 3.2 Mobile-only convenience tokens
 
-Mobile `LIGHT` / `DARK` in `theme.ts` may still list older hexes until Phase 8 parity. Prefer web Light values above when reconciling.
+Mobile `LIGHT` / `DARK` in `theme.ts` match web Atelier Light/Dark hexes (Phase 8). Expo cannot port CSS `backdrop-filter` / glass — see `docs/lifeos-3-phase8.md`.
 
 | Token | Typical Light | Use |
 |-------|---------------|-----|
