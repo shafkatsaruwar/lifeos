@@ -52,19 +52,21 @@ function RingSvg({
         fill="none"
         strokeWidth={RING_STROKE}
       />
-      <circle
-        className={`activity-ring-progress${reduceMotion ? " no-motion" : ""}`}
-        cx={RING_SIZE / 2}
-        cy={RING_SIZE / 2}
-        r={RING_R}
-        fill="none"
-        stroke={stroke}
-        strokeWidth={RING_STROKE}
-        strokeLinecap={clamped > 0 ? "round" : "butt"}
-        strokeDasharray={`${progressLength} ${RING_C}`}
-        transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
-        style={{ transition: reduceMotion ? "none" : undefined }}
-      />
+      {clamped > 0 ? (
+        <circle
+          className={`activity-ring-progress${reduceMotion ? " no-motion" : ""}`}
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          r={RING_R}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={RING_STROKE}
+          strokeLinecap="round"
+          strokeDasharray={`${progressLength} ${RING_C}`}
+          transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+          style={{ transition: reduceMotion ? "none" : undefined }}
+        />
+      ) : null}
       <title>{label}</title>
     </svg>
   );
@@ -129,14 +131,8 @@ export default function ActivityRingsWidget({
                   reduceMotion={reduceMotion}
                 />
                 <div className="activity-ring-center">
-                  <strong>
-                    {ring.percent}%
-                    <span className="activity-ring-center-sep" aria-hidden>
-                      {" "}
-                      ·{" "}
-                    </span>
-                    <span className="activity-ring-center-label">{ring.label}</span>
-                  </strong>
+                  <strong>{ring.percent}%</strong>
+                  <span className="activity-ring-center-label">{ring.label}</span>
                 </div>
               </div>
               <p className="activity-ring-value">{valueLabel}</p>
