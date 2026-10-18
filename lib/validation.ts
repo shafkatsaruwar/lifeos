@@ -155,6 +155,11 @@ export const SettingsSchema = z.object({
   wallpaperId: z.enum(['none', 'solid', 'midnight', 'aurora', 'ember', 'mist']).optional(),
   wallpaperSolid: z.string().optional(),
   glassLevel: z.enum(['off', 'subtle', 'balanced', 'high']).optional(),
+  /** Now dashboard widget layout (Phase 4) — show/hide + order. */
+  nowWidgetLayout: z.object({
+    order: z.array(z.enum(['weather', 'quote', 'today', 'focus', 'hubs', 'copilot'])).optional(),
+    hidden: z.array(z.enum(['weather', 'quote', 'today', 'focus', 'hubs', 'copilot'])).optional(),
+  }).optional(),
   /** Saved webcal / .ics subscription feeds (multi-calendar subscribe). */
   icalSubscriptions: z.array(z.object({
     id: z.string(),
