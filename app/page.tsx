@@ -44,6 +44,31 @@ import {
   type Personality,
   type ThemeMode,
 } from "@/lib/appearancePrefs";
+import {
+  applyAppearanceChrome,
+  appearanceStudioFromSettings,
+  type AppearanceStudioCommitPatch,
+  type GlassLevel,
+  type WallpaperId,
+} from "@/lib/appearanceStudio";
+import {
+  DEFAULT_NOW_WIDGET_LAYOUT,
+  isDefaultNowWidgetLayout,
+  moveNowWidget,
+  normalizeNowWidgetLayout,
+  NOW_WIDGET_LABELS,
+  toggleNowWidgetHidden,
+  visibleNowWidgets,
+  type NowWidgetId,
+  type NowWidgetLayout,
+} from "@/lib/nowWidgetLayout";
+import { AppearanceStudio } from "@/app/components/AppearanceStudio";
+import ActivityRingsWidget from "@/app/components/ActivityRingsWidget";
+import {
+  DEFAULT_ACTIVITY_RINGS_GOALS,
+  normalizeActivityRingsGoals,
+  type ActivityRingsGoals,
+} from "@/lib/activityRings";
 import { logger } from "@/lib/logger";
 import { PRIORITY_RANK, TEST_USER, STORAGE_KEYS } from "@/lib/constants";
 import { isNavigationOwner } from "@/lib/navigationOwner";
@@ -153,7 +178,7 @@ import type { ParsedTask } from "@/lib/useNLTaskCreation";
 import { useTaskBreakdown } from "@/lib/useTaskBreakdown";
 import {
   Aperture, Archive, ArrowRight, Brain, CalendarDays, Check, CheckCircle2,
-  ChevronDown, Circle, Clock3, Command, FileText, Flame, Focus, FolderKanban,
+  ChevronDown, ChevronUp, Circle, Clock3, Command, FileText, Flame, Focus, FolderKanban,
   Globe2, Home, Inbox, LayoutGrid, Library, Link2, ListChecks, ListTodo, Menu, Moon, MoreHorizontal,
   Mail, Music2, Plus, Search, Settings, Sparkles, Sun, TimerReset, UserRound, X, Zap,
   Ban, Pencil, Trash2, Bell, Download, Palette, Shield, SlidersHorizontal, Coffee, Maximize, Mic, GripVertical,
@@ -231,6 +256,16 @@ type SettingsState = {
   themeMode?: ThemeMode;
   /** Named Atelier personality for Studio later. Optional; UX may still say Light/Dark. */
   personality?: Personality;
+  /** Appearance Studio — wallpaper preset id (Phase 3). */
+  wallpaperId?: WallpaperId;
+  /** Solid wallpaper hex when wallpaperId === "solid". */
+  wallpaperSolid?: string;
+  /** Glass intensity for chrome (Phase 3). */
+  glassLevel?: GlassLevel;
+  /** Now widget show/hide + order (Phase 4). */
+  nowWidgetLayout?: NowWidgetLayout;
+  /** Activity rings goals (Phase 5). */
+  activityRingsGoals?: ActivityRingsGoals;
   nowTaskId?: number | null;
   spaceContext?: Record<string, { lastTaskId?: number; lastFilter?: string; updatedAt?: string }>;
   ambientActivity?: AmbientActivity | null;
@@ -396,6 +431,11 @@ const initialSettings: SettingsState = {
   reduceMotion: false,
   themeMode: "light",
   personality: "atelier-light",
+  wallpaperId: "none",
+  wallpaperSolid: "#0B1020",
+  glassLevel: "off",
+  nowWidgetLayout: { ...DEFAULT_NOW_WIDGET_LAYOUT, order: [...DEFAULT_NOW_WIDGET_LAYOUT.order], hidden: [] },
+  activityRingsGoals: { ...DEFAULT_ACTIVITY_RINGS_GOALS },
   nowTaskId: null,
   spaceContext: {},
   ambientActivity: null,
@@ -1339,6 +1379,27 @@ export default function LifeOS() {
     document.documentElement.classList.toggle("dark", dark);
     document.documentElement.dataset.personality = dark ? "atelier-dark" : "atelier-light";
   }, [dark]);
+  /** Follow OS theme when Appearance Studio commits `themeMode: system`. */
+  useEffect(() => {
+    if (settingsState.themeMode !== "system" || typeof window === "undefined") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => {
+      const next = mq.matches;
+      setDark(prev => (prev === next ? prev : next));
+    };
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, [settingsState.themeMode]);
+  /** Committed wallpaper / glass chrome (Studio draft previews separately). */
+  useEffect(() => {
+    applyAppearanceChrome(appearanceStudioFromSettings(settingsState));
+  }, [
+    settingsState.wallpaperId,
+    settingsState.wallpaperSolid,
+    settingsState.glassLevel,
+    settingsState.accent,
+  ]);
   const applyDark = useCallback((next: boolean | ((value: boolean) => boolean)) => {
     setDark(prev => {
       const resolved = typeof next === "function" ? next(prev) : next;
@@ -1351,6 +1412,21 @@ export default function LifeOS() {
       });
       return resolved;
     });
+  }, []);
+  /** Appearance Studio Apply — preserves `themeMode: system` (do not route through applyDark). */
+  const commitAppearanceStudio = useCallback((patch: AppearanceStudioCommitPatch) => {
+    setSettingsState((current) => ({
+      ...current,
+      themeMode: patch.themeMode,
+      personality: patch.personality,
+      accent: patch.accent,
+      wallpaperId: patch.wallpaperId,
+      wallpaperSolid: patch.wallpaperSolid,
+      glassLevel: patch.glassLevel,
+      compactMode: patch.compactMode,
+      reduceMotion: patch.reduceMotion,
+    }));
+    setDark(patch.dark);
   }, []);
   useEffect(() => {
     if (!cloudUserId) return;
@@ -3170,7 +3246,7 @@ export default function LifeOS() {
               />
             )}
             {view === "Mastery" && <MasterOSDashboard />}
-            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onOpenTimesheet={() => { setWorkView("timesheet"); go("Work"); }} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableCareerOS={settingsState.enableCareerOS !== false} enableSchoolOS={settingsState.enableSchoolOS !== false} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableTreasuryOS={settingsState.enableTreasuryOS !== false} enableMasterOS={settingsState.enableMasterOS !== false} onboardingCompletedAt={settingsState.onboardingCompletedAt} onMarkOnboarded={() => setSettingsState(current => ({ ...current, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} flash={flash} />}
+            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onOpenTimesheet={() => { setWorkView("timesheet"); go("Work"); }} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableCareerOS={settingsState.enableCareerOS !== false} enableSchoolOS={settingsState.enableSchoolOS !== false} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableTreasuryOS={settingsState.enableTreasuryOS !== false} enableMasterOS={settingsState.enableMasterOS !== false} onboardingCompletedAt={settingsState.onboardingCompletedAt} onMarkOnboarded={() => setSettingsState(current => ({ ...current, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} flash={flash} activityRingsGoals={settingsState.activityRingsGoals} reduceMotion={settingsState.reduceMotion} weekStartsMonday={settingsState.weekStartsMonday} nowWidgetLayout={settingsState.nowWidgetLayout} onNowWidgetLayoutChange={(nowWidgetLayout) => updateSettings({ nowWidgetLayout })} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
             {view === "Tasks" && <Tasks tasks={activeTasks} classes={classes} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} onDeleteMany={deleteTasks} />}
             {view === "Navigation" && canAccessNavigation && (
@@ -3183,7 +3259,7 @@ export default function LifeOS() {
             {view === "Resources" && <ResourcesView resources={resources} classes={classes} onUpload={(file) => uploadResource(file)} onDelete={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplace={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Library" && <LibraryView notes={notes} classes={classes} projects={projectItems} resources={resources} selectedNoteId={selectedNoteId} onSelectNote={setSelectedNoteId} onCreateNote={() => createNote()} onUpdateNote={updateNote} onDeleteNote={deleteNote} onImportNotes={importNotes} onCreateTask={createTaskFromNote} onUpload={(file) => uploadResource(file)} onDeleteResource={(id) => { const resource = resources.find(item => item.id === id); if (resource) void deleteResource(resource); }} onReplaceResource={(id, file) => { const resource = resources.find(item => item.id === id); if (resource) void replaceResource(resource, file); }} onDownload={downloadResource} />}
             {view === "Brain" && <BrainView items={brainItems} onCapture={() => setCapture(true)} onArchive={(index) => { setBrainItems(items => items.filter((_, i) => i !== index)); flash("Thought archived"); }} onConvertToTask={(index, text) => { addTask(text, undefined, "", { flashLabel: "Task created from brain" }); setBrainItems(items => items.filter((_, i) => i !== index)); }} />}
-            {view === "Settings" && <SettingsView dark={dark} setDark={applyDark} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} icalSubscriptions={settingsState.icalSubscriptions ?? []} onIcalSubscriptionsChange={(icalSubscriptions) => updateSettings({ icalSubscriptions })} onReplaceIcalSubscriptionEvents={replaceIcalSubscriptionEvents} onRemoveIcalSubscriptionEvents={removeIcalSubscriptionEvents} onSyncIcalSubscriptions={() => void syncIcalSubscriptions()} />}
+            {view === "Settings" && <SettingsView dark={dark} setDark={applyDark} onCommitAppearance={commitAppearanceStudio} settings={settingsState} update={updateSettings} tasks={tasks} projects={projectItems} events={calendarEvents} brainItems={brainItems} flash={flash} onSync={syncFromCloud} onReset={resetLocalData} onExport={exportData} onImport={importData} user={user} userId={cloudUserId} onLogout={handleLogout} onOpenTask={openTaskPage} onRestoreTask={(id) => { updateTaskDetails(id, { status: "Not started", done: false, canceled: false, completedAt: undefined }); flash("Task restored to your active list"); }} onRequestPaywall={(hub) => { setPendingPaidHub(hub); setHubPaywallOpen(true); }} icalSubscriptions={settingsState.icalSubscriptions ?? []} onIcalSubscriptionsChange={(icalSubscriptions) => updateSettings({ icalSubscriptions })} onReplaceIcalSubscriptionEvents={replaceIcalSubscriptionEvents} onRemoveIcalSubscriptionEvents={removeIcalSubscriptionEvents} onSyncIcalSubscriptions={() => void syncIcalSubscriptions()} />}
             {view === "Settings" && <SynapseDayPlanImport flash={flash} />}
             {!["Life", "School", "Work", "Career", "Study Abroad", "Treasury", "Mastery", "Now", "Today", "Spaces", "Library", "Dashboard", "Tasks", "Navigation", "Calendar", "Notes", "Brain", "Resources", "Settings"].includes(view) && <ComingSoon view={view} onFocus={() => setFocus(true)} />}
           </motion.div>
@@ -3286,10 +3362,15 @@ export default function LifeOS() {
   );
 }
 
-function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, timeTracking, onTimeTrackingChange, onOpenTimesheet, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableCareerOS, enableSchoolOS, enableWorkOS, enableStudyAbroad, enableTreasuryOS, enableMasterOS, onboardingCompletedAt, onMarkOnboarded, flash}: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; timeTracking: TimeTrackingState; onTimeTrackingChange: (next: TimeTrackingState) => void; onOpenTimesheet: () => void; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableCareerOS: boolean; enableSchoolOS: boolean; enableWorkOS: boolean; enableStudyAbroad: boolean; enableTreasuryOS: boolean; enableMasterOS: boolean; onboardingCompletedAt?: string; onMarkOnboarded: () => void; flash: (message: string) => void }) {
+function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, timeTracking, onTimeTrackingChange, onOpenTimesheet, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableCareerOS, enableSchoolOS, enableWorkOS, enableStudyAbroad, enableTreasuryOS, enableMasterOS, onboardingCompletedAt, onMarkOnboarded, flash, nowWidgetLayout, onNowWidgetLayoutChange, activityRingsGoals, reduceMotion, weekStartsMonday}: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; timeTracking: TimeTrackingState; onTimeTrackingChange: (next: TimeTrackingState) => void; onOpenTimesheet: () => void; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableCareerOS: boolean; enableSchoolOS: boolean; enableWorkOS: boolean; enableStudyAbroad: boolean; enableTreasuryOS: boolean; enableMasterOS: boolean; onboardingCompletedAt?: string; onMarkOnboarded: () => void; flash: (message: string) => void; nowWidgetLayout?: NowWidgetLayout; onNowWidgetLayoutChange?: (layout: NowWidgetLayout) => void; activityRingsGoals?: ActivityRingsGoals; reduceMotion?: boolean; weekStartsMonday?: boolean }) {
   const [handoff, setHandoff] = useState("");
   const [queueOpen, setQueueOpen] = useState(false);
   const [dragQueueId, setDragQueueId] = useState<number | null>(null);
+  const [customizeNow, setCustomizeNow] = useState(false);
+  const widgetLayout = normalizeNowWidgetLayout(nowWidgetLayout);
+  const widgetVisible = new Set(visibleNowWidgets(widgetLayout));
+  const showWidget = (id: NowWidgetId) => widgetVisible.has(id);
+  const patchWidgetLayout = (next: NowWidgetLayout) => onNowWidgetLayoutChange?.(normalizeNowWidgetLayout(next));
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false;
     if (onboardingCompletedAt) return false;
@@ -3413,19 +3494,85 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       return (
     <>
     <div className="atelier-now">
+      <div className="now-customize-bar">
+        <button
+          type="button"
+          className={customizeNow ? "selected" : ""}
+          onClick={() => setCustomizeNow((v) => !v)}
+          data-testid="now-customize-toggle"
+        >
+          <SlidersHorizontal size={14} /> {customizeNow ? "Done customizing" : "Customize Now"}
+        </button>
+        {!isDefaultNowWidgetLayout(widgetLayout) && (
+          <button
+            type="button"
+            onClick={() => {
+              patchWidgetLayout(DEFAULT_NOW_WIDGET_LAYOUT);
+              flash?.("Now layout restored to default");
+            }}
+          >
+            Restore default layout
+          </button>
+        )}
+      </div>
+      {customizeNow && (
+        <section className="card now-customize-panel" data-testid="now-customize-panel">
+          <div className="card-head"><div><h2>Dashboard widgets</h2></div></div>
+          <div className="now-customize-list">
+            {widgetLayout.order.map((id, index) => {
+              const hidden = widgetLayout.hidden.includes(id);
+              return (
+                <div key={id} className={`now-customize-row${hidden ? " is-hidden" : ""}`}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={!hidden}
+                      onChange={() => patchWidgetLayout(toggleNowWidgetHidden(widgetLayout, id))}
+                    />
+                    <strong>{NOW_WIDGET_LABELS[id]}</strong>
+                  </label>
+                  <div className="now-customize-move">
+                    <button
+                      type="button"
+                      aria-label={`Move ${NOW_WIDGET_LABELS[id]} up`}
+                      disabled={index === 0}
+                      onClick={() => patchWidgetLayout(moveNowWidget(widgetLayout, id, "up"))}
+                    >
+                      <ChevronUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Move ${NOW_WIDGET_LABELS[id]} down`}
+                      disabled={index === widgetLayout.order.length - 1}
+                      onClick={() => patchWidgetLayout(moveNowWidget(widgetLayout, id, "down"))}
+                    >
+                      <ChevronDown size={14} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="settings-note">Show, hide, and reorder widgets. Current Atelier layout stays the default until you change it.</p>
+        </section>
+      )}
       <header className="atelier-now-hero">
         <div className="atelier-now-hero-copy">
           <h1 className="atelier-greeting">{greetingNode}</h1>
           <p className="atelier-hero-copy">A clear mind builds a better tomorrow.</p>
           <p className="atelier-hero-date">{dateObj.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }).toUpperCase()}</p>
         </div>
+        {(showWidget("weather") || showWidget("quote")) && (
         <div className="atelier-now-hero-widgets">
-          <NowWeatherWidget />
-          <div className="atelier-glass-card atelier-quote-widget">
+          {showWidget("weather") && <div style={{ order: widgetLayout.order.indexOf("weather") }}><NowWeatherWidget /></div>}
+          {showWidget("quote") && (
+          <div className="atelier-glass-card atelier-quote-widget" style={{ order: widgetLayout.order.indexOf("quote") }}>
             <p>“Progress, not perfection.”</p>
             <ArrowRight size={16} aria-hidden />
           </div>
+          )}
         </div>
+        )}
       </header>
 
       {ambientActivity ? (
@@ -3436,7 +3583,8 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
       ) : null}
 
       <div className="atelier-now-main">
-        <section className="card atelier-today-panel" aria-label="Today">
+        {showWidget("today") && (
+        <section className="card atelier-today-panel" aria-label="Today" style={{ order: widgetLayout.order.indexOf("today") }}>
           <div className="card-head"><div><h2>Today</h2></div></div>
           <div className={`now-today-list${todayEvents.length ? " now-today-timeline" : ""}`}>
             {todayEvents.length ? todayEvents.map((event, index) => {
@@ -3474,9 +3622,11 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           ) : null}
           <div className="now-today-footer"><button type="button" onClick={() => onGo("Today")}>View full day</button></div>
         </section>
+        )}
 
         <div className="atelier-now-mid">
-          <section className="card atelier-focus-panel" title="Your focused task">
+          {showWidget("focus") && (
+          <section className="card atelier-focus-panel" title="Your focused task" style={{ order: widgetLayout.order.indexOf("focus") }}>
             <div className="atelier-focus-ring-wrap" aria-hidden={focusPct == null}>
               <svg className="atelier-focus-ring" viewBox="0 0 140 140">
                 <circle cx="70" cy="70" r={ringR} pathLength="100" />
@@ -3546,8 +3696,22 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               </div>
             )}
           </section>
+          )}
 
-          <div className="atelier-hub-tiles" aria-label="Spaces">
+          {showWidget("rings") && (
+          <div style={{ order: widgetLayout.order.indexOf("rings") }} data-testid="activity-rings-slot">
+            <ActivityRingsWidget
+              tasks={tasks}
+              goals={activityRingsGoals}
+              weekStartsMonday={weekStartsMonday !== false}
+              reduceMotion={Boolean(reduceMotion)}
+              onOpenGoals={() => onGo("Settings")}
+            />
+          </div>
+          )}
+
+          {showWidget("hubs") && (
+          <div className="atelier-hub-tiles" aria-label="Spaces" style={{ order: widgetLayout.order.indexOf("hubs") }}>
             {(() => {
               type StripTile = { key: string; label: string; sub: string; view: View; className: string; Icon: typeof Home };
               const byKey: Record<string, StripTile> = {
@@ -3578,12 +3742,15 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
               ));
             })()}
           </div>
+          )}
         </div>
       </div>
 
-      <div className="atelier-now-bottom">
+      {showWidget("copilot") && (
+      <div className="atelier-now-bottom" style={{ order: widgetLayout.order.indexOf("copilot") }}>
         <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} studyAbroadContext={enableStudyAbroad ? buildStudyAbroadCopilotContext(studyAbroadHub) : null} />
       </div>
+      )}
 
       <div className="atelier-now-utility">
         <TimesheetNowStrip
@@ -5192,7 +5359,7 @@ function WorkspaceHubsEditor({
   );
 }
 
-function SettingsView({ dark, setDark, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport, user, userId, onLogout, onOpenTask, onRestoreTask, onRequestPaywall, icalSubscriptions = [], onIcalSubscriptionsChange, onReplaceIcalSubscriptionEvents, onRemoveIcalSubscriptionEvents, onSyncIcalSubscriptions }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; userId?: string | null; onLogout?: () => void; onOpenTask?: (id: number) => void; onRestoreTask?: (id: number) => void; onRequestPaywall?: (hub: View) => void; icalSubscriptions?: IcalSubscription[]; onIcalSubscriptionsChange?: (subscriptions: IcalSubscription[]) => void; onReplaceIcalSubscriptionEvents?: (subscriptionId: string, events: CalendarEvent[]) => void; onRemoveIcalSubscriptionEvents?: (subscriptionId: string) => void; onSyncIcalSubscriptions?: () => void }) {
+function SettingsView({ dark: _dark, setDark: _setDark, onCommitAppearance, settings, update, tasks, projects, events, brainItems, flash, onSync, onReset, onExport, onImport, user, userId, onLogout, onOpenTask, onRestoreTask, onRequestPaywall, icalSubscriptions = [], onIcalSubscriptionsChange, onReplaceIcalSubscriptionEvents, onRemoveIcalSubscriptionEvents, onSyncIcalSubscriptions }: { dark: boolean; setDark: (next: boolean | ((value: boolean) => boolean)) => void; onCommitAppearance: (patch: AppearanceStudioCommitPatch) => void; settings: SettingsState; update: (updates: Partial<SettingsState>) => void; tasks: Task[]; projects: Project[]; events: CalendarEvent[]; brainItems: string[]; flash: (message: string) => void; onSync?: () => void; onReset?: () => void; onExport?: () => void; onImport?: () => void; user?: any; userId?: string | null; onLogout?: () => void; onOpenTask?: (id: number) => void; onRestoreTask?: (id: number) => void; onRequestPaywall?: (hub: View) => void; icalSubscriptions?: IcalSubscription[]; onIcalSubscriptionsChange?: (subscriptions: IcalSubscription[]) => void; onReplaceIcalSubscriptionEvents?: (subscriptionId: string, events: CalendarEvent[]) => void; onRemoveIcalSubscriptionEvents?: (subscriptionId: string) => void; onSyncIcalSubscriptions?: () => void }) {
   const archivedTasks = tasks.filter((task) => task.done || task.canceled || task.status === "Done" || task.status === "Canceled");
   const [archivesOpen, setArchivesOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsBentoSection | "account" | null>(null);
@@ -5205,7 +5372,7 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
     flash(permission === "granted" ? "Browser notifications enabled" : "Notifications not enabled");
   };
   const sectionMeta: Record<SettingsBentoSection | "account", { title: string; blurb: string }> = {
-    appearance: { title: "Appearance", blurb: "Theme, accent, density, and capture shortcuts." },
+    appearance: { title: "Appearance", blurb: "Appearance Studio — theme, accent, wallpaper, glass, and density." },
     hubs: { title: "Hubs", blurb: "Choose which spaces show in the sidebar." },
     connections: { title: "Connections", blurb: "Gmail, calendars, assistant access, and calendar defaults." },
     focus: { title: "Focus", blurb: "Default session length and energy." },
@@ -5245,20 +5412,12 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
           {activeSection === "appearance" && (
             <section className="card settings-card">
               <div className="settings-body settings-body-dense">
-                <div className="theme-options">
-                  <button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16} /><span>Light</span></button>
-                  <button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16} /><span>Dark</span></button>
-                </div>
-                <div className="accent-picker">
-                  {SPACE_COLORS.map(color => (
-                    <button key={color} className={settings.accent === color ? "selected" : ""} style={{ background: color }} onClick={() => update({ accent: color })} aria-label={`Set accent ${color}`} />
-                  ))}
-                </div>
-                <p className="settings-note">Default accent for Now, Tasks, and the rest of LifeOS.</p>
-                <div className="settings-toggle-pair">
-                  <ToggleRow title="Compact" desc="Tighter spacing." checked={settings.compactMode} onChange={(compactMode) => update({ compactMode })} />
-                  <ToggleRow title="Reduce motion" desc="Calmer transitions." checked={settings.reduceMotion} onChange={(reduceMotion) => update({ reduceMotion })} />
-                </div>
+                <AppearanceStudio
+                  settings={settings}
+                  systemDark={typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches}
+                  flash={flash}
+                  onCommit={onCommitAppearance}
+                />
                 {settings.enableMasterOS !== false && <p className="settings-note">Mastery · type <code>/mos</code> on Now.</p>}
                 <div className="settings-panel-divider" />
                 <ToggleRow title="Show capture commands" desc="When you open Search anything (⌘K), show the /command list so you can learn them." checked={settings.showCaptureCommands !== false} onChange={(showCaptureCommands) => update({ showCaptureCommands })} />
@@ -5304,6 +5463,25 @@ function SettingsView({ dark, setDark, settings, update, tasks, projects, events
                   <label>Default energy<select value={settings.defaultEnergy} onChange={event => update({ defaultEnergy: event.target.value as EnergyLevel })}><option>Low</option><option>Medium</option><option>High</option></select></label>
                 </div>
                 <p className="settings-note">New priorities use these defaults. Existing tasks can still be edited individually.</p>
+                <div className="settings-panel-divider" />
+                <span className="settings-field-label">Activity rings</span>
+                <p className="settings-note" style={{ margin: "4px 0 10px" }}>Goals for the Now progress rings — completed tasks and focus minutes from real sessions. No streaks. Calendar attendance is not scored.</p>
+                {(() => {
+                  const goals = normalizeActivityRingsGoals(settings.activityRingsGoals);
+                  const patchGoals = (partial: Partial<ActivityRingsGoals>) => update({ activityRingsGoals: normalizeActivityRingsGoals({ ...goals, ...partial }) });
+                  return (
+                    <>
+                      <div className="calendar-mode-tabs" role="group" aria-label="Activity rings period" style={{ marginBottom: 12 }}>
+                        <button type="button" className={goals.period === "daily" ? "selected" : ""} onClick={() => patchGoals({ period: "daily" })}>Daily</button>
+                        <button type="button" className={goals.period === "weekly" ? "selected" : ""} onClick={() => patchGoals({ period: "weekly" })}>Weekly</button>
+                      </div>
+                      <div className="settings-grid-fields">
+                        <label>Task goal<input type="number" min={1} max={50} value={goals.tasksTarget} onChange={event => patchGoals({ tasksTarget: Number(event.target.value) || 3 })} /></label>
+                        <label>Focus minutes goal<input type="number" min={15} max={1200} step={15} value={goals.focusMinutesTarget} onChange={event => patchGoals({ focusMinutesTarget: Number(event.target.value) || 90 })} /></label>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </section>
           )}
