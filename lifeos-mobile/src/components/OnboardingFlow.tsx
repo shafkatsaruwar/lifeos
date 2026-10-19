@@ -16,7 +16,7 @@ import { useLifeOS } from "../lib/LifeOSContext";
 import { createNotebook, createPage } from "../lib/notebooks";
 import type { OnboardingDestination, Task } from "../types";
 
-type Interest = "life" | "school" | "work" | "notes" | "today";
+type Interest = "life" | "school" | "work" | "career" | "notes" | "today";
 
 type Props = {
   onFinished: (destination?: OnboardingDestination) => void;
@@ -30,6 +30,7 @@ const INTERESTS: {
 }[] = [
   { id: "life", label: "HomeOS", desc: "Personal home base — habits, day log, projects", icon: "home" },
   { id: "school", label: "School", desc: "Classes & academics", icon: "award" },
+  { id: "career", label: "Career", desc: "Job search pipeline & interviews", icon: "target" },
   { id: "work", label: "Work", desc: "Professional projects & deliverables", icon: "briefcase" },
   { id: "notes", label: "Notes", desc: "Handwriting & library", icon: "edit-3" },
   { id: "today", label: "Just today", desc: "Priorities on Now", icon: "zap" },
@@ -73,6 +74,7 @@ export function OnboardingFlow({ onFinished }: Props) {
       next.add("school");
     }
     if (workspace.settings.enableWorkOS === true) next.add("work");
+    if (workspace.settings.enableCareerOS === true) next.add("career");
     return next.size ? next : new Set<Interest>(["life", "school"]);
   });
   const [busy, setBusy] = useState(false);
@@ -138,6 +140,7 @@ export function OnboardingFlow({ onFinished }: Props) {
     preferredName: name.trim() || workspace.settings.preferredName,
     enableLifeOS: interests.has("life"),
     enableSchoolOS: interests.has("school"),
+    enableCareerOS: interests.has("career"),
     enableWorkOS: interests.has("work"),
     // New accounts start without optional packs; Settings can turn them on later.
     enableStudyAbroad: false,

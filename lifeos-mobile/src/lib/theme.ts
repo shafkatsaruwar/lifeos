@@ -35,6 +35,8 @@ export const DEFAULT_WORKSPACE_COLORS = {
   life: "#d99b38",
   school: "#8b5cf6",
   work: "#4338ca",
+  /** Matches web `--env-career` / Job Seeker OS teal. */
+  career: "#0f766e",
   studyAbroad: "#0d9488",
   treasuryOS: "#47a47b",
   masterOS: "#625af6",

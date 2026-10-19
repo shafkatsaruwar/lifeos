@@ -41,6 +41,7 @@ import { SettingsScreen } from "../screens/SettingsScreen";
 import { NotificationSettingsScreen } from "../screens/NotificationSettingsScreen";
 import { NotificationCenterScreen } from "../screens/NotificationCenterScreen";
 import { WorkDashboardScreen } from "../screens/WorkDashboardScreen";
+import { CareerDashboardScreen } from "../screens/CareerDashboardScreen";
 import { FocusEnforcerSetupScreen } from "../screens/FocusEnforcerSetupScreen";
 import { FocusEnforcerSessionScreen } from "../screens/FocusEnforcerSessionScreen";
 import { FocusEnforcerHistoryScreen } from "../screens/FocusEnforcerHistoryScreen";
@@ -57,6 +58,7 @@ const KeptStack = createNativeStackNavigator();
 const LibraryStack = createNativeStackNavigator();
 const SchoolStack = createNativeStackNavigator();
 const WorkStack = createNativeStackNavigator();
+const CareerStack = createNativeStackNavigator();
 
 /** Feather stroke icons — lighter and less boxy than filled Ionicons squares. */
 const TAB_ICONS: Record<string, keyof typeof Feather.glyphMap> = {
@@ -67,6 +69,7 @@ const TAB_ICONS: Record<string, keyof typeof Feather.glyphMap> = {
   LifeTab: "home",
   SchoolTab: "award",
   WorkTab: "briefcase",
+  CareerTab: "target",
   LibraryTab: "book-open",
 };
 
@@ -164,6 +167,17 @@ function WorkStackNavigator() {
       <WorkStack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
       <WorkStack.Screen name="TaskDetail" component={TaskDetailScreen} />
     </WorkStack.Navigator>
+  );
+}
+
+
+/** Career is free (like Home / School) — no paywall gate. */
+function CareerStackNavigator() {
+  const screenOptions = useStackScreenOptions();
+  return (
+    <CareerStack.Navigator screenOptions={screenOptions}>
+      <CareerStack.Screen name="CareerDashboard" component={CareerDashboardScreen} />
+    </CareerStack.Navigator>
   );
 }
 
@@ -268,6 +282,7 @@ export function RootNavigator() {
   const showLife = isHubVisibleInNav("Life", settings);
   const showSchool = isHubVisibleInNav("School", settings);
   const showWork = isHubVisibleInNav("Work", settings);
+  const showCareer = isHubVisibleInNav("Career", settings);
 
   const base = dark ? DarkTheme : DefaultTheme;
   const navTheme = {
