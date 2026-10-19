@@ -1,4 +1,3 @@
-import { Platform } from "react-native";
 import type { Workspace } from "../../types";
 import { taskIsOpen, taskRemaining, toDateKey } from "../helpers";
 import { mergeCalendarWithWorkMeetings } from "../workos";
@@ -238,8 +237,8 @@ export function buildWidgetSnapshot(workspace: Workspace): WidgetSnapshot {
     });
   }
 
-  // Surface the next event for up to a week (calendar widget always shows it too).
-  if (nextEvent && nextEventMins != null && nextEventMins <= 7 * 24 * 60) {
+  // Imminent events only — farther ones stay on the Calendar widget, not Attention.
+  if (nextEvent && nextEventMins != null && nextEventMins <= 24 * 60) {
     attention.push({
       id: `event-${nextEvent.id}`,
       kind: "event",
@@ -252,11 +251,11 @@ export function buildWidgetSnapshot(workspace: Workspace): WidgetSnapshot {
             ? "soon"
             : formatWhenLabel(nextEvent.start, today) || "upcoming",
       deepLink: "lifeos://calendar",
-      urgency: 15 + Math.max(0, Math.min(nextEventMins, 7 * 24 * 60)),
+      urgency: 15 + Math.max(0, Math.min(nextEventMins, 24 * 60)),
     });
   }
 
-  // Stale high-priority with no due date
+  // Stale high-priority with no due date (open Task — not Executive retainers routine)
   for (const t of highPriority.filter((x) => !x.due).slice(0, 1)) {
     attention.push({
       id: `stale-${t.id}`,
@@ -270,16 +269,15 @@ export function buildWidgetSnapshot(workspace: Workspace): WidgetSnapshot {
   }
 
   attention.sort((a, b) => a.urgency - b.urgency);
-  const topAttention = attention.slice(0, 4);
+  // Cap at 2 — Attention widget (small pills + medium rows) only renders two.
+  const topAttention = attention.slice(0, 2);
   const attentionCount = topAttention.length;
   const headline =
     attentionCount === 0
       ? "You're clear"
       : attentionCount === 1
         ? "1 thing needs you"
-        : attentionCount <= 3
-          ? `Only ${attentionCount} alerts matter`
-          : `${attentionCount} things need you`;
+        : `Only ${attentionCount} alerts matter`;
 
   const hottestDeadline =
     overdue[0] ||
@@ -374,6 +372,8 @@ export function buildWidgetSnapshot(workspace: Workspace): WidgetSnapshot {
  * Document-directory writes are useless to widgets — App Group only.
  */
 export async function writeWidgetSnapshot(workspace: Workspace): Promise<void> {
+  // Dynamic import keeps buildWidgetSnapshot testable in Node (no RN transform).
+  const { Platform } = await import("react-native");
   if (Platform.OS !== "ios") return;
   const snapshot = buildWidgetSnapshot(workspace);
   // Ensure doubles stay doubles for Swift Codable (avoid Int-only JSON numbers where needed).

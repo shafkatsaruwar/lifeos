@@ -7,6 +7,7 @@ import {
 } from "firebase/auth";
 import { get, getDatabase, onValue, ref, remove, set, type Unsubscribe } from "firebase/database";
 import type { NotebookHub, NotebookPage, Workspace } from "../types";
+import { emptyCareerHub, normalizeCareerHub } from "./career";
 import { emptyTimeTracking, normalizeTimeTracking } from "./timeTracking";
 import { normalizeCalendars } from "./calendars";
 import { emptyNotebookHub } from "./notebooks";
@@ -127,6 +128,7 @@ export const emptyWorkspace: Workspace = {
     goals: [],
   },
   work: { projects: [], deliverables: [], tasks: [], meetings: [] },
+  career: emptyCareerHub(),
   timeTracking: emptyTimeTracking(),
   notebookHub: emptyNotebookHub(),
   notebookPages: {},
@@ -183,6 +185,7 @@ export async function loadWorkspace(userId: string): Promise<Workspace> {
       tasks: Array.isArray(loaded.work?.tasks) ? loaded.work.tasks : [],
       meetings: Array.isArray(loaded.work?.meetings) ? loaded.work.meetings : [],
     },
+    career: normalizeCareerHub(loaded.career),
     timeTracking: normalizeTimeTracking(loaded.timeTracking),
     calendars: normalizeCalendars(loaded.calendars),
     calendar: Array.isArray(loaded.calendar) ? loaded.calendar : [],

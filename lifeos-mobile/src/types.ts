@@ -1,6 +1,7 @@
+import type { CareerHub } from "./lib/career";
 import type { WorkHubState } from "./lib/workos";
 import type { TimeTrackingState } from "./lib/timeTracking";
-export type { WorkHubState };
+export type { CareerHub, WorkHubState };
 export type { TimeTrackingState };
 
 export type EnergyLevel = "Low" | "Medium" | "High";
@@ -305,11 +306,12 @@ export type CalendarDefaultView = "upcoming" | "month" | "day";
 
 export type SettingsState = {
   accent?: string;
-  /** Per-workspace accents (Life / School / Work / Study Abroad / TreasuryOS / MasterOS). Synced with web. */
+  /** Per-workspace accents (Life / School / Work / Career / Study Abroad / TreasuryOS / MasterOS). Synced with web. */
   workspaceColors?: {
     life?: string;
     school?: string;
     work?: string;
+    career?: string;
     studyAbroad?: string;
     treasuryOS?: string;
     masterOS?: string;
@@ -334,6 +336,8 @@ export type SettingsState = {
   enableLifeOS?: boolean;
   enableSchoolOS?: boolean;
   enableWorkOS?: boolean;
+  /** Career / Job Seeker OS — free hub; synced with web enableCareerOS. */
+  enableCareerOS?: boolean;
   /** MasterOS teaching workspace — web + iPad; not shown on iPhone. */
   enableMasterOS?: boolean;
   /** Study Abroad workspace — web-first; capture commands open web guidance on mobile. */
@@ -570,6 +574,8 @@ export type Workspace = {
   school: SchoolHubState;
   /** WorkOS hub — same Firebase `work` key as web */
   work: WorkHubState;
+  /** Career / Job Seeker OS — same Firebase `career` key as web */
+  career: CareerHub;
   /** Clock in/out and contractor timesheet entries */
   timeTracking: TimeTrackingState;
   /** Notebook library metadata */

@@ -23,7 +23,8 @@ const INACTIVE = "#8E8E93";
 function tabTint(routeName: string, accent: string, settings: SettingsState): string {
   switch (routeName) {
     case "NowTab":
-      return accent;
+      // Same cornflower selection chrome as Calendar / Kept (not theme accent).
+      return "#3F7ED7";
     case "TasksTab":
       return "#31926A";
     case "CalendarTab":
@@ -37,6 +38,8 @@ function tabTint(routeName: string, accent: string, settings: SettingsState): st
       return workspaceColorFor(settings, "school");
     case "WorkTab":
       return workspaceColorFor(settings, "work");
+    case "CareerTab":
+      return workspaceColorFor(settings, "career");
     case "LibraryTab":
       return "#DB2777";
     default:

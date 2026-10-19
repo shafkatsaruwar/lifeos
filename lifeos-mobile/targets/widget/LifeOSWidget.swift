@@ -436,28 +436,33 @@ struct AttentionView: View {
           }
         }
         .padding(.top, 4)
-      } else if let first = block?.items.first {
-        HStack(alignment: .top, spacing: 10) {
-          RoundedRectangle(cornerRadius: 2)
-            .fill(accent(for: first.kind))
-            .frame(width: 3, height: 36)
-          VStack(alignment: .leading, spacing: 2) {
-            Text(first.title)
-              .font(.system(size: 14, weight: .bold))
-              .foregroundStyle(LifeOSWidgetPalette.ink)
-              .lineLimit(1)
-            if let sub = first.subtitle {
-              Text(sub)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(LifeOSWidgetPalette.muted)
-                .lineLimit(1)
+      } else {
+        // Match headline count: snapshot caps at 2; never claim N alerts while rendering one row.
+        VStack(alignment: .leading, spacing: 8) {
+          ForEach((block?.items ?? []).prefix(2)) { item in
+            HStack(alignment: .top, spacing: 10) {
+              RoundedRectangle(cornerRadius: 2)
+                .fill(accent(for: item.kind))
+                .frame(width: 3, height: 36)
+              VStack(alignment: .leading, spacing: 2) {
+                Text(item.title)
+                  .font(.system(size: 14, weight: .bold))
+                  .foregroundStyle(LifeOSWidgetPalette.ink)
+                  .lineLimit(1)
+                if let sub = item.subtitle {
+                  Text(sub)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(LifeOSWidgetPalette.muted)
+                    .lineLimit(1)
+                }
+              }
+              Spacer(minLength: 0)
+              if let meta = item.meta {
+                Text(meta.uppercased())
+                  .font(.system(size: 11, weight: .bold))
+                  .foregroundStyle(LifeOSWidgetPalette.muted)
+              }
             }
-          }
-          Spacer(minLength: 0)
-          if let meta = first.meta {
-            Text(meta.uppercased())
-              .font(.system(size: 11, weight: .bold))
-              .foregroundStyle(LifeOSWidgetPalette.muted)
           }
         }
         .padding(.top, 4)

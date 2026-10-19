@@ -184,6 +184,7 @@ export function SettingsScreen() {
               ["life", "Life"],
               ["school", "School"],
               ["work", "Work"],
+              ["career", "Career"],
               ["studyAbroad", "Study Abroad"],
               ["treasuryOS", "TreasuryOS"],
               ["masterOS", "MasterOS"],
@@ -396,7 +397,7 @@ export function SettingsScreen() {
             <Text style={[styles.cardLabel, { color: theme.text }]}>Environments</Text>
           </View>
           <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>
-            Home and School are free. Work and MasterOS need LifeOS Pro.
+            Home, School, and Career are free. Work and MasterOS need LifeOS Pro.
           </Text>
           <View style={styles.settingRow}>
             <View style={styles.grow}>
@@ -416,6 +417,18 @@ export function SettingsScreen() {
             <Switch
               value={workspace.settings.enableSchoolOS !== false}
               onValueChange={(value) => patchSettings({ enableSchoolOS: value })}
+              trackColor={{ true: theme.accent }}
+            />
+          </View>
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <View style={styles.settingRow}>
+            <View style={styles.grow}>
+              <Text style={{ color: theme.text, fontWeight: "800" }}>Career</Text>
+              <Text style={{ color: theme.muted, fontSize: 12 }}>Job search pipeline — free hub</Text>
+            </View>
+            <Switch
+              value={workspace.settings.enableCareerOS !== false}
+              onValueChange={(value) => patchSettings({ enableCareerOS: value })}
               trackColor={{ true: theme.accent }}
             />
           </View>
