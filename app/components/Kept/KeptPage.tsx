@@ -17,8 +17,10 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  createMicInactivityTimer,
   emptyKeptHub,
   executeKeptCommand,
+  KEPT_LISTENING_CANCELED_STATUS,
   locationsIndex,
   normalizeKeptHub,
   recentKept,
@@ -27,6 +29,7 @@ import {
   type KeptHub,
   type KeptItem,
   type KeptPrivacy,
+  type MicInactivityTimer,
 } from "@/lib/kept";
 import { isKeptSpeechSupported, startKeptSpeech } from "@/lib/kept/speech";
 import { syncDataToFirebase, loadDataFromFirebase } from "@/lib/dataSync";
@@ -42,6 +45,8 @@ type Props = {
 };
 
 const spring = { type: "spring" as const, stiffness: 380, damping: 28, mass: 0.7 };
+const DEFAULT_TAGLINE = "A place for everything you want to remember.";
+
 
 function formatWhen(iso: string) {
   const t = Date.parse(iso);
@@ -63,7 +68,7 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
   const [query, setQuery] = useState("");
   const [transcript, setTranscript] = useState("");
   const [phase, setPhase] = useState<VoicePhase>("idle");
-  const [statusMessage, setStatusMessage] = useState("A place for everything you want to remember.");
+  const [statusMessage, setStatusMessage] = useState(DEFAULT_TAGLINE);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualName, setManualName] = useState("");
@@ -73,6 +78,11 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
   const [locationFilter, setLocationFilter] = useState<string | null>(null);
   const [speechOk] = useState(() => isKeptSpeechSupported());
   const stopRef = useRef<(() => void) | null>(null);
+  const phaseRef = useRef<VoicePhase>("idle");
+  const listenCancelledRef = useRef(false);
+  const inactivityRef = useRef<MicInactivityTimer | null>(null);
+
+  phaseRef.current = phase;
 
   // Load from Firebase / local fallback
   useEffect(() => {
@@ -113,7 +123,35 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
     }
   }, [hub, hydrated, userId]);
 
-  useEffect(() => () => stopRef.current?.(), []);
+  useEffect(
+    () => () => {
+      inactivityRef.current?.clear();
+      inactivityRef.current = null;
+      stopRef.current?.();
+    },
+    [],
+  );
+
+  const clearInactivity = () => {
+    inactivityRef.current?.clear();
+    inactivityRef.current = null;
+  };
+
+  const cancelListening = () => {
+    if (phaseRef.current !== "listening") return;
+    listenCancelledRef.current = true;
+    clearInactivity();
+    stopRef.current?.();
+    stopRef.current = null;
+    setTranscript("");
+    setPhase("idle");
+    setStatusMessage(KEPT_LISTENING_CANCELED_STATUS);
+  };
+
+  const armInactivity = () => {
+    clearInactivity();
+    inactivityRef.current = createMicInactivityTimer(cancelListening);
+  };
 
   const visible = useMemo(() => {
     let items = searchKept(hub, query, { includePrivate: true });
@@ -195,15 +233,30 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
       setStatusMessage("Speech isn’t available here — type below instead.");
       return;
     }
+    listenCancelledRef.current = false;
+    clearInactivity();
     stopRef.current?.();
     setTranscript("");
     setPhase("listening");
+    phaseRef.current = "listening";
     setStatusMessage("Listening…");
+    // Accidental tap: cancel if no transcript activity for ~3s.
+    armInactivity();
     const handle = startKeptSpeech({
-      onStart: () => setPhase("listening"),
-      onResult: (text) => setTranscript(text),
+      onStart: () => {
+        if (listenCancelledRef.current) return;
+        setPhase("listening");
+        phaseRef.current = "listening";
+      },
+      onResult: (text) => {
+        if (listenCancelledRef.current) return;
+        armInactivity();
+        setTranscript(text);
+      },
       onEnd: () => {
+        clearInactivity();
         stopRef.current = null;
+        if (listenCancelledRef.current) return;
         setTranscript((current) => {
           if (current.trim()) void runUtterance(current);
           else {
@@ -214,6 +267,8 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
         });
       },
       onError: (message) => {
+        clearInactivity();
+        if (listenCancelledRef.current) return;
         setPhase("error");
         setStatusMessage(message);
       },
@@ -222,6 +277,8 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
   };
 
   const stopListening = () => {
+    clearInactivity();
+    listenCancelledRef.current = false;
     stopRef.current?.();
     stopRef.current = null;
     setPhase((p) => (p === "listening" ? "processing" : p));
