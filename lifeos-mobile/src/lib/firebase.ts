@@ -39,17 +39,24 @@ export const firebaseConfigured = Boolean(
   firebaseConfig.apiKey && firebaseConfig.authDomain && firebaseConfig.databaseURL && firebaseConfig.projectId,
 );
 
-function createApp(): FirebaseApp {
+function createApp(): FirebaseApp | null {
   if (!firebaseConfigured) {
-    throw new Error(
-      "Firebase is not configured. Copy lifeos-mobile/.env.example to .env and set EXPO_PUBLIC_FIREBASE_*.",
+    console.warn(
+      "[LifeOS] Firebase is not configured. Copy lifeos-mobile/.env.example to .env and set EXPO_PUBLIC_FIREBASE_*.",
     );
+    return null;
   }
-  if (getApps().length) return getApp();
-  return initializeApp(firebaseConfig);
+  try {
+    if (getApps().length) return getApp();
+    return initializeApp(firebaseConfig);
+  } catch (error) {
+    // Never throw at import — Expo Updates ErrorRecovery turns that into SIGABRT.
+    console.warn("[LifeOS] Firebase app init failed at import", error);
+    return null;
+  }
 }
 
-const app = firebaseConfigured ? createApp() : null;
+const app = createApp();
 
 /**
  * Load getReactNativePersistence from the RN build of @firebase/auth.
@@ -90,12 +97,7 @@ function createAuth(firebaseApp: FirebaseApp): Auth {
     // Never throw at module import — a boot-time throw becomes Expo Updates
     // ErrorRecovery.crash() (SIGABRT) on TestFlight. Prefer memory auth over kill.
     console.warn("[LifeOS] Auth RN persistence failed; using default Auth", error);
-    try {
-      return getAuth(firebaseApp);
-    } catch (fallbackError) {
-      console.warn("[LifeOS] getAuth fallback failed", fallbackError);
-      return getAuth(firebaseApp);
-    }
+    return getAuth(firebaseApp);
   }
 }
 
@@ -112,7 +114,15 @@ export const auth = (() => {
     }
   }
 })();
-export const database = app ? getDatabase(app) : (null as unknown as ReturnType<typeof getDatabase>);
+export const database = (() => {
+  if (!app) return null as unknown as ReturnType<typeof getDatabase>;
+  try {
+    return getDatabase(app);
+  } catch (error) {
+    console.warn("[LifeOS] RTDB init failed at import", error);
+    return null as unknown as ReturnType<typeof getDatabase>;
+  }
+})();
 
 /** RTDB often stores lists as objects (sparse keys) — never assume Array.isArray. */
 export function asArray<T>(value: unknown): T[] {

@@ -37,13 +37,15 @@ module.exports = {
     ...appJson.expo,
     plugins,
     runtimeVersion: appJson.expo.runtimeVersion || { policy: "appVersion" },
+    // Keep updates.url so EAS CLI can still publish rollbacks for old binaries
+    // (build 58). enabled:false removes ErrorRecovery from the next native
+    // binary so a boot-time JS throw cannot SIGABRT via StartupProcedure.
     updates: projectId
       ? {
           url: `https://u.expo.dev/${projectId}`,
-          // Build 58 crashed via ErrorRecovery when ON_LOAD eagerly loaded a bad OTA.
-          // Only check for updates during error recovery; apply on next cold start.
-          checkAutomatically: "ON_ERROR_RECOVERY",
-          fallbackToCacheTimeout: 5000,
+          enabled: false,
+          checkAutomatically: "NEVER",
+          fallbackToCacheTimeout: 0,
         }
       : { enabled: false },
     extra: {
