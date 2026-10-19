@@ -1416,7 +1416,7 @@ html.reduce-transparency .focus-studio>header{
 .kept-voice-copy{display:flex;flex-direction:column;gap:4px;min-width:0}
 .kept-voice-copy strong{font-size:14px;line-height:1.35}
 .kept-phase{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:700}
-.kept-transcript,.kept-search-row{display:flex;align-items:center;gap:10px;padding:0 12px;height:44px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--muted)}
+.kept-transcript,.kept-search-row{display:flex;align-items:center;gap:10px;padding:0 12px;height:44px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--muted)}
 .kept-transcript input,.kept-search-row input{flex:1;border:0;background:transparent;outline:none;color:var(--ink);font-size:13px;min-width:0}
 .kept-transcript button{border:0;background:var(--accent);color:#fff;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700}
 .kept-transcript button:disabled{opacity:.45}
