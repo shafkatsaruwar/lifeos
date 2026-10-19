@@ -37,6 +37,8 @@ function tabTint(routeName: string, accent: string, settings: SettingsState): st
       return workspaceColorFor(settings, "school");
     case "WorkTab":
       return workspaceColorFor(settings, "work");
+    case "CareerTab":
+      return workspaceColorFor(settings, "career");
     case "LibraryTab":
       return "#DB2777";
     default:

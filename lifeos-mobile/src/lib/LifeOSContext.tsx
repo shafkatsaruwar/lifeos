@@ -12,6 +12,7 @@ import type {
   Project,
   Resource,
   SettingsState,
+  CareerHub,
   SchoolHubState,
   Task,
   TimeTrackingState,
@@ -38,6 +39,7 @@ export type AppState = {
   updateLife: (next: LifeHubState) => Promise<void>;
   updateSchool: (next: SchoolHubState) => Promise<void>;
   updateWork: (next: WorkHubState) => Promise<void>;
+  updateCareer: (next: CareerHub) => Promise<void>;
   updateTimeTracking: (next: TimeTrackingState) => Promise<void>;
   updateNotebookHub: (next: NotebookHub) => Promise<void>;
   /** Optimistic local merge + single-page RTDB write */

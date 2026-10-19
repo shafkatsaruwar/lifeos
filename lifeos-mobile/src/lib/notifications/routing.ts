@@ -155,6 +155,11 @@ export const linking = {
           WorkDashboard: "work",
         },
       },
+      CareerTab: {
+        screens: {
+          CareerDashboard: "career",
+        },
+      },
       LibraryTab: {
         path: "library",
       },
