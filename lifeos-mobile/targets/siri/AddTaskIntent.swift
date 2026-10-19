@@ -144,10 +144,11 @@ private func enqueueKeptCommand(_ entry: [String: Any]) {
 
 @available(iOS 16.0, *)
 struct LifeOSAppShortcuts: AppShortcutsProvider {
+  // Result builder: no commas between AppShortcut values, and no surrounding array.
+  @AppShortcutsBuilder
   static var appShortcuts: [AppShortcut] {
     // Xcode 26 / new App Intents export only allows AppEntity/AppEnum in phrase
     // variables — not bare String. Siri will ask for the title via @Parameter.
-    [
     AppShortcut(
       intent: AddTaskIntent(),
       phrases: [
@@ -157,7 +158,7 @@ struct LifeOSAppShortcuts: AppShortcutsProvider {
       ],
       shortTitle: "Add Task",
       systemImageName: "checkmark.circle"
-    ),
+    )
     AppShortcut(
       intent: RememberKeptIntent(),
       phrases: [
@@ -167,7 +168,7 @@ struct LifeOSAppShortcuts: AppShortcutsProvider {
       ],
       shortTitle: "Remember in Kept",
       systemImageName: "bookmark"
-    ),
+    )
     AppShortcut(
       intent: FindKeptIntent(),
       phrases: [
@@ -177,6 +178,6 @@ struct LifeOSAppShortcuts: AppShortcutsProvider {
       ],
       shortTitle: "Find in Kept",
       systemImageName: "magnifyingglass"
-    ),
-  ]
+    )
+  }
 }
