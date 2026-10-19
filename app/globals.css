@@ -1410,7 +1410,7 @@ html.reduce-transparency .focus-studio>header{
 .kept-page h1{font-size:28px;letter-spacing:-.03em;margin:2px 0 6px;line-height:1.15}
 .kept-tagline,.kept-muted{color:var(--muted);font-size:13px;line-height:1.5;margin:0}
 .kept-add{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);font-size:13px;font-weight:600}
-.kept-voice{display:flex;align-items:center;gap:16px;padding:18px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(160deg,color-mix(in srgb,var(--accent) 8%,var(--panel)),var(--panel))}
+.kept-voice{display:flex;align-items:center;gap:16px;padding:18px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(160deg,color-mix(in srgb,var(--accent) 8%,var(--panel)),var(--panel))}
 .kept-mic{width:72px;height:72px;border-radius:50%;border:0;background:var(--accent);color:#fff;display:grid;place-items:center;box-shadow:0 10px 28px color-mix(in srgb,var(--accent) 35%,transparent);transition:transform .2s ease,box-shadow .2s ease}
 .kept-mic.listening{animation:kept-pulse 1.4s ease-in-out infinite;background:var(--accent-coral)}
 .kept-voice-copy{display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -1430,7 +1430,7 @@ html.reduce-transparency .focus-studio>header{
 .kept-row strong{display:inline-flex;align-items:center;gap:6px;font-size:14px}
 .kept-row span{display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-size:12px;margin-top:4px}
 .kept-row small{color:var(--muted);font-size:11px;white-space:nowrap}
-.kept-empty{display:grid;place-items:center;gap:8px;padding:48px 20px;border:1px dashed var(--line);border-radius:16px;text-align:center;color:var(--muted);background:var(--surface-2)}
+.kept-empty{display:grid;place-items:center;gap:8px;padding:48px 20px;border:1px solid var(--line);border-radius:14px;text-align:center;color:var(--muted);background:var(--surface-2)}
 .kept-empty strong{color:var(--ink);font-size:15px}
 .kept-empty p{max-width:280px;margin:0;font-size:13px;line-height:1.5}
 .kept-back{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--muted);font-size:13px;padding:0;width:fit-content}

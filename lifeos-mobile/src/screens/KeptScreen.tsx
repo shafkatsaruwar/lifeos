@@ -635,13 +635,14 @@ const styles = StyleSheet.create({
   main: { flex: 1, paddingHorizontal: 4 },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 8 },
   addBtn: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  // Border language matches Calendar panels (upcomingRow / readyRow): solid theme.border, 1px, radius 14.
   voiceCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
     padding: 14,
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 14,
     marginBottom: 10,
   },
   mic: {
@@ -656,7 +657,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 12,
     marginBottom: 8,
   },
@@ -667,7 +668,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     height: 30,
     borderRadius: 999,
-    borderWidth: 1,
+    borderWidth: 1.5,
   },
   row: {
     flexDirection: "row",
@@ -682,8 +683,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
     padding: 28,
     borderWidth: 1,
-    borderStyle: "dashed",
-    borderRadius: 16,
+    borderRadius: 14,
     alignItems: "center",
     gap: 8,
   },
