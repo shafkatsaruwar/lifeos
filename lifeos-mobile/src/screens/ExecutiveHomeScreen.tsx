@@ -147,7 +147,8 @@ export function ExecutiveHomeScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: tabBarPad, gap: 14 }}>
-        <Card>
+        {/* Border language matches Calendar panels: solid theme.border, 1px, radius 14. */}
+        <Card style={styles.panel}>
           <Text style={[styles.lead, { color: theme.muted }]}>
             Intention → prompt → acknowledgment → start → follow-up → confirmed completion. Nothing is
             assumed.
@@ -165,7 +166,7 @@ export function ExecutiveHomeScreen() {
                   },
                 ]}
               >
-                <Text style={{ color: theme.text, fontSize: 11, fontWeight: "700" }}>
+                <Text style={{ color: theme.text, fontSize: 12, fontWeight: "700" }}>
                   {m === "auto" ? "Auto" : modeLabel(m)}
                 </Text>
               </Pressable>
@@ -173,7 +174,7 @@ export function ExecutiveHomeScreen() {
           </View>
         </Card>
 
-        <Card>
+        <Card style={styles.panel}>
           <Eyebrow>{briefing.title}</Eyebrow>
           <Text style={{ color: theme.text, marginTop: 6 }}>{briefing.summary}</Text>
           {briefing.recommended ? (
@@ -185,7 +186,7 @@ export function ExecutiveHomeScreen() {
         </Card>
 
         {primary && routine && (primary.state === "pending" || primary.state === "scheduled" || primary.state === "acknowledged") ? (
-          <Card>
+          <Card style={styles.panel}>
             <Text style={[styles.chip, { color: theme.accent }]}>
               {modeLabel(primary.mode)} · {primary.state.replace("_", " ")}
             </Text>
@@ -231,7 +232,7 @@ export function ExecutiveHomeScreen() {
         ) : null}
 
         {primary && routine && step && (primary.state === "in_progress" || primary.state === "paused") ? (
-          <Card>
+          <Card style={styles.panel}>
             <Text style={[styles.chip, { color: theme.accent }]}>
               {modeLabel(primary.mode)} · {primary.state.replace("_", " ")} · {routine.name}
             </Text>
@@ -317,7 +318,7 @@ export function ExecutiveHomeScreen() {
         {!primary || ["completed", "skipped", "expired"].includes(primary.state) ? (
           <View style={{ gap: 10 }}>
             {hub.routines.map((item) => (
-              <Card key={item.id}>
+              <Card key={item.id} style={styles.panel}>
                 <Text style={[styles.chip, { color: theme.accent }]}>{item.category.toUpperCase()}</Text>
                 <Text style={{ color: theme.text, fontWeight: "700", fontSize: 17, marginTop: 4 }}>
                   {item.name}
@@ -337,7 +338,7 @@ export function ExecutiveHomeScreen() {
         ) : null}
 
         {showPrefs ? (
-          <Card>
+          <Card style={styles.panel}>
             <Eyebrow>Preferences</Eyebrow>
             <Text style={[styles.hint, { color: theme.muted, marginBottom: 10 }]}>
               Follow-ups use local notifications. Salah stays private when the lock is on.
@@ -492,14 +493,23 @@ function PrefRow({
 
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
+  // Calendar upcomingRow / readyRow language — solid 1px theme.border via Card, radius 14.
+  panel: { borderRadius: 14, padding: 14, gap: 10 },
   lead: { fontSize: 13, lineHeight: 18 },
-  modeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 12 },
-  methodRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 },
+  // Content-sized chip row — wrap, never flex-grow into empty gaps (same idea as Kept placesRow).
+  modeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12, alignItems: "center" },
+  methodRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10, alignItems: "center" },
+  // Match Calendar calFilterChip stroke weight (1.5) and pill radius.
   modePill: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    borderWidth: 1.5,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    flexGrow: 0,
+    flexShrink: 0,
   },
   chip: { fontSize: 11, fontWeight: "800", letterSpacing: 0.4, textTransform: "uppercase" },
   prompt: { fontSize: 20, fontWeight: "600", marginTop: 8, lineHeight: 26 },
@@ -510,7 +520,7 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 11, fontWeight: "700", marginTop: 12, marginBottom: 6 },
   input: {
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
