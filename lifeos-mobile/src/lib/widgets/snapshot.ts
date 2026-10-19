@@ -139,10 +139,24 @@ function endsAtLabel(remainingSeconds: number): string {
   return end.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
+function asList<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (value && typeof value === "object") return Object.values(value as Record<string, T>);
+  return [];
+}
+
 /** Build a glanceable snapshot for WidgetKit — Attention-first, never dump everything. */
 export function buildWidgetSnapshot(workspace: Workspace): WidgetSnapshot {
   const today = toDateKey(new Date());
-  const open = workspace.tasks.filter(taskIsOpen);
+  const tasks = asList<Workspace["tasks"][number]>(workspace.tasks);
+  const calendar = asList<Workspace["calendar"][number]>(workspace.calendar);
+  const work = {
+    projects: asList(workspace.work?.projects),
+    deliverables: asList(workspace.work?.deliverables),
+    tasks: asList(workspace.work?.tasks),
+    meetings: asList(workspace.work?.meetings),
+  };
+  const open = tasks.filter(taskIsOpen);
   const dueToday = open.filter((t) => (t.due || "").slice(0, 10) === today);
   const highPriority = open.filter((t) => (t.priority || "Medium") === "High");
   const overdue = open
@@ -167,8 +181,8 @@ export function buildWidgetSnapshot(workspace: Workspace): WidgetSnapshot {
 
   const calendarEvents =
     workspace.settings.enableWorkOS === false
-      ? workspace.calendar
-      : mergeCalendarWithWorkMeetings(workspace.calendar, workspace.work);
+      ? calendar
+      : mergeCalendarWithWorkMeetings(calendar, work);
 
   const upcomingEvents = calendarEvents
     .filter((e) => {
@@ -372,20 +386,20 @@ export function buildWidgetSnapshot(workspace: Workspace): WidgetSnapshot {
  * Document-directory writes are useless to widgets — App Group only.
  */
 export async function writeWidgetSnapshot(workspace: Workspace): Promise<void> {
-  // Dynamic import keeps buildWidgetSnapshot testable in Node (no RN transform).
-  const { Platform } = await import("react-native");
-  if (Platform.OS !== "ios") return;
-  const snapshot = buildWidgetSnapshot(workspace);
-  // Ensure doubles stay doubles for Swift Codable (avoid Int-only JSON numbers where needed).
-  if (typeof snapshot.focus.progress === "number") {
-    snapshot.focus.progress = Number(snapshot.focus.progress);
-  }
-  for (const item of snapshot.attention.items) {
-    item.urgency = Number(item.urgency);
-  }
-  const payload = JSON.stringify(snapshot);
-
   try {
+    // Dynamic import keeps buildWidgetSnapshot testable in Node (no RN transform).
+    const { Platform } = await import("react-native");
+    if (Platform.OS !== "ios") return;
+    const snapshot = buildWidgetSnapshot(workspace);
+    // Ensure doubles stay doubles for Swift Codable (avoid Int-only JSON numbers where needed).
+    if (typeof snapshot.focus.progress === "number") {
+      snapshot.focus.progress = Number(snapshot.focus.progress);
+    }
+    for (const item of snapshot.attention.items) {
+      item.urgency = Number(item.urgency);
+    }
+    const payload = JSON.stringify(snapshot);
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const native = (globalThis as any)?.expo?.modules?.ExtensionStorage;
     if (!native?.setString) {
@@ -398,7 +412,7 @@ export async function writeWidgetSnapshot(workspace: Workspace): Promise<void> {
     native.setString(SNAPSHOT_KEY, payload, APP_GROUP);
     native.reloadWidget?.();
   } catch (error) {
-    console.warn("[widgets] ExtensionStorage write failed", error);
+    console.warn("[widgets] snapshot write failed", error);
   }
 }
 

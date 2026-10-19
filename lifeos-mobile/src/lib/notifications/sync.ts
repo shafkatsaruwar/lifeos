@@ -11,12 +11,20 @@ import {
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 let lastFingerprint = "";
 
+function asList<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (value && typeof value === "object") return Object.values(value as Record<string, T>);
+  return [];
+}
+
 function fingerprint(workspace: Workspace) {
   const prefs = resolveNotificationPrefs(workspace.settings);
-  const taskPart = workspace.tasks
+  const tasks = asList<Workspace["tasks"][number]>(workspace.tasks);
+  const calendar = asList<Workspace["calendar"][number]>(workspace.calendar);
+  const taskPart = tasks
     .map((t) => `${t.id}:${t.due ?? ""}:${t.done ? 1 : 0}:${t.canceled ? 1 : 0}:${t.priority ?? ""}:${t.status ?? ""}`)
     .join("|");
-  const calPart = workspace.calendar.map((e) => `${e.id}:${e.start}`).join("|");
+  const calPart = calendar.map((e) => `${e.id}:${e.start}`).join("|");
   return `${prefs.enabled}:${JSON.stringify(prefs)}::${taskPart}::${calPart}`;
 }
 
@@ -24,24 +32,30 @@ function fingerprint(workspace: Workspace) {
 export function scheduleWorkspaceNotificationSync(workspace: Workspace) {
   if (syncTimer) clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
-    void syncWorkspaceNotifications(workspace);
+    void syncWorkspaceNotifications(workspace).catch((error) => {
+      console.warn("[LifeOS] notification sync failed", error);
+    });
   }, 600);
 }
 
 export async function syncWorkspaceNotifications(workspace: Workspace) {
-  const fp = fingerprint(workspace);
-  if (fp === lastFingerprint) return;
-  lastFingerprint = fp;
+  try {
+    const fp = fingerprint(workspace);
+    if (fp === lastFingerprint) return;
+    lastFingerprint = fp;
 
-  const prefs = resolveNotificationPrefs(workspace.settings);
-  const existing = await getScheduledIds();
-  const workspaceIds = existing.filter((id) => id.startsWith("task:") || id.startsWith("event:"));
-  await cancelNotificationIds(workspaceIds);
+    const prefs = resolveNotificationPrefs(workspace.settings);
+    const existing = await getScheduledIds();
+    const workspaceIds = existing.filter((id) => id.startsWith("task:") || id.startsWith("event:"));
+    await cancelNotificationIds(workspaceIds);
 
-  if (!prefs.enabled) return;
+    if (!prefs.enabled) return;
 
-  const planned = planWorkspaceNotifications(workspace);
-  await schedulePlanned(planned);
+    const planned = planWorkspaceNotifications(workspace);
+    await schedulePlanned(planned);
+  } catch (error) {
+    console.warn("[LifeOS] notification sync failed", error);
+  }
 }
 
 export async function cancelFocusNotifications(taskId: number) {

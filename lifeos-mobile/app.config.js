@@ -40,8 +40,10 @@ module.exports = {
     updates: projectId
       ? {
           url: `https://u.expo.dev/${projectId}`,
+          // ON_LOAD + 0ms fallback made a bad OTA kill launch via ErrorRecovery.crash (SIGABRT).
+          // Give the embedded bundle a few seconds so a broken remote update cannot brick cold start.
           checkAutomatically: "ON_LOAD",
-          fallbackToCacheTimeout: 0,
+          fallbackToCacheTimeout: 5000,
         }
       : { enabled: false },
     extra: {

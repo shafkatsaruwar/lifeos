@@ -66,9 +66,10 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const visible = state.routes.filter((route) => {
     // Belt-and-suspenders: never show Career while kill-switch is off.
     if (!CAREER_IOS_ENABLED && route.name === "CareerTab") return false;
-    return !isHidden(descriptors[route.key].options);
+    return !isHidden(descriptors[route.key]?.options);
   });
   const activeKey = state.routes[state.index]?.key;
+  const activeHidden = Boolean(activeKey) && !visible.some((route) => route.key === activeKey);
   const activeIndex = Math.max(
     0,
     visible.findIndex((route) => route.key === activeKey),
@@ -78,6 +79,15 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const indexSV = useSharedValue(activeIndex);
   const dragX = useSharedValue(0);
   const dragging = useSharedValue(0);
+  const countSV = useSharedValue(Math.max(visible.length, 1));
+  countSV.value = Math.max(visible.length, 1);
+
+  // If the navigator is parked on a hidden hub, bounce to the first visible tab.
+  const firstVisibleName = visible[0]?.name;
+  useEffect(() => {
+    if (!activeHidden || !firstVisibleName) return;
+    navigation.navigate(firstVisibleName);
+  }, [activeHidden, firstVisibleName, navigation]);
 
   useEffect(() => {
     if (reduceMotion) {
@@ -112,7 +122,8 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
       dragX.value += e.changeX;
     })
     .onEnd(() => {
-      const count = visible.length;
+      // Use shared count — reading a JS array in a worklet can hard-crash on swipe.
+      const count = countSV.value;
       const w = widthSV.value;
       if (count < 1 || w <= 0) {
         dragging.value = 0;
@@ -126,9 +137,6 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
       dragX.value = 0;
       runOnJS(goTo)(snapped);
     });
-
-  const countSV = useSharedValue(Math.max(visible.length, 1));
-  countSV.value = Math.max(visible.length, 1);
 
   const lightStyle = useAnimatedStyle(() => {
     const count = Math.max(countSV.value, 1);
@@ -182,7 +190,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               ]}
             />
             {visible.map((route, index) => {
-              const { options } = descriptors[route.key];
+              const options = descriptors[route.key]?.options ?? {};
               const label =
                 typeof options.tabBarLabel === "string"
                   ? options.tabBarLabel

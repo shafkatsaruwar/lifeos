@@ -95,6 +95,13 @@ function createAuth(firebaseApp: FirebaseApp): Auth {
 export const auth = app ? createAuth(app) : (null as unknown as Auth);
 export const database = app ? getDatabase(app) : (null as unknown as ReturnType<typeof getDatabase>);
 
+/** RTDB often stores lists as objects (sparse keys) — never assume Array.isArray. */
+export function asArray<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (value && typeof value === "object") return Object.values(value as Record<string, T>);
+  return [];
+}
+
 export const emptyWorkspace: Workspace = {
   tasks: [],
   projects: [],
@@ -169,26 +176,58 @@ export async function loadWorkspace(userId: string): Promise<Workspace> {
   );
 
   const loaded = Object.fromEntries(values) as Workspace;
+  const lifeRaw = (loaded.life && typeof loaded.life === "object" ? loaded.life : {}) as Record<string, unknown>;
+  const schoolRaw = (loaded.school && typeof loaded.school === "object" ? loaded.school : {}) as Record<
+    string,
+    unknown
+  >;
   return {
     ...emptyWorkspace,
     ...loaded,
+    tasks: asArray(loaded.tasks),
+    projects: asArray(loaded.projects),
+    notes: asArray(loaded.notes),
+    classes: asArray(loaded.classes),
+    brain: asArray(loaded.brain),
+    resources: asArray(loaded.resources),
     settings: { ...emptyWorkspace.settings, ...loaded.settings },
-    life: { ...emptyWorkspace.life, ...loaded.life },
+    life: {
+      ...emptyWorkspace.life,
+      habits: asArray(lifeRaw.habits),
+      recipes: asArray(lifeRaw.recipes),
+      food: asArray(lifeRaw.food),
+      exercises: asArray(lifeRaw.exercises),
+      trainings: asArray(lifeRaw.trainings),
+      trips: asArray(lifeRaw.trips),
+      media: asArray(lifeRaw.media),
+      tools: asArray(lifeRaw.tools),
+      contacts: asArray(lifeRaw.contacts),
+      documents: asArray(lifeRaw.documents),
+      vault: asArray(lifeRaw.vault),
+      gallery: asArray(lifeRaw.gallery),
+      vision: asArray(lifeRaw.vision),
+      archive: asArray(lifeRaw.archive),
+    },
     school: {
       ...emptyWorkspace.school,
-      ...loaded.school,
-      profile: { ...emptyWorkspace.school.profile, ...loaded.school?.profile },
+      profile: {
+        ...emptyWorkspace.school.profile,
+        ...((schoolRaw.profile && typeof schoolRaw.profile === "object" ? schoolRaw.profile : {}) as object),
+      },
+      topics: asArray(schoolRaw.topics),
+      professors: asArray(schoolRaw.professors),
+      goals: asArray(schoolRaw.goals),
     },
     work: {
-      projects: Array.isArray(loaded.work?.projects) ? loaded.work.projects : [],
-      deliverables: Array.isArray(loaded.work?.deliverables) ? loaded.work.deliverables : [],
-      tasks: Array.isArray(loaded.work?.tasks) ? loaded.work.tasks : [],
-      meetings: Array.isArray(loaded.work?.meetings) ? loaded.work.meetings : [],
+      projects: asArray(loaded.work?.projects),
+      deliverables: asArray(loaded.work?.deliverables),
+      tasks: asArray(loaded.work?.tasks),
+      meetings: asArray(loaded.work?.meetings),
     },
     career: safeNormalizeCareerHub(loaded.career),
     timeTracking: normalizeTimeTracking(loaded.timeTracking),
     calendars: normalizeCalendars(loaded.calendars),
-    calendar: Array.isArray(loaded.calendar) ? loaded.calendar : [],
+    calendar: asArray(loaded.calendar),
     notebookHub: normalizeNotebookHub(loaded.notebookHub),
     notebookPages: normalizeNotebookPages(loaded.notebookPages),
   };

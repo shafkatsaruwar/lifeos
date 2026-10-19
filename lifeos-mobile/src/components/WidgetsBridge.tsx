@@ -12,11 +12,10 @@ export function WidgetsBridge() {
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
-      try {
-        void writeWidgetSnapshot(workspace);
-      } catch (error) {
+      // Must .catch — writeWidgetSnapshot is async; try/catch around void cannot see rejections.
+      void writeWidgetSnapshot(workspace).catch((error) => {
         console.warn("[LifeOS] widget snapshot failed", error);
-      }
+      });
     }, 600);
     return () => {
       if (timer.current) clearTimeout(timer.current);
@@ -26,11 +25,9 @@ export function WidgetsBridge() {
   useEffect(() => {
     const onChange = (state: AppStateStatus) => {
       if (state !== "active") return;
-      try {
-        void writeWidgetSnapshot(workspace);
-      } catch (error) {
+      void writeWidgetSnapshot(workspace).catch((error) => {
         console.warn("[LifeOS] widget snapshot failed", error);
-      }
+      });
     };
     const sub = AppState.addEventListener("change", onChange);
     return () => sub.remove();
