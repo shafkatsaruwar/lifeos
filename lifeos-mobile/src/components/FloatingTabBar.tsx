@@ -11,6 +11,7 @@ import Animated, {
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { CAREER_IOS_ENABLED } from "../lib/careerFlag";
 import { useLayout } from "../lib/layout";
 import { workspaceColorFor } from "../lib/theme";
 import type { SettingsState } from "../types";
@@ -39,7 +40,7 @@ function tabTint(routeName: string, accent: string, settings: SettingsState): st
     case "WorkTab":
       return workspaceColorFor(settings, "work");
     case "CareerTab":
-      return workspaceColorFor(settings, "career");
+      return CAREER_IOS_ENABLED ? workspaceColorFor(settings, "career") : accent;
     case "LibraryTab":
       return "#DB2777";
     default:
@@ -62,7 +63,11 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const { isTablet } = useLayout();
   const reduceMotion = Boolean(workspace.settings.reduceMotion);
 
-  const visible = state.routes.filter((route) => !isHidden(descriptors[route.key].options));
+  const visible = state.routes.filter((route) => {
+    // Belt-and-suspenders: never show Career while kill-switch is off.
+    if (!CAREER_IOS_ENABLED && route.name === "CareerTab") return false;
+    return !isHidden(descriptors[route.key].options);
+  });
   const activeKey = state.routes[state.index]?.key;
   const activeIndex = Math.max(
     0,
