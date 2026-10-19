@@ -1,6 +1,11 @@
 /**
  * Career / Job Seeker OS — shared Firebase blob with web (`users/{uid}/career`).
- * Re-exports pure helpers from the monorepo `lib/` (Metro watches ../lib).
+ *
+ * Uses Metro-safe copies under `src/lib/career/` (not `../../../lib/...`) so
+ * EAS Update / production bundles never depend on resolving outside projectRoot.
+ * Keep those copies in sync with repo-root `lib/career*.ts`.
+ *
+ * For launch-critical paths, prefer `careerSafe.ts` (never throws on import).
  */
 
 export {
@@ -11,7 +16,7 @@ export {
   type CareerHub,
   type CareerStageId,
   type CareerView,
-} from "../../../lib/careerTypes";
+} from "./career/careerTypes";
 
 export {
   companyName,
@@ -23,4 +28,6 @@ export {
   normalizeCareerHub,
   stageLabel,
   type CreateApplicationInput,
-} from "../../../lib/careerHelpers";
+} from "./career/careerHelpers";
+
+export { safeEmptyCareerHub, safeNormalizeCareerHub } from "./careerSafe";

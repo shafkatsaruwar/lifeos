@@ -11,7 +11,7 @@ import { useLifeOS } from "../lib/LifeOSContext";
 import { canAccessPaidHubs, isHubVisibleInNav } from "../lib/entitlement";
 import { shouldPersistOnboardingComplete, shouldShowOnboarding } from "../lib/onboardingGate";
 import { useLayout } from "../lib/layout";
-import { linking } from "../lib/notifications";
+import { buildLinking } from "../lib/notifications";
 import type { OnboardingDestination } from "../types";
 import { navigationRef } from "./navigationRef";
 import { useNavigation } from "@react-navigation/native";
@@ -41,7 +41,7 @@ import { SettingsScreen } from "../screens/SettingsScreen";
 import { NotificationSettingsScreen } from "../screens/NotificationSettingsScreen";
 import { NotificationCenterScreen } from "../screens/NotificationCenterScreen";
 import { WorkDashboardScreen } from "../screens/WorkDashboardScreen";
-import { CareerDashboardScreen } from "../screens/CareerDashboardScreen";
+import { getCareerDashboardScreen, isCareerHubAvailable } from "../lib/careerGate";
 import { FocusEnforcerSetupScreen } from "../screens/FocusEnforcerSetupScreen";
 import { FocusEnforcerSessionScreen } from "../screens/FocusEnforcerSessionScreen";
 import { FocusEnforcerHistoryScreen } from "../screens/FocusEnforcerHistoryScreen";
@@ -174,6 +174,11 @@ function WorkStackNavigator() {
 /** Career is free (like Home / School) — no paywall gate. */
 function CareerStackNavigator() {
   const screenOptions = useStackScreenOptions();
+  const CareerDashboardScreen = getCareerDashboardScreen();
+  if (!CareerDashboardScreen) {
+    // Should not mount — Tab.Screen is gated by isCareerHubAvailable().
+    return null;
+  }
   return (
     <CareerStack.Navigator screenOptions={screenOptions}>
       <CareerStack.Screen name="CareerDashboard" component={CareerDashboardScreen} />
@@ -282,7 +287,10 @@ export function RootNavigator() {
   const showLife = isHubVisibleInNav("Life", settings);
   const showSchool = isHubVisibleInNav("School", settings);
   const showWork = isHubVisibleInNav("Work", settings);
-  const showCareer = isHubVisibleInNav("Career", settings);
+  // Never register CareerTab if the screen module failed to load (OTA-safe).
+  const careerReady = isCareerHubAvailable();
+  const showCareer = careerReady && isHubVisibleInNav("Career", settings);
+  const linking = buildLinking({ includeCareer: careerReady });
 
   const base = dark ? DarkTheme : DefaultTheme;
   const navTheme = {
@@ -323,7 +331,7 @@ export function RootNavigator() {
             tabBarActiveTintColor: theme.accent,
             tabBarInactiveTintColor: "#8E8E93",
             tabBarIcon: ({ color }) => {
-              const name = TAB_ICONS[route.name];
+              const name = TAB_ICONS[route.name] ?? "circle";
               return <Feather name={name} size={isTablet ? 22 : 20} color={color} />;
             },
           })}
@@ -376,18 +384,20 @@ export function RootNavigator() {
                 : { display: "none", width: 0, height: 0, minWidth: 0, flex: 0, padding: 0 },
             }}
           />
-          <Tab.Screen
-            name="CareerTab"
-            component={CareerStackNavigator}
-            options={{
-              title: "Career",
-              tabBarLabel: "Career",
-              tabBarButton: showCareer ? undefined : () => null,
-              tabBarItemStyle: showCareer
-                ? undefined
-                : { display: "none", width: 0, height: 0, minWidth: 0, flex: 0, padding: 0 },
-            }}
-          />
+          {careerReady ? (
+            <Tab.Screen
+              name="CareerTab"
+              component={CareerStackNavigator}
+              options={{
+                title: "Career",
+                tabBarLabel: "Career",
+                tabBarButton: showCareer ? undefined : () => null,
+                tabBarItemStyle: showCareer
+                  ? undefined
+                  : { display: "none", width: 0, height: 0, minWidth: 0, flex: 0, padding: 0 },
+              }}
+            />
+          ) : null}
           <Tab.Screen
             name="LibraryTab"
             component={LibraryStackNavigator}

@@ -113,56 +113,65 @@ export function navigateFromWidgetUrl(url: string | null | undefined): boolean {
   return false;
 }
 
-export const linking = {
-  prefixes: ["lifeos://", "exp+lifeos-mobile://"],
-  config: {
+const linkingScreens = {
+  NowTab: {
     screens: {
-      NowTab: {
-        screens: {
-          NowHome: "now",
-          Focus: "focus",
-          Settings: "settings",
-          TaskDetail: "now/task/:taskId",
-          FocusEnforcerSession: "focus-enforcer/:sessionId",
-          FocusEnforcerSetup: "focus-enforcer/setup",
-          FocusEnforcerHistory: "focus-enforcer/history",
-        },
-      },
-      TasksTab: {
-        screens: {
-          TasksList: "tasks",
-          TaskDetail: "task/:taskId",
-        },
-      },
-      CalendarTab: {
-        screens: {
-          CalendarMain: "calendar",
-          ConnectWeb: "calendar/connect",
-        },
-      },
-      LifeTab: {
-        screens: {
-          LifeDashboard: "life",
-          NotificationCenter: "life/inbox",
-          ProjectDetail: "life/project/:projectName",
-        },
-      },
-      SchoolTab: {
-        path: "school",
-      },
-      WorkTab: {
-        screens: {
-          WorkDashboard: "work",
-        },
-      },
-      CareerTab: {
-        screens: {
-          CareerDashboard: "career",
-        },
-      },
-      LibraryTab: {
-        path: "library",
-      },
+      NowHome: "now",
+      Focus: "focus",
+      Settings: "settings",
+      TaskDetail: "now/task/:taskId",
+      FocusEnforcerSession: "focus-enforcer/:sessionId",
+      FocusEnforcerSetup: "focus-enforcer/setup",
+      FocusEnforcerHistory: "focus-enforcer/history",
     },
   },
-};
+  TasksTab: {
+    screens: {
+      TasksList: "tasks",
+      TaskDetail: "task/:taskId",
+    },
+  },
+  CalendarTab: {
+    screens: {
+      CalendarMain: "calendar",
+      ConnectWeb: "calendar/connect",
+    },
+  },
+  LifeTab: {
+    screens: {
+      LifeDashboard: "life",
+      NotificationCenter: "life/inbox",
+      ProjectDetail: "life/project/:projectName",
+    },
+  },
+  SchoolTab: {
+    path: "school",
+  },
+  WorkTab: {
+    screens: {
+      WorkDashboard: "work",
+    },
+  },
+  CareerTab: {
+    screens: {
+      CareerDashboard: "career",
+    },
+  },
+  LibraryTab: {
+    path: "library",
+  },
+} as const;
+
+/** Build linking config; omit CareerTab when the hub module failed to load. */
+export function buildLinking(options?: { includeCareer?: boolean }) {
+  const includeCareer = options?.includeCareer !== false;
+  const screens = includeCareer
+    ? linkingScreens
+    : Object.fromEntries(Object.entries(linkingScreens).filter(([key]) => key !== "CareerTab"));
+  return {
+    prefixes: ["lifeos://", "exp+lifeos-mobile://"],
+    config: { screens },
+  };
+}
+
+export const linking = buildLinking({ includeCareer: true });
