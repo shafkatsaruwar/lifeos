@@ -14,7 +14,6 @@ import { clearCachedPageInk } from "./src/lib/inkCache";
 import type { NotebookPage, Task, Workspace } from "./src/types";
 import { LifeOSContext, type AppState } from "./src/lib/LifeOSContext";
 import { migrateLegacyNotesToNotebooks } from "./src/lib/notebooks";
-import { applyOtaUpdateIfAvailable } from "./src/lib/ota";
 import { resolveTheme } from "./src/lib/theme";
 import { SignIn } from "./src/components/Auth";
 import { FocusLiveActivityBridge } from "./src/components/FocusLiveActivityBridge";
@@ -58,9 +57,8 @@ export default function App() {
   });
   const theme = resolveTheme(dark, workspace?.settings.accent);
 
-  useEffect(() => {
-    void applyOtaUpdateIfAvailable();
-  }, []);
+  // Do not prefetch/reload OTA from JS. Native expo-updates ON_LOAD already
+  // applies updates; JS reloadAsync raced ErrorRecovery and caused SIGABRT.
 
   useEffect(() => {
     if (!firebaseConfigured || !auth) {

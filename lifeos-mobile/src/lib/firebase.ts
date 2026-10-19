@@ -87,12 +87,31 @@ function createAuth(firebaseApp: FirebaseApp): Auth {
     if (error?.code === "auth/already-initialized") {
       return getAuth(firebaseApp);
     }
-    // Re-throw other failures — silent getAuth() fallback would drop persistence.
-    throw error;
+    // Never throw at module import — a boot-time throw becomes Expo Updates
+    // ErrorRecovery.crash() (SIGABRT) on TestFlight. Prefer memory auth over kill.
+    console.warn("[LifeOS] Auth RN persistence failed; using default Auth", error);
+    try {
+      return getAuth(firebaseApp);
+    } catch (fallbackError) {
+      console.warn("[LifeOS] getAuth fallback failed", fallbackError);
+      return getAuth(firebaseApp);
+    }
   }
 }
 
-export const auth = app ? createAuth(app) : (null as unknown as Auth);
+export const auth = (() => {
+  if (!app) return null as unknown as Auth;
+  try {
+    return createAuth(app);
+  } catch (error) {
+    console.warn("[LifeOS] Auth init failed at import", error);
+    try {
+      return getAuth(app);
+    } catch {
+      return null as unknown as Auth;
+    }
+  }
+})();
 export const database = app ? getDatabase(app) : (null as unknown as ReturnType<typeof getDatabase>);
 
 /** RTDB often stores lists as objects (sparse keys) — never assume Array.isArray. */
