@@ -528,14 +528,17 @@ export function KeptScreen() {
       </View>
 
       {places.length > 0 ? (
-        <FlatList
+        // ScrollView (not horizontal FlatList): FlatList flex-grows in a column and
+        // leaves a tall blank under the chips before the item list.
+        <ScrollView
           horizontal
-          data={places}
-          keyExtractor={(item) => item.location}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
-          renderItem={({ item }) => (
+          style={styles.placesRow}
+          contentContainerStyle={styles.placesRowContent}
+        >
+          {places.map((item) => (
             <Pressable
+              key={item.location}
               onPress={() => setLocationFilter((cur) => (cur === item.location ? null : item.location))}
               style={[
                 styles.placeChip,
@@ -549,26 +552,26 @@ export function KeptScreen() {
               <Text style={{ color: theme.text, fontSize: 12 }}>{item.location}</Text>
               <Text style={{ color: theme.muted, fontSize: 11 }}>{item.count}</Text>
             </Pressable>
-          )}
-        />
+          ))}
+        </ScrollView>
       ) : null}
 
       {!hydrated ? (
         <ActivityIndicator color={theme.accent} style={{ marginTop: 24 }} />
+      ) : listData.length === 0 ? (
+        <View style={[styles.empty, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+          <Feather name="bookmark" size={20} color={theme.muted} />
+          <Text style={{ color: theme.text, fontWeight: "700", fontSize: 15 }}>Nothing kept yet</Text>
+          <Text style={{ color: theme.muted, textAlign: "center", fontSize: 13, lineHeight: 18 }}>
+            Say or type where something lives — “passport in the blue suitcase”.
+          </Text>
+        </View>
       ) : (
         <FlatList
+          style={styles.itemList}
           data={listData}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingTop: 8, paddingBottom: 24, flexGrow: 1 }}
-          ListEmptyComponent={
-            <View style={[styles.empty, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-              <Feather name="bookmark" size={22} color={theme.muted} />
-              <Text style={{ color: theme.text, fontWeight: "700", fontSize: 15 }}>Nothing kept yet</Text>
-              <Text style={{ color: theme.muted, textAlign: "center", fontSize: 13, lineHeight: 18 }}>
-                Say or type where something lives — “passport in the blue suitcase”.
-              </Text>
-            </View>
-          }
+          contentContainerStyle={styles.itemListContent}
           renderItem={({ item }) => (
             <Pressable
               onPress={() => setSelected(item)}
@@ -692,6 +695,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginBottom: 8,
   },
+  // Content-sized chip row — never flex-grow into the list area.
+  placesRow: { flexGrow: 0, flexShrink: 0, marginBottom: 4 },
+  placesRowContent: { gap: 8, paddingVertical: 4, alignItems: "center" },
   placeChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -701,6 +707,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1.5,
   },
+  // List fills leftover screen for scroll; content stays packed at the top.
+  itemList: { flex: 1, minHeight: 0 },
+  itemListContent: { paddingTop: 4, paddingBottom: 24, flexGrow: 0 },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -711,12 +720,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   empty: {
-    marginTop: 24,
-    padding: 28,
+    marginTop: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     borderWidth: 1,
     borderRadius: 14,
     alignItems: "center",
-    gap: 8,
+    gap: 6,
+    alignSelf: "stretch",
   },
   back: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
