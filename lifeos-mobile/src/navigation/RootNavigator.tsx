@@ -377,6 +377,18 @@ export function RootNavigator() {
             }}
           />
           <Tab.Screen
+            name="CareerTab"
+            component={CareerStackNavigator}
+            options={{
+              title: "Career",
+              tabBarLabel: "Career",
+              tabBarButton: showCareer ? undefined : () => null,
+              tabBarItemStyle: showCareer
+                ? undefined
+                : { display: "none", width: 0, height: 0, minWidth: 0, flex: 0, padding: 0 },
+            }}
+          />
+          <Tab.Screen
             name="LibraryTab"
             component={LibraryStackNavigator}
             options={{ title: "Library", tabBarLabel: "Library" }}
