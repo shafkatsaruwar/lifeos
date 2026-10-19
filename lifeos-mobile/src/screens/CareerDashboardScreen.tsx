@@ -63,7 +63,8 @@ export function CareerDashboardScreen() {
   const { theme, workspace, updateCareer } = useLifeOS();
   const navigation = useNavigation<any>();
   const tabBarPad = useFloatingTabBarContentPadding(40);
-  const hub = workspace.career;
+  // Defensive: never crash if career blob is missing from an older workspace payload.
+  const hub = workspace.career ?? emptyCareerHub();
 
   const [view, setView] = useState<CareerView>("overview");
   const [query, setQuery] = useState("");
