@@ -1,7 +1,9 @@
 import {
   boundLocationHistory,
+  createMicInactivityTimer,
   emptyKeptHub,
   executeKeptCommand,
+  KEPT_MIC_INACTIVITY_MS,
   locationsIndex,
   matchKeptItems,
   mergeAiIntent,
@@ -227,5 +229,42 @@ describe("kept browse helpers", () => {
     };
     expect(recentKept(hub, 10, false).map((i) => i.id)).toEqual(["1"]);
     expect(locationsIndex(hub, false)).toEqual([{ location: "Bowl", count: 1 }]);
+  });
+});
+
+describe("kept mic inactivity", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("fires after KEPT_MIC_INACTIVITY_MS with no activity", () => {
+    const onTimeout = jest.fn();
+    createMicInactivityTimer(onTimeout);
+    jest.advanceTimersByTime(KEPT_MIC_INACTIVITY_MS - 1);
+    expect(onTimeout).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1);
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it("resets when bump is called on transcript activity", () => {
+    const onTimeout = jest.fn();
+    const timer = createMicInactivityTimer(onTimeout);
+    jest.advanceTimersByTime(2000);
+    timer.bump();
+    jest.advanceTimersByTime(2000);
+    expect(onTimeout).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1000);
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fire after clear", () => {
+    const onTimeout = jest.fn();
+    const timer = createMicInactivityTimer(onTimeout);
+    timer.clear();
+    jest.advanceTimersByTime(KEPT_MIC_INACTIVITY_MS + 1000);
+    expect(onTimeout).not.toHaveBeenCalled();
   });
 });

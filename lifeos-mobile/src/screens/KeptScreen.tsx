@@ -20,8 +20,10 @@ import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { Eyebrow, Page, Subtitle, Title } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import {
+  createMicInactivityTimer,
   emptyKeptHub,
   executeKeptCommand,
+  KEPT_LISTENING_CANCELED_STATUS,
   locationsIndex,
   recentKept,
   resolveKeptIntent,
@@ -29,11 +31,14 @@ import {
   type KeptHub,
   type KeptItem,
   type KeptPrivacy,
+  type MicInactivityTimer,
 } from "../lib/kept/shared";
 import { loadKeptHub, saveKeptHub, subscribeKeptHub } from "../lib/kept/store";
 import { isSpeechRecognitionAvailable, startDictation, stopDictation } from "../lib/speechRecognition";
 
 type Phase = "idle" | "listening" | "processing" | "confirm" | "done" | "error";
+
+const DEFAULT_TAGLINE = "A place for everything you want to remember.";
 
 function bump() {
   try {
@@ -54,7 +59,7 @@ export function KeptScreen() {
   const [query, setQuery] = useState("");
   const [transcript, setTranscript] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
-  const [status, setStatus] = useState("A place for everything you want to remember.");
+  const [status, setStatus] = useState(DEFAULT_TAGLINE);
   const [selected, setSelected] = useState<KeptItem | null>(null);
   const [locationFilter, setLocationFilter] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
@@ -63,7 +68,12 @@ export function KeptScreen() {
   const [manualNotes, setManualNotes] = useState("");
   const [manualPrivacy, setManualPrivacy] = useState<KeptPrivacy>("normal");
   const stopRef = useRef<(() => void) | null>(null);
+  const phaseRef = useRef<Phase>("idle");
+  const listenCancelledRef = useRef(false);
+  const inactivityRef = useRef<MicInactivityTimer | null>(null);
   const speechOk = isSpeechRecognitionAvailable();
+
+  phaseRef.current = phase;
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
@@ -85,10 +95,34 @@ export function KeptScreen() {
     return () => {
       cancelled = true;
       unsub?.();
+      inactivityRef.current?.clear();
+      inactivityRef.current = null;
       stopDictation();
       stopRef.current?.();
     };
   }, [user.uid]);
+
+  const clearInactivity = () => {
+    inactivityRef.current?.clear();
+    inactivityRef.current = null;
+  };
+
+  const cancelListening = () => {
+    if (phaseRef.current !== "listening") return;
+    listenCancelledRef.current = true;
+    clearInactivity();
+    stopDictation();
+    stopRef.current?.();
+    stopRef.current = null;
+    setTranscript("");
+    setPhase("idle");
+    setStatus(KEPT_LISTENING_CANCELED_STATUS);
+  };
+
+  const armInactivity = () => {
+    clearInactivity();
+    inactivityRef.current = createMicInactivityTimer(cancelListening);
+  };
 
   const persist = useCallback(
     async (next: KeptHub, message: string) => {
@@ -156,27 +190,45 @@ export function KeptScreen() {
       );
       return;
     }
+    listenCancelledRef.current = false;
+    clearInactivity();
     stopDictation();
     stopRef.current?.();
     setTranscript("");
     setPhase("listening");
+    phaseRef.current = "listening";
     setStatus("Listening…");
     bump();
+    // Accidental tap: cancel if no transcript activity for ~3s.
+    armInactivity();
     const stop = await startDictation({
-      onStart: () => setPhase("listening"),
-      onResult: (text) => setTranscript(text),
+      onStart: () => {
+        if (listenCancelledRef.current) return;
+        setPhase("listening");
+        phaseRef.current = "listening";
+      },
+      onResult: (text) => {
+        if (listenCancelledRef.current) return;
+        armInactivity();
+        setTranscript(text);
+      },
       onEnd: () => {
+        clearInactivity();
         stopRef.current = null;
+        if (listenCancelledRef.current) return;
         setTranscript((current) => {
           if (current.trim()) void runUtterance(current);
           else {
+            // Empty end = no speech activity (accidental tap / silence).
             setPhase("idle");
-            setStatus("Didn’t catch that — try again or type.");
+            setStatus(KEPT_LISTENING_CANCELED_STATUS);
           }
           return current;
         });
       },
       onError: (message) => {
+        clearInactivity();
+        if (listenCancelledRef.current) return;
         if (message === "not-allowed") {
           setPhase("error");
           setStatus("Allow microphone access in Settings.");
@@ -192,10 +244,16 @@ export function KeptScreen() {
         setStatus(message);
       },
     });
+    if (listenCancelledRef.current) {
+      stop();
+      return;
+    }
     stopRef.current = stop;
   };
 
   const stopListening = () => {
+    clearInactivity();
+    listenCancelledRef.current = false;
     stopDictation();
     stopRef.current?.();
     stopRef.current = null;
