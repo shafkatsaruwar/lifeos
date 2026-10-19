@@ -147,6 +147,7 @@ struct LifeOSAppShortcuts: AppShortcutsProvider {
   static var appShortcuts: [AppShortcut] {
     // Xcode 26 / new App Intents export only allows AppEntity/AppEnum in phrase
     // variables — not bare String. Siri will ask for the title via @Parameter.
+    [
     AppShortcut(
       intent: AddTaskIntent(),
       phrases: [
