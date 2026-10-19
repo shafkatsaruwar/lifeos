@@ -398,7 +398,9 @@ export function SettingsScreen() {
             <Text style={[styles.cardLabel, { color: theme.text }]}>Environments</Text>
           </View>
           <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>
-            Home, School, and Career are free. Work and MasterOS need LifeOS Pro.
+            {CAREER_IOS_ENABLED
+              ? "Home, School, and Career are free. Work and MasterOS need LifeOS Pro."
+              : "Home and School are free. Work and MasterOS need LifeOS Pro."}
           </Text>
           <View style={styles.settingRow}>
             <View style={styles.grow}>

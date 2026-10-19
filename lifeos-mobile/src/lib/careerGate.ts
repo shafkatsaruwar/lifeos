@@ -2,8 +2,8 @@
  * Soft-load Career UI so a bad Career module cannot crash app launch.
  * RootNavigator only registers CareerTab when this resolves.
  *
- * HARD FLAG: set true only after Career launch is proven safe on TestFlight.
- * While false, Career never loads — app must still open.
+ * While CAREER_IOS_ENABLED is false, Career is fully removed from iOS —
+ * never require the screen module.
  */
 import type { ComponentType } from "react";
 import { CAREER_IOS_ENABLED } from "./careerFlag";
