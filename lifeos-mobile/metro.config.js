@@ -12,6 +12,7 @@ config.watchFolders = [
   path.resolve(__dirname, "../lib"),
   path.resolve(__dirname, "../lib/focusEnforcer"),
   path.resolve(__dirname, "../lib/masteros"),
+  path.resolve(__dirname, "../lib/kept"),
 ];
 
 // Firebase Auth's React Native entry (getReactNativePersistence) only resolves

@@ -45,6 +45,7 @@ import { FocusEnforcerSetupScreen } from "../screens/FocusEnforcerSetupScreen";
 import { FocusEnforcerSessionScreen } from "../screens/FocusEnforcerSessionScreen";
 import { FocusEnforcerHistoryScreen } from "../screens/FocusEnforcerHistoryScreen";
 import { ExecutiveHomeScreen } from "../screens/ExecutiveHomeScreen";
+import { KeptScreen } from "../screens/KeptScreen";
 import { MasterOSNavigator } from "./MasterOSNavigator";
 
 const Tab = createBottomTabNavigator();
@@ -52,6 +53,7 @@ const NowStack = createNativeStackNavigator();
 const LifeStack = createNativeStackNavigator();
 const TasksStack = createNativeStackNavigator();
 const CalendarStack = createNativeStackNavigator();
+const KeptStack = createNativeStackNavigator();
 const LibraryStack = createNativeStackNavigator();
 const SchoolStack = createNativeStackNavigator();
 const WorkStack = createNativeStackNavigator();
@@ -61,6 +63,7 @@ const TAB_ICONS: Record<string, keyof typeof Feather.glyphMap> = {
   NowTab: "zap",
   TasksTab: "check-circle",
   CalendarTab: "calendar",
+  KeptTab: "bookmark",
   LifeTab: "home",
   SchoolTab: "award",
   WorkTab: "briefcase",
@@ -171,6 +174,15 @@ function CalendarStackNavigator() {
       <CalendarStack.Screen name="CalendarMain" component={CalendarScreen} />
       <CalendarStack.Screen name="ConnectWeb" component={ConnectWebScreen} />
     </CalendarStack.Navigator>
+  );
+}
+
+function KeptStackNavigator() {
+  const screenOptions = useStackScreenOptions();
+  return (
+    <KeptStack.Navigator screenOptions={screenOptions}>
+      <KeptStack.Screen name="KeptHome" component={KeptScreen} />
+    </KeptStack.Navigator>
   );
 }
 
@@ -307,6 +319,11 @@ export function RootNavigator() {
             name="CalendarTab"
             component={CalendarStackNavigator}
             options={{ title: "Calendar", tabBarLabel: "Cal" }}
+          />
+          <Tab.Screen
+            name="KeptTab"
+            component={KeptStackNavigator}
+            options={{ title: "Kept", tabBarLabel: "Kept" }}
           />
           <Tab.Screen
             name="LifeTab"
