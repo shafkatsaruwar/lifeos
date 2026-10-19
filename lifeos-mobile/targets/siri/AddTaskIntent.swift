@@ -147,35 +147,37 @@ struct LifeOSAppShortcuts: AppShortcutsProvider {
   static var appShortcuts: [AppShortcut] {
     // Xcode 26 / new App Intents export only allows AppEntity/AppEnum in phrase
     // variables — not bare String. Siri will ask for the title via @Parameter.
-    AppShortcut(
-      intent: AddTaskIntent(),
-      phrases: [
-        "Add a task in \(.applicationName)",
-        "Create a task in \(.applicationName)",
-        "Add something to \(.applicationName)",
-      ],
-      shortTitle: "Add Task",
-      systemImageName: "checkmark.circle"
-    ),
-    AppShortcut(
-      intent: RememberKeptIntent(),
-      phrases: [
-        "Remember something in \(.applicationName)",
-        "Keep something in \(.applicationName)",
-        "Remember where in \(.applicationName)",
-      ],
-      shortTitle: "Remember in Kept",
-      systemImageName: "bookmark"
-    ),
-    AppShortcut(
-      intent: FindKeptIntent(),
-      phrases: [
-        "Find something in \(.applicationName)",
-        "Where is something in \(.applicationName)",
-        "Look up in Kept with \(.applicationName)",
-      ],
-      shortTitle: "Find in Kept",
-      systemImageName: "magnifyingglass"
-    ),
-  ]
+    [
+      AppShortcut(
+        intent: AddTaskIntent(),
+        phrases: [
+          "Add a task in \(.applicationName)",
+          "Create a task in \(.applicationName)",
+          "Add something to \(.applicationName)",
+        ],
+        shortTitle: "Add Task",
+        systemImageName: "checkmark.circle"
+      ),
+      AppShortcut(
+        intent: RememberKeptIntent(),
+        phrases: [
+          "Remember something in \(.applicationName)",
+          "Keep something in \(.applicationName)",
+          "Remember where in \(.applicationName)",
+        ],
+        shortTitle: "Remember in Kept",
+        systemImageName: "bookmark"
+      ),
+      AppShortcut(
+        intent: FindKeptIntent(),
+        phrases: [
+          "Find something in \(.applicationName)",
+          "Where is something in \(.applicationName)",
+          "Look up in Kept with \(.applicationName)",
+        ],
+        shortTitle: "Find in Kept",
+        systemImageName: "magnifyingglass"
+      ),
+    ]
+  }
 }
