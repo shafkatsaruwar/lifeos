@@ -28,6 +28,8 @@ function tabTint(routeName: string, accent: string, settings: SettingsState): st
       return "#31926A";
     case "CalendarTab":
       return "#3F7ED7";
+    case "KeptTab":
+      return "#0D9488";
     case "LifeTab":
       return workspaceColorFor(settings, "life");
     case "SchoolTab":

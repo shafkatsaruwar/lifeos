@@ -18,7 +18,7 @@ function withLifeOSSiri(config) {
   config = withInfoPlist(config, (cfg) => {
     if (!cfg.modResults.NSSiriUsageDescription) {
       cfg.modResults.NSSiriUsageDescription =
-        "LifeOS uses Siri so you can add tasks with your voice.";
+        "LifeOS uses Siri so you can add tasks and remember where things are with Kept.";
     }
     return cfg;
   });

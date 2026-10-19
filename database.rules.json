@@ -5,7 +5,16 @@
     "users": {
       "$uid": {
         ".read": "auth != null && auth.uid == $uid",
-        ".write": "auth != null && auth.uid == $uid"
+        ".write": "auth != null && auth.uid == $uid",
+        "kept": {
+          ".read": "auth != null && auth.uid == $uid",
+          ".write": "auth != null && auth.uid == $uid",
+          "items": {
+            "$itemId": {
+              ".validate": "!newData.exists() || (!newData.hasChild('ownerId') || newData.child('ownerId').val() == $uid)"
+            }
+          }
+        }
       }
     }
   }

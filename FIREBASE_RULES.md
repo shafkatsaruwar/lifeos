@@ -48,3 +48,4 @@ Config lives in `firebase.json` and `.firebaserc`.
 
 - Dev **Test Login** (`test-user-dev`) has no Firebase Auth token, so cloud sync will fail under these rules (expected). Use Google sign-in to verify.
 - Gmail / Outlook / iCloud API routes already write with the user’s ID token under `users/{uid}/…`, so they keep working.
+- **Kept** lives at `users/{uid}/kept` (items + location history). Client writes must not set a foreign `ownerId`; server `/api/kept` strips `ownerId` and stamps `updatedAt` with the server clock. Publish `database.rules.json` so the `kept` child rules apply.

@@ -25,6 +25,7 @@ import { SynapseImportBridge } from "./src/components/SynapseImportBridge";
 import { IcsImportReviewHost } from "./src/components/IcsImportReviewHost";
 import { ShareInboxBridge } from "./src/components/ShareInboxBridge";
 import { SiriTaskBridge } from "./src/components/SiriTaskBridge";
+import { SiriKeptBridge } from "./src/components/SiriKeptBridge";
 import { WidgetsBridge } from "./src/components/WidgetsBridge";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 
