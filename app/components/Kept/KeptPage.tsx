@@ -45,8 +45,27 @@ type Props = {
 };
 
 const spring = { type: "spring" as const, stiffness: 380, damping: 28, mass: 0.7 };
-const DEFAULT_TAGLINE = "A place for everything you want to remember.";
+const PAGE_TAGLINE = "A place for everything you want to remember.";
 
+/** Mic primary — never repeats the page tagline; idle stays a quiet hint. */
+function keptVoicePrimary(phase: VoicePhase, status: string, speechOk: boolean, transcript: string): string {
+  if (phase === "listening") return transcript.trim() || "Listening…";
+  if (phase === "processing") return status.trim() || "Understanding…";
+  if (phase === "idle") {
+    if (status.trim()) return status.trim();
+    return speechOk ? "Tap to speak" : "Type below — mic unavailable";
+  }
+  if (phase === "confirm") return status.trim() || "Needs a choice";
+  if (phase === "error") return status.trim() || "Try again";
+  return status.trim() || "Done";
+}
+
+/** Phase chip — Listening / Processing only (no permanent idle label). */
+function keptVoicePhaseLabel(phase: VoicePhase): string | null {
+  if (phase === "listening") return "Listening";
+  if (phase === "processing") return "Processing";
+  return null;
+}
 
 function formatWhen(iso: string) {
   const t = Date.parse(iso);
@@ -68,7 +87,7 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
   const [query, setQuery] = useState("");
   const [transcript, setTranscript] = useState("");
   const [phase, setPhase] = useState<VoicePhase>("idle");
-  const [statusMessage, setStatusMessage] = useState(DEFAULT_TAGLINE);
+  const [statusMessage, setStatusMessage] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualName, setManualName] = useState("");
@@ -357,6 +376,9 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
         transition: spring,
       };
 
+  const voicePrimary = keptVoicePrimary(phase, statusMessage, speechOk, transcript);
+  const voicePhase = keptVoicePhaseLabel(phase);
+
   if (selected) {
     return (
       <motion.section className="kept-page" data-testid="kept-page" {...motionProps}>
@@ -365,7 +387,6 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
         </button>
         <header className="kept-detail-head">
           <div>
-            <p className="eyebrow">Kept</p>
             <h1 data-testid="kept-detail-name">{selected.name}</h1>
             <p className="kept-location-line">
               <MapPin size={14} /> {selected.location}
@@ -452,11 +473,11 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
 
   return (
     <motion.section className="kept-page" data-testid="kept-page" {...motionProps}>
+      {/* One title + one subtitle — no duplicate “Kept” eyebrow (matches Calendar calm header). */}
       <header className="kept-hero">
         <div>
-          <p className="eyebrow">Kept</p>
           <h1>Kept</h1>
-          <p className="kept-tagline">A place for everything you want to remember.</p>
+          <p className="kept-tagline">{PAGE_TAGLINE}</p>
         </div>
         <button
           type="button"
@@ -479,15 +500,17 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
           {speechOk ? <Mic size={28} /> : <MicOff size={28} />}
         </button>
         <div className="kept-voice-copy">
-          <strong data-testid="kept-status">{statusMessage}</strong>
-          <span className="kept-phase" data-testid="kept-phase">
-            {phase === "idle" && (speechOk ? "Tap the mic or type below" : "Type below — mic unavailable")}
-            {phase === "listening" && "Listening"}
-            {phase === "processing" && "Processing"}
-            {phase === "confirm" && "Needs a choice"}
-            {phase === "done" && "Done"}
-            {phase === "error" && "Try again"}
-          </span>
+          <strong data-testid="kept-status">
+            {keptVoicePrimary(phase, statusMessage, speechOk, transcript)}
+          </strong>
+          {(() => {
+            const phaseLabel = keptVoicePhaseLabel(phase);
+            return phaseLabel ? (
+              <span className="kept-phase" data-testid="kept-phase">
+                {phaseLabel}
+              </span>
+            ) : null;
+          })()}
         </div>
       </div>
 

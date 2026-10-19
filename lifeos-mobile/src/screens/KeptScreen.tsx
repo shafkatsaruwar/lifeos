@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
-import { Eyebrow, Page, Subtitle, Title } from "../components/UI";
+import { Page, Subtitle, Title } from "../components/UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 import {
   createMicInactivityTimer,
@@ -38,7 +38,25 @@ import { isSpeechRecognitionAvailable, startDictation, stopDictation } from "../
 
 type Phase = "idle" | "listening" | "processing" | "confirm" | "done" | "error";
 
-const DEFAULT_TAGLINE = "A place for everything you want to remember.";
+const PAGE_TAGLINE = "A place for everything you want to remember.";
+
+/** Mic card primary line — never repeats the page tagline; idle stays quiet. */
+function keptVoicePrimary(phase: Phase, status: string, speechOk: boolean, transcript: string): string {
+  if (phase === "listening") return transcript.trim() || "Listening…";
+  if (phase === "processing") return status.trim() || "Understanding…";
+  if (phase === "idle") {
+    if (status.trim()) return status.trim();
+    return speechOk ? "Tap to speak" : "Type below — mic unavailable";
+  }
+  return status.trim() || (phase === "error" ? "Try again" : "Done");
+}
+
+/** Secondary phase chip — Listening / Processing only (never permanent IDLE). */
+function keptVoicePhaseLabel(phase: Phase): string | null {
+  if (phase === "listening") return "Listening";
+  if (phase === "processing") return "Processing";
+  return null;
+}
 
 function bump() {
   try {
@@ -59,7 +77,7 @@ export function KeptScreen() {
   const [query, setQuery] = useState("");
   const [transcript, setTranscript] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
-  const [status, setStatus] = useState(DEFAULT_TAGLINE);
+  const [status, setStatus] = useState("");
   const [selected, setSelected] = useState<KeptItem | null>(null);
   const [locationFilter, setLocationFilter] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
@@ -150,6 +168,8 @@ export function KeptScreen() {
   const recent = useMemo(() => recentKept(hub, 20, true), [hub]);
   const places = useMemo(() => locationsIndex(hub, true).slice(0, 10), [hub]);
   const listData = query || locationFilter ? visible : recent.length ? recent : visible;
+  const voicePrimary = keptVoicePrimary(phase, status, speechOk, transcript);
+  const voicePhase = keptVoicePhaseLabel(phase);
 
   const runUtterance = async (text: string) => {
     const utterance = text.trim();
@@ -336,12 +356,11 @@ export function KeptScreen() {
   if (selected) {
     return (
       <Page>
-        <ScrollView contentContainerStyle={{ paddingBottom: tabPad + insets.bottom, paddingHorizontal: 4 }}>
+        <ScrollView contentContainerStyle={{ paddingBottom: tabPad + insets.bottom, paddingHorizontal: 16 }}>
         <Pressable onPress={() => setSelected(null)} style={styles.back}>
           <Feather name="arrow-left" size={16} color={theme.muted} />
           <Text style={{ color: theme.muted, fontSize: 13 }}>Back to Kept</Text>
         </Pressable>
-        <Eyebrow>Kept</Eyebrow>
         <Title>{selected.name}</Title>
         <Subtitle>
           {selected.location}
@@ -433,11 +452,11 @@ export function KeptScreen() {
   return (
     <Page>
       <View style={[styles.main, { paddingBottom: tabPad + insets.bottom }]}>
+      {/* One title + one subtitle (Calendar-style). No duplicate “Kept” eyebrow. */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Eyebrow>Kept</Eyebrow>
           <Title>Kept</Title>
-          <Subtitle>A place for everything you want to remember.</Subtitle>
+          <Subtitle>{PAGE_TAGLINE}</Subtitle>
         </View>
         <Pressable
           onPress={() => setManualOpen(true)}
@@ -462,11 +481,21 @@ export function KeptScreen() {
         >
           <Feather name={speechOk ? "mic" : "mic-off"} size={28} color="#fff" />
         </Pressable>
-        <View style={{ flex: 1, gap: 4 }}>
-          <Text style={{ color: theme.text, fontWeight: "700", fontSize: 14 }}>{status}</Text>
-          <Text style={{ color: theme.muted, fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", fontWeight: "700" }}>
-            {phase}
-          </Text>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={{ color: theme.text, fontWeight: "700", fontSize: 14 }}>{voicePrimary}</Text>
+          {voicePhase ? (
+            <Text
+              style={{
+                color: theme.muted,
+                fontSize: 11,
+                letterSpacing: 0.6,
+                textTransform: "uppercase",
+                fontWeight: "700",
+              }}
+            >
+              {voicePhase}
+            </Text>
+          ) : null}
         </View>
       </View>
 
@@ -632,23 +661,24 @@ function Field({
 }
 
 const styles = StyleSheet.create({
-  main: { flex: 1, paddingHorizontal: 4 },
-  header: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 8 },
-  addBtn: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  // Match Calendar hub padding (header paddingHorizontal: 20, paddingTop: 8).
+  main: { flex: 1, paddingHorizontal: 16 },
+  header: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 12, paddingTop: 8 },
+  addBtn: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", marginTop: 4 },
   // Border language matches Calendar panels (upcomingRow / readyRow): solid theme.border, 1px, radius 14.
   voiceCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    padding: 14,
+    padding: 12,
     borderWidth: 1,
     borderRadius: 14,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   mic: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
   },
