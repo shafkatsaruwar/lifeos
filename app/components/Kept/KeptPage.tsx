@@ -500,17 +500,12 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
           {speechOk ? <Mic size={28} /> : <MicOff size={28} />}
         </button>
         <div className="kept-voice-copy">
-          <strong data-testid="kept-status">
-            {keptVoicePrimary(phase, statusMessage, speechOk, transcript)}
-          </strong>
-          {(() => {
-            const phaseLabel = keptVoicePhaseLabel(phase);
-            return phaseLabel ? (
-              <span className="kept-phase" data-testid="kept-phase">
-                {phaseLabel}
-              </span>
-            ) : null;
-          })()}
+          <strong data-testid="kept-status">{voicePrimary}</strong>
+          {voicePhase ? (
+            <span className="kept-phase" data-testid="kept-phase">
+              {voicePhase}
+            </span>
+          ) : null}
         </div>
       </div>
 
