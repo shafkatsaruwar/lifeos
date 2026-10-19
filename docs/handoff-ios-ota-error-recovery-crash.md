@@ -4,26 +4,46 @@
 
 ```
 Exception Type: EXC_CRASH (SIGABRT)
-Launch → crash ~6s
+Launch → crash ~2–6s
 StartupProcedure.throwException
 ErrorRecovery.crash()
 ErrorRecovery.notify(newRemoteLoadStatus:)
 ```
 
-This is **not** a Career UI crash. Expo Updates aborted the process because a remote OTA failed to load cleanly during startup.
+Expo Updates aborted because a remote OTA failed to load cleanly during native startup. Build **58** still has `checkAutomatically: ON_LOAD` + `fallbackToCacheTimeout: 0` baked in — **OTA JS cannot change that**.
 
-## Contributing factors
+## Immediate mitigation (done)
 
-1. `checkAutomatically: ON_LOAD` + `fallbackToCacheTimeout: 0` (native) — eager remote load with no grace period for embedded JS.
-2. `applyOtaUpdateIfAvailable()` called `Updates.reloadAsync()` from JS on every mount — races native startup recovery.
-3. JS boot throws (e.g. RTDB object-shaped `tasks` → `.filter is not a function` on Now) mark the remote update as failed → ErrorRecovery SIGABRT.
+Published **roll-back-to-embedded** on production / runtime `1.0.0` so build 58 uses its September embedded JS (commit `317ab263`, pre-Career):
 
-## Fixes shipped
+- Update group: `285b4a54-aa19-4a50-aa36-2db041251e9a`
+- Message: `emergency: re-assert embedded rollback after main OTA`
 
-- Stop `reloadAsync` in `lifeos-mobile/src/lib/ota.ts` (prefetch only; next cold start applies).
-- `fallbackToCacheTimeout: 5000` in app config (**needs next native/TestFlight build** to take effect).
-- Coerce RTDB lists in `loadWorkspace` (`asArray`), harden WidgetsBridge/notification sync, FloatingTabBar worklet safety.
+**User must delete + reinstall TestFlight** (or clear update cache) then open once so the client receives the rollback directive.
 
-## If still looping on device
+Note: every push to `main` republishes an OTA via GitHub Actions and can overwrite the rollback — re-run:
 
-Delete the TestFlight app and reinstall (clears a poisoned downloaded update). Then force-quit once after the good OTA lands.
+```bash
+cd lifeos-mobile
+npx eas-cli@latest update:roll-back-to-embedded \
+  --channel production --runtime-version 1.0.0 --platform ios --non-interactive \
+  --message "emergency: re-assert embedded rollback"
+```
+
+## Proper fix (needs native build 59+)
+
+In app config (already on main `4d1c803`):
+
+- `checkAutomatically: "ON_ERROR_RECOVERY"`
+- `fallbackToCacheTimeout: 5000`
+- No JS `Updates.reloadAsync()` on mount
+- Auth init never throws at import
+
+`eas build --platform ios --profile production --auto-submit` failed here (multi-target credentials need interactive setup for `com.example.lifeos` targets). Run from a machine with credentials access:
+
+```bash
+cd lifeos-mobile
+npx eas build --platform ios --profile production --auto-submit
+```
+
+Confirm the build uses `com.shafkatsaruwar.lifeos` (TestFlight id), not the placeholder `com.example.lifeos` if that still appears in local config.
