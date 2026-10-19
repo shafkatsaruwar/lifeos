@@ -226,6 +226,8 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
             setPhase(execBody.ok ? "done" : "confirm");
             if (execBody.item?.id) setSelectedId(execBody.item.id);
             flash(execBody.message || "Kept");
+            // Clear after successful keep so the placeholder returns; leave text on clarify.
+            if (execBody.ok) setTranscript("");
             return;
           }
         }
@@ -239,6 +241,7 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
     if (result.ok) {
       applyHub(result.hub, result.message);
       setPhase("done");
+      setTranscript("");
       if (result.item?.id) setSelectedId(result.item.id);
     } else {
       setStatusMessage(result.message);
