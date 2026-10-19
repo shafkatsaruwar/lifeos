@@ -52,22 +52,35 @@ export function isTerminalStage(stageId: CareerStageId) {
   return CAREER_STAGES.find((s) => s.id === stageId)?.isTerminal ?? false;
 }
 
+/** Firebase RTDB can yield sparse arrays / null holes — drop anything that isn't a plain object with an id. */
+function sanitizeRecords<T extends { id: string }>(raw: unknown): T[] {
+  if (!Array.isArray(raw)) return [];
+  const out: T[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const id = (item as { id?: unknown }).id;
+    if (typeof id !== "string" || !id) continue;
+    out.push(item as T);
+  }
+  return out;
+}
+
 export function normalizeCareerHub(raw: unknown): CareerHub {
   const empty = emptyCareerHub();
   if (!raw || typeof raw !== "object") return empty;
   const data = raw as Partial<CareerHub>;
   return {
     version: 1,
-    companies: Array.isArray(data.companies) ? data.companies : [],
-    applications: Array.isArray(data.applications) ? data.applications : [],
-    stageHistory: Array.isArray(data.stageHistory) ? data.stageHistory : [],
-    contacts: Array.isArray(data.contacts) ? data.contacts : [],
-    interactions: Array.isArray(data.interactions) ? data.interactions : [],
-    interviews: Array.isArray(data.interviews) ? data.interviews : [],
-    tasks: Array.isArray(data.tasks) ? data.tasks : [],
-    documents: Array.isArray(data.documents) ? data.documents : [],
-    activity: Array.isArray(data.activity) ? data.activity : [],
-    observations: Array.isArray(data.observations) ? data.observations : [],
+    companies: sanitizeRecords(data.companies),
+    applications: sanitizeRecords(data.applications),
+    stageHistory: sanitizeRecords(data.stageHistory),
+    contacts: sanitizeRecords(data.contacts),
+    interactions: sanitizeRecords(data.interactions),
+    interviews: sanitizeRecords(data.interviews),
+    tasks: sanitizeRecords(data.tasks),
+    documents: sanitizeRecords(data.documents),
+    activity: sanitizeRecords(data.activity),
+    observations: sanitizeRecords(data.observations),
     settings: {
       defaultCurrency: data.settings?.defaultCurrency || empty.settings.defaultCurrency,
       defaultTimezone: data.settings?.defaultTimezone || empty.settings.defaultTimezone,
@@ -714,7 +727,9 @@ export function linkDocument(
 }
 
 export function companyName(hub: CareerHub, companyId?: string) {
-  return hub.companies.find((c) => c.id === companyId)?.name ?? "Unknown company";
+  if (!companyId) return "Unknown company";
+  const companies = Array.isArray(hub.companies) ? hub.companies : [];
+  return companies.find((c) => c && c.id === companyId)?.name ?? "Unknown company";
 }
 
 export function applicationsForCompany(hub: CareerHub, companyId: string) {
@@ -781,35 +796,42 @@ export function filterApplications(
 
 export function dashboardMetrics(hub: CareerHub) {
   const today = nowIso().slice(0, 10);
-  const active = hub.applications.filter((a) => !isTerminalStage(a.stageId));
+  const applications = Array.isArray(hub.applications) ? hub.applications.filter(Boolean) : [];
+  const interviews = Array.isArray(hub.interviews) ? hub.interviews.filter(Boolean) : [];
+  const tasks = Array.isArray(hub.tasks) ? hub.tasks.filter(Boolean) : [];
+  const activity = Array.isArray(hub.activity) ? hub.activity.filter(Boolean) : [];
+  const duePrefix = (value: unknown) => (typeof value === "string" ? value.slice(0, 10) : null);
+
+  const active = applications.filter((a) => a.stageId && !isTerminalStage(a.stageId));
   const awaiting = active.filter((a) =>
     ["applied", "assessment", "recruiter_screening", "hiring_manager", "technical", "final"].includes(a.stageId),
   );
-  const upcomingInterviews = hub.interviews.filter(
-    (i) =>
-      typeof i.startsAt === "string" &&
-      i.startsAt.slice(0, 10) >= today &&
-      (i.outcome === "pending" || !i.outcome),
-  );
-  const offers = hub.applications.filter((a) => a.stageId === "offer" || a.outcome === "offer");
-  const rejections = hub.applications.filter((a) => a.stageId === "rejected" || a.outcome === "rejected");
+  const upcomingInterviews = interviews.filter((i) => {
+    const day = duePrefix(i.startsAt);
+    return Boolean(day && day >= today && (i.outcome === "pending" || !i.outcome));
+  });
+  const offers = applications.filter((a) => a.stageId === "offer" || a.outcome === "offer");
+  const rejections = applications.filter((a) => a.stageId === "rejected" || a.outcome === "rejected");
   const followUpsDue = [
-    ...hub.applications.filter(
-      (a) => a.nextActionDueAt && a.nextActionDueAt.slice(0, 10) <= today && !isTerminalStage(a.stageId),
-    ),
-    ...hub.tasks.filter((t) => !t.completedAt && t.dueAt && t.dueAt.slice(0, 10) <= today),
+    ...applications.filter((a) => {
+      const day = duePrefix(a.nextActionDueAt);
+      return Boolean(day && day <= today && a.stageId && !isTerminalStage(a.stageId));
+    }),
+    ...tasks.filter((t) => {
+      const day = duePrefix(t.dueAt);
+      return !t.completedAt && Boolean(day && day <= today);
+    }),
   ];
-  const overdueFollowUps = hub.applications.filter(
-    (a) => a.nextActionDueAt && a.nextActionDueAt.slice(0, 10) < today && !isTerminalStage(a.stageId),
-  );
-  const needsAttention = active.filter(
-    (a) =>
-      (a.nextActionDueAt && a.nextActionDueAt.slice(0, 10) <= today) ||
-      a.stageId === "offer" ||
-      (!a.nextAction && a.stageId === "applied"),
-  );
+  const overdueFollowUps = applications.filter((a) => {
+    const day = duePrefix(a.nextActionDueAt);
+    return Boolean(day && day < today && a.stageId && !isTerminalStage(a.stageId));
+  });
+  const needsAttention = active.filter((a) => {
+    const day = duePrefix(a.nextActionDueAt);
+    return Boolean(day && day <= today) || a.stageId === "offer" || (!a.nextAction && a.stageId === "applied");
+  });
   return {
-    total: hub.applications.length,
+    total: applications.length,
     active: active.length,
     awaiting: awaiting.length,
     upcomingInterviews: upcomingInterviews.length,
@@ -818,11 +840,14 @@ export function dashboardMetrics(hub: CareerHub) {
     followUpsDue: followUpsDue.length,
     overdueFollowUps,
     needsAttention,
-    upcomingInterviewList: upcomingInterviews.sort((a, b) => a.startsAt.localeCompare(b.startsAt)).slice(0, 8),
-    recentActivity: hub.activity.slice(0, 12),
+    upcomingInterviewList: upcomingInterviews
+      .filter((i) => typeof i.startsAt === "string")
+      .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+      .slice(0, 8),
+    recentActivity: activity.slice(0, 12),
     byStage: CAREER_STAGES.map((stage) => ({
       ...stage,
-      count: hub.applications.filter((a) => a.stageId === stage.id).length,
+      count: applications.filter((a) => a.stageId === stage.id).length,
     })),
   };
 }

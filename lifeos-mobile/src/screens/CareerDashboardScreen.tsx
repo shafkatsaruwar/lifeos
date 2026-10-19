@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { CareerErrorBoundary } from "../components/CareerErrorBoundary";
 import { ActionButton, Card, Empty, Eyebrow, Page, Title } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { SwipeDeleteRow } from "../components/SwipeDeleteRow";
@@ -24,6 +25,7 @@ import {
   emptyCareerHub,
   filterApplications,
   moveApplicationStage,
+  normalizeCareerHub,
   stageLabel,
   type ApplicationPriority,
   type CareerApplication,
@@ -61,11 +63,26 @@ function applyHubResult(
 }
 
 export function CareerDashboardScreen() {
+  return (
+    <CareerErrorBoundary>
+      <CareerDashboardBody />
+    </CareerErrorBoundary>
+  );
+}
+
+function CareerDashboardBody() {
   const { theme, workspace, updateCareer } = useLifeOS();
   const navigation = useNavigation<any>();
   const tabBarPad = useFloatingTabBarContentPadding(40);
-  // Defensive: never crash if career blob is missing from an older workspace payload.
-  const hub = workspace.career ?? emptyCareerHub();
+  // Re-normalize on read — workspace.career may predate sanitizeRecords or be a sparse RTDB blob.
+  const hub = useMemo(() => {
+    try {
+      return normalizeCareerHub(workspace.career ?? emptyCareerHub());
+    } catch (error) {
+      console.warn("[LifeOS] Career hub normalize failed in screen", error);
+      return emptyCareerHub();
+    }
+  }, [workspace.career]);
 
   const [view, setView] = useState<CareerView>("overview");
   const [query, setQuery] = useState("");
@@ -76,11 +93,22 @@ export function CareerDashboardScreen() {
   const [priority, setPriority] = useState<ApplicationPriority>("medium");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const metrics = useMemo(() => dashboardMetrics(hub), [hub]);
-  const apps = useMemo(
-    () => filterApplications(hub, { query, sort: "updated" }),
-    [hub, query],
-  );
+  const metrics = useMemo(() => {
+    try {
+      return dashboardMetrics(hub);
+    } catch (error) {
+      console.warn("[LifeOS] Career metrics failed", error);
+      return dashboardMetrics(emptyCareerHub());
+    }
+  }, [hub]);
+  const apps = useMemo(() => {
+    try {
+      return filterApplications(hub, { query, sort: "updated" });
+    } catch (error) {
+      console.warn("[LifeOS] Career filter failed", error);
+      return [];
+    }
+  }, [hub, query]);
   const selected = hub.applications.find((a) => a.id === selectedId) ?? null;
   const upcoming = metrics.upcomingInterviewList;
 

@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef } from "react";
+import { Text, View } from "react-native";
 import { OnboardingFlow } from "../components/OnboardingFlow";
 import { PaywallGate } from "../components/PaywallGate";
 import { FloatingTabBar } from "../components/FloatingTabBar";
@@ -171,17 +172,26 @@ function WorkStackNavigator() {
 }
 
 
+/** Never return null from a tab stack — that can crash React Navigation. */
+function CareerUnavailableScreen() {
+  const { theme } = useLifeOS();
+  return (
+    <View style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: theme.bg }}>
+      <Text style={{ color: theme.text, fontWeight: "800", fontSize: 18 }}>Career unavailable</Text>
+      <Text style={{ color: theme.muted, marginTop: 8 }}>
+        Something went wrong loading Career. Your other hubs still work — try again after an update.
+      </Text>
+    </View>
+  );
+}
+
 /** Career is free (like Home / School) — no paywall gate. */
 function CareerStackNavigator() {
   const screenOptions = useStackScreenOptions();
-  const CareerDashboardScreen = getCareerDashboardScreen();
-  if (!CareerDashboardScreen) {
-    // Should not mount — Tab.Screen is gated by isCareerHubAvailable().
-    return null;
-  }
+  const Screen = getCareerDashboardScreen() ?? CareerUnavailableScreen;
   return (
     <CareerStack.Navigator screenOptions={screenOptions}>
-      <CareerStack.Screen name="CareerDashboard" component={CareerDashboardScreen} />
+      <CareerStack.Screen name="CareerDashboard" component={Screen} />
     </CareerStack.Navigator>
   );
 }
