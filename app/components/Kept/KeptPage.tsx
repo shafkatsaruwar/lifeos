@@ -260,8 +260,9 @@ export function KeptPage({ userId, reduceMotion: reduceMotionProp, flash, getIdT
         setTranscript((current) => {
           if (current.trim()) void runUtterance(current);
           else {
+            // Empty end = no speech activity (accidental tap / silence).
             setPhase("idle");
-            setStatusMessage("Didn’t catch that — try again or type.");
+            setStatusMessage(KEPT_LISTENING_CANCELED_STATUS);
           }
           return current;
         });
