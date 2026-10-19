@@ -6,9 +6,9 @@
  * While false, Career never loads — app must still open.
  */
 import type { ComponentType } from "react";
+import { CAREER_IOS_ENABLED } from "./careerFlag";
 
-/** Kill-switch for iOS Career hub (OTA-safe). */
-export const CAREER_IOS_ENABLED = false;
+export { CAREER_IOS_ENABLED };
 
 export type CareerScreenComponent = ComponentType<Record<string, never>>;
 

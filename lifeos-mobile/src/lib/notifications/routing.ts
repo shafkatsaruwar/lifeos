@@ -162,9 +162,9 @@ const linkingScreens = {
   },
 } as const;
 
-/** Build linking config; omit CareerTab when the hub module failed to load. */
+/** Build linking config; CareerTab is opt-in only (CAREER_IOS_ENABLED + soft-load). */
 export function buildLinking(options?: { includeCareer?: boolean }) {
-  const includeCareer = options?.includeCareer !== false;
+  const includeCareer = options?.includeCareer === true;
   const screens = includeCareer
     ? linkingScreens
     : Object.fromEntries(Object.entries(linkingScreens).filter(([key]) => key !== "CareerTab"));
@@ -174,4 +174,4 @@ export function buildLinking(options?: { includeCareer?: boolean }) {
   };
 }
 
-export const linking = buildLinking({ includeCareer: true });
+export const linking = buildLinking({ includeCareer: false });

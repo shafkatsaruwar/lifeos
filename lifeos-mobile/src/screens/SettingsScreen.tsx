@@ -23,6 +23,7 @@ import {
   formatEntitlementExpiry,
   redeemPromoCode,
 } from "../lib/entitlement";
+import { CAREER_IOS_ENABLED } from "../lib/careerFlag";
 import { SPACE_COLORS, DEFAULT_WORKSPACE_COLORS, workspaceColorFor } from "../lib/theme";
 import { appearancePatchForThemeMode } from "../../../lib/appearancePrefs";
 import type { CalendarDefaultView, EnergyLevel, ThemeMode } from "../types";
@@ -184,7 +185,7 @@ export function SettingsScreen() {
               ["life", "Life"],
               ["school", "School"],
               ["work", "Work"],
-              ["career", "Career"],
+              ...(CAREER_IOS_ENABLED ? [["career", "Career"] as const] : []),
               ["studyAbroad", "Study Abroad"],
               ["treasuryOS", "TreasuryOS"],
               ["masterOS", "MasterOS"],
@@ -420,18 +421,22 @@ export function SettingsScreen() {
               trackColor={{ true: theme.accent }}
             />
           </View>
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
-          <View style={styles.settingRow}>
-            <View style={styles.grow}>
-              <Text style={{ color: theme.text, fontWeight: "800" }}>Career</Text>
-              <Text style={{ color: theme.muted, fontSize: 12 }}>Job search pipeline — free hub</Text>
-            </View>
-            <Switch
-              value={workspace.settings.enableCareerOS !== false}
-              onValueChange={(value) => patchSettings({ enableCareerOS: value })}
-              trackColor={{ true: theme.accent }}
-            />
-          </View>
+          {CAREER_IOS_ENABLED ? (
+            <>
+              <View style={[styles.divider, { backgroundColor: theme.border }]} />
+              <View style={styles.settingRow}>
+                <View style={styles.grow}>
+                  <Text style={{ color: theme.text, fontWeight: "800" }}>Career</Text>
+                  <Text style={{ color: theme.muted, fontSize: 12 }}>Job search pipeline — free hub</Text>
+                </View>
+                <Switch
+                  value={workspace.settings.enableCareerOS !== false}
+                  onValueChange={(value) => patchSettings({ enableCareerOS: value })}
+                  trackColor={{ true: theme.accent }}
+                />
+              </View>
+            </>
+          ) : null}
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
           <View style={styles.settingRow}>
             <View style={styles.grow}>

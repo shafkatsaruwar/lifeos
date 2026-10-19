@@ -1,4 +1,4 @@
-import type { CareerHub } from "./lib/career";
+import type { CareerHub } from "./lib/career/careerTypes";
 import type { WorkHubState } from "./lib/workos";
 import type { TimeTrackingState } from "./lib/timeTracking";
 export type { CareerHub, WorkHubState };
