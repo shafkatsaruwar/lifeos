@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 
-const APP_GROUP = "group.com.example.lifeos";
+const APP_GROUP = "group.com.shafkatsaruwar.lifeos";
 const PENDING_KEY = "lifeosPendingKeptCommands";
 
 export type PendingKeptCommand =

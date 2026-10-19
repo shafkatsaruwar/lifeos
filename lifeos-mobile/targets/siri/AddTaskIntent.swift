@@ -30,7 +30,7 @@ struct AddTaskIntent: AppIntent {
   }
 
   private func enqueuePendingTask(title: String) {
-    let groupId = "group.com.example.lifeos"
+    let groupId = "group.com.shafkatsaruwar.lifeos"
     let key = "lifeosPendingSiriTasks"
     let entry: [String: Any] = [
       "title": title,
@@ -122,7 +122,7 @@ struct FindKeptIntent: AppIntent {
 
 @available(iOS 16.0, *)
 private func enqueueKeptCommand(_ entry: [String: Any]) {
-  let groupId = "group.com.example.lifeos"
+  let groupId = "group.com.shafkatsaruwar.lifeos"
   let key = "lifeosPendingKeptCommands"
   let defaults = UserDefaults(suiteName: groupId)
   var pending: [[String: Any]] = []

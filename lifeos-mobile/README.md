@@ -58,7 +58,7 @@ EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=....apps.googleusercontent.com
 
 Google sign-in uses the HTTPS `/shell-auth` bridge (Expo Go cannot use `exp://` redirects), then signs into Firebase natively with the Google ID token.
 
-iOS bundle ID: `com.example.lifeos`
+iOS bundle ID: `com.shafkatsaruwar.lifeos`
 
 ## Tabs
 

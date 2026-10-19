@@ -11,12 +11,12 @@
     "ios": {
       "supportsTablet": true,
       "requireFullScreen": false,
-      "bundleIdentifier": "com.example.lifeos",
+      "bundleIdentifier": "com.shafkatsaruwar.lifeos",
       "buildNumber": "14",
       "usesAppleSignIn": true,
       "entitlements": {
         "com.apple.security.application-groups": [
-          "group.com.example.lifeos"
+          "group.com.shafkatsaruwar.lifeos"
         ]
       },
       "infoPlist": {
@@ -79,7 +79,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.example.lifeos"
+      "package": "com.shafkatsaruwar.lifeos"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -129,19 +129,19 @@
               "appExtensions": [
                 {
                   "targetName": "LiveActivity",
-                  "bundleIdentifier": "com.example.lifeos.LiveActivity",
+                  "bundleIdentifier": "com.shafkatsaruwar.lifeos.LiveActivity",
                   "entitlements": {
                     "com.apple.security.application-groups": [
-                      "group.com.example.lifeos"
+                      "group.com.shafkatsaruwar.lifeos"
                     ]
                   }
                 },
                 {
                   "targetName": "Share",
-                  "bundleIdentifier": "com.example.lifeos.Share",
+                  "bundleIdentifier": "com.shafkatsaruwar.lifeos.Share",
                   "entitlements": {
                     "com.apple.security.application-groups": [
-                      "group.com.example.lifeos"
+                      "group.com.shafkatsaruwar.lifeos"
                     ]
                   }
                 }

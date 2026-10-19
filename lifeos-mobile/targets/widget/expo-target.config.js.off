@@ -10,7 +10,7 @@ module.exports = (config) => ({
   entitlements: {
     "com.apple.security.application-groups":
       config.ios?.entitlements?.["com.apple.security.application-groups"] ?? [
-        "group.com.example.lifeos",
+        "group.com.shafkatsaruwar.lifeos",
       ],
   },
 });

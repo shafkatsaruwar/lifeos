@@ -2,7 +2,7 @@ import type { Workspace } from "../../types";
 import { taskIsOpen, taskRemaining, toDateKey } from "../helpers";
 import { mergeCalendarWithWorkMeetings } from "../workos";
 
-const APP_GROUP = "group.com.example.lifeos";
+const APP_GROUP = "group.com.shafkatsaruwar.lifeos";
 const SNAPSHOT_KEY = "lifeosWidgetSnapshot";
 
 /** Accent tokens from the LifeOS widget mockups. */
