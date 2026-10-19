@@ -1,51 +1,38 @@
 # Handoff: iOS SIGABRT was Expo Updates ErrorRecovery
 
-## Crash evidence (TestFlight build 58)
+## Crash evidence
+
+Every pasted TestFlight crash is **`Version: 1.0.0 (58)`**:
 
 ```
 Exception Type: EXC_CRASH (SIGABRT)
-Launch → crash ~2–6s
-StartupProcedure.throwException
-ErrorRecovery.crash()
-ErrorRecovery.notify(newRemoteLoadStatus:)
+Termination Reason: SIGNAL 6 Abort trap: 6
+StartupProcedure.throwException → ErrorRecovery.crash()
 ```
 
-Expo Updates aborted because a remote OTA failed to load cleanly during native startup. Build **58** still has `checkAutomatically: ON_LOAD` + `fallbackToCacheTimeout: 0` baked in — **OTA JS cannot change that**.
+No crash log from builds 64+ has been pasted. Rebuilds of 58 (delete/reinstall) cannot fix this — native Updates config is baked in.
 
-## Status (2026-10-19)
+## Build map
 
-| Build | Result | Notes |
-|-------|--------|-------|
-| 58 | Live / aborting | `ON_LOAD` binary. Delete + reinstall does not fix if embedded JS or recovery still fails. |
-| 59–63 | Errored / canceled | Siri `AppShortcuts` Swift syntax on Xcode 26 |
-| **64** | IPA + ASC submit finished | Safer Updates (`ON_ERROR_RECOVERY`). Wait for TestFlight processing, then install **64** (not 58). |
-| **65+** | Next | `updates.enabled: false` + boot harden + app version `1.0.1` |
+| Build | Version | Updates | Status |
+|-------|---------|---------|--------|
+| **58** | 1.0.0 | `ON_LOAD` / timeout 0 | Aborting — do not use |
+| 64–65 | 1.0.0 | `ON_ERROR_RECOVERY` | In ASC; still has ErrorRecovery path |
+| **66 / 67** | **1.0.1** | **`enabled: false`** | IPA finished; ASC submit in flight |
 
-## What to do on the phone
+## What to install
 
-1. Open TestFlight → confirm build number is **64** (or newer), not 58.
-2. Delete LifeOS from the phone.
-3. Install the new build from TestFlight.
-4. Open once.
+1. Wait for TestFlight to show **1.0.1 (66 or 67)**.
+2. Delete LifeOS from the phone (clears old Updates cache).
+3. Install **1.0.1**, open once.
+4. Confirm Settings / About / TestFlight card shows **1.0.1**, not 1.0.0 (58).
 
-If TestFlight still only shows 58, wait for Apple processing (can be minutes–hours after ASC “finished”).
+If it still crashes on **1.0.1**, paste the new crash log (must show build 66/67) — that would be a different bug than ErrorRecovery.
 
-## Next native build (Mac)
+## Branch tip
 
-```bash
-git fetch origin
-git checkout cursor/fix-ios-native-updates-b1ae
-git pull
-npx eas build --platform ios --profile production --auto-submit
-```
+`cursor/fix-ios-native-updates-b1ae` @ `c95105c`:
 
-This ships `1.0.1` with **Expo Updates disabled** so ErrorRecovery cannot SIGABRT. Re-enable OTA only after launch is proven.
-
-## Rollback for anyone still on 58
-
-```bash
-cd lifeos-mobile
-npx eas-cli@latest update:roll-back-to-embedded \
-  --channel production --runtime-version 1.0.0 --platform ios --non-interactive \
-  --message "emergency: re-assert embedded rollback"
-```
+- `updates.enabled: false` + `checkAutomatically: NEVER`
+- App version `1.0.1` (new runtime; old OTAs cannot attach)
+- Firebase / notifications / WebBrowser import side effects wrapped
