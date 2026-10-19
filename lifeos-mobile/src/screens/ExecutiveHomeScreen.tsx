@@ -439,7 +439,7 @@ export function ExecutiveHomeScreen() {
                     },
                   ]}
                 >
-                  <Text style={{ color: theme.text, fontSize: 11, fontWeight: "700" }}>{method}</Text>
+                  <Text style={{ color: theme.text, fontSize: 12, fontWeight: "700" }}>{method}</Text>
                 </Pressable>
               ))}
             </View>
@@ -461,7 +461,7 @@ export function ExecutiveHomeScreen() {
                     },
                   ]}
                 >
-                  <Text style={{ color: theme.text, fontSize: 11, fontWeight: "700" }}>Asr · {asr}</Text>
+                  <Text style={{ color: theme.text, fontSize: 12, fontWeight: "700" }}>Asr · {asr}</Text>
                 </Pressable>
               ))}
             </View>
