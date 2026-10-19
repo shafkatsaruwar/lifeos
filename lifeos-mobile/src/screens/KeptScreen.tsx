@@ -181,6 +181,7 @@ export function KeptScreen() {
     if (result.ok) {
       await persist(result.hub, result.message);
       setPhase("done");
+      setTranscript("");
       if (result.item) setSelected(result.item);
     } else {
       setStatus(result.message);
