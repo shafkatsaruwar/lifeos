@@ -29,7 +29,8 @@ function tabTint(routeName: string, accent: string, settings: SettingsState): st
     case "CalendarTab":
       return "#3F7ED7";
     case "KeptTab":
-      return "#0D9488";
+      // Same cornflower selection chrome as Calendar (not teal).
+      return "#3F7ED7";
     case "LifeTab":
       return workspaceColorFor(settings, "life");
     case "SchoolTab":
