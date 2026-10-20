@@ -6,7 +6,7 @@ const appJson = require("./app.json");
 
 const PLACEHOLDER = "YOUR_EAS_PROJECT_ID";
 // Public Expo project UUID (also embedded in client updates URL).
-const BAKED_EAS_PROJECT_ID = "[REDACTED]"; // pragma: allowlist secret
+const BAKED_EAS_PROJECT_ID = "6021a343-7ac2-421d-a247-35279744602d"; // pragma: allowlist secret
 const UUID_RE =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
