@@ -1,7 +1,6 @@
-import { type ReactNode, useEffect } from "react";
-import { StyleSheet, View } from "react-native";
+import { type ReactNode, useEffect, useRef } from "react";
+import { Animated, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
 const MIN_SCALE = 0.9;
 const MAX_SCALE = 2.5;
@@ -17,49 +16,55 @@ type Props = {
 };
 
 function clamp(n: number, min: number, max: number) {
-  "worklet";
   return Math.max(min, Math.min(max, n));
 }
 
 /**
  * Document-level pinch / pan / double-tap zoom for the Seamless note stage.
- * Keeps page sheets + overlays in one transform tree.
+ * Uses RN Animated (no Reanimated) so Old Arch TestFlight builds stay stable.
  */
 export function DocumentZoom({ children, enabled = true, scale, onScaleChange }: Props) {
-  const scaleSV = useSharedValue(scale);
-  const savedScale = useSharedValue(scale);
-  const tx = useSharedValue(0);
-  const ty = useSharedValue(0);
-  const savedTx = useSharedValue(0);
-  const savedTy = useSharedValue(0);
+  const scaleAnim = useRef(new Animated.Value(scale)).current;
+  const tx = useRef(new Animated.Value(0)).current;
+  const ty = useRef(new Animated.Value(0)).current;
+  const scaleRef = useRef(scale);
+  const savedScale = useRef(scale);
+  const savedTx = useRef(0);
+  const savedTy = useRef(0);
+  const txRef = useRef(0);
+  const tyRef = useRef(0);
 
   useEffect(() => {
-    scaleSV.value = scale;
+    scaleRef.current = scale;
+    scaleAnim.setValue(scale);
     if (scale <= 1.01) {
-      tx.value = withTiming(0, { duration: 160 });
-      ty.value = withTiming(0, { duration: 160 });
+      txRef.current = 0;
+      tyRef.current = 0;
+      Animated.timing(tx, { toValue: 0, duration: 160, useNativeDriver: true }).start();
+      Animated.timing(ty, { toValue: 0, duration: 160, useNativeDriver: true }).start();
     }
-  }, [scale, scaleSV, tx, ty]);
-
-  const reportScale = (next: number) => {
-    onScaleChange(next);
-  };
+  }, [scale, scaleAnim, tx, ty]);
 
   const pinch = Gesture.Pinch()
     .enabled(enabled)
     .onBegin(() => {
-      savedScale.value = scaleSV.value;
+      savedScale.current = scaleRef.current;
     })
     .onUpdate((e) => {
-      scaleSV.value = clamp(savedScale.value * e.scale, MIN_SCALE, MAX_SCALE);
+      const next = clamp(savedScale.current * e.scale, MIN_SCALE, MAX_SCALE);
+      scaleRef.current = next;
+      scaleAnim.setValue(next);
     })
     .onEnd(() => {
-      const next = clamp(scaleSV.value, MIN_SCALE, MAX_SCALE);
-      scaleSV.value = next;
-      runOnJS(reportScale)(next);
+      const next = clamp(scaleRef.current, MIN_SCALE, MAX_SCALE);
+      scaleRef.current = next;
+      scaleAnim.setValue(next);
+      onScaleChange(next);
       if (next <= 1.01) {
-        tx.value = withTiming(0, { duration: 160 });
-        ty.value = withTiming(0, { duration: 160 });
+        txRef.current = 0;
+        tyRef.current = 0;
+        Animated.timing(tx, { toValue: 0, duration: 160, useNativeDriver: true }).start();
+        Animated.timing(ty, { toValue: 0, duration: 160, useNativeDriver: true }).start();
       }
     });
 
@@ -67,38 +72,48 @@ export function DocumentZoom({ children, enabled = true, scale, onScaleChange }:
     .enabled(enabled)
     .minPointers(2)
     .onBegin(() => {
-      savedTx.value = tx.value;
-      savedTy.value = ty.value;
+      savedTx.current = txRef.current;
+      savedTy.current = tyRef.current;
     })
     .onUpdate((e) => {
-      if (scaleSV.value <= 1.01) return;
-      tx.value = savedTx.value + e.translationX;
-      ty.value = savedTy.value + e.translationY;
+      if (scaleRef.current <= 1.01) return;
+      txRef.current = savedTx.current + e.translationX;
+      tyRef.current = savedTy.current + e.translationY;
+      tx.setValue(txRef.current);
+      ty.setValue(tyRef.current);
     });
 
   const doubleTap = Gesture.Tap()
     .enabled(enabled)
     .numberOfTaps(2)
     .onEnd(() => {
-      const next = scaleSV.value > 1.05 ? 1 : COMFORT_ZOOM;
-      scaleSV.value = withTiming(next, { duration: 180 });
+      const next = scaleRef.current > 1.05 ? 1 : COMFORT_ZOOM;
+      scaleRef.current = next;
+      Animated.timing(scaleAnim, { toValue: next, duration: 180, useNativeDriver: true }).start();
       if (next <= 1.01) {
-        tx.value = withTiming(0, { duration: 180 });
-        ty.value = withTiming(0, { duration: 180 });
+        txRef.current = 0;
+        tyRef.current = 0;
+        Animated.timing(tx, { toValue: 0, duration: 180, useNativeDriver: true }).start();
+        Animated.timing(ty, { toValue: 0, duration: 180, useNativeDriver: true }).start();
       }
-      runOnJS(reportScale)(next);
+      onScaleChange(next);
     });
 
   const gesture = Gesture.Simultaneous(pinch, pan, doubleTap);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scaleSV.value }],
-  }));
-
   return (
     <GestureDetector gesture={gesture}>
       <View style={styles.root} collapsable={false}>
-        <Animated.View style={[styles.content, animatedStyle]}>{children}</Animated.View>
+        <Animated.View
+          style={[
+            styles.content,
+            {
+              transform: [{ translateX: tx }, { translateY: ty }, { scale: scaleAnim }],
+            },
+          ]}
+        >
+          {children}
+        </Animated.View>
       </View>
     </GestureDetector>
   );

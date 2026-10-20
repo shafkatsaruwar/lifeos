@@ -19,19 +19,24 @@ Hermes SIGSEGV (not Updates). Stack matches RN 0.81 bug:
 corrupts JSI (facebook/react-native#56265 / 4083a6f). Build used
 **React-Core-prebuilt**, so patch-package alone could not land.
 
-## Build 72+ (1.0.2) — ship this
-- Patch `RCTTurboModule.mm` void NSException path (`@throw` instead of JSError)
-- Force `RCT_USE_PREBUILT_RNCORE=0` so the patch compiles into the binary
-- Exclude `expo-dev-client` from production autolinking
-- Defer `maybeCompleteAuthSession`; `.catch` on `Linking.getInitialURL`
-- Scene fix + Updates off + New Arch on (Reanimated) + P1 harden still apply
+## Build 72 (1.0.2) — may still crash
+TurboModule patch + RN source build. If user still on 1.0.2, confirm
+TestFlight **build number** (71 = unpatched Hermes bug).
+
+## Build 73+ (1.0.3) — ship this
+Hard cut for iOS 27 stability:
+- **Old Arch** (`newArchEnabled: false`) — Reanimated 4 + worklets **removed**
+- FloatingTabBar / DocumentZoom use RN `Animated`
+- **expo-dev-client removed** from package.json
+- Live Activity JS calls kill-switched (`LIVE_ACTIVITY_IOS_ENABLED = false`)
+- Keep Updates off + RCTTurboModule patch + RN source build
 
 ```bash
 git fetch origin
 git checkout cursor/fix-ios-native-updates-b1ae
 git pull
+cd lifeos-mobile
 npx eas build --platform ios --profile production --auto-submit
 ```
 
-Delete LifeOS, install **1.0.2**, confirm TestFlight shows 1.0.2 (not 58/67).
-If it still crashes, paste a crash log that shows **build 68+ / 1.0.2**.
+Delete LifeOS, install **1.0.3** (build 73+). Paste a crash log with that build number if it still dies.

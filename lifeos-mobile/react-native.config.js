@@ -1,21 +1,16 @@
 /**
- * Production/preview binaries must not autolink expo-dev-client.
- * Plugin gating in app.config.js is not enough — CocoaPods still links
- * transitive expo-dev-* pods from package.json dependencies.
+ * Keep crash-prone packages out of store binaries even if they reappear
+ * transitively. EAS_BUILD_PROFILE is set during EAS builds.
  */
-const profile = (process.env.EAS_BUILD_PROFILE || "").trim();
-const isDevClientProfile =
-  profile === "development" || profile === "development-device";
-
 const disableNative = { platforms: { ios: null, android: null } };
 
 module.exports = {
-  dependencies: isDevClientProfile
-    ? {}
-    : {
-        "expo-dev-client": disableNative,
-        "expo-dev-launcher": disableNative,
-        "expo-dev-menu": disableNative,
-        "expo-dev-menu-interface": disableNative,
-      },
+  dependencies: {
+    "expo-dev-client": disableNative,
+    "expo-dev-launcher": disableNative,
+    "expo-dev-menu": disableNative,
+    "expo-dev-menu-interface": disableNative,
+    "react-native-reanimated": disableNative,
+    "react-native-worklets": disableNative,
+  },
 };

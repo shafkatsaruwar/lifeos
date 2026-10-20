@@ -11,7 +11,8 @@ Scope: `lifeos-mobile` TestFlight launches and early runtime. Tip: `f00d830` / b
 | **64–65** | 1.0.0 | Intermediate | Updates still on (`ON_ERROR_RECOVERY`); ErrorRecovery path still live. |
 | **68–70** | 1.0.2 | EAS errored | `newArchEnabled: false` → CocoaPods: Reanimated 4.x requires New Arch. |
 | **71** | 1.0.2 | Confirmed crash log | Hermes `EXC_BAD_ACCESS` / SIGSEGV ~2.7s after launch. Concurrent `performVoidMethodInvocation` → `convertNSExceptionToJSError` (RN 0.81 prebuilt bug; upstream #56265). |
-| **72+ tip** | not TF yet | — | Patch RCTTurboModule void-exception path + force RN **source** build (prebuilt ignored patches). |
+| **72** | 1.0.2 | User may still crash | TurboModule patch + RN source. Confirm build # — 71 is unpatched Hermes bug. |
+| **73+ tip** | 1.0.3 | — | Old Arch (Reanimated removed), no expo-dev-client, Live Activity JS off, TurboModule patch + RN source. |
 
 No crash log for build 67 was pasted — diagnosis is from IPA config + git history.
 
@@ -69,10 +70,10 @@ index.ts
 
 ## Ship checklist for next TestFlight (1.0.2+)
 
-1. Tip includes scene fix + Updates off + New Arch left on + P1 harden.
+1. Tip is **1.0.3**: Old Arch, no Reanimated/dev-client, Live Activity JS off, Updates off, TurboModule patch + RN source.
 2. `eas build --profile production --auto-submit` from branch tip.
-3. Delete old LifeOS; install **1.0.2**; confirm TestFlight card version.
-4. If it still dies, paste a crash log that shows **that** build number (not 58).
+3. Delete old LifeOS; install **1.0.3** (build 73+), not any 1.0.2.
+4. If it still dies, paste a crash log that shows **that** build number.
 
 ## Out of scope this pass
 

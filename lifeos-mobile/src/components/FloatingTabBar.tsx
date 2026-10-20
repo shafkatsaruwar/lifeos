@@ -1,14 +1,14 @@
 import Feather from "@expo/vector-icons/Feather";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Gesture, GestureDetector, Pressable } from "react-native-gesture-handler";
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
-import { StyleSheet, Text, View } from "react-native";
+import {
+  Animated,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { CAREER_IOS_ENABLED } from "../lib/careerFlag";
@@ -24,14 +24,12 @@ const INACTIVE = "#8E8E93";
 function tabTint(routeName: string, accent: string, settings: SettingsState): string {
   switch (routeName) {
     case "NowTab":
-      // Same cornflower selection chrome as Calendar / Kept (not theme accent).
       return "#3F7ED7";
     case "TasksTab":
       return "#31926A";
     case "CalendarTab":
       return "#3F7ED7";
     case "KeptTab":
-      // Same cornflower selection chrome as Calendar (not teal).
       return "#3F7ED7";
     case "LifeTab":
       return workspaceColorFor(settings, "life");
@@ -57,6 +55,10 @@ function isHidden(options: BottomTabBarProps["descriptors"][string]["options"]) 
   return style?.display === "none";
 }
 
+/**
+ * Floating tab bar using RN Animated (no Reanimated / New Arch).
+ * Spring indicator + pan-to-switch kept for UX; worklets removed for TF stability.
+ */
 export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { theme, workspace } = useLifeOS();
   const insets = useSafeAreaInsets();
@@ -64,7 +66,6 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const reduceMotion = Boolean(workspace.settings.reduceMotion);
 
   const visible = state.routes.filter((route) => {
-    // Belt-and-suspenders: never show Career while kill-switch is off.
     if (!CAREER_IOS_ENABLED && route.name === "CareerTab") return false;
     return !isHidden(descriptors[route.key]?.options);
   });
@@ -75,14 +76,13 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     visible.findIndex((route) => route.key === activeKey),
   );
 
-  const widthSV = useSharedValue(0);
-  const indexSV = useSharedValue(activeIndex);
-  const dragX = useSharedValue(0);
-  const dragging = useSharedValue(0);
-  const countSV = useSharedValue(Math.max(visible.length, 1));
-  countSV.value = Math.max(visible.length, 1);
+  const [trackWidth, setTrackWidth] = useState(0);
+  const indexAnim = useRef(new Animated.Value(activeIndex)).current;
+  const dragX = useRef(new Animated.Value(0)).current;
+  const dragOffset = useRef(0);
+  const count = Math.max(visible.length, 1);
+  const tabW = trackWidth > 0 ? trackWidth / count : 0;
 
-  // If the navigator is parked on a hidden hub, bounce to the first visible tab.
   const firstVisibleName = visible[0]?.name;
   useEffect(() => {
     if (!activeHidden || !firstVisibleName) return;
@@ -90,14 +90,19 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   }, [activeHidden, firstVisibleName, navigation]);
 
   useEffect(() => {
+    dragOffset.current = 0;
+    dragX.setValue(0);
     if (reduceMotion) {
-      indexSV.value = activeIndex;
-      dragX.value = 0;
+      indexAnim.setValue(activeIndex);
       return;
     }
-    indexSV.value = withSpring(activeIndex, { damping: 18, stiffness: 220, mass: 0.7 });
-    dragX.value = 0;
-  }, [activeIndex, dragX, indexSV, reduceMotion]);
+    Animated.spring(indexAnim, {
+      toValue: activeIndex,
+      useNativeDriver: true,
+      friction: 7,
+      tension: 80,
+    }).start();
+  }, [activeIndex, dragX, indexAnim, reduceMotion]);
 
   const goTo = (nextIndex: number) => {
     const route = visible[nextIndex];
@@ -116,43 +121,39 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     .activeOffsetX([-12, 12])
     .failOffsetY([-16, 16])
     .onBegin(() => {
-      dragging.value = 1;
+      dragOffset.current = 0;
     })
     .onChange((e) => {
-      dragX.value += e.changeX;
+      dragOffset.current += e.changeX;
+      dragX.setValue(dragOffset.current);
     })
     .onEnd(() => {
-      // Use shared count — reading a JS array in a worklet can hard-crash on swipe.
-      const count = countSV.value;
-      const w = widthSV.value;
-      if (count < 1 || w <= 0) {
-        dragging.value = 0;
-        dragX.value = 0;
+      if (count < 1 || tabW <= 0) {
+        dragOffset.current = 0;
+        dragX.setValue(0);
         return;
       }
-      const tabW = w / count;
-      const raw = indexSV.value + dragX.value / tabW;
+      const raw = activeIndex + dragOffset.current / tabW;
       const snapped = Math.max(0, Math.min(count - 1, Math.round(raw)));
-      dragging.value = 0;
-      dragX.value = 0;
-      runOnJS(goTo)(snapped);
+      dragOffset.current = 0;
+      dragX.setValue(0);
+      goTo(snapped);
     });
 
-  const lightStyle = useAnimatedStyle(() => {
-    const count = Math.max(countSV.value, 1);
-    const w = widthSV.value;
-    const tabW = count > 0 && w > 0 ? w / count : 0;
-    const x = indexSV.value * tabW + dragX.value;
-    return {
-      width: Math.max(0, tabW - LIGHT_INSET * 2),
-      transform: [{ translateX: x + LIGHT_INSET }],
-    };
-  });
+  const lightTranslateX = Animated.add(
+    Animated.multiply(indexAnim, tabW || 0),
+    Animated.add(dragX, LIGHT_INSET),
+  );
 
   const dark = theme.bg === "#111214" || theme.surface === "#191A1D";
   const pillBg = dark ? theme.surface : "#FFFFFF";
   const activeRoute = visible[activeIndex]?.name ?? "NowTab";
   const activeTint = tabTint(activeRoute, theme.accent, workspace.settings);
+  const lightWidth = Math.max(0, tabW - LIGHT_INSET * 2);
+
+  const onTrackLayout = (e: LayoutChangeEvent) => {
+    setTrackWidth(e.nativeEvent.layout.width);
+  };
 
   return (
     <View
@@ -175,20 +176,21 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
             },
           ]}
         >
-          <View
-            onLayout={(e) => {
-              widthSV.value = e.nativeEvent.layout.width;
-            }}
-            style={styles.track}
-          >
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.light,
-                { borderColor: activeTint, backgroundColor: tintFill(activeTint, dark) },
-                lightStyle,
-              ]}
-            />
+          <View onLayout={onTrackLayout} style={styles.track}>
+            {tabW > 0 ? (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.light,
+                  {
+                    width: lightWidth,
+                    borderColor: activeTint,
+                    backgroundColor: tintFill(activeTint, dark),
+                    transform: [{ translateX: lightTranslateX }],
+                  },
+                ]}
+              />
+            ) : null}
             {visible.map((route, index) => {
               const options = descriptors[route.key]?.options ?? {};
               const label =
