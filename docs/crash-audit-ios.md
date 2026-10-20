@@ -9,7 +9,8 @@ Scope: `lifeos-mobile` TestFlight launches and early runtime. Tip: `f00d830` / b
 | **58** | 1.0.0 | Confirmed (crash logs) | Expo Updates `StartupProcedure` → `ErrorRecovery.crash()` SIGABRT. Native `ON_LOAD` + bad/failed OTA. **OTA cannot fix this binary.** |
 | **67** | 1.0.1 | User-reported; IPA audited | `EXUpdatesEnabled=false` baked correctly → **not** ErrorRecovery. Likely UIScene + frameless AppDelegate bootstrap window (expo-dev-client pattern) + New Arch default ON. |
 | **64–65** | 1.0.0 | Intermediate | Updates still on (`ON_ERROR_RECOVERY`); ErrorRecovery path still live. |
-| **1.0.2 tip** | not TF yet | — | Scene lifecycle restored; Updates off; New Arch off. Must be rebuilt + installed. |
+| **68–70** | 1.0.2 | EAS errored | `newArchEnabled: false` → CocoaPods: Reanimated 4.x requires New Arch. |
+| **1.0.2 tip** | not TF yet | — | Scene lifecycle restored; Updates off; New Arch **on** (required by Reanimated 4). Must rebuild. |
 
 No crash log for build 67 was pasted — diagnosis is from IPA config + git history.
 
@@ -17,10 +18,11 @@ No crash log for build 67 was pasted — diagnosis is from IPA config + git hist
 
 1. **Frameless bootstrap window** — AppDelegate must not create `UIWindow(frame:)`; SceneDelegate always `UIWindow(windowScene:)`.
 2. **`updates.enabled: false`** — removes ErrorRecovery from the hot path (symbols remain linked).
-3. **`newArchEnabled: false`**
+3. **Do not set `newArchEnabled: false`** — Reanimated 4.x fails pod install without New Arch (builds 68–70).
 4. **Career off** — `CAREER_IOS_ENABLED = false`; soft gates in `careerSafe` / `careerGate`.
 5. **No JS `Updates.reloadAsync()`** on boot.
 6. **Firebase / notifications import** try/catch (mostly).
+7. **P1 boot harden** — Auth/workspace/database/ErrorBoundary (commit `23b990f`).
 
 ## Remaining crash / blank risks (ranked)
 
@@ -65,7 +67,7 @@ index.ts
 
 ## Ship checklist for next TestFlight (1.0.2+)
 
-1. Tip includes scene fix + Updates off + New Arch off.
+1. Tip includes scene fix + Updates off + New Arch left on + P1 harden.
 2. `eas build --profile production --auto-submit` from branch tip.
 3. Delete old LifeOS; install **1.0.2**; confirm TestFlight card version.
 4. If it still dies, paste a crash log that shows **that** build number (not 58).

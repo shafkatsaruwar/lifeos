@@ -47,11 +47,8 @@ module.exports = {
   expo: {
     ...appJson.expo,
     plugins,
-    newArchEnabled: false,
-    ios: {
-      ...(appJson.expo.ios || {}),
-      newArchEnabled: false,
-    },
+    // Do not set newArchEnabled:false — react-native-reanimated 4.x requires
+    // New Architecture (EAS builds 68–70 failed at pod install with that flag).
     runtimeVersion: appJson.expo.runtimeVersion || { policy: "appVersion" },
     // Keep updates.url so EAS CLI can still publish rollbacks for old binaries
     // (build 58). enabled:false removes ErrorRecovery from native binaries.

@@ -9,13 +9,18 @@ Likely cause: frameless `UIWindow` created in `AppDelegate` then reused in
 `SceneDelegate` (expo-dev-launcher bootstrap from `e674d93`), which breaks
 UIScene on iOS 26/27. New Arch was also on by default.
 
-## Build 68+ (1.0.2) — ship this
+## Builds 68–70 (1.0.2) — EAS failed
+`newArchEnabled: false` broke `pod install`: Reanimated 4.x asserts New Arch.
+Do **not** disable New Arch on this SDK.
+
+## Build 71+ (1.0.2) — ship this
 Branch tip restores known-good scene lifecycle (`1a6a1b2` shape):
 - AppDelegate does **not** create a bootstrap window
 - SceneDelegate always `UIWindow(windowScene:)`
-- `newArchEnabled: false`
+- New Arch left **on** (Reanimated requirement)
 - `expo-dev-client` only on development EAS profiles
 - Updates still `enabled: false`
+- P1 boot harden (Auth / workspace / ErrorBoundary)
 
 ```bash
 git fetch origin

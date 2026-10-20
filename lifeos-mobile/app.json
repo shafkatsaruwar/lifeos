@@ -8,14 +8,12 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "lifeos",
-    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "requireFullScreen": false,
       "bundleIdentifier": "com.shafkatsaruwar.lifeos",
       "buildNumber": "14",
       "usesAppleSignIn": true,
-      "newArchEnabled": false,
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.shafkatsaruwar.lifeos"
