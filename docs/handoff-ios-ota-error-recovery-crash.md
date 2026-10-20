@@ -1,38 +1,28 @@
-# Handoff: iOS SIGABRT was Expo Updates ErrorRecovery
+# Handoff: iOS launch crash
 
-## Crash evidence
+## Build 58 (1.0.0)
+Expo Updates `ErrorRecovery.crash()` SIGABRT (`ON_LOAD`). OTA cannot fix.
 
-Every pasted TestFlight crash is **`Version: 1.0.0 (58)`**:
+## Build 67 (1.0.1)
+IPA confirmed `EXUpdatesEnabled=false` — **not** an Updates abort.
+Likely cause: frameless `UIWindow` created in `AppDelegate` then reused in
+`SceneDelegate` (expo-dev-launcher bootstrap from `e674d93`), which breaks
+UIScene on iOS 26/27. New Arch was also on by default.
 
+## Build 68+ (1.0.2) — ship this
+Branch tip restores known-good scene lifecycle (`1a6a1b2` shape):
+- AppDelegate does **not** create a bootstrap window
+- SceneDelegate always `UIWindow(windowScene:)`
+- `newArchEnabled: false`
+- `expo-dev-client` only on development EAS profiles
+- Updates still `enabled: false`
+
+```bash
+git fetch origin
+git checkout cursor/fix-ios-native-updates-b1ae
+git pull
+npx eas build --platform ios --profile production --auto-submit
 ```
-Exception Type: EXC_CRASH (SIGABRT)
-Termination Reason: SIGNAL 6 Abort trap: 6
-StartupProcedure.throwException → ErrorRecovery.crash()
-```
 
-No crash log from builds 64+ has been pasted. Rebuilds of 58 (delete/reinstall) cannot fix this — native Updates config is baked in.
-
-## Build map
-
-| Build | Version | Updates | Status |
-|-------|---------|---------|--------|
-| **58** | 1.0.0 | `ON_LOAD` / timeout 0 | Aborting — do not use |
-| 64–65 | 1.0.0 | `ON_ERROR_RECOVERY` | In ASC; still has ErrorRecovery path |
-| **66 / 67** | **1.0.1** | **`enabled: false`** | IPA finished; ASC submit in flight |
-
-## What to install
-
-1. Wait for TestFlight to show **1.0.1 (66 or 67)**.
-2. Delete LifeOS from the phone (clears old Updates cache).
-3. Install **1.0.1**, open once.
-4. Confirm Settings / About / TestFlight card shows **1.0.1**, not 1.0.0 (58).
-
-If it still crashes on **1.0.1**, paste the new crash log (must show build 66/67) — that would be a different bug than ErrorRecovery.
-
-## Branch tip
-
-`cursor/fix-ios-native-updates-b1ae` @ `c95105c`:
-
-- `updates.enabled: false` + `checkAutomatically: NEVER`
-- App version `1.0.1` (new runtime; old OTAs cannot attach)
-- Firebase / notifications / WebBrowser import side effects wrapped
+Delete LifeOS, install **1.0.2**, confirm TestFlight shows 1.0.2 (not 58/67).
+If it still crashes, paste a crash log that shows **build 68+ / 1.0.2**.
