@@ -77,48 +77,48 @@ export function SubscriptionCheckoutCard({
         )}
 
         <div className="subscription-offers">
-          {SUBSCRIPTION_OFFERS.map((offer, index) => (
-            <div className="subscription-checkout-row" key={offer.id}>
-              <div className="subscription-checkout-copy">
-                <strong>
-                  {offer.label} · {offer.priceLabel}
-                </strong>
-                {index === 0 ? (
-                  <>
-                    <p className="settings-note" style={{ margin: "8px 0 0" }}>
-                      <strong>Renewal terms.</strong> {SUBSCRIPTION_RENEWAL_TERMS}
-                    </p>
-                    <p className="settings-note" style={{ margin: "8px 0 0" }}>
-                      <strong>How to cancel.</strong> {SUBSCRIPTION_CANCEL_INSTRUCTIONS}
-                    </p>
-                  </>
-                ) : null}
+          {SUBSCRIPTION_OFFERS.map((offer) => {
+            const disclosureId = `lifeos-sub-disclosure-${offer.id}`;
+            return (
+              <div className="subscription-checkout-row" key={offer.id}>
+                <div className="subscription-checkout-copy">
+                  <strong>
+                    {offer.label} · {offer.priceLabel}
+                  </strong>
+                  <p id={disclosureId} className="settings-note" style={{ margin: "8px 0 0" }}>
+                    <strong>Renewal.</strong>{" "}
+                    {offer.period === "lifetime"
+                      ? "One-time purchase — does not auto-renew."
+                      : SUBSCRIPTION_RENEWAL_TERMS}{" "}
+                    <strong>Cancel.</strong> {SUBSCRIPTION_CANCEL_INSTRUCTIONS}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={!offer.available || entitled}
+                  aria-describedby={`${disclosureId} lifeos-subscription-disclosures`}
+                  onClick={() => offer.available && onSubscribe?.(offer.id)}
+                  title={
+                    entitled
+                      ? "You already have access"
+                      : offer.available
+                        ? `Subscribe to ${offer.label}`
+                        : "Paid plans are not open yet"
+                  }
+                >
+                  {entitled ? "Active" : offer.available ? "Subscribe" : "Coming soon"}
+                </button>
               </div>
-              <button
-                type="button"
-                className="primary"
-                disabled={!offer.available || entitled}
-                aria-describedby="lifeos-subscription-disclosures"
-                onClick={() => offer.available && onSubscribe?.(offer.id)}
-                title={
-                  entitled
-                    ? "You already have access"
-                    : offer.available
-                      ? `Subscribe to ${offer.label}`
-                      : "Paid plans are not open yet"
-                }
-              >
-                {entitled ? "Active" : offer.available ? "Subscribe" : "Coming soon"}
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div id="lifeos-subscription-disclosures" className="subscription-disclosures">
           <p>
-            By subscribing you agree to the renewal terms above. Cancel before the next billing date to avoid the
-            next charge. Lifetime does not renew. On iPhone, paid plans use the App Store when products are live;
-            web checkout uses Stripe when configured.
+            By clicking Subscribe you agree to the renewal and cancel terms next to that button. Cancel before the
+            next billing date to avoid the next charge. Lifetime does not renew. On iPhone, paid plans use the App
+            Store when products are live; web checkout uses Stripe when configured.
           </p>
         </div>
 

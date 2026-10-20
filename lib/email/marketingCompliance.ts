@@ -11,6 +11,8 @@ export type MarketingEmailIdentity = {
   siteOrigin: string;
 };
 
+const PHYSICAL_ADDRESS_PLACEHOLDER = "[Set LIFEOS_LEGAL_PHYSICAL_ADDRESS in .env]";
+
 export function getMarketingEmailIdentity(): MarketingEmailIdentity {
   const siteOrigin = (
     process.env.NEXT_PUBLIC_LIFEOS_SITE_URL ||
@@ -23,11 +25,20 @@ export function getMarketingEmailIdentity(): MarketingEmailIdentity {
   return {
     entityName: process.env.LIFEOS_LEGAL_ENTITY_NAME?.trim() || "LifeOS",
     physicalAddress:
-      process.env.LIFEOS_LEGAL_PHYSICAL_ADDRESS?.trim() ||
-      "[Set LIFEOS_LEGAL_PHYSICAL_ADDRESS in .env]",
+      process.env.LIFEOS_LEGAL_PHYSICAL_ADDRESS?.trim() || PHYSICAL_ADDRESS_PLACEHOLDER,
     supportEmail: process.env.LIFEOS_SUPPORT_EMAIL?.trim() || "support@example.com",
     siteOrigin: origin,
   };
+}
+
+/** CAN-SPAM requires a valid physical postal address — refuse placeholder / empty. */
+export function isPhysicalAddressConfigured(address = getMarketingEmailIdentity().physicalAddress): boolean {
+  const value = address.trim();
+  if (!value) return false;
+  if (value === PHYSICAL_ADDRESS_PLACEHOLDER) return false;
+  if (/^\[Set\s/i.test(value)) return false;
+  // Require something that looks like a street/city line (digits or comma).
+  return /\d/.test(value) || /,/.test(value);
 }
 
 export function unsubscribeUrl(email?: string, token?: string): string {

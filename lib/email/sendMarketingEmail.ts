@@ -1,6 +1,7 @@
 import {
   buildMarketingEmailHtml,
   buildMarketingEmailText,
+  isPhysicalAddressConfigured,
   marketingEmailFooterHtml,
   marketingEmailFooterText,
 } from "@/lib/email/marketingCompliance";
@@ -16,6 +17,13 @@ export async function sendMarketingEmail(args: {
   bodyText: string;
   token?: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isPhysicalAddressConfigured()) {
+    return {
+      ok: false,
+      error: "Set LIFEOS_LEGAL_PHYSICAL_ADDRESS before sending marketing email (CAN-SPAM).",
+    };
+  }
+
   const html = buildMarketingEmailHtml({
     bodyHtml: args.bodyHtml,
     email: args.to,

@@ -66,7 +66,7 @@ Root `npm install` / `npm run dev` only cover the **web** app. Mobile requires `
 | Entry UI | Mostly monolithic `app/page.tsx` (views, composers, settings) |
 | Environments | Life, School, Work, Study Abroad, Treasury, Mastery (toggleable) |
 | Styling | `app/globals.css` design tokens |
-| Fonts | Inter via `next/font` + display serif stack |
+| Fonts | Self-hosted `public/fonts/SFProDisplay-Medium.ttf` as `@font-face` family `LifeOS` (no Google Fonts CDN) |
 | Config | `next.config.ts` + `withReticle()`; Firebase auth rewrites `/__/auth/*` |
 | Dev login | `TEST_USER` when host is localhost |
 | Verification | Reticle SDK (`ReticleDev`, bridge `:4400`) |
