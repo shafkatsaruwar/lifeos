@@ -92,7 +92,8 @@ export function SettingsScreen() {
           { paddingBottom: tabBarPad },
           workspace.settings.compactMode && styles.screenCompact,
         ]}
-      >        <Eyebrow>YOUR LIFEOS</Eyebrow>
+      >
+        <Eyebrow>YOUR LIFEOS</Eyebrow>
         <Title>Settings</Title>
 
         <Card>
