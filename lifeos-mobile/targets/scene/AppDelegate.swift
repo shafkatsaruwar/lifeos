@@ -20,10 +20,12 @@ public class AppDelegate: ExpoAppDelegate {
       NSLog("[LifeOS] RCTFatal suppressed: %@", error?.localizedDescription ?? "unknown")
     }
     RCTSetFatalExceptionHandler { exception in
+      // RCTFatalExceptionHandler passes NSException? — unwrap before logging
+      // (build 74 ARCHIVE FAILED on exception.name / .reason without ?).
       NSLog(
         "[LifeOS] RCTFatalException suppressed: %@ — %@",
-        exception.name as Any,
-        exception.reason ?? ""
+        exception?.name.rawValue ?? "nil",
+        exception?.reason ?? ""
       )
     }
     #endif
