@@ -3,17 +3,19 @@
     "name": "LifeOS",
     "slug": "lifeos-mobile",
     "owner": "mohammedsaruwars-organization",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "lifeos",
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "requireFullScreen": false,
       "bundleIdentifier": "com.shafkatsaruwar.lifeos",
       "buildNumber": "14",
       "usesAppleSignIn": true,
+      "newArchEnabled": false,
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.shafkatsaruwar.lifeos"
@@ -87,7 +89,6 @@
     "plugins": [
       "expo-web-browser",
       "expo-font",
-      "expo-dev-client",
       [
         "expo-image-picker",
         {

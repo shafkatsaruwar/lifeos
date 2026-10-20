@@ -6,7 +6,7 @@ const appJson = require("./app.json");
 
 const PLACEHOLDER = "YOUR_EAS_PROJECT_ID";
 // Public Expo project UUID (also embedded in client updates URL).
-const BAKED_EAS_PROJECT_ID = "6021a343-7ac2-421d-a247-35279744602d"; // pragma: allowlist secret
+const BAKED_EAS_PROJECT_ID = "[REDACTED]"; // pragma: allowlist secret
 const UUID_RE =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
@@ -29,17 +29,32 @@ if (!projectId) {
   );
 }
 
-const plugins = [...(appJson.expo.plugins || [])];
+const profile = (process.env.EAS_BUILD_PROFILE || "").trim();
+const isDevClientProfile =
+  profile === "development" || profile === "development-device";
+
+const plugins = [...(appJson.expo.plugins || [])].filter(
+  (plugin) => plugin !== "expo-dev-client",
+);
 if (!plugins.includes("expo-updates")) plugins.push("expo-updates");
+// Keep expo-dev-client off production / preview binaries — its AppDelegate
+// bootstrap window pattern regresses UIScene launch on iOS 26/27.
+if (isDevClientProfile && !plugins.includes("expo-dev-client")) {
+  plugins.splice(2, 0, "expo-dev-client");
+}
 
 module.exports = {
   expo: {
     ...appJson.expo,
     plugins,
+    newArchEnabled: false,
+    ios: {
+      ...(appJson.expo.ios || {}),
+      newArchEnabled: false,
+    },
     runtimeVersion: appJson.expo.runtimeVersion || { policy: "appVersion" },
     // Keep updates.url so EAS CLI can still publish rollbacks for old binaries
-    // (build 58). enabled:false removes ErrorRecovery from the next native
-    // binary so a boot-time JS throw cannot SIGABRT via StartupProcedure.
+    // (build 58). enabled:false removes ErrorRecovery from native binaries.
     updates: projectId
       ? {
           url: `https://u.expo.dev/${projectId}`,
