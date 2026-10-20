@@ -37,14 +37,6 @@ import { SiriTaskBridge } from "./src/components/SiriTaskBridge";
 import { WidgetsBridge } from "./src/components/WidgetsBridge";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 
-// Required once at module load so the OAuth redirect from Google's web
-// sign-in flow can close the in-app browser and return control to the app.
-try {
-  WebBrowser.maybeCompleteAuthSession();
-} catch (error) {
-  console.warn("[LifeOS] maybeCompleteAuthSession failed", error);
-}
-
 const SILENT_SYNC_MS = 60_000;
 
 function inkHasData(ink: NotebookPage["ink"] | undefined): boolean {
@@ -72,6 +64,17 @@ export default function App() {
 
   // OTA disabled in native config (updates.enabled: false) until launch is stable.
   // Do not call Updates.reloadAsync() — it raced ErrorRecovery and caused SIGABRT.
+
+  // Defer void TurboModule calls until after first paint. On RN 0.81 prebuilt,
+  // an NSException inside an async void method corrupted Hermes (build 71
+  // SIGSEGV). Source build patches that path; still avoid cold-start races.
+  useEffect(() => {
+    try {
+      WebBrowser.maybeCompleteAuthSession();
+    } catch (error) {
+      console.warn("[LifeOS] maybeCompleteAuthSession failed", error);
+    }
+  }, []);
 
   useEffect(() => {
     if (!firebaseConfigured || !auth) {

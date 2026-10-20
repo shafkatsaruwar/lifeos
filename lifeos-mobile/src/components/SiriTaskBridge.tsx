@@ -59,7 +59,9 @@ export function SiriTaskBridge() {
       for (const title of titles) createFromTitle(title);
     };
 
-    void Linking.getInitialURL().then(applyUrl);
+    void Linking.getInitialURL()
+      .then(applyUrl)
+      .catch((error) => console.warn("[SiriTaskBridge] getInitialURL failed", error));
     void drain();
 
     const linkSub = Linking.addEventListener("url", ({ url }) => applyUrl(url));

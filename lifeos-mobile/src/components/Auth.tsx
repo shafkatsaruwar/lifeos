@@ -26,13 +26,6 @@ import { LIGHT, DARK } from "../lib/theme";
 import { ActionButton } from "./UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 
-try {
-  WebBrowser.maybeCompleteAuthSession();
-} catch (error) {
-  // Never throw at import — Expo Updates ErrorRecovery turns that into SIGABRT.
-  console.warn("[LifeOS] maybeCompleteAuthSession failed", error);
-}
-
 const LIFEOS_ORIGIN = (() => {
   const raw = resolveLifeosApiBase();
   if (!raw) return "";
