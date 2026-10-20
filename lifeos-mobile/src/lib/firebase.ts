@@ -196,6 +196,10 @@ function normalizeNotebookPages(value: unknown): Record<string, NotebookPage> {
 }
 
 export async function loadWorkspace(userId: string): Promise<Workspace> {
+  if (!database) {
+    console.warn("[LifeOS] loadWorkspace skipped — database unavailable");
+    return { ...emptyWorkspace };
+  }
   const keys = Object.keys(emptyWorkspace) as (keyof Workspace)[];
   const values = await Promise.all(
     keys.map(async (key) => {
@@ -267,6 +271,10 @@ export async function saveWorkspacePart<K extends keyof Workspace>(
   key: K,
   value: Workspace[K],
 ) {
+  if (!database) {
+    console.warn("[LifeOS] saveWorkspacePart skipped — database unavailable");
+    return;
+  }
   const serializable = JSON.parse(JSON.stringify(value)) as Workspace[K];
   await set(ref(database, `users/${userId}/${key}`), serializable);
 }
@@ -276,6 +284,10 @@ export function subscribeWorkspacePart<K extends keyof Workspace>(
   key: K,
   onData: (value: Workspace[K]) => void,
 ): Unsubscribe {
+  if (!database) {
+    console.warn("[LifeOS] subscribeWorkspacePart skipped — database unavailable");
+    return () => undefined;
+  }
   return onValue(ref(database, `users/${userId}/${key}`), (snapshot) => {
     if (!snapshot.exists()) return;
     onData(snapshot.val() as Workspace[K]);
@@ -284,10 +296,18 @@ export function subscribeWorkspacePart<K extends keyof Workspace>(
 
 /** Per-page write so stroke autosave does not rewrite the whole library. */
 export async function saveNotebookPage(userId: string, page: NotebookPage) {
+  if (!database) {
+    console.warn("[LifeOS] saveNotebookPage skipped — database unavailable");
+    return;
+  }
   const serializable = JSON.parse(JSON.stringify(page)) as NotebookPage;
   await set(ref(database, `users/${userId}/notebookPages/${page.id}`), serializable);
 }
 
 export async function deleteNotebookPageRemote(userId: string, pageId: string) {
+  if (!database) {
+    console.warn("[LifeOS] deleteNotebookPageRemote skipped — database unavailable");
+    return;
+  }
   await remove(ref(database, `users/${userId}/notebookPages/${pageId}`));
 }
