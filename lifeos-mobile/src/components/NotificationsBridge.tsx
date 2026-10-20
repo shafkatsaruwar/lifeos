@@ -6,6 +6,7 @@ import {
   scheduleWorkspaceNotificationSync,
   type NotifPayload,
 } from "../lib/notifications";
+import { ensureNotificationHandler } from "../lib/notifications/schedule";
 import { useLifeOS } from "../lib/LifeOSContext";
 
 /**
@@ -14,6 +15,10 @@ import { useLifeOS } from "../lib/LifeOSContext";
 export function NotificationsBridge() {
   const { workspace } = useLifeOS();
   const ready = useRef(false);
+
+  useEffect(() => {
+    ensureNotificationHandler();
+  }, []);
 
   useEffect(() => {
     scheduleWorkspaceNotificationSync(workspace);

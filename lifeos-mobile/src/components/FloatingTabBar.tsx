@@ -1,9 +1,9 @@
 import Feather from "@expo/vector-icons/Feather";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useEffect, useRef, useState } from "react";
-import { Gesture, GestureDetector, Pressable } from "react-native-gesture-handler";
 import {
   Animated,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -20,7 +20,6 @@ const PILL_H = 64;
 const LIGHT_INSET = 5;
 const INACTIVE = "#8E8E93";
 
-/** Each tab gets its own pop — Life/School/Work use workspace colors. */
 function tabTint(routeName: string, accent: string, settings: SettingsState): string {
   switch (routeName) {
     case "NowTab":
@@ -56,8 +55,8 @@ function isHidden(options: BottomTabBarProps["descriptors"][string]["options"]) 
 }
 
 /**
- * Floating tab bar using RN Animated (no Reanimated / New Arch).
- * Spring indicator + pan-to-switch kept for UX; worklets removed for TF stability.
+ * Floating tab bar — Pressable + RN Animated only.
+ * No react-native-gesture-handler Gesture API (needs Reanimated worklets).
  */
 export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { theme, workspace } = useLifeOS();
@@ -78,8 +77,6 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
 
   const [trackWidth, setTrackWidth] = useState(0);
   const indexAnim = useRef(new Animated.Value(activeIndex)).current;
-  const dragX = useRef(new Animated.Value(0)).current;
-  const dragOffset = useRef(0);
   const count = Math.max(visible.length, 1);
   const tabW = trackWidth > 0 ? trackWidth / count : 0;
 
@@ -90,8 +87,6 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   }, [activeHidden, firstVisibleName, navigation]);
 
   useEffect(() => {
-    dragOffset.current = 0;
-    dragX.setValue(0);
     if (reduceMotion) {
       indexAnim.setValue(activeIndex);
       return;
@@ -102,7 +97,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
       friction: 7,
       tension: 80,
     }).start();
-  }, [activeIndex, dragX, indexAnim, reduceMotion]);
+  }, [activeIndex, indexAnim, reduceMotion]);
 
   const goTo = (nextIndex: number) => {
     const route = visible[nextIndex];
@@ -117,32 +112,9 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     }
   };
 
-  const pan = Gesture.Pan()
-    .activeOffsetX([-12, 12])
-    .failOffsetY([-16, 16])
-    .onBegin(() => {
-      dragOffset.current = 0;
-    })
-    .onChange((e) => {
-      dragOffset.current += e.changeX;
-      dragX.setValue(dragOffset.current);
-    })
-    .onEnd(() => {
-      if (count < 1 || tabW <= 0) {
-        dragOffset.current = 0;
-        dragX.setValue(0);
-        return;
-      }
-      const raw = activeIndex + dragOffset.current / tabW;
-      const snapped = Math.max(0, Math.min(count - 1, Math.round(raw)));
-      dragOffset.current = 0;
-      dragX.setValue(0);
-      goTo(snapped);
-    });
-
   const lightTranslateX = Animated.add(
     Animated.multiply(indexAnim, tabW || 0),
-    Animated.add(dragX, LIGHT_INSET),
+    LIGHT_INSET,
   );
 
   const dark = theme.bg === "#111214" || theme.surface === "#191A1D";
@@ -166,78 +138,72 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
         },
       ]}
     >
-      <GestureDetector gesture={pan}>
-        <View
-          style={[
-            styles.pill,
-            {
-              backgroundColor: pillBg,
-              borderColor: activeTint,
-            },
-          ]}
-        >
-          <View onLayout={onTrackLayout} style={styles.track}>
-            {tabW > 0 ? (
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  styles.light,
-                  {
-                    width: lightWidth,
-                    borderColor: activeTint,
-                    backgroundColor: tintFill(activeTint, dark),
-                    transform: [{ translateX: lightTranslateX }],
-                  },
-                ]}
-              />
-            ) : null}
-            {visible.map((route, index) => {
-              const options = descriptors[route.key]?.options ?? {};
-              const label =
-                typeof options.tabBarLabel === "string"
-                  ? options.tabBarLabel
-                  : options.title ?? route.name;
-              const focused = index === activeIndex;
-              const color = focused ? tabTint(route.name, theme.accent, workspace.settings) : INACTIVE;
-              const iconName = (options.tabBarIcon
-                ? undefined
-                : "circle") as keyof typeof Feather.glyphMap;
-              return (
-                <Pressable
-                  key={route.key}
-                  accessibilityRole="button"
-                  accessibilityState={focused ? { selected: true } : {}}
-                  accessibilityLabel={options.tabBarAccessibilityLabel ?? String(label)}
-                  onPress={() => goTo(index)}
-                  onLongPress={() =>
-                    navigation.emit({ type: "tabLongPress", target: route.key })
-                  }
-                  style={styles.item}
-                >
-                  {options.tabBarIcon
-                    ? options.tabBarIcon({ focused, color, size: isTablet ? 22 : 20 })
-                    : (
-                      <Feather name={iconName} size={20} color={color} />
-                    )}
-                  <Text numberOfLines={1} style={[styles.label, { color }]}>
-                    {String(label)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+      <View
+        style={[
+          styles.pill,
+          {
+            backgroundColor: pillBg,
+            borderColor: activeTint,
+          },
+        ]}
+      >
+        <View onLayout={onTrackLayout} style={styles.track}>
+          {tabW > 0 ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.light,
+                {
+                  width: lightWidth,
+                  borderColor: activeTint,
+                  backgroundColor: tintFill(activeTint, dark),
+                  transform: [{ translateX: lightTranslateX }],
+                },
+              ]}
+            />
+          ) : null}
+          {visible.map((route, index) => {
+            const options = descriptors[route.key]?.options ?? {};
+            const label =
+              typeof options.tabBarLabel === "string"
+                ? options.tabBarLabel
+                : options.title ?? route.name;
+            const focused = index === activeIndex;
+            const color = focused ? tabTint(route.name, theme.accent, workspace.settings) : INACTIVE;
+            const iconName = (options.tabBarIcon
+              ? undefined
+              : "circle") as keyof typeof Feather.glyphMap;
+            return (
+              <Pressable
+                key={route.key}
+                accessibilityRole="button"
+                accessibilityState={focused ? { selected: true } : {}}
+                accessibilityLabel={options.tabBarAccessibilityLabel ?? String(label)}
+                onPress={() => goTo(index)}
+                onLongPress={() =>
+                  navigation.emit({ type: "tabLongPress", target: route.key })
+                }
+                style={styles.item}
+              >
+                {options.tabBarIcon
+                  ? options.tabBarIcon({ focused, color, size: isTablet ? 22 : 20 })
+                  : (
+                    <Feather name={iconName} size={20} color={color} />
+                  )}
+                <Text numberOfLines={1} style={[styles.label, { color }]}>
+                  {String(label)}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
-      </GestureDetector>
+      </View>
     </View>
   );
 }
 
 export const FLOATING_TAB_BAR_HEIGHT = PILL_H + 22;
 
-/**
- * Bottom inset for scroll content. The tab bar is in-layout (not an overlay),
- * so screens only need a little breathing room above it.
- */
 export function useFloatingTabBarContentPadding(extra = 16) {
   return Math.max(8, extra);
 }

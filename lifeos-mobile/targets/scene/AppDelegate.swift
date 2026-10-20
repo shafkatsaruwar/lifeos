@@ -13,6 +13,21 @@ public class AppDelegate: ExpoAppDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
+    // Soft-fail RN fatals in release. Build 73: uncaught JS → ExceptionsManager
+    // reportFatal → RCTFatal → SIGABRT. Prefer a live (possibly broken) UI over abort.
+    #if !DEBUG
+    RCTSetFatalHandler { error in
+      NSLog("[LifeOS] RCTFatal suppressed: %@", error?.localizedDescription ?? "unknown")
+    }
+    RCTSetFatalExceptionHandler { exception in
+      NSLog(
+        "[LifeOS] RCTFatalException suppressed: %@ — %@",
+        exception.name as Any,
+        exception.reason ?? ""
+      )
+    }
+    #endif
+
     let delegate = ReactNativeDelegate()
     let factory = ExpoReactNativeFactory(delegate: delegate)
     delegate.dependencyProvider = RCTAppDependencyProvider()

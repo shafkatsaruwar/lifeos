@@ -23,13 +23,15 @@ corrupts JSI (facebook/react-native#56265 / 4083a6f). Build used
 TurboModule patch + RN source build. If user still on 1.0.2, confirm
 TestFlight **build number** (71 = unpatched Hermes bug).
 
-## Build 73+ (1.0.3) — ship this
-Hard cut for iOS 27 stability:
-- **Old Arch** (`newArchEnabled: false`) — Reanimated 4 + worklets **removed**
-- FloatingTabBar / DocumentZoom use RN `Animated`
-- **expo-dev-client removed** from package.json
-- Live Activity JS calls kill-switched (`LIVE_ACTIVITY_IOS_ENABLED = false`)
-- Keep Updates off + RCTTurboModule patch + RN source build
+## Build 73 (1.0.3) — still crashed
+JS fatal: `RCTExceptionsManager.reportFatal` → `RCTFatal` → SIGABRT (~2s).
+Different from Hermes SIGSEGV (71). Role was Non UI.
+
+## Build 74+ (1.0.4) — ship this
+- Soft-fail JS fatals: ErrorUtils handler + `RCTSetFatalHandler` (no SIGABRT)
+- Drop Gesture Handler v2 API from tab bar / zoom (no worklets)
+- Defer notification handler + lazy-load RootNavigator
+- Keep Old Arch, no Reanimated/dev-client, Live Activity JS off, Updates off
 
 ```bash
 git fetch origin
@@ -39,4 +41,4 @@ cd lifeos-mobile
 npx eas build --platform ios --profile production --auto-submit
 ```
 
-Delete LifeOS, install **1.0.3** (build 73+). Paste a crash log with that build number if it still dies.
+Delete LifeOS, install **1.0.4** (build 74+).

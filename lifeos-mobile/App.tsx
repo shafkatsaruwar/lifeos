@@ -35,9 +35,28 @@ import { IcsImportReviewHost } from "./src/components/IcsImportReviewHost";
 import { ShareInboxBridge } from "./src/components/ShareInboxBridge";
 import { SiriTaskBridge } from "./src/components/SiriTaskBridge";
 import { WidgetsBridge } from "./src/components/WidgetsBridge";
-import { RootNavigator } from "./src/navigation/RootNavigator";
 
 const SILENT_SYNC_MS = 60_000;
+
+/** Lazy so cold start does not evaluate every screen module before auth. */
+function AppShell() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { RootNavigator } = require("./src/navigation/RootNavigator") as typeof import("./src/navigation/RootNavigator");
+  return (
+    <>
+      <SynapseImportBridge />
+      <ShareInboxBridge />
+      <IcsImportReviewHost />
+      <FocusLiveActivityBridge />
+      <NotificationsBridge />
+      <FocusEnforcerBridge />
+      <ExecutiveBridge />
+      <WidgetsBridge />
+      <SiriTaskBridge />
+      <RootNavigator />
+    </>
+  );
+}
 
 function inkHasData(ink: NotebookPage["ink"] | undefined): boolean {
   if (!ink) return false;
@@ -438,16 +457,7 @@ export default function App() {
       <GestureHandlerRootView style={styles.root}>
         <SafeAreaProvider>
           <LifeOSContext.Provider value={state}>
-            <SynapseImportBridge />
-            <ShareInboxBridge />
-            <IcsImportReviewHost />
-            <FocusLiveActivityBridge />
-            <NotificationsBridge />
-            <FocusEnforcerBridge />
-            <ExecutiveBridge />
-            <WidgetsBridge />
-            <SiriTaskBridge />
-            <RootNavigator />
+            <AppShell />
           </LifeOSContext.Provider>
         </SafeAreaProvider>
       </GestureHandlerRootView>
