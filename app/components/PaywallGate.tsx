@@ -69,26 +69,32 @@ export function PaywallGate({
         </p>
 
         <div className="paywall-offers">
-          {SUBSCRIPTION_OFFERS.map((offer) => (
-            <button
-              key={offer.id}
-              type="button"
-              className="paywall-offer"
-              disabled={!offer.available || subscribeBusy}
-              onClick={() => onSubscribe?.(offer.id)}
-            >
-              <strong>{offer.label}</strong>
-              <span>{offer.priceLabel}</span>
-            </button>
-          ))}
+          {SUBSCRIPTION_OFFERS.map((offer) => {
+            const disclosureId = `paywall-disclosure-${offer.id}`;
+            return (
+              <div key={offer.id} className="paywall-offer-block">
+                <button
+                  type="button"
+                  className="paywall-offer"
+                  disabled={!offer.available || subscribeBusy}
+                  aria-describedby={disclosureId}
+                  onClick={() => onSubscribe?.(offer.id)}
+                >
+                  <strong>{offer.label}</strong>
+                  <span>{offer.priceLabel}</span>
+                </button>
+                <p id={disclosureId} className="paywall-legal paywall-legal-inline">
+                  <strong>Renewal.</strong>{" "}
+                  {offer.period === "lifetime"
+                    ? "One-time purchase — does not auto-renew."
+                    : SUBSCRIPTION_RENEWAL_TERMS}{" "}
+                  <strong>Cancel.</strong> {SUBSCRIPTION_CANCEL_INSTRUCTIONS}
+                </p>
+              </div>
+            );
+          })}
         </div>
 
-        <p className="paywall-legal">
-          <strong>Renewal.</strong> {SUBSCRIPTION_RENEWAL_TERMS}
-        </p>
-        <p className="paywall-legal">
-          <strong>Cancel.</strong> {SUBSCRIPTION_CANCEL_INSTRUCTIONS}
-        </p>
         {subscribeNote ? <p className="paywall-note">{subscribeNote}</p> : null}
 
         <div className="paywall-promo">
