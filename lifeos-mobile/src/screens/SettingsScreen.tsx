@@ -604,7 +604,13 @@ export function SettingsScreen() {
               icon="grid"
               quiet
               onPress={async () => {
-                const d = await diagnoseWidgetSnapshot(workspace);
+                let d;
+                try {
+                  d = await diagnoseWidgetSnapshot(workspace);
+                } catch (error) {
+                  Alert.alert("Widget check", `Check threw: ${error instanceof Error ? error.message : String(error)}`);
+                  return;
+                }
                 Alert.alert(
                   "Widget check",
                   [

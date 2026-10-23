@@ -452,14 +452,21 @@ export type WidgetDiagnostic = {
  */
 export async function diagnoseWidgetSnapshot(workspace: Workspace): Promise<WidgetDiagnostic> {
   const { Platform } = await import("react-native");
-  const snapshot = buildWidgetSnapshot(workspace);
   const result: WidgetDiagnostic = {
     platform: Platform.OS,
     nativeLoaded: false,
     wrote: false,
-    snapshotTasks: snapshot.tasks.items.length,
+    snapshotTasks: 0,
     readBackFound: false,
   };
+  let snapshot: WidgetSnapshot;
+  try {
+    snapshot = buildWidgetSnapshot(workspace);
+  } catch (error) {
+    result.writeError = `build failed: ${error instanceof Error ? error.message : String(error)}`;
+    return result;
+  }
+  result.snapshotTasks = snapshot.tasks.items.length;
   if (Platform.OS !== "ios") return result;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
