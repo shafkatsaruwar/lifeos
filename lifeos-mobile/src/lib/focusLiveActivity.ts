@@ -1,11 +1,12 @@
 import { Platform } from "react-native";
+import { LIVE_ACTIVITY_IOS_ENABLED } from "./liveActivityFlag";
 import type { Task } from "../types";
 
 type LiveActivityModule = typeof import("expo-live-activity");
 
 let LiveActivity: LiveActivityModule | null = null;
 try {
-  if (Platform.OS === "ios") {
+  if (Platform.OS === "ios" && LIVE_ACTIVITY_IOS_ENABLED) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     LiveActivity = require("expo-live-activity") as LiveActivityModule;
   }
@@ -31,7 +32,7 @@ const CONFIG = {
 };
 
 function isAvailable() {
-  return Platform.OS === "ios" && LiveActivity != null;
+  return LIVE_ACTIVITY_IOS_ENABLED && Platform.OS === "ios" && LiveActivity != null;
 }
 
 function shortTitle(raw: string) {

@@ -2,18 +2,24 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import type { PlannedNotification } from "./types";
 
-try {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
-  });
-} catch (error) {
-  // Never throw at import — Expo Updates ErrorRecovery turns that into SIGABRT.
-  console.warn("[LifeOS] setNotificationHandler failed", error);
+let handlerReady = false;
+
+/** Call once after first paint — avoid void TurboModule work at import. */
+export function ensureNotificationHandler() {
+  if (handlerReady) return;
+  handlerReady = true;
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+  } catch (error) {
+    console.warn("[LifeOS] setNotificationHandler failed", error);
+  }
 }
 
 let channelReady = false;

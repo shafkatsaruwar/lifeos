@@ -42,7 +42,9 @@ export function SynapseImportBridge() {
       }
     };
 
-    void Linking.getInitialURL().then(applyUrl);
+    void Linking.getInitialURL()
+      .then(applyUrl)
+      .catch((error) => console.warn("[SynapseImportBridge] getInitialURL failed", error));
     const sub = Linking.addEventListener("url", ({ url }) => applyUrl(url));
     return () => sub.remove();
   }, [updateCalendar]);

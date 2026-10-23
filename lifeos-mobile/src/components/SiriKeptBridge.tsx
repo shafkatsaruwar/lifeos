@@ -65,7 +65,9 @@ export function SiriKeptBridge() {
       for (const command of pending) await apply(command);
     };
 
-    void Linking.getInitialURL().then(applyUrl);
+    void Linking.getInitialURL()
+      .then(applyUrl)
+      .catch((error) => console.warn("[SiriKeptBridge] getInitialURL failed", error));
     void drain();
 
     const linkSub = Linking.addEventListener("url", ({ url }) => applyUrl(url));

@@ -44,7 +44,9 @@ export function WidgetsBridge() {
       };
       tryNav(0);
     };
-    void Linking.getInitialURL().then(apply);
+    void Linking.getInitialURL()
+      .then(apply)
+      .catch((error) => console.warn("[WidgetsBridge] getInitialURL failed", error));
     const sub = Linking.addEventListener("url", ({ url }) => apply(url));
     return () => sub.remove();
   }, []);

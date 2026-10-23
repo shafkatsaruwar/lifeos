@@ -13,7 +13,6 @@
     },
     "development": {
       "extends": "base",
-      "developmentClient": true,
       "distribution": "internal",
       "config": "ios-simulator-ensure-expo.yml",
       "ios": {
@@ -22,7 +21,6 @@
     },
     "development-device": {
       "extends": "base",
-      "developmentClient": true,
       "distribution": "internal",
       "config": "ios-ensure-expo.yml",
       "ios": {
@@ -34,14 +32,22 @@
       "distribution": "internal",
       "config": "ios-ensure-expo.yml",
       "channel": "preview",
-      "environment": "preview"
+      "environment": "preview",
+      "env": {
+        "RCT_USE_PREBUILT_RNCORE": "0",
+        "RCT_USE_RN_DEP": "0"
+      }
     },
     "production": {
       "extends": "base",
       "autoIncrement": true,
       "config": "ios-ensure-expo.yml",
       "channel": "production",
-      "environment": "production"
+      "environment": "production",
+      "env": {
+        "RCT_USE_PREBUILT_RNCORE": "0",
+        "RCT_USE_RN_DEP": "0"
+      }
     }
   },
   "submit": {

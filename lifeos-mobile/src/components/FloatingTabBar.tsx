@@ -1,14 +1,14 @@
 import Feather from "@expo/vector-icons/Feather";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { useEffect } from "react";
-import { Gesture, GestureDetector, Pressable } from "react-native-gesture-handler";
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
-import { StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { CAREER_IOS_ENABLED } from "../lib/careerFlag";
@@ -20,18 +20,15 @@ const PILL_H = 64;
 const LIGHT_INSET = 5;
 const INACTIVE = "#8E8E93";
 
-/** Each tab gets its own pop — Life/School/Work use workspace colors. */
 function tabTint(routeName: string, accent: string, settings: SettingsState): string {
   switch (routeName) {
     case "NowTab":
-      // Same cornflower selection chrome as Calendar / Kept (not theme accent).
       return "#3F7ED7";
     case "TasksTab":
       return "#31926A";
     case "CalendarTab":
       return "#3F7ED7";
     case "KeptTab":
-      // Same cornflower selection chrome as Calendar (not teal).
       return "#3F7ED7";
     case "LifeTab":
       return workspaceColorFor(settings, "life");
@@ -57,6 +54,10 @@ function isHidden(options: BottomTabBarProps["descriptors"][string]["options"]) 
   return style?.display === "none";
 }
 
+/**
+ * Floating tab bar — Pressable + RN Animated only.
+ * No react-native-gesture-handler Gesture API (needs Reanimated worklets).
+ */
 export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { theme, workspace } = useLifeOS();
   const insets = useSafeAreaInsets();
@@ -64,7 +65,6 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const reduceMotion = Boolean(workspace.settings.reduceMotion);
 
   const visible = state.routes.filter((route) => {
-    // Belt-and-suspenders: never show Career while kill-switch is off.
     if (!CAREER_IOS_ENABLED && route.name === "CareerTab") return false;
     return !isHidden(descriptors[route.key]?.options);
   });
@@ -75,14 +75,11 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     visible.findIndex((route) => route.key === activeKey),
   );
 
-  const widthSV = useSharedValue(0);
-  const indexSV = useSharedValue(activeIndex);
-  const dragX = useSharedValue(0);
-  const dragging = useSharedValue(0);
-  const countSV = useSharedValue(Math.max(visible.length, 1));
-  countSV.value = Math.max(visible.length, 1);
+  const [trackWidth, setTrackWidth] = useState(0);
+  const indexAnim = useRef(new Animated.Value(activeIndex)).current;
+  const count = Math.max(visible.length, 1);
+  const tabW = trackWidth > 0 ? trackWidth / count : 0;
 
-  // If the navigator is parked on a hidden hub, bounce to the first visible tab.
   const firstVisibleName = visible[0]?.name;
   useEffect(() => {
     if (!activeHidden || !firstVisibleName) return;
@@ -91,13 +88,16 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
 
   useEffect(() => {
     if (reduceMotion) {
-      indexSV.value = activeIndex;
-      dragX.value = 0;
+      indexAnim.setValue(activeIndex);
       return;
     }
-    indexSV.value = withSpring(activeIndex, { damping: 18, stiffness: 220, mass: 0.7 });
-    dragX.value = 0;
-  }, [activeIndex, dragX, indexSV, reduceMotion]);
+    Animated.spring(indexAnim, {
+      toValue: activeIndex,
+      useNativeDriver: true,
+      friction: 7,
+      tension: 80,
+    }).start();
+  }, [activeIndex, indexAnim, reduceMotion]);
 
   const goTo = (nextIndex: number) => {
     const route = visible[nextIndex];
@@ -112,47 +112,20 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     }
   };
 
-  const pan = Gesture.Pan()
-    .activeOffsetX([-12, 12])
-    .failOffsetY([-16, 16])
-    .onBegin(() => {
-      dragging.value = 1;
-    })
-    .onChange((e) => {
-      dragX.value += e.changeX;
-    })
-    .onEnd(() => {
-      // Use shared count — reading a JS array in a worklet can hard-crash on swipe.
-      const count = countSV.value;
-      const w = widthSV.value;
-      if (count < 1 || w <= 0) {
-        dragging.value = 0;
-        dragX.value = 0;
-        return;
-      }
-      const tabW = w / count;
-      const raw = indexSV.value + dragX.value / tabW;
-      const snapped = Math.max(0, Math.min(count - 1, Math.round(raw)));
-      dragging.value = 0;
-      dragX.value = 0;
-      runOnJS(goTo)(snapped);
-    });
-
-  const lightStyle = useAnimatedStyle(() => {
-    const count = Math.max(countSV.value, 1);
-    const w = widthSV.value;
-    const tabW = count > 0 && w > 0 ? w / count : 0;
-    const x = indexSV.value * tabW + dragX.value;
-    return {
-      width: Math.max(0, tabW - LIGHT_INSET * 2),
-      transform: [{ translateX: x + LIGHT_INSET }],
-    };
-  });
+  const lightTranslateX = Animated.add(
+    Animated.multiply(indexAnim, tabW || 0),
+    LIGHT_INSET,
+  );
 
   const dark = theme.bg === "#111214" || theme.surface === "#191A1D";
   const pillBg = dark ? theme.surface : "#FFFFFF";
   const activeRoute = visible[activeIndex]?.name ?? "NowTab";
   const activeTint = tabTint(activeRoute, theme.accent, workspace.settings);
+  const lightWidth = Math.max(0, tabW - LIGHT_INSET * 2);
+
+  const onTrackLayout = (e: LayoutChangeEvent) => {
+    setTrackWidth(e.nativeEvent.layout.width);
+  };
 
   return (
     <View
@@ -165,77 +138,72 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
         },
       ]}
     >
-      <GestureDetector gesture={pan}>
-        <View
-          style={[
-            styles.pill,
-            {
-              backgroundColor: pillBg,
-              borderColor: activeTint,
-            },
-          ]}
-        >
-          <View
-            onLayout={(e) => {
-              widthSV.value = e.nativeEvent.layout.width;
-            }}
-            style={styles.track}
-          >
+      <View
+        style={[
+          styles.pill,
+          {
+            backgroundColor: pillBg,
+            borderColor: activeTint,
+          },
+        ]}
+      >
+        <View onLayout={onTrackLayout} style={styles.track}>
+          {tabW > 0 ? (
             <Animated.View
               pointerEvents="none"
               style={[
                 styles.light,
-                { borderColor: activeTint, backgroundColor: tintFill(activeTint, dark) },
-                lightStyle,
+                {
+                  width: lightWidth,
+                  borderColor: activeTint,
+                  backgroundColor: tintFill(activeTint, dark),
+                  transform: [{ translateX: lightTranslateX }],
+                },
               ]}
             />
-            {visible.map((route, index) => {
-              const options = descriptors[route.key]?.options ?? {};
-              const label =
-                typeof options.tabBarLabel === "string"
-                  ? options.tabBarLabel
-                  : options.title ?? route.name;
-              const focused = index === activeIndex;
-              const color = focused ? tabTint(route.name, theme.accent, workspace.settings) : INACTIVE;
-              const iconName = (options.tabBarIcon
-                ? undefined
-                : "circle") as keyof typeof Feather.glyphMap;
-              return (
-                <Pressable
-                  key={route.key}
-                  accessibilityRole="button"
-                  accessibilityState={focused ? { selected: true } : {}}
-                  accessibilityLabel={options.tabBarAccessibilityLabel ?? String(label)}
-                  onPress={() => goTo(index)}
-                  onLongPress={() =>
-                    navigation.emit({ type: "tabLongPress", target: route.key })
-                  }
-                  style={styles.item}
-                >
-                  {options.tabBarIcon
-                    ? options.tabBarIcon({ focused, color, size: isTablet ? 22 : 20 })
-                    : (
-                      <Feather name={iconName} size={20} color={color} />
-                    )}
-                  <Text numberOfLines={1} style={[styles.label, { color }]}>
-                    {String(label)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          ) : null}
+          {visible.map((route, index) => {
+            const options = descriptors[route.key]?.options ?? {};
+            const label =
+              typeof options.tabBarLabel === "string"
+                ? options.tabBarLabel
+                : options.title ?? route.name;
+            const focused = index === activeIndex;
+            const color = focused ? tabTint(route.name, theme.accent, workspace.settings) : INACTIVE;
+            const iconName = (options.tabBarIcon
+              ? undefined
+              : "circle") as keyof typeof Feather.glyphMap;
+            return (
+              <Pressable
+                key={route.key}
+                accessibilityRole="button"
+                accessibilityState={focused ? { selected: true } : {}}
+                accessibilityLabel={options.tabBarAccessibilityLabel ?? String(label)}
+                onPress={() => goTo(index)}
+                onLongPress={() =>
+                  navigation.emit({ type: "tabLongPress", target: route.key })
+                }
+                style={styles.item}
+              >
+                {options.tabBarIcon
+                  ? options.tabBarIcon({ focused, color, size: isTablet ? 22 : 20 })
+                  : (
+                    <Feather name={iconName} size={20} color={color} />
+                  )}
+                <Text numberOfLines={1} style={[styles.label, { color }]}>
+                  {String(label)}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
-      </GestureDetector>
+      </View>
     </View>
   );
 }
 
 export const FLOATING_TAB_BAR_HEIGHT = PILL_H + 22;
 
-/**
- * Bottom inset for scroll content. The tab bar is in-layout (not an overlay),
- * so screens only need a little breathing room above it.
- */
 export function useFloatingTabBarContentPadding(extra = 16) {
   return Math.max(8, extra);
 }
