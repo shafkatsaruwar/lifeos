@@ -83,8 +83,8 @@ Cloud agents open PRs. Once a PR merges to `main`, GitHub Actions publishes an *
    npx eas-cli update:configure
    ```
    Copy the project UUID into `.env` as `EAS_PROJECT_ID=` (and/or commit it under `expo.extra.eas.projectId` in `app.json` if you prefer).
-2. Add GitHub repo secrets: `EXPO_TOKEN` (expo.dev → Access tokens) and `EAS_PROJECT_ID`.
-3. Ship **one new native build** so the binary is channel-aware:
+2. Add the GitHub Actions secret `EXPO_TOKEN`. Create the token at [expo.dev → Access tokens](https://expo.dev/accounts/mohammedsaruwars-organization/settings/access-tokens) (a personal token at [expo.dev/settings/access-tokens](https://expo.dev/settings/access-tokens) also works if that account can publish this project). In the repo: **Settings → Secrets and variables → Actions → New repository secret**, name `EXPO_TOKEN`. `EAS_PROJECT_ID` is optional; the workflow uses the project id already in `app.config.js` when that secret is missing.
+3. The production/TestFlight binaries already on channel `production` with runtime version `1.0.0` can take OTAs. Ship a new native build only for a native change, or for an install that predates `expo-updates`:
    ```bash
    npx eas-cli build --platform ios --profile production
    ```
@@ -92,6 +92,15 @@ Cloud agents open PRs. Once a PR merges to `main`, GitHub Actions publishes an *
 4. (Optional) Enable auto-merge on agent PRs in GitHub if you want merge→OTA with less clicking.
 
 JS/UI changes after that: merge to `main` → wait for **EAS Update (OTA)** workflow → force-quit LifeOS → reopen.
+
+### Run from the GitHub iOS app
+
+No Mac. Open this repo in the GitHub app → **Actions** → **EAS Update (OTA)** → **Run workflow**.
+
+1. Branch: `main` (that commit is what gets published).
+2. Channel: leave `production`. That is `build.production.channel` in `eas.json`, which TestFlight builds use. Type `preview` for the preview profile.
+3. Message: optional. Blank becomes `<git branch>@<short sha>`.
+4. When the run is green, force-quit LifeOS and reopen.
 
 Native changes (new native module, plugin, SDK bump) still need a full EAS build.
 

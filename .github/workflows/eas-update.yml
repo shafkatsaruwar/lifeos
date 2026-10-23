@@ -2,6 +2,9 @@ name: EAS Update (OTA)
 
 # Synapse-style: merge to main → publish JS update → TestFlight/production
 # builds on the matching channel pick it up on next cold start.
+# Or run this by hand from GitHub Actions (including the GitHub iOS app):
+# channel defaults to production, which is build.production.channel in
+# lifeos-mobile/eas.json. Message is optional.
 on:
   push:
     branches: [main]
@@ -11,13 +14,14 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: "EAS Update channel"
-        required: true
+        description: "EAS Update channel or branch. Production/TestFlight builds use production."
+        required: false
         default: "production"
-        type: choice
-        options:
-          - production
-          - preview
+        type: string
+      message:
+        description: "Optional update message. Blank uses <git branch>@<short sha>."
+        required: false
+        type: string
 
 concurrency:
   group: eas-update-${{ github.ref }}
@@ -49,6 +53,8 @@ jobs:
           EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
           EXPO_PUBLIC_EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          UPDATE_CHANNEL: ${{ github.event.inputs.channel }}
+          UPDATE_MESSAGE: ${{ github.event.inputs.message }}
           # Optional overrides — mobile falls back to baked public Firebase client defaults.
           EXPO_PUBLIC_FIREBASE_API_KEY: ${{ secrets.EXPO_PUBLIC_FIREBASE_API_KEY }}
           EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
@@ -57,9 +63,19 @@ jobs:
           EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
           EXPO_PUBLIC_LIFEOS_URL: ${{ secrets.EXPO_PUBLIC_LIFEOS_URL }}
         run: |
-          CHANNEL="${{ github.event.inputs.channel || 'production' }}"
+          # Default matches eas.json build.production.channel (TestFlight/production).
+          CHANNEL="${UPDATE_CHANNEL:-production}"
+          if ! printf '%s' "$CHANNEL" | grep -Eq '^[A-Za-z0-9._/-]+$'; then
+            echo "Invalid channel/branch '$CHANNEL'. Use letters, numbers, and . _ / -."
+            exit 1
+          fi
+          if [ -z "${UPDATE_MESSAGE:-}" ]; then
+            UPDATE_MESSAGE="${GITHUB_REF_NAME}@${GITHUB_SHA::7}"
+          fi
           if [ -z "$EXPO_TOKEN" ]; then
             echo "Missing GitHub secret EXPO_TOKEN."
+            echo "Create a token at https://expo.dev/accounts/mohammedsaruwars-organization/settings/access-tokens"
+            echo "Then add it: GitHub repo → Settings → Secrets and variables → Actions → EXPO_TOKEN."
             exit 1
           fi
           # Prefer a UUID secret; ignore placeholders/slugs so app.json / app.config.js can win.
@@ -75,4 +91,6 @@ jobs:
           fi
           export EAS_PROJECT_ID="$RESOLVED"
           export EXPO_PUBLIC_EAS_PROJECT_ID="$RESOLVED"
-          npx eas-cli@latest update --channel "$CHANNEL" --message "main@${GITHUB_SHA::7}" --non-interactive
+          # npx eas-cli (not expo/expo-github-action): that action installs eas-cli
+          # via yarn with no lockfile and has failed in this repo. Node 22 is set above.
+          npx eas-cli@latest update --channel "$CHANNEL" --message "$UPDATE_MESSAGE" --non-interactive
