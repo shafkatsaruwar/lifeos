@@ -146,6 +146,7 @@ private func enqueueKeptCommand(_ entry: [String: Any]) {
 struct LifeOSAppShortcuts: AppShortcutsProvider {
   // Xcode 26: appShortcuts uses @AppShortcutsBuilder — emit AppShortcut
   // values as separate statements (no array literal, no commas between them).
+  @AppShortcutsBuilder
   static var appShortcuts: [AppShortcut] {
     AppShortcut(
       intent: AddTaskIntent(),
