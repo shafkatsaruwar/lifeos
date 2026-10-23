@@ -433,3 +433,58 @@ export function widgetDeepLink(
 }
 
 export { APP_GROUP, SNAPSHOT_KEY };
+
+export type WidgetDiagnostic = {
+  platform: string;
+  nativeLoaded: boolean;
+  wrote: boolean;
+  writeError?: string;
+  snapshotTasks: number;
+  readBackFound: boolean;
+  readBackTasks?: number;
+  readBackUpdatedAt?: string;
+};
+
+/**
+ * Temporary diagnostic: writes the snapshot, reads it straight back from the
+ * App Group, and reports what the widget would see. Safe to remove once the
+ * widget cause is found.
+ */
+export async function diagnoseWidgetSnapshot(workspace: Workspace): Promise<WidgetDiagnostic> {
+  const { Platform } = await import("react-native");
+  const snapshot = buildWidgetSnapshot(workspace);
+  const result: WidgetDiagnostic = {
+    platform: Platform.OS,
+    nativeLoaded: false,
+    wrote: false,
+    snapshotTasks: snapshot.tasks.items.length,
+    readBackFound: false,
+  };
+  if (Platform.OS !== "ios") return result;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const native = (globalThis as any)?.expo?.modules?.ExtensionStorage;
+  result.nativeLoaded = Boolean(native?.setString && native?.get);
+  if (!result.nativeLoaded) return result;
+
+  try {
+    native.setString(SNAPSHOT_KEY, JSON.stringify(snapshot), APP_GROUP);
+    result.wrote = true;
+  } catch (error) {
+    result.writeError = error instanceof Error ? error.message : String(error);
+    return result;
+  }
+
+  try {
+    const raw = native.get(SNAPSHOT_KEY, APP_GROUP);
+    if (typeof raw === "string" && raw.length > 0) {
+      const parsed = JSON.parse(raw) as WidgetSnapshot;
+      result.readBackFound = true;
+      result.readBackTasks = parsed.tasks?.items?.length ?? 0;
+      result.readBackUpdatedAt = parsed.updatedAt;
+    }
+  } catch (error) {
+    result.writeError = `read-back failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
+  return result;
+}
