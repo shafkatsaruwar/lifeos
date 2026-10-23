@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import type { Workspace } from "../../types";
 import { taskIsOpen, taskRemaining, toDateKey } from "../helpers";
 import { mergeCalendarWithWorkMeetings } from "../workos";
@@ -387,8 +388,6 @@ export function buildWidgetSnapshot(workspace: Workspace): WidgetSnapshot {
  */
 export async function writeWidgetSnapshot(workspace: Workspace): Promise<void> {
   try {
-    // Dynamic import keeps buildWidgetSnapshot testable in Node (no RN transform).
-    const { Platform } = await import("react-native");
     if (Platform.OS !== "ios") return;
     const snapshot = buildWidgetSnapshot(workspace);
     // Ensure doubles stay doubles for Swift Codable (avoid Int-only JSON numbers where needed).
@@ -451,7 +450,6 @@ export type WidgetDiagnostic = {
  * widget cause is found.
  */
 export async function diagnoseWidgetSnapshot(workspace: Workspace): Promise<WidgetDiagnostic> {
-  const { Platform } = await import("react-native");
   const result: WidgetDiagnostic = {
     platform: Platform.OS,
     nativeLoaded: false,
