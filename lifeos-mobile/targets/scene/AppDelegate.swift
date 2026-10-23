@@ -1,12 +1,10 @@
 import Expo
 import React
 import ReactAppDependencyProvider
-import UIKit
 
 @UIApplicationMain
 public class AppDelegate: ExpoAppDelegate {
-  /// Must be @objc so expo-dev-launcher can read `UIApplication.shared.delegate?.window`.
-  @objc public var window: UIWindow?
+  var window: UIWindow?
 
   var reactNativeDelegate: ExpoReactNativeFactoryDelegate?
   var reactNativeFactory: RCTReactNativeFactory?
@@ -15,6 +13,23 @@ public class AppDelegate: ExpoAppDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
+    // Soft-fail RN fatals in release. Build 73: uncaught JS → ExceptionsManager
+    // reportFatal → RCTFatal → SIGABRT. Prefer a live (possibly broken) UI over abort.
+    #if !DEBUG
+    RCTSetFatalHandler { error in
+      NSLog("[LifeOS] RCTFatal suppressed: %@", error?.localizedDescription ?? "unknown")
+    }
+    RCTSetFatalExceptionHandler { exception in
+      // RCTFatalExceptionHandler passes NSException? — unwrap before logging
+      // (build 74 ARCHIVE FAILED on exception.name / .reason without ?).
+      NSLog(
+        "[LifeOS] RCTFatalException suppressed: %@ — %@",
+        exception?.name.rawValue ?? "nil",
+        exception?.reason ?? ""
+      )
+    }
+    #endif
+
     let delegate = ReactNativeDelegate()
     let factory = ExpoReactNativeFactory(delegate: delegate)
     delegate.dependencyProvider = RCTAppDependencyProvider()
@@ -23,14 +38,9 @@ public class AppDelegate: ExpoAppDelegate {
     reactNativeFactory = factory
     bindReactNativeFactory(factory)
 
-    // expo-dev-launcher fatalErrors in didFinishLaunching if there is no key window.
-    // UIScene attaches the real window in SceneDelegate; bootstrap one first.
-    if window == nil {
-      let bootstrap = UIWindow(frame: UIScreen.main.bounds)
-      bootstrap.rootViewController = UIViewController()
-      bootstrap.makeKeyAndVisible()
-      window = bootstrap
-    }
+    // Window + React Native start in SceneDelegate (UIScene lifecycle required by iOS 27 SDK).
+    // Do NOT create a frameless UIWindow here — that pattern (added for expo-dev-launcher)
+    // regresses launch under UIScene / iOS 26–27 and caused TestFlight build 67 aborts.
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

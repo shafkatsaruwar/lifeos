@@ -3,12 +3,15 @@
     "name": "LifeOS",
     "slug": "lifeos-mobile",
     "owner": "mohammedsaruwars-organization",
-    "version": "1.0.0",
+    "version": "1.0.4",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "lifeos",
+    "newArchEnabled": false,
     "ios": {
+      "newArchEnabled": false,
+      "appleTeamId": "9NND6657B2",
       "supportsTablet": true,
       "requireFullScreen": false,
       "bundleIdentifier": "com.shafkatsaruwar.lifeos",
@@ -87,7 +90,6 @@
     "plugins": [
       "expo-web-browser",
       "expo-font",
-      "expo-dev-client",
       [
         "expo-image-picker",
         {
@@ -117,8 +119,9 @@
     },
     "updates": {
       "url": "https://u.expo.dev/YOUR_EAS_PROJECT_ID",
-      "checkAutomatically": "ON_ERROR_RECOVERY",
-      "fallbackToCacheTimeout": 5000
+      "enabled": false,
+      "checkAutomatically": "NEVER",
+      "fallbackToCacheTimeout": 0
     },
     "extra": {
       "eas": {

@@ -144,11 +144,10 @@ private func enqueueKeptCommand(_ entry: [String: Any]) {
 
 @available(iOS 16.0, *)
 struct LifeOSAppShortcuts: AppShortcutsProvider {
-  // Result builder: no commas between AppShortcut values, and no surrounding array.
+  // Xcode 26: appShortcuts uses @AppShortcutsBuilder — emit AppShortcut
+  // values as separate statements (no array literal, no commas between them).
   @AppShortcutsBuilder
   static var appShortcuts: [AppShortcut] {
-    // Xcode 26 / new App Intents export only allows AppEntity/AppEnum in phrase
-    // variables — not bare String. Siri will ask for the title via @Parameter.
     AppShortcut(
       intent: AddTaskIntent(),
       phrases: [

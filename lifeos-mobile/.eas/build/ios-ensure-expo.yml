@@ -19,7 +19,14 @@ build:
     - run:
         name: Install pods
         working_directory: ./ios
-        command: pod install
+        # Force RN Core from source so patch-package fixes in RCTTurboModule.mm
+        # (Hermes EXC_BAD_ACCESS on void TurboModule NSException) are compiled in.
+        # EAS defaults to React-Core-prebuilt, which ignores node_modules patches.
+        command: |
+          export RCT_USE_PREBUILT_RNCORE=0
+          export RCT_USE_RN_DEP=0
+          echo "[eas] RCT_USE_PREBUILT_RNCORE=$RCT_USE_PREBUILT_RNCORE (0 = build RN from source)"
+          pod install
     - eas/configure_eas_update:
         inputs:
           throw_if_not_configured: false

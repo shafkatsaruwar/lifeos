@@ -1,9 +1,10 @@
-import 'react-native-gesture-handler';
-import { registerRootComponent } from 'expo';
+import "react-native-gesture-handler";
+// Install soft ErrorUtils before App (and any other app modules) evaluate.
+// Keep this as a dedicated import so Babel commonjs hoist preserves order —
+// an IIFE between import statements can end up AFTER App is required.
+import "./softFatal";
 
-import App from './App';
+import { registerRootComponent } from "expo";
+import App from "./App";
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
 registerRootComponent(App);

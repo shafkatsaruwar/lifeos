@@ -24,10 +24,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
       return
     }
 
-    // Reuse AppDelegate's bootstrap window (needed by expo-dev-launcher) and bind it to this scene.
-    let window = appDelegate.window ?? UIWindow(windowScene: windowScene)
-    window.windowScene = windowScene
+    // Always create a scene-backed window. Never reuse a frameless bootstrap
+    // UIWindow from AppDelegate — that breaks UIScene on iOS 26/27.
+    let window = UIWindow(windowScene: windowScene)
     self.window = window
+    // Keep UIApplicationDelegate.window in sync (expo-system-ui, etc.).
     appDelegate.window = window
 
     factory.startReactNative(

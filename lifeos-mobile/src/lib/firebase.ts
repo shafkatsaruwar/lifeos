@@ -39,17 +39,24 @@ export const firebaseConfigured = Boolean(
   firebaseConfig.apiKey && firebaseConfig.authDomain && firebaseConfig.databaseURL && firebaseConfig.projectId,
 );
 
-function createApp(): FirebaseApp {
+function createApp(): FirebaseApp | null {
   if (!firebaseConfigured) {
-    throw new Error(
-      "Firebase is not configured. Copy lifeos-mobile/.env.example to .env and set EXPO_PUBLIC_FIREBASE_*.",
+    console.warn(
+      "[LifeOS] Firebase is not configured. Copy lifeos-mobile/.env.example to .env and set EXPO_PUBLIC_FIREBASE_*.",
     );
+    return null;
   }
-  if (getApps().length) return getApp();
-  return initializeApp(firebaseConfig);
+  try {
+    if (getApps().length) return getApp();
+    return initializeApp(firebaseConfig);
+  } catch (error) {
+    // Never throw at import — Expo Updates ErrorRecovery turns that into SIGABRT.
+    console.warn("[LifeOS] Firebase app init failed at import", error);
+    return null;
+  }
 }
 
-const app = firebaseConfigured ? createApp() : null;
+const app = createApp();
 
 /**
  * Load getReactNativePersistence from the RN build of @firebase/auth.
@@ -90,12 +97,7 @@ function createAuth(firebaseApp: FirebaseApp): Auth {
     // Never throw at module import — a boot-time throw becomes Expo Updates
     // ErrorRecovery.crash() (SIGABRT) on TestFlight. Prefer memory auth over kill.
     console.warn("[LifeOS] Auth RN persistence failed; using default Auth", error);
-    try {
-      return getAuth(firebaseApp);
-    } catch (fallbackError) {
-      console.warn("[LifeOS] getAuth fallback failed", fallbackError);
-      return getAuth(firebaseApp);
-    }
+    return getAuth(firebaseApp);
   }
 }
 
@@ -112,7 +114,15 @@ export const auth = (() => {
     }
   }
 })();
-export const database = app ? getDatabase(app) : (null as unknown as ReturnType<typeof getDatabase>);
+export const database = (() => {
+  if (!app) return null as unknown as ReturnType<typeof getDatabase>;
+  try {
+    return getDatabase(app);
+  } catch (error) {
+    console.warn("[LifeOS] RTDB init failed at import", error);
+    return null as unknown as ReturnType<typeof getDatabase>;
+  }
+})();
 
 /** RTDB often stores lists as objects (sparse keys) — never assume Array.isArray. */
 export function asArray<T>(value: unknown): T[] {
@@ -186,6 +196,10 @@ function normalizeNotebookPages(value: unknown): Record<string, NotebookPage> {
 }
 
 export async function loadWorkspace(userId: string): Promise<Workspace> {
+  if (!database) {
+    console.warn("[LifeOS] loadWorkspace skipped — database unavailable");
+    return { ...emptyWorkspace };
+  }
   const keys = Object.keys(emptyWorkspace) as (keyof Workspace)[];
   const values = await Promise.all(
     keys.map(async (key) => {
@@ -257,6 +271,10 @@ export async function saveWorkspacePart<K extends keyof Workspace>(
   key: K,
   value: Workspace[K],
 ) {
+  if (!database) {
+    console.warn("[LifeOS] saveWorkspacePart skipped — database unavailable");
+    return;
+  }
   const serializable = JSON.parse(JSON.stringify(value)) as Workspace[K];
   await set(ref(database, `users/${userId}/${key}`), serializable);
 }
@@ -266,6 +284,10 @@ export function subscribeWorkspacePart<K extends keyof Workspace>(
   key: K,
   onData: (value: Workspace[K]) => void,
 ): Unsubscribe {
+  if (!database) {
+    console.warn("[LifeOS] subscribeWorkspacePart skipped — database unavailable");
+    return () => undefined;
+  }
   return onValue(ref(database, `users/${userId}/${key}`), (snapshot) => {
     if (!snapshot.exists()) return;
     onData(snapshot.val() as Workspace[K]);
@@ -274,10 +296,18 @@ export function subscribeWorkspacePart<K extends keyof Workspace>(
 
 /** Per-page write so stroke autosave does not rewrite the whole library. */
 export async function saveNotebookPage(userId: string, page: NotebookPage) {
+  if (!database) {
+    console.warn("[LifeOS] saveNotebookPage skipped — database unavailable");
+    return;
+  }
   const serializable = JSON.parse(JSON.stringify(page)) as NotebookPage;
   await set(ref(database, `users/${userId}/notebookPages/${page.id}`), serializable);
 }
 
 export async function deleteNotebookPageRemote(userId: string, pageId: string) {
+  if (!database) {
+    console.warn("[LifeOS] deleteNotebookPageRemote skipped — database unavailable");
+    return;
+  }
   await remove(ref(database, `users/${userId}/notebookPages/${pageId}`));
 }

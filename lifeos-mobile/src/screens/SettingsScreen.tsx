@@ -7,6 +7,7 @@ import { signOut } from "firebase/auth";
 import { ActionButton, Card, Eyebrow, Page, SegmentedControl, Title } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
+import { diagnoseWidgetSnapshot } from "../lib/widgets/snapshot";
 import { API_BASE } from "../lib/api";
 import { useLayout } from "../lib/layout";
 import { auth } from "../lib/firebase";
@@ -92,7 +93,8 @@ export function SettingsScreen() {
           { paddingBottom: tabBarPad },
           workspace.settings.compactMode && styles.screenCompact,
         ]}
-      >        <Eyebrow>YOUR LIFEOS</Eyebrow>
+      >
+        <Eyebrow>YOUR LIFEOS</Eyebrow>
         <Title>Settings</Title>
 
         <Card>
@@ -597,6 +599,28 @@ export function SettingsScreen() {
           ) : null}
           <View style={[styles.row, { marginTop: 14 }]}>
             <ActionButton label="Sync now" icon="refresh-cw" quiet onPress={sync} />
+            <ActionButton
+              label="Widget check"
+              icon="grid"
+              quiet
+              onPress={async () => {
+                const d = await diagnoseWidgetSnapshot(workspace);
+                Alert.alert(
+                  "Widget check",
+                  [
+                    `Platform: ${d.platform}`,
+                    `Native module loaded: ${d.nativeLoaded}`,
+                    `Wrote snapshot: ${d.wrote}${d.writeError ? ` (${d.writeError})` : ""}`,
+                    `Tasks in snapshot: ${d.snapshotTasks}`,
+                    `Read back from App Group: ${d.readBackFound}`,
+                    d.readBackFound ? `Read-back tasks: ${d.readBackTasks}` : null,
+                    d.readBackFound ? `Read-back time: ${d.readBackUpdatedAt}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join("\n"),
+                );
+              }}
+            />
             <ActionButton label="Sign out" icon="log-out" quiet danger onPress={() => signOut(auth)} />
           </View>
         </Card>

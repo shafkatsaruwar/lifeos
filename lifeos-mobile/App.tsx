@@ -4,7 +4,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, AppState as RNAppState, StyleSheet, Text, useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { auth, deleteNotebookPageRemote, firebaseConfigured, loadWorkspace, saveNotebookPage, saveWorkspacePart, subscribeWorkspacePart } from "./src/lib/firebase";
+import {
+  auth,
+  deleteNotebookPageRemote,
+  emptyWorkspace,
+  firebaseConfigured,
+  loadWorkspace,
+  saveNotebookPage,
+  saveWorkspacePart,
+  subscribeWorkspacePart,
+} from "./src/lib/firebase";
+import { RootErrorBoundary } from "./src/components/RootErrorBoundary";
 import { normalizeTimeTracking } from "./src/lib/timeTracking";
 import { readOnboardingComplete, writeOnboardingComplete } from "./src/lib/onboardingCache";
 import { shouldPersistOnboardingComplete } from "./src/lib/onboardingGate";
@@ -24,15 +34,29 @@ import { SynapseImportBridge } from "./src/components/SynapseImportBridge";
 import { IcsImportReviewHost } from "./src/components/IcsImportReviewHost";
 import { ShareInboxBridge } from "./src/components/ShareInboxBridge";
 import { SiriTaskBridge } from "./src/components/SiriTaskBridge";
-import { SiriKeptBridge } from "./src/components/SiriKeptBridge";
 import { WidgetsBridge } from "./src/components/WidgetsBridge";
-import { RootNavigator } from "./src/navigation/RootNavigator";
-
-// Required once at module load so the OAuth redirect from Google's web
-// sign-in flow can close the in-app browser and return control to the app.
-WebBrowser.maybeCompleteAuthSession();
 
 const SILENT_SYNC_MS = 60_000;
+
+/** Lazy so cold start does not evaluate every screen module before auth. */
+function AppShell() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { RootNavigator } = require("./src/navigation/RootNavigator") as typeof import("./src/navigation/RootNavigator");
+  return (
+    <>
+      <SynapseImportBridge />
+      <ShareInboxBridge />
+      <IcsImportReviewHost />
+      <FocusLiveActivityBridge />
+      <NotificationsBridge />
+      <FocusEnforcerBridge />
+      <ExecutiveBridge />
+      <WidgetsBridge />
+      <SiriTaskBridge />
+      <RootNavigator />
+    </>
+  );
+}
 
 function inkHasData(ink: NotebookPage["ink"] | undefined): boolean {
   if (!ink) return false;
@@ -57,8 +81,19 @@ export default function App() {
   });
   const theme = resolveTheme(dark, workspace?.settings.accent);
 
-  // Do not prefetch/reload OTA from JS. Native expo-updates ON_LOAD already
-  // applies updates; JS reloadAsync raced ErrorRecovery and caused SIGABRT.
+  // OTA disabled in native config (updates.enabled: false) until launch is stable.
+  // Do not call Updates.reloadAsync() — it raced ErrorRecovery and caused SIGABRT.
+
+  // Defer void TurboModule calls until after first paint. On RN 0.81 prebuilt,
+  // an NSException inside an async void method corrupted Hermes (build 71
+  // SIGSEGV). Source build patches that path; still avoid cold-start races.
+  useEffect(() => {
+    try {
+      WebBrowser.maybeCompleteAuthSession();
+    } catch (error) {
+      console.warn("[LifeOS] maybeCompleteAuthSession failed", error);
+    }
+  }, []);
 
   useEffect(() => {
     if (!firebaseConfigured || !auth) {
@@ -70,12 +105,21 @@ export default function App() {
     let cancelled = false;
     // Wait until AsyncStorage persistence has restored (or confirmed null)
     // before showing SignIn — avoids a false logged-out flash on cold start.
-    void auth.authStateReady().then(() => {
-      if (cancelled) return;
-      setUser(auth.currentUser);
-      setLoading(false);
-      if (!auth.currentUser) setWorkspace(null);
-    });
+    void auth
+      .authStateReady()
+      .then(() => {
+        if (cancelled) return;
+        setUser(auth.currentUser);
+        setLoading(false);
+        if (!auth.currentUser) setWorkspace(null);
+      })
+      .catch((error) => {
+        console.warn("[LifeOS] authStateReady failed", error);
+        if (cancelled) return;
+        setLoading(false);
+        setUser(null);
+        setWorkspace(null);
+      });
     const unsub = onAuthStateChanged(auth, (nextUser) => {
       if (cancelled) return;
       setUser(nextUser);
@@ -130,9 +174,13 @@ export default function App() {
     if (!user) return;
     if (pendingWrites.current > 0) return;
     const startedAt = Date.now();
-    const next = await loadWorkspace(user.uid);
-    if (pendingWrites.current > 0 || lastWriteAt.current >= startedAt) return;
-    setWorkspace((current) => (current ? mergeRemoteWorkspace(current, next) : next));
+    try {
+      const next = await loadWorkspace(user.uid);
+      if (pendingWrites.current > 0 || lastWriteAt.current >= startedAt) return;
+      setWorkspace((current) => (current ? mergeRemoteWorkspace(current, next) : next));
+    } catch (error: any) {
+      Alert.alert("Could not sync", error?.message || "Try again in a moment.");
+    }
   }, [user, mergeRemoteWorkspace]);
 
   /** Pull latest Firebase data with no UI chrome — used by the 60s poll. */
@@ -208,7 +256,15 @@ export default function App() {
           lastWriteAt.current = Date.now();
         }
       })
-      .catch((error) => Alert.alert("Could not load LifeOS", error.message));
+      .catch((error) => {
+        console.warn("[LifeOS] initial workspace load failed", error);
+        Alert.alert("Could not load LifeOS", error?.message || "Starting with a blank workspace.");
+        // Never leave the user stuck on the opening spinner.
+        setWorkspace({
+          ...emptyWorkspace,
+          settings: mergeSettingsWithEnvironmentDefaults({}, emptyWorkspace.settings),
+        });
+      });
   }, [user]);
 
   // Focus pause/resume must land on the other device immediately — polling
@@ -397,22 +453,15 @@ export default function App() {
   };
 
   return (
-    <GestureHandlerRootView style={styles.root}>
-      <SafeAreaProvider>
-        <LifeOSContext.Provider value={state}>
-          <SynapseImportBridge />
-          <ShareInboxBridge />
-          <IcsImportReviewHost />
-          <FocusLiveActivityBridge />
-          <NotificationsBridge />
-          <FocusEnforcerBridge />
-          <ExecutiveBridge />
-          <WidgetsBridge />
-          <SiriTaskBridge />
-          <RootNavigator />
-        </LifeOSContext.Provider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <RootErrorBoundary>
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaProvider>
+          <LifeOSContext.Provider value={state}>
+            <AppShell />
+          </LifeOSContext.Provider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </RootErrorBoundary>
   );
 }
 

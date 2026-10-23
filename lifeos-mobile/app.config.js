@@ -29,21 +29,33 @@ if (!projectId) {
   );
 }
 
-const plugins = [...(appJson.expo.plugins || [])];
+const plugins = [...(appJson.expo.plugins || [])].filter(
+  (plugin) => plugin !== "expo-dev-client",
+);
 if (!plugins.includes("expo-updates")) plugins.push("expo-updates");
+// expo-dev-client removed from package.json (1.0.3+) — frameless AppDelegate
+// bootstrap window regresses UIScene launch on iOS 26/27.
 
 module.exports = {
   expo: {
     ...appJson.expo,
     plugins,
+    // Old Arch for 1.0.3+ — Reanimated 4 removed so this is safe (builds 68–70
+    // failed when New Arch was off while Reanimated 4 was still a dependency).
+    newArchEnabled: false,
+    ios: {
+      ...(appJson.expo.ios || {}),
+      newArchEnabled: false,
+    },
     runtimeVersion: appJson.expo.runtimeVersion || { policy: "appVersion" },
+    // Keep updates.url so EAS CLI can still publish rollbacks for old binaries
+    // (build 58). enabled:false removes ErrorRecovery from native binaries.
     updates: projectId
       ? {
           url: `https://u.expo.dev/${projectId}`,
-          // Build 58 crashed via ErrorRecovery when ON_LOAD eagerly loaded a bad OTA.
-          // Only check for updates during error recovery; apply on next cold start.
-          checkAutomatically: "ON_ERROR_RECOVERY",
-          fallbackToCacheTimeout: 5000,
+          enabled: false,
+          checkAutomatically: "NEVER",
+          fallbackToCacheTimeout: 0,
         }
       : { enabled: false },
     extra: {
