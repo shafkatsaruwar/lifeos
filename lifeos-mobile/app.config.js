@@ -29,24 +29,19 @@ if (!projectId) {
   );
 }
 
-const profile = (process.env.EAS_BUILD_PROFILE || "").trim();
-const isDevClientProfile =
-  profile === "development" || profile === "development-device";
-
 const plugins = [...(appJson.expo.plugins || [])].filter(
   (plugin) => plugin !== "expo-dev-client",
 );
 if (!plugins.includes("expo-updates")) plugins.push("expo-updates");
-// Keep expo-dev-client off production / preview binaries — its AppDelegate
-// bootstrap window pattern regresses UIScene launch on iOS 26/27.
-if (isDevClientProfile && !plugins.includes("expo-dev-client")) {
-  plugins.splice(2, 0, "expo-dev-client");
-}
+// expo-dev-client removed from package.json (1.0.3+) — frameless AppDelegate
+// bootstrap window regresses UIScene launch on iOS 26/27.
 
 module.exports = {
   expo: {
     ...appJson.expo,
     plugins,
+    // Old Arch for 1.0.3+ — Reanimated 4 removed so this is safe (builds 68–70
+    // failed when New Arch was off while Reanimated 4 was still a dependency).
     newArchEnabled: false,
     ios: {
       ...(appJson.expo.ios || {}),

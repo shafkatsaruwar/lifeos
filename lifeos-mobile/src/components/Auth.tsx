@@ -26,8 +26,6 @@ import { LIGHT, DARK } from "../lib/theme";
 import { ActionButton } from "./UI";
 import { useLifeOS } from "../lib/LifeOSContext";
 
-WebBrowser.maybeCompleteAuthSession();
-
 const LIFEOS_ORIGIN = (() => {
   const raw = resolveLifeosApiBase();
   if (!raw) return "";
@@ -226,7 +224,7 @@ export function SignIn() {
         {!ageConfirmed ? (
           <Text style={styles.ageGateHint}>LifeOS is not available to users under 13.</Text>
         ) : null}
-        {firebaseConfigured ? (
+        {firebaseConfigured && auth ? (
           ageConfirmed ? <GoogleSignInButton /> : (
             <View style={[styles.signInButton, { opacity: 0.45 }]}>
               <Feather name="log-in" size={18} color="#FFF" />
@@ -239,8 +237,8 @@ export function SignIn() {
             <Text style={styles.signInButtonText}>Continue with Google</Text>
           </View>
         )}
-        {firebaseConfigured && Platform.OS === "ios" && ageConfirmed ? <AppleSignInButton /> : null}
-        {!firebaseConfigured ? (
+        {firebaseConfigured && auth && Platform.OS === "ios" && ageConfirmed ? <AppleSignInButton /> : null}
+        {!firebaseConfigured || !auth ? (
           <Text style={[styles.setupText, { color: theme.muted }]}>
             {__DEV__
               ? "Add the Firebase values to your local .env file first."

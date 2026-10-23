@@ -96,7 +96,9 @@ export function ShareInboxBridge() {
       if (isShareUrl(url) || looksLikeIcs(url)) void drain();
     };
 
-    void Linking.getInitialURL().then((url) => void fromUrl(url));
+    void Linking.getInitialURL()
+      .then((url) => void fromUrl(url))
+      .catch((error) => console.warn("[ShareInboxBridge] getInitialURL failed", error));
     void drain();
     const linkSub = Linking.addEventListener("url", ({ url }) => void fromUrl(url));
     const appSub = AppState.addEventListener("change", (state: AppStateStatus) => {
