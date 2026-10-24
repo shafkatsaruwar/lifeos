@@ -48,13 +48,14 @@ module.exports = {
       newArchEnabled: false,
     },
     runtimeVersion: appJson.expo.runtimeVersion || { policy: "appVersion" },
-    // Keep updates.url so EAS CLI can still publish rollbacks for old binaries
-    // (build 58). enabled:false removes ErrorRecovery from native binaries.
+    // OTA on: binaries check for an update on cold start and apply it on the
+    // next launch. Startup no longer reloads mid-boot (see src/lib/ota.ts), so
+    // ErrorRecovery is safe to ship again. Without a project id, updates stay off.
     updates: projectId
       ? {
           url: `https://u.expo.dev/${projectId}`,
-          enabled: false,
-          checkAutomatically: "NEVER",
+          enabled: true,
+          checkAutomatically: "ON_LOAD",
           fallbackToCacheTimeout: 0,
         }
       : { enabled: false },
