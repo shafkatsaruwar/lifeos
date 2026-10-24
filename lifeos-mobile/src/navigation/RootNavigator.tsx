@@ -46,6 +46,7 @@ import { getCareerDashboardScreen, isCareerHubAvailable } from "../lib/careerGat
 import { FocusEnforcerSetupScreen } from "../screens/FocusEnforcerSetupScreen";
 import { FocusEnforcerSessionScreen } from "../screens/FocusEnforcerSessionScreen";
 import { FocusEnforcerHistoryScreen } from "../screens/FocusEnforcerHistoryScreen";
+import { CareerPageScreen } from "../screens/CareerPageScreen";
 import { ExecutiveHomeScreen } from "../screens/ExecutiveHomeScreen";
 import { KeptScreen } from "../screens/KeptScreen";
 import { MasterOSNavigator } from "./MasterOSNavigator";
@@ -95,6 +96,7 @@ function NowStackNavigator() {
       <NowStack.Screen name="FocusEnforcerSetup" component={FocusEnforcerSetupScreen} />
       <NowStack.Screen name="FocusEnforcerSession" component={FocusEnforcerSessionScreen} />
       <NowStack.Screen name="FocusEnforcerHistory" component={FocusEnforcerHistoryScreen} />
+      <NowStack.Screen name="CareerPage" component={CareerPageScreen} />
       <NowStack.Screen name="ExecutiveHome" component={ExecutiveHomeScreen} />
       <NowStack.Screen
         name="MasterOS"

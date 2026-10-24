@@ -25,6 +25,7 @@ import {
   redeemPromoCode,
 } from "../lib/entitlement";
 import { CAREER_IOS_ENABLED } from "../lib/careerFlag";
+import { CAREER_PAGE_ENABLED } from "../lib/careerPage";
 import { SPACE_COLORS, DEFAULT_WORKSPACE_COLORS, workspaceColorFor } from "../lib/theme";
 import { appearancePatchForThemeMode } from "../../../lib/appearancePrefs";
 import type { CalendarDefaultView, EnergyLevel, ThemeMode } from "../types";
@@ -584,6 +585,18 @@ export function SettingsScreen() {
             />
           </View>
         </Card>
+
+        {CAREER_PAGE_ENABLED ? (
+          <Card>
+            <Text style={[styles.cardLabel, { color: theme.text }]}>Careers</Text>
+            <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 18 }}>
+              Your job search at a glance. Read-only for now.
+            </Text>
+            <View style={[styles.row, { marginTop: 14 }]}>
+              <ActionButton label="Open Careers" icon="briefcase" quiet onPress={() => navigation.navigate("CareerPage")} />
+            </View>
+          </Card>
+        ) : null}
 
         <Card>
           <Text style={[styles.cardLabel, { color: theme.text }]}>Data</Text>
