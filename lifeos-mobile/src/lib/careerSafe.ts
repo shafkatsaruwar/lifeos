@@ -6,6 +6,7 @@
  * When CAREER_IOS_ENABLED is false, never require Career modules at all.
  */
 import { CAREER_IOS_ENABLED } from "./careerFlag";
+import { CAREER_PAGE_ENABLED } from "./careerPage";
 
 const FALLBACK_HUB = {
   version: 1 as const,
@@ -51,8 +52,13 @@ export function safeEmptyCareerHub() {
   }
 }
 
+/**
+ * Real hub data is kept for the read-only Careers page even while the full
+ * Career hub is off. The require stays inside try/catch, so a bad module
+ * falls back to an empty hub instead of crashing launch.
+ */
 export function safeNormalizeCareerHub(raw: unknown) {
-  if (!CAREER_IOS_ENABLED) return fallbackHub();
+  if (!CAREER_IOS_ENABLED && !CAREER_PAGE_ENABLED) return fallbackHub();
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require("./career/careerHelpers") as typeof import("./career/careerHelpers");
