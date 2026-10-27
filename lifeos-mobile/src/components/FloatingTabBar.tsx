@@ -153,11 +153,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 5,
     paddingHorizontal: 4,
-    maxWidth: "100%",
   },
   activeLabel: {
     fontSize: 13,
     fontWeight: "700",
-    flexShrink: 1,
+    flexShrink: 0,
   },
 });
