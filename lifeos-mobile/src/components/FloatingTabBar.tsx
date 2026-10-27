@@ -95,8 +95,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               }
               style={styles.item}
             >
-              {focused ? <View pointerEvents="none" style={styles.activeBg} /> : null}
-              <View style={styles.content}>
+              <View style={focused ? styles.activePill : styles.content}>
                 {icon}
                 {focused ? (
                   <Text numberOfLines={1} style={[styles.activeLabel, { color: theme.accent }]}>
@@ -139,12 +138,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  activeBg: {
-    position: "absolute",
-    top: 7,
-    bottom: 7,
-    left: 2,
-    right: 2,
+  activePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: BAR_H - 14,
+    paddingHorizontal: 14,
     borderRadius: 999,
     backgroundColor: "#FFFFFF",
   },
