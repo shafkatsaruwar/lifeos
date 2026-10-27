@@ -143,6 +143,7 @@ const styles = StyleSheet.create({
   itemActive: {
     flexGrow: 0,
     flexShrink: 0,
+    flexBasis: "auto",
   },
   activePill: {
     flexDirection: "row",
