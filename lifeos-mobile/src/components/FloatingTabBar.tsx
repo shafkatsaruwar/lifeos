@@ -1,6 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { LayoutAnimation, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLifeOS } from "../lib/LifeOSContext";
@@ -58,6 +58,16 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   };
 
   const size = isTablet ? 22 : 20;
+  // Each active label is measured once, off-screen, so the pill can be sized
+  // to fit it. Letting flex size the label cut names down to "K...".
+  const [labelWidths, setLabelWidths] = useState<Record<string, number>>({});
+  const labelFor = (route: (typeof visible)[number]) => {
+    const options = descriptors[route.key]?.options ?? {};
+    return typeof options.tabBarLabel === "string" ? options.tabBarLabel : options.title ?? route.name;
+  };
+  const recordLabelWidth = (key: string, width: number) => {
+    setLabelWidths((prev) => (prev[key] === width ? prev : { ...prev, [key]: width }));
+  };
 
   return (
     <View
@@ -70,6 +80,16 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
       ]}
     >
       <View style={[styles.bar, { backgroundColor: theme.accent }]}>
+        {visible.map((route) => (
+          <Text
+            key={`measure-${route.key}`}
+            pointerEvents="none"
+            onLayout={(e) => recordLabelWidth(route.key, e.nativeEvent.layout.width)}
+            style={[styles.activeLabel, styles.measure]}
+          >
+            {String(labelFor(route))}
+          </Text>
+        ))}
         {visible.map((route, index) => {
           const options = descriptors[route.key]?.options ?? {};
           const label =
@@ -95,12 +115,21 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               }
               style={styles.item}
             >
-              <View style={focused ? styles.activePill : styles.content}>
+              <View
+                style={
+                  focused
+                    ? [
+                        styles.activePill,
+                        labelWidths[route.key] !== undefined
+                          ? { width: size + 6 + labelWidths[route.key] + 28 }
+                          : null,
+                      ]
+                    : styles.content
+                }
+              >
                 {icon}
                 {focused ? (
-                  <Text numberOfLines={1} style={[styles.activeLabel, { color: theme.accent }]}>
-                    {String(label)}
-                  </Text>
+                  <Text style={[styles.activeLabel, { color: theme.accent }]}>{String(label)}</Text>
                 ) : null}
               </View>
             </Pressable>
@@ -154,8 +183,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   activeLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
-    flexShrink: 0,
+  },
+  measure: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    opacity: 0,
   },
 });
