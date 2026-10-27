@@ -68,6 +68,25 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const recordLabelWidth = (key: string, width: number) => {
     setLabelWidths((prev) => (prev[key] === width ? prev : { ...prev, [key]: width }));
   };
+  const [barWidth, setBarWidth] = useState(0);
+  // Explicit widths: the active tab takes its pill width, the rest share what's
+  // left. Until the bar is measured, tabs fall back to equal flex slots.
+  const innerWidth = Math.max(0, barWidth - 12);
+  const activeKey = visible[activeIndex]?.key;
+  const activeLabelWidth = activeKey ? labelWidths[activeKey] : undefined;
+  const pillWidth = activeLabelWidth !== undefined ? size + 6 + activeLabelWidth + 28 : undefined;
+  const count = Math.max(visible.length, 1);
+  const slotWidth =
+    innerWidth === 0
+      ? undefined
+      : pillWidth === undefined || count === 1
+        ? innerWidth / count
+        : Math.max(0, innerWidth - pillWidth) / (count - 1);
+  const tabWidth = (focused: boolean) => {
+    if (innerWidth === 0) return undefined;
+    if (focused && pillWidth !== undefined) return pillWidth;
+    return slotWidth;
+  };
 
   return (
     <View
@@ -79,7 +98,10 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
         },
       ]}
     >
-      <View style={[styles.bar, { backgroundColor: theme.accent }]}>
+      <View
+        onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+        style={[styles.bar, { backgroundColor: theme.accent }]}
+      >
         {visible.map((route) => (
           <Text
             key={`measure-${route.key}`}
@@ -113,7 +135,12 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               onLongPress={() =>
                 navigation.emit({ type: "tabLongPress", target: route.key })
               }
-              style={styles.item}
+              style={[
+                styles.item,
+                tabWidth(focused) !== undefined
+                  ? { width: tabWidth(focused), flex: 0 }
+                  : null,
+              ]}
             >
               <View
                 style={
