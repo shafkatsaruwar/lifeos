@@ -93,18 +93,17 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               onLongPress={() =>
                 navigation.emit({ type: "tabLongPress", target: route.key })
               }
-              style={[styles.item, focused && styles.itemActive]}
+              style={styles.item}
             >
-              {focused ? (
-                <View style={styles.activePill}>
-                  {icon}
+              {focused ? <View pointerEvents="none" style={styles.activeBg} /> : null}
+              <View style={styles.content}>
+                {icon}
+                {focused ? (
                   <Text numberOfLines={1} style={[styles.activeLabel, { color: theme.accent }]}>
                     {String(label)}
                   </Text>
-                </View>
-              ) : (
-                icon
-              )}
+                ) : null}
+              </View>
             </Pressable>
           );
         })}
@@ -140,22 +139,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  itemActive: {
-    flexGrow: 0,
-    flexShrink: 0,
-    flexBasis: "auto",
-  },
-  activePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    height: BAR_H - 14,
-    paddingHorizontal: 14,
+  activeBg: {
+    position: "absolute",
+    top: 7,
+    bottom: 7,
+    left: 2,
+    right: 2,
     borderRadius: 999,
     backgroundColor: "#FFFFFF",
   },
+  content: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 4,
+    maxWidth: "100%",
+  },
   activeLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
+    flexShrink: 1,
   },
 });
