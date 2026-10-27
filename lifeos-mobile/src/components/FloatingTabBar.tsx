@@ -69,23 +69,19 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     setLabelWidths((prev) => (prev[key] === width ? prev : { ...prev, [key]: width }));
   };
   const [barWidth, setBarWidth] = useState(0);
-  // Explicit widths: the active tab takes its pill width, the rest share what's
-  // left. Until the bar is measured, tabs fall back to equal flex slots.
+  // Every tab keeps a fixed slot, so the other tabs never move. The active pill
+  // is drawn over its own slot and nudged inward only if it would pass the bar.
   const innerWidth = Math.max(0, barWidth - 12);
+  const count = Math.max(visible.length, 1);
+  const slotWidth = innerWidth > 0 ? innerWidth / count : undefined;
   const activeKey = visible[activeIndex]?.key;
   const activeLabelWidth = activeKey ? labelWidths[activeKey] : undefined;
   const pillWidth = activeLabelWidth !== undefined ? size + 6 + activeLabelWidth + 28 : undefined;
-  const count = Math.max(visible.length, 1);
-  const slotWidth =
-    innerWidth === 0
-      ? undefined
-      : pillWidth === undefined || count === 1
-        ? innerWidth / count
-        : Math.max(0, innerWidth - pillWidth) / (count - 1);
-  const tabWidth = (focused: boolean) => {
-    if (innerWidth === 0) return undefined;
-    if (focused && pillWidth !== undefined) return pillWidth;
-    return slotWidth;
+  const pillShift = (index: number) => {
+    if (slotWidth === undefined || pillWidth === undefined) return 0;
+    const desired = index * slotWidth + slotWidth / 2 - pillWidth / 2;
+    const clamped = Math.min(Math.max(desired, 0), Math.max(0, innerWidth - pillWidth));
+    return clamped - desired;
   };
 
   return (
@@ -137,21 +133,20 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               }
               style={[
                 styles.item,
-                tabWidth(focused) !== undefined
-                  ? { width: tabWidth(focused), flex: 0 }
-                  : null,
+                slotWidth !== undefined ? { width: slotWidth, flex: 0 } : null,
+                focused ? styles.itemActive : null,
               ]}
             >
               <View
                 style={
-                  focused
+                  focused && pillWidth !== undefined
                     ? [
                         styles.activePill,
-                        labelWidths[route.key] !== undefined
-                          ? { width: size + 6 + labelWidths[route.key] + 28 }
-                          : null,
+                        { width: pillWidth, transform: [{ translateX: pillShift(index) }] },
                       ]
-                    : styles.content
+                    : focused
+                      ? styles.activePill
+                      : styles.content
                 }
               >
                 {icon}
@@ -186,6 +181,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 6,
+  },
+  itemActive: {
+    zIndex: 1,
   },
   item: {
     flex: 1,
