@@ -47,6 +47,7 @@ import { FocusEnforcerSetupScreen } from "../screens/FocusEnforcerSetupScreen";
 import { FocusEnforcerSessionScreen } from "../screens/FocusEnforcerSessionScreen";
 import { FocusEnforcerHistoryScreen } from "../screens/FocusEnforcerHistoryScreen";
 import { CareerPageScreen } from "../screens/CareerPageScreen";
+import { CAREER_PAGE_ENABLED } from "../lib/careerPage";
 import { ExecutiveHomeScreen } from "../screens/ExecutiveHomeScreen";
 import { KeptScreen } from "../screens/KeptScreen";
 import { MasterOSNavigator } from "./MasterOSNavigator";
@@ -72,6 +73,7 @@ const TAB_ICONS: Record<string, keyof typeof Feather.glyphMap> = {
   SchoolTab: "award",
   WorkTab: "briefcase",
   CareerTab: "target",
+  CareerPageTab: "briefcase",
   LibraryTab: "book-open",
 };
 
@@ -301,7 +303,7 @@ export function RootNavigator() {
   const showWork = isHubVisibleInNav("Work", settings);
   // Never register CareerTab if the screen module failed to load (OTA-safe).
   const careerReady = isCareerHubAvailable();
-  const showCareer = careerReady && isHubVisibleInNav("Career", settings);
+  const showCareerPage = CAREER_PAGE_ENABLED && isHubVisibleInNav("Career", settings);
   const linking = buildLinking({ includeCareer: careerReady });
 
   const base = dark ? DarkTheme : DefaultTheme;
@@ -396,15 +398,15 @@ export function RootNavigator() {
                 : { display: "none", width: 0, height: 0, minWidth: 0, flex: 0, padding: 0 },
             }}
           />
-          {careerReady ? (
+          {CAREER_PAGE_ENABLED ? (
             <Tab.Screen
-              name="CareerTab"
-              component={CareerStackNavigator}
+              name="CareerPageTab"
+              component={CareerPageScreen}
               options={{
-                title: "Career",
-                tabBarLabel: "Career",
-                tabBarButton: showCareer ? undefined : () => null,
-                tabBarItemStyle: showCareer
+                title: "Careers",
+                tabBarLabel: "Careers",
+                tabBarButton: showCareerPage ? undefined : () => null,
+                tabBarItemStyle: showCareerPage
                   ? undefined
                   : { display: "none", width: 0, height: 0, minWidth: 0, flex: 0, padding: 0 },
               }}
