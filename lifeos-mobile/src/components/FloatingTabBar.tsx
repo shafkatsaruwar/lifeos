@@ -1,53 +1,14 @@
 import Feather from "@expo/vector-icons/Feather";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type LayoutChangeEvent,
-} from "react-native";
+import { useEffect } from "react";
+import { LayoutAnimation, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLifeOS } from "../lib/LifeOSContext";
 import { CAREER_IOS_ENABLED } from "../lib/careerFlag";
 import { useLayout } from "../lib/layout";
-import { workspaceColorFor } from "../lib/theme";
-import type { SettingsState } from "../types";
 
-const PILL_H = 64;
-const LIGHT_INSET = 5;
-const INACTIVE = "#8E8E93";
-
-function tabTint(routeName: string, accent: string, settings: SettingsState): string {
-  switch (routeName) {
-    case "NowTab":
-      return "#3F7ED7";
-    case "TasksTab":
-      return "#31926A";
-    case "CalendarTab":
-      return "#3F7ED7";
-    case "KeptTab":
-      return "#3F7ED7";
-    case "LifeTab":
-      return workspaceColorFor(settings, "life");
-    case "SchoolTab":
-      return workspaceColorFor(settings, "school");
-    case "WorkTab":
-      return workspaceColorFor(settings, "work");
-    case "CareerTab":
-      return CAREER_IOS_ENABLED ? workspaceColorFor(settings, "career") : accent;
-    case "LibraryTab":
-      return "#DB2777";
-    default:
-      return accent;
-  }
-}
-
-function tintFill(hex: string, dark: boolean) {
-  return dark ? `${hex}33` : `${hex}22`;
-}
+const BAR_H = 60;
+const ICON_INACTIVE = "rgba(255,255,255,0.72)";
 
 function isHidden(options: BottomTabBarProps["descriptors"][string]["options"]) {
   const style = options.tabBarItemStyle as { display?: string } | undefined;
@@ -55,8 +16,9 @@ function isHidden(options: BottomTabBarProps["descriptors"][string]["options"]) 
 }
 
 /**
- * Floating tab bar — Pressable + RN Animated only.
- * No react-native-gesture-handler Gesture API (needs Reanimated worklets).
+ * Bottom bar: one solid accent pill. The active tab turns into a white pill
+ * with its icon and label; the other tabs show icons only.
+ * Pressable + LayoutAnimation only (no Reanimated).
  */
 export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { theme, workspace } = useLifeOS();
@@ -75,29 +37,11 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     visible.findIndex((route) => route.key === activeKey),
   );
 
-  const [trackWidth, setTrackWidth] = useState(0);
-  const indexAnim = useRef(new Animated.Value(activeIndex)).current;
-  const count = Math.max(visible.length, 1);
-  const tabW = trackWidth > 0 ? trackWidth / count : 0;
-
   const firstVisibleName = visible[0]?.name;
   useEffect(() => {
     if (!activeHidden || !firstVisibleName) return;
     navigation.navigate(firstVisibleName);
   }, [activeHidden, firstVisibleName, navigation]);
-
-  useEffect(() => {
-    if (reduceMotion) {
-      indexAnim.setValue(activeIndex);
-      return;
-    }
-    Animated.spring(indexAnim, {
-      toValue: activeIndex,
-      useNativeDriver: true,
-      friction: 7,
-      tension: 80,
-    }).start();
-  }, [activeIndex, indexAnim, reduceMotion]);
 
   const goTo = (nextIndex: number) => {
     const route = visible[nextIndex];
@@ -108,24 +52,12 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
       canPreventDefault: true,
     });
     if (!event.defaultPrevented && state.routes[state.index]?.key !== route.key) {
+      if (!reduceMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       navigation.navigate(route.name);
     }
   };
 
-  const lightTranslateX = Animated.add(
-    Animated.multiply(indexAnim, tabW || 0),
-    LIGHT_INSET,
-  );
-
-  const dark = theme.bg === "#111214" || theme.surface === "#191A1D";
-  const pillBg = dark ? theme.surface : "#FFFFFF";
-  const activeRoute = visible[activeIndex]?.name ?? "NowTab";
-  const activeTint = tabTint(activeRoute, theme.accent, workspace.settings);
-  const lightWidth = Math.max(0, tabW - LIGHT_INSET * 2);
-
-  const onTrackLayout = (e: LayoutChangeEvent) => {
-    setTrackWidth(e.nativeEvent.layout.width);
-  };
+  const size = isTablet ? 22 : 20;
 
   return (
     <View
@@ -134,75 +66,54 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
         {
           backgroundColor: theme.bg,
           paddingBottom: Math.max(insets.bottom, 10),
-          borderTopColor: theme.border,
         },
       ]}
     >
-      <View
-        style={[
-          styles.pill,
-          {
-            backgroundColor: pillBg,
-            borderColor: activeTint,
-          },
-        ]}
-      >
-        <View onLayout={onTrackLayout} style={styles.track}>
-          {tabW > 0 ? (
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.light,
-                {
-                  width: lightWidth,
-                  borderColor: activeTint,
-                  backgroundColor: tintFill(activeTint, dark),
-                  transform: [{ translateX: lightTranslateX }],
-                },
-              ]}
-            />
-          ) : null}
-          {visible.map((route, index) => {
-            const options = descriptors[route.key]?.options ?? {};
-            const label =
-              typeof options.tabBarLabel === "string"
-                ? options.tabBarLabel
-                : options.title ?? route.name;
-            const focused = index === activeIndex;
-            const color = focused ? tabTint(route.name, theme.accent, workspace.settings) : INACTIVE;
-            const iconName = (options.tabBarIcon
-              ? undefined
-              : "circle") as keyof typeof Feather.glyphMap;
-            return (
-              <Pressable
-                key={route.key}
-                accessibilityRole="button"
-                accessibilityState={focused ? { selected: true } : {}}
-                accessibilityLabel={options.tabBarAccessibilityLabel ?? String(label)}
-                onPress={() => goTo(index)}
-                onLongPress={() =>
-                  navigation.emit({ type: "tabLongPress", target: route.key })
-                }
-                style={styles.item}
-              >
-                {options.tabBarIcon
-                  ? options.tabBarIcon({ focused, color, size: isTablet ? 22 : 20 })
-                  : (
-                    <Feather name={iconName} size={20} color={color} />
-                  )}
-                <Text numberOfLines={1} style={[styles.label, { color }]}>
-                  {String(label)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+      <View style={[styles.bar, { backgroundColor: theme.accent }]}>
+        {visible.map((route, index) => {
+          const options = descriptors[route.key]?.options ?? {};
+          const label =
+            typeof options.tabBarLabel === "string"
+              ? options.tabBarLabel
+              : options.title ?? route.name;
+          const focused = index === activeIndex;
+          const iconColor = focused ? theme.accent : ICON_INACTIVE;
+          const icon = options.tabBarIcon ? (
+            options.tabBarIcon({ focused, color: iconColor, size })
+          ) : (
+            <Feather name="circle" size={size} color={iconColor} />
+          );
+          return (
+            <Pressable
+              key={route.key}
+              accessibilityRole="button"
+              accessibilityState={focused ? { selected: true } : {}}
+              accessibilityLabel={options.tabBarAccessibilityLabel ?? String(label)}
+              onPress={() => goTo(index)}
+              onLongPress={() =>
+                navigation.emit({ type: "tabLongPress", target: route.key })
+              }
+              style={[styles.item, focused && styles.itemActive]}
+            >
+              {focused ? (
+                <View style={styles.activePill}>
+                  {icon}
+                  <Text numberOfLines={1} style={[styles.activeLabel, { color: theme.accent }]}>
+                    {String(label)}
+                  </Text>
+                </View>
+              ) : (
+                icon
+              )}
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
 }
 
-export const FLOATING_TAB_BAR_HEIGHT = PILL_H + 22;
+export const FLOATING_TAB_BAR_HEIGHT = BAR_H + 22;
 
 export function useFloatingTabBarContentPadding(extra = 16) {
   return Math.max(8, extra);
@@ -213,30 +124,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 14,
     paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  pill: {
-    height: PILL_H,
+  bar: {
+    height: BAR_H,
     width: "100%",
     borderRadius: 999,
-    borderWidth: 1,
-    overflow: "hidden",
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-    justifyContent: "center",
-  },
-  track: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-  },
-  light: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: 0,
-    borderRadius: 14,
-    borderWidth: 1.5,
+    paddingHorizontal: 6,
   },
   item: {
     flex: 1,
@@ -244,12 +139,22 @@ const styles = StyleSheet.create({
     height: "100%",
     alignItems: "center",
     justifyContent: "center",
-    gap: 2,
-    zIndex: 1,
   },
-  label: {
-    fontSize: 9,
+  itemActive: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  activePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: BAR_H - 14,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+  },
+  activeLabel: {
+    fontSize: 14,
     fontWeight: "700",
-    letterSpacing: 0.1,
   },
 });
