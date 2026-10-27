@@ -401,7 +401,7 @@ export function SettingsScreen() {
             <Text style={[styles.cardLabel, { color: theme.text }]}>Environments</Text>
           </View>
           <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>
-            {CAREER_IOS_ENABLED
+            {CAREER_IOS_ENABLED || CAREER_PAGE_ENABLED
               ? "Home, School, and Career are free. Work and MasterOS need LifeOS Pro."
               : "Home and School are free. Work and MasterOS need LifeOS Pro."}
           </Text>
@@ -426,7 +426,7 @@ export function SettingsScreen() {
               trackColor={{ true: theme.accent }}
             />
           </View>
-          {CAREER_IOS_ENABLED ? (
+          {CAREER_IOS_ENABLED || CAREER_PAGE_ENABLED ? (
             <>
               <View style={[styles.divider, { backgroundColor: theme.border }]} />
               <View style={styles.settingRow}>
