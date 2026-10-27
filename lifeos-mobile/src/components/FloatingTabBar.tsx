@@ -74,8 +74,8 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const innerWidth = Math.max(0, barWidth - 12);
   const count = Math.max(visible.length, 1);
   const slotWidth = innerWidth > 0 ? innerWidth / count : undefined;
-  const activeKey = visible[activeIndex]?.key;
-  const activeLabelWidth = activeKey ? labelWidths[activeKey] : undefined;
+  const visibleActiveKey = visible[activeIndex]?.key;
+  const activeLabelWidth = visibleActiveKey ? labelWidths[visibleActiveKey] : undefined;
   const pillWidth = activeLabelWidth !== undefined ? size + 6 + activeLabelWidth + 28 : undefined;
   const pillShift = (index: number) => {
     if (slotWidth === undefined || pillWidth === undefined) return 0;
