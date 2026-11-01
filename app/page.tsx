@@ -29,7 +29,7 @@
 // Phase 5: BrainModule (inbox, capture, notes)
 // Phase 6: Third-party modules (Synapse sync, photography workflows, etc.)
 
-import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { syncDataToFirebase, loadDataFromFirebase, loadTasksFromFirebase, listenToFirebaseChanges, stopListeningToFirebaseChanges, pullAllDataFromFirebase, setUserId, clearUserId, getUserId } from "@/lib/dataSync";
 import { coerceFirebaseList } from "@/lib/validation";
@@ -6653,6 +6653,14 @@ function CommandPalette({
   onDismissCaptureCommands: () => void;
 }) {
   const [suggestedIndex, setSuggestedIndex] = useState(-1);
+  // Drop the palette just under the search box, like App Store's search, instead of centering it.
+  const [anchor, setAnchor] = useState<{ top: number; left: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    const trigger = document.querySelector(".search-trigger");
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    setAnchor({ top: rect.bottom + 6, left: rect.left, width: Math.max(rect.width, 360) });
+  }, []);
   const slashMode = query.trim().startsWith("/");
   const commandMatches = slashMode
     ? filterCaptureCommands(captureCommands, query)
@@ -6712,8 +6720,25 @@ function CommandPalette({
   };
 
   return (
-    <motion.div className="modal-layer" onMouseDown={close} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <motion.div className="command-modal" onMouseDown={(e) => e.stopPropagation()} initial={{ scale: 0.98, y: -10 }} animate={{ scale: 1, y: 0 }}>
+    <motion.div
+      className="modal-layer"
+      style={{ background: "transparent", backdropFilter: "none", paddingTop: 0, justifyContent: "flex-start" }}
+      onMouseDown={close}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        className="command-modal"
+        style={
+          anchor
+            ? { position: "fixed", top: anchor.top, left: anchor.left, width: anchor.width, transformOrigin: "top left" }
+            : undefined
+        }
+        onMouseDown={(e) => e.stopPropagation()}
+        initial={{ scale: 0.98, y: -6 }}
+        animate={{ scale: 1, y: 0 }}
+      >
         <div className="command-input">
           <Search size={20} />
           <input
