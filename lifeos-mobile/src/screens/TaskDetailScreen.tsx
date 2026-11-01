@@ -369,6 +369,15 @@ export function TaskDetailScreen() {
         >
           <Feather name="chevron-left" size={22} color={theme.text} />
         </Pressable>
+        <View style={{ flex: 1 }} />
+        <Pressable
+          accessibilityLabel="Simple checklist"
+          accessibilityRole="button"
+          onPress={() => navigation.navigate("SimpleChecklist", { taskId: task.id })}
+          style={styles.backButton}
+        >
+          <Feather name="check-circle" size={20} color={theme.accent} />
+        </Pressable>
         <Pressable
           accessibilityLabel="Delete task"
           accessibilityRole="button"
@@ -856,7 +865,7 @@ const styles = StyleSheet.create({
   clearText: { fontSize: 13, fontWeight: "700", paddingVertical: 2 },
   textarea: { minHeight: 90, borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 15, textAlignVertical: "top" },
   checkRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
-  checkBox: { width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  checkBox: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
   checkInput: { flex: 1, fontSize: 14, paddingVertical: 4 },
   sessionList: { gap: 8, marginTop: 4 },
   sessionRow: {

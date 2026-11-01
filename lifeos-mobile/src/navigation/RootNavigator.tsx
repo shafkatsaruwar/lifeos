@@ -23,6 +23,7 @@ import { SchoolDashboardScreen } from "../screens/SchoolDashboardScreen";
 import { NowScreen } from "../screens/NowScreen";
 import { TasksScreen } from "../screens/TasksScreen";
 import { TaskDetailScreen } from "../screens/TaskDetailScreen";
+import { SimpleChecklistScreen } from "../screens/SimpleChecklistScreen";
 import { CalendarScreen } from "../screens/CalendarScreen";
 import { ConnectWebScreen } from "../screens/ConnectWebScreen";
 import { ProjectDetailScreen } from "../screens/ProjectDetailScreen";
@@ -93,6 +94,7 @@ function NowStackNavigator() {
       <NowStack.Screen name="NowHome" component={NowScreen} />
       <NowStack.Screen name="Focus" component={NowScreen} initialParams={{ openFocus: true }} />
       <NowStack.Screen name="TaskDetail" component={TaskDetailScreen} />
+      <NowStack.Screen name="SimpleChecklist" component={SimpleChecklistScreen} />
       <NowStack.Screen name="Settings" component={SettingsScreen} />
       <NowStack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
       <NowStack.Screen name="FocusEnforcerSetup" component={FocusEnforcerSetupScreen} />
@@ -134,6 +136,7 @@ function TasksStackNavigator() {
     <TasksStack.Navigator screenOptions={screenOptions}>
       <TasksStack.Screen name="TasksList" component={TasksScreen} />
       <TasksStack.Screen name="TaskDetail" component={TaskDetailScreen} />
+      <TasksStack.Screen name="SimpleChecklist" component={SimpleChecklistScreen} />
     </TasksStack.Navigator>
   );
 }
