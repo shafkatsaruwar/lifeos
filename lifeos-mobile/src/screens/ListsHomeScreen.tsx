@@ -3,6 +3,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useMemo } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { Empty, Eyebrow, Page, Title } from "../components/UI";
+import { SwipeDeleteRow } from "../components/SwipeDeleteRow";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import { useLifeOS } from "../lib/LifeOSContext";
 import type { Task } from "../types";
@@ -76,33 +77,43 @@ export function ListsHomeScreen() {
         contentContainerStyle={[styles.list, { paddingBottom: tabBarPad }]}
         renderItem={({ item }) => {
           const { done, total } = listProgress(item);
+          const title = item.title?.trim() || "Checklist";
           return (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={item.title || "Checklist"}
-              onPress={() => navigation.navigate("SimpleChecklist", { taskId: item.id })}
-              style={({ pressed }) => [
-                styles.row,
-                {
-                  backgroundColor: theme.surface,
-                  borderColor: theme.border,
-                  opacity: pressed ? 0.85 : 1,
-                },
-              ]}
+            <SwipeDeleteRow
+              label={title}
+              confirmTitle="Delete list"
+              confirmBody={`Delete "${title}"? This can't be undone.`}
+              onDelete={() => {
+                void updateTasks(workspace.tasks.filter((task) => task.id !== item.id));
+              }}
             >
-              <View style={[styles.iconWrap, { backgroundColor: theme.soft }]}>
-                <Feather name="check-circle" size={18} color={theme.accent} />
-              </View>
-              <View style={styles.grow}>
-                <Text style={[styles.rowTitle, { color: theme.text }]} numberOfLines={1}>
-                  {item.title?.trim() || "Checklist"}
-                </Text>
-                <Text style={[styles.rowMeta, { color: theme.muted }]}>
-                  {total === 0 ? "Empty list" : `${done} of ${total} done`}
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.muted} />
-            </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={title}
+                onPress={() => navigation.navigate("SimpleChecklist", { taskId: item.id })}
+                style={({ pressed }) => [
+                  styles.row,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: theme.border,
+                    opacity: pressed ? 0.85 : 1,
+                  },
+                ]}
+              >
+                <View style={[styles.iconWrap, { backgroundColor: theme.soft }]}>
+                  <Feather name="check-circle" size={18} color={theme.accent} />
+                </View>
+                <View style={styles.grow}>
+                  <Text style={[styles.rowTitle, { color: theme.text }]} numberOfLines={1}>
+                    {title}
+                  </Text>
+                  <Text style={[styles.rowMeta, { color: theme.muted }]}>
+                    {total === 0 ? "Empty list" : `${done} of ${total} done`}
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={theme.muted} />
+              </Pressable>
+            </SwipeDeleteRow>
           );
         }}
         ListEmptyComponent={
