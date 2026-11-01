@@ -185,7 +185,7 @@ export function TasksScreen() {
                 const task: Task = {
                   id,
                   title: "Checklist",
-                  project: "Inbox",
+                  project: "Lists",
                   priority: "Medium",
                   focusMinutes: workspace.settings.defaultFocusMinutes ?? 30,
                   energy: workspace.settings.defaultEnergy ?? "Medium",
