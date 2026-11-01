@@ -179,6 +179,29 @@ export function TasksScreen() {
             ) : null}
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="New checklist"
+              onPress={() => {
+                const id = Date.now();
+                const task: Task = {
+                  id,
+                  title: "Checklist",
+                  project: "Inbox",
+                  priority: "Medium",
+                  focusMinutes: workspace.settings.defaultFocusMinutes ?? 30,
+                  energy: workspace.settings.defaultEnergy ?? "Medium",
+                  status: "Not started",
+                  checklist: [""],
+                  checklistProgress: [false],
+                };
+                void updateTasks([...workspace.tasks, task]);
+                navigation.navigate("SimpleChecklist", { taskId: id });
+              }}
+              style={[styles.headerChip, { backgroundColor: theme.surface, borderColor: theme.border }]}
+            >
+              <Feather name="check-circle" size={18} color={theme.text} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
               accessibilityLabel="New task"
               onPress={() => setCaptureOpen(true)}
               style={[styles.addButton, { backgroundColor: theme.text }]}
@@ -259,7 +282,10 @@ export function TasksScreen() {
             selectionMode={selecting}
             selected={visibleSelected.includes(item.id)}
             onToggleSelect={() => toggleOne(item.id)}
-            onPress={() => navigation.navigate("TaskDetail", { taskId: item.id })}
+            onPress={() => {
+              const hasList = (item.checklist ?? []).some((step) => step.trim().length > 0);
+              navigation.navigate(hasList ? "SimpleChecklist" : "TaskDetail", { taskId: item.id });
+            }}
             onToggleDone={() => toggleDone(item.id)}
             onRestore={filter === "Done" ? () => restoreTask(item.id) : undefined}
             onDelete={() => updateTasks(workspace.tasks.filter((t) => t.id !== item.id))}
