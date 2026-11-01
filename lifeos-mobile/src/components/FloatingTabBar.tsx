@@ -138,6 +138,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               ]}
             >
               <View
+                pointerEvents={focused ? "none" : "auto"}
                 style={
                   focused && pillWidth !== undefined
                     ? [
