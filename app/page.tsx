@@ -6653,6 +6653,11 @@ function CommandPalette({
   onDismissCaptureCommands: () => void;
 }) {
   const [suggestedIndex, setSuggestedIndex] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Focus the input explicitly on open, so the search bar takes typing right away.
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
   // Drop the palette just under the search box, like App Store's search, instead of centering it.
   const [anchor, setAnchor] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   useLayoutEffect(() => {
@@ -6743,6 +6748,7 @@ function CommandPalette({
         <div className="command-input" style={anchor ? { height: anchor.height, borderRadius: 12 } : undefined}>
           <Search size={20} />
           <input
+            ref={inputRef}
             autoFocus
             placeholder="Search or type /t, /break, /focus…"
             value={query}
