@@ -24,7 +24,6 @@ import { NowScreen } from "../screens/NowScreen";
 import { TasksScreen } from "../screens/TasksScreen";
 import { TaskDetailScreen } from "../screens/TaskDetailScreen";
 import { SimpleChecklistScreen } from "../screens/SimpleChecklistScreen";
-import { ListsHomeScreen } from "../screens/ListsHomeScreen";
 import { CalendarScreen } from "../screens/CalendarScreen";
 import { ConnectWebScreen } from "../screens/ConnectWebScreen";
 import { ProjectDetailScreen } from "../screens/ProjectDetailScreen";
@@ -58,7 +57,6 @@ const Tab = createBottomTabNavigator();
 const NowStack = createNativeStackNavigator();
 const LifeStack = createNativeStackNavigator();
 const TasksStack = createNativeStackNavigator();
-const ListsStack = createNativeStackNavigator();
 const CalendarStack = createNativeStackNavigator();
 const KeptStack = createNativeStackNavigator();
 const LibraryStack = createNativeStackNavigator();
@@ -69,8 +67,7 @@ const CareerStack = createNativeStackNavigator();
 /** Feather stroke icons — lighter and less boxy than filled Ionicons squares. */
 const TAB_ICONS: Record<string, keyof typeof Feather.glyphMap> = {
   NowTab: "zap",
-  TasksTab: "check-square",
-  ListsTab: "check-circle",
+  TasksTab: "check-circle",
   CalendarTab: "calendar",
   KeptTab: "bookmark",
   LifeTab: "home",
@@ -141,17 +138,6 @@ function TasksStackNavigator() {
       <TasksStack.Screen name="TaskDetail" component={TaskDetailScreen} />
       <TasksStack.Screen name="SimpleChecklist" component={SimpleChecklistScreen} />
     </TasksStack.Navigator>
-  );
-}
-
-function ListsStackNavigator() {
-  const screenOptions = useStackScreenOptions();
-  return (
-    <ListsStack.Navigator screenOptions={screenOptions}>
-      <ListsStack.Screen name="ListsHome" component={ListsHomeScreen} />
-      <ListsStack.Screen name="SimpleChecklist" component={SimpleChecklistScreen} />
-      <ListsStack.Screen name="TaskDetail" component={TaskDetailScreen} />
-    </ListsStack.Navigator>
   );
 }
 
@@ -369,11 +355,6 @@ export function RootNavigator() {
         >
           <Tab.Screen name="NowTab" component={NowStackNavigator} options={{ title: "Now", tabBarLabel: "Now" }} />
           <Tab.Screen name="TasksTab" component={TasksStackNavigator} options={{ title: "Tasks", tabBarLabel: "Tasks" }} />
-          <Tab.Screen
-            name="ListsTab"
-            component={ListsStackNavigator}
-            options={{ title: "To-do", tabBarLabel: "To-do" }}
-          />
           <Tab.Screen
             name="CalendarTab"
             component={CalendarStackNavigator}
