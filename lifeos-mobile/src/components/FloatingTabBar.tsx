@@ -18,7 +18,12 @@ import type { SettingsState } from "../types";
 
 const PILL_H = 64;
 const LIGHT_INSET = 5;
+/** Idle chrome — bar, highlight, and unselected icons stay monochrome. */
 const INACTIVE = "#8E8E93";
+const MONO_BORDER_LIGHT = "#D1D1D6";
+const MONO_BORDER_DARK = "#3A3A3C";
+const MONO_FILL_LIGHT = "rgba(142,142,147,0.14)";
+const MONO_FILL_DARK = "rgba(142,142,147,0.22)";
 
 function tabTint(routeName: string, accent: string, settings: SettingsState): string {
   switch (routeName) {
@@ -49,18 +54,14 @@ function tabTint(routeName: string, accent: string, settings: SettingsState): st
   }
 }
 
-function tintFill(hex: string, dark: boolean) {
-  return dark ? `${hex}33` : `${hex}22`;
-}
-
 function isHidden(options: BottomTabBarProps["descriptors"][string]["options"]) {
   const style = options.tabBarItemStyle as { display?: string } | undefined;
   return style?.display === "none";
 }
 
 /**
- * Floating tab bar — Pressable + RN Animated only.
- * No react-native-gesture-handler Gesture API (needs Reanimated worklets).
+ * Floating tab bar — monochrome chrome; only the selected hub is colored.
+ * Pressable + RN Animated only (no Reanimated worklets).
  */
 export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { theme, workspace } = useLifeOS();
@@ -121,10 +122,10 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     LIGHT_INSET,
   );
 
-  const dark = theme.bg === "#111214" || theme.surface === "#191A1D";
+  const dark = theme.bg === "#111214" || theme.surface === "#191A1D" || theme.bg === "#0B1020";
   const pillBg = dark ? theme.surface : "#FFFFFF";
-  const activeRoute = visible[activeIndex]?.name ?? "NowTab";
-  const activeTint = tabTint(activeRoute, theme.accent, workspace.settings);
+  const monoBorder = dark ? MONO_BORDER_DARK : MONO_BORDER_LIGHT;
+  const monoFill = dark ? MONO_FILL_DARK : MONO_FILL_LIGHT;
   const lightWidth = Math.max(0, tabW - LIGHT_INSET * 2);
 
   const onTrackLayout = (e: LayoutChangeEvent) => {
@@ -147,7 +148,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
           styles.pill,
           {
             backgroundColor: pillBg,
-            borderColor: activeTint,
+            borderColor: monoBorder,
           },
         ]}
       >
@@ -159,8 +160,8 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
                 styles.light,
                 {
                   width: lightWidth,
-                  borderColor: activeTint,
-                  backgroundColor: tintFill(activeTint, dark),
+                  borderColor: monoBorder,
+                  backgroundColor: monoFill,
                   transform: [{ translateX: lightTranslateX }],
                 },
               ]}
@@ -173,6 +174,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
                 ? options.tabBarLabel
                 : options.title ?? route.name;
             const focused = index === activeIndex;
+            // Color only the selected hub; everything else stays gray.
             const color = focused ? tabTint(route.name, theme.accent, workspace.settings) : INACTIVE;
             const iconName = (options.tabBarIcon
               ? undefined
