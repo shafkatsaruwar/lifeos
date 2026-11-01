@@ -6654,12 +6654,13 @@ function CommandPalette({
 }) {
   const [suggestedIndex, setSuggestedIndex] = useState(-1);
   // Drop the palette just under the search box, like App Store's search, instead of centering it.
-  const [anchor, setAnchor] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [anchor, setAnchor] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   useLayoutEffect(() => {
     const trigger = document.querySelector(".search-trigger");
     if (!trigger) return;
     const rect = trigger.getBoundingClientRect();
-    setAnchor({ top: rect.bottom + 6, left: rect.left, width: Math.max(rect.width, 360) });
+    // The palette starts on top of the search bar, so its input row replaces the bar.
+    setAnchor({ top: rect.top, left: rect.left, width: Math.max(rect.width, 320), height: rect.height });
   }, []);
   const slashMode = query.trim().startsWith("/");
   const commandMatches = slashMode
@@ -6739,7 +6740,7 @@ function CommandPalette({
         initial={{ scale: 0.98, y: -6 }}
         animate={{ scale: 1, y: 0 }}
       >
-        <div className="command-input">
+        <div className="command-input" style={anchor ? { height: anchor.height, borderRadius: 12 } : undefined}>
           <Search size={20} />
           <input
             autoFocus
