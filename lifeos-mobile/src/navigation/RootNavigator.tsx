@@ -70,7 +70,7 @@ const CareerStack = createNativeStackNavigator();
 const TAB_ICONS: Record<string, keyof typeof Feather.glyphMap> = {
   NowTab: "zap",
   TasksTab: "check-square",
-  ListsTab: "check-circle",
+  ListsTab: "list",
   CalendarTab: "calendar",
   KeptTab: "bookmark",
   LifeTab: "home",
