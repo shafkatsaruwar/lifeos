@@ -12,6 +12,7 @@ import {
   PanelDialog,
   type FocusIslandSession,
 } from "@/components/motion";
+import Link from "next/link";
 import { useReduceMotion } from "@/lib/motion";
 import "./motion-lab.css";
 
@@ -283,9 +284,9 @@ export default function MotionLabClient() {
           >
             {forceReduce ? "reduceMotion on" : "reduceMotion off"}
           </button>
-          <a href="/" style={{ fontSize: 11, color: "var(--muted)", textDecoration: "none" }}>
+          <Link href="/" style={{ fontSize: 11, color: "var(--muted)", textDecoration: "none" }}>
             ← Back to LifeOS
-          </a>
+          </Link>
         </div>
       </header>
 
