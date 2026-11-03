@@ -485,6 +485,23 @@ export function createInterview(
   return next;
 }
 
+/**
+ * Once an interview is finished, the application's next action is retired if it
+ * was due on or before the interview day. Later actions are left alone.
+ */
+function retireNextActionBefore(hub: CareerHub, applicationId: string, interviewStartsAt: string): CareerHub {
+  const app = hub.applications.find((a) => a.id === applicationId);
+  if (!app?.nextActionDueAt) return hub;
+  if (app.nextActionDueAt.slice(0, 10) > interviewStartsAt.slice(0, 10)) return hub;
+  const now = nowIso();
+  return {
+    ...hub,
+    applications: hub.applications.map((a) =>
+      a.id === applicationId ? { ...a, nextAction: undefined, nextActionDueAt: undefined, updatedAt: now } : a,
+    ),
+  };
+}
+
 export function updateInterview(
   hub: CareerHub,
   interviewId: string,
@@ -501,6 +518,9 @@ export function updateInterview(
   next = pushActivity(next, "interview_updated", `Updated interview: ${nextInterview.title}`, {
     applicationId: nextInterview.applicationId,
   });
+  if (patch.outcome && patch.outcome !== "pending") {
+    next = retireNextActionBefore(next, nextInterview.applicationId, nextInterview.startsAt);
+  }
   if (patch.outcome && patch.outcome !== "pending" && current.outcome === "pending") {
     next = publishCareerObservation(next, {
       id: `obs-interview-done-${interviewId}-${now}`,
