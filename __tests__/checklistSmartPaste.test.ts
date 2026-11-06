@@ -1,4 +1,10 @@
-import { createItemBlock } from "../lifeos-mobile/src/lib/checklistBlocks";
+import {
+  blocksToLegacy,
+  createItemBlock,
+  ensureTrailingBlankItem,
+  finalizeHeadingEdit,
+  resolveChecklistBlocks,
+} from "../lifeos-mobile/src/lib/checklistBlocks";
 import {
   applyChecklistBlockTextChange,
   applyChecklistItemTextChange,
@@ -205,6 +211,97 @@ describe("parsePastedChecklistBlocks / headings", () => {
       { type: "item", text: "Run" },
       { type: "heading", text: "Clothes" },
       { type: "item", text: "Socks" },
+    ]);
+  });
+
+  it("does not drop # / ## / ### headings when listing item texts only", () => {
+    // parsePastedChecklistLines is item-only by design; blocks API must keep headings.
+    expect(parsePastedChecklistBlocks("### TECH\nCharger").map((l) => l.type)).toEqual([
+      "heading",
+      "item",
+    ]);
+  });
+});
+
+describe("packing-list Smart Paste regression", () => {
+  const PACKING_LIST = `# CLOTHES
+T-shirts
+Socks
+
+# HEALTH & TOILETRIES
+Toothbrush
+Sunscreen
+
+# TECH
+Charger
+Adapters`;
+
+  it("pastes the packing list as heading + item blocks in order", () => {
+    const pasted = applyChecklistBlockTextChange({
+      blocks: [createItemBlock("", false, "blank")],
+      index: 0,
+      previousText: "",
+      nextText: PACKING_LIST,
+      selectionStart: 0,
+      selectionEnd: 0,
+    });
+    expect(pasted.kind).toBe("split");
+    if (pasted.kind !== "split") return;
+
+    expect(pasted.blocks.map((b) => ({ type: b.type, text: b.text }))).toEqual([
+      { type: "heading", text: "CLOTHES" },
+      { type: "item", text: "T-shirts" },
+      { type: "item", text: "Socks" },
+      { type: "heading", text: "HEALTH & TOILETRIES" },
+      { type: "item", text: "Toothbrush" },
+      { type: "item", text: "Sunscreen" },
+      { type: "heading", text: "TECH" },
+      { type: "item", text: "Charger" },
+      { type: "item", text: "Adapters" },
+    ]);
+
+    // Spurious empty blur after remount must not delete headings.
+    let blocks = pasted.blocks;
+    for (let i = 0; i < blocks.length; i += 1) {
+      if (blocks[i].type === "heading") {
+        blocks = finalizeHeadingEdit(blocks, i, "");
+      }
+    }
+    expect(blocks.filter((b) => b.type === "heading").map((b) => b.text)).toEqual([
+      "CLOTHES",
+      "HEALTH & TOILETRIES",
+      "TECH",
+    ]);
+
+    // App restart: only legacy arrays survive → headings must still resolve.
+    const saved = ensureTrailingBlankItem(blocks);
+    const legacy = blocksToLegacy(saved);
+    expect(legacy.checklist.filter((line) => line.startsWith("# "))).toEqual([
+      "# CLOTHES",
+      "# HEALTH & TOILETRIES",
+      "# TECH",
+    ]);
+    const reloaded = resolveChecklistBlocks({
+      checklist: legacy.checklist,
+      checklistProgress: legacy.checklistProgress,
+      taskId: 99,
+    });
+    expect(reloaded.filter((b) => b.type === "heading").map((b) => b.text)).toEqual([
+      "CLOTHES",
+      "HEALTH & TOILETRIES",
+      "TECH",
+    ]);
+    expect(reloaded.map((b) => `${b.type}:${b.text}`)).toEqual([
+      "heading:CLOTHES",
+      "item:T-shirts",
+      "item:Socks",
+      "heading:HEALTH & TOILETRIES",
+      "item:Toothbrush",
+      "item:Sunscreen",
+      "heading:TECH",
+      "item:Charger",
+      "item:Adapters",
+      "item:",
     ]);
   });
 });

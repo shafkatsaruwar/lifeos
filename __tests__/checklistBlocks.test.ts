@@ -33,6 +33,23 @@ describe("migrateLegacyChecklistToBlocks", () => {
       checklistProgress: [false, true],
     });
   });
+
+  it("encodes headings in legacy mirror and restores them on migrate", () => {
+    const blocks = [
+      createHeadingBlock("CLOTHES", "h1"),
+      createItemBlock("Socks", true, "i1"),
+    ];
+    const legacy = blocksToLegacy(blocks);
+    expect(legacy).toEqual({
+      checklist: ["# CLOTHES", "Socks"],
+      checklistProgress: [false, true],
+    });
+    const restored = migrateLegacyChecklistToBlocks(legacy.checklist, legacy.checklistProgress, 5);
+    expect(restored.map((b) => ({ type: b.type, text: b.text }))).toEqual([
+      { type: "heading", text: "CLOTHES" },
+      { type: "item", text: "Socks" },
+    ]);
+  });
 });
 
 describe("resolveChecklistBlocks", () => {
@@ -135,6 +152,16 @@ describe("finalizeHeadingEdit (keyboard dismiss / blur regression)", () => {
     });
     expect(next.find((b) => b.id === "i0")).toMatchObject({ text: "Milk", done: true });
     expect(next.find((b) => b.id === "i1")).toMatchObject({ text: "Eggs", done: false });
+  });
+
+  it("keeps committed heading text when blur draft is spuriously empty", () => {
+    // After Smart Paste, FlatList remount can blur with draft "" while block.text is set.
+    const items = [
+      createHeadingBlock("CLOTHES", "h1"),
+      createItemBlock("Socks", false, "i1"),
+    ];
+    const next = finalizeHeadingEdit(items, 0, "");
+    expect(next.find((b) => b.id === "h1")).toMatchObject({ type: "heading", text: "CLOTHES" });
   });
 
   it("discards only a genuinely empty heading on blur", () => {

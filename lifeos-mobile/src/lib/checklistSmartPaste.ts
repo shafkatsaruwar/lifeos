@@ -4,6 +4,7 @@
  */
 
 import {
+  blocksToLegacy,
   createHeadingBlock,
   createItemBlock,
   type ChecklistBlock,
@@ -13,23 +14,25 @@ import {
 const LIST_MARKER_RE =
   /^\s*(?:(?:[-*+•·▪▸►○●]|–|—)|\d+[.)]|[a-zA-Z][.)]|\[[ xX]?\]|[☐☑✓✔])\s+/u;
 
-const MARKDOWN_HEADING_RE = /^(#{1,6})\s+(.+)$/;
+const MARKDOWN_HEADING_RE = /^(#{1,6})\s+(.+)$/u;
 
 /** Strip a leading bullet / number / checkbox marker from one line. */
 export function stripChecklistListMarker(line: string): string {
-  const trimmedStart = line.replace(/^\s+/, "");
-  return trimmedStart.replace(LIST_MARKER_RE, "").replace(/\s+$/, "");
+  const trimmedStart = line.replace(/^\s+/u, "");
+  return trimmedStart.replace(LIST_MARKER_RE, "").replace(/\s+$/u, "");
 }
 
 export type PastedChecklistLine =
   | { type: "item"; text: string }
   | { type: "heading"; text: string };
 
-/** Parse one pasted line into an item or explicit markdown heading (`#` / `##`). */
+/** Parse one pasted line into an item or explicit markdown heading (`#` / `##` / `###`). */
 export function parsePastedChecklistLine(rawLine: string): PastedChecklistLine | null {
-  const trimmed = rawLine.replace(/^\s+/, "").replace(/\s+$/, "");
+  const trimmed = rawLine.replace(/^\s+/u, "").replace(/\s+$/u, "");
   if (!trimmed) return null;
 
+  // Headings must be recognized before list-marker stripping so `# Title`
+  // never becomes a checkbox item or gets dropped.
   const heading = trimmed.match(MARKDOWN_HEADING_RE);
   if (heading) {
     const text = (heading[2] ?? "").trim();
@@ -40,14 +43,19 @@ export function parsePastedChecklistLine(rawLine: string): PastedChecklistLine |
   return text ? { type: "item", text } : null;
 }
 
+/** Split on LF / CR / Unicode line separators (some clipboard sources use U+2028). */
+export function splitChecklistPasteLines(raw: string): string[] {
+  return raw.split(/\r\n|\n|\r|\u2028|\u2029/u);
+}
+
 /**
  * Split pasted text into checklist lines (items + headings).
- * Drops empty lines; strips list markers; recognizes `# Heading` lines.
+ * Drops empty lines; strips list markers; recognizes `#` / `##` / `###` headings.
+ * Never filters out heading lines — they become heading blocks.
  */
 export function parsePastedChecklistBlocks(raw: string): PastedChecklistLine[] {
   if (!raw) return [];
-  return raw
-    .split(/\r\n|\n|\r/)
+  return splitChecklistPasteLines(raw)
     .map(parsePastedChecklistLine)
     .filter((line): line is PastedChecklistLine => line != null);
 }
@@ -81,7 +89,7 @@ export function extractInsertedText(
 }
 
 export function isMultilineChecklistPaste(insertedText: string): boolean {
-  return /[\r\n]/.test(insertedText);
+  return /[\r\n\u2028\u2029]/.test(insertedText);
 }
 
 export type ChecklistTextChangeResult =
@@ -156,7 +164,7 @@ export function applyChecklistBlockTextChange(args: {
     return { kind: "replace", text: before + after };
   }
 
-  const rawParts = inserted.split(/\r\n|\n|\r/);
+  const rawParts = splitChecklistPasteLines(inserted);
   const startsWithBreak =
     rawParts.length > 1 && parsePastedChecklistLine(rawParts[0] ?? "") == null;
   const endsWithBreak =
@@ -230,7 +238,7 @@ function buildPasteSegment(args: {
 
 /**
  * Legacy string-array paste API (used by older tests / mirrors).
- * Headings are flattened to their display text as ordinary items.
+ * Headings are encoded as `# Title` lines (same as blocksToLegacy) — never dropped.
  */
 export function applyChecklistItemTextChange(args: {
   items: string[];
@@ -254,21 +262,11 @@ export function applyChecklistItemTextChange(args: {
   });
   if (result.kind === "replace") return result;
 
-  const checklist: string[] = [];
-  const checklistProgress: boolean[] = [];
-  for (const block of result.blocks) {
-    if (block.type === "heading") {
-      checklist.push(block.text);
-      checklistProgress.push(false);
-    } else {
-      checklist.push(block.text);
-      checklistProgress.push(block.done);
-    }
-  }
+  const legacy = blocksToLegacy(result.blocks);
   return {
     kind: "split",
-    checklist,
-    checklistProgress,
-    focusIndex: Math.min(result.focusIndex, checklist.length - 1),
+    checklist: legacy.checklist,
+    checklistProgress: legacy.checklistProgress,
+    focusIndex: Math.min(result.focusIndex, legacy.checklist.length - 1),
   };
 }

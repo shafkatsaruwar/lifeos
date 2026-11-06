@@ -38,6 +38,22 @@ export function createHeadingBlock(text = "", id?: string): ChecklistHeadingBloc
   return { id: id ?? createChecklistBlockId("h"), type: "heading", text };
 }
 
+/** Legacy mirror encodes headings as `# Title` / `## Title` lines in `checklist`. */
+export const LEGACY_HEADING_LINE_RE = /^(#{1,6})\s+(.+)$/;
+
+export function legacyLineToBlock(
+  text: string,
+  done: boolean,
+  id?: string,
+): ChecklistBlock {
+  const heading = text.match(LEGACY_HEADING_LINE_RE);
+  if (heading) {
+    const title = (heading[2] ?? "").trim();
+    if (title) return createHeadingBlock(title, id);
+  }
+  return createItemBlock(text, done, id);
+}
+
 /** Migrate legacy parallel arrays into blocks (stable ids from task + index). */
 export function migrateLegacyChecklistToBlocks(
   checklist: string[] | undefined,
@@ -47,7 +63,7 @@ export function migrateLegacyChecklistToBlocks(
   const items = checklist ?? [];
   const progress = checklistProgress ?? [];
   return items.map((text, index) =>
-    createItemBlock(
+    legacyLineToBlock(
       text,
       Boolean(progress[index]),
       taskId != null ? `legacy-${taskId}-${index}` : undefined,
@@ -84,7 +100,9 @@ export function resolveChecklistBlocks(input: {
 
 /**
  * End editing on a heading: commit the draft text, discard only if genuinely empty.
- * Pure — used by the screen and regression tests (no React state / timers).
+ * If the draft is blank but the committed block still has text (common after a
+ * FlatList remount blanks the TextInput draft), keep the committed text — never
+ * delete a nonempty heading because of a stale empty draft.
  */
 export function finalizeHeadingEdit(
   blocks: ChecklistBlock[],
@@ -93,11 +111,12 @@ export function finalizeHeadingEdit(
 ): ChecklistBlock[] {
   const block = blocks[index];
   if (!block || block.type !== "heading") return blocks;
-  if (draftText.trim() === "") {
+  const text = draftText.trim() !== "" ? draftText : block.text;
+  if (text.trim() === "") {
     return blocks.filter((_, i) => i !== index);
   }
-  if (block.text === draftText) return blocks;
-  return blocks.map((b, i) => (i === index && b.type === "heading" ? { ...b, text: draftText } : b));
+  if (block.text === text) return blocks;
+  return blocks.map((b, i) => (i === index && b.type === "heading" ? { ...b, text } : b));
 }
 
 /** End editing on an item: drop mid-list empties; keep trailing blank. */
@@ -171,16 +190,27 @@ export function convertChecklistBlockType(
   return blocks.map((b, i) => (i === index ? item : b));
 }
 
-/** Mirror blocks back to legacy fields (items only — headings omitted). */
+/**
+ * Mirror blocks into legacy `checklist` / `checklistProgress`.
+ * Headings are encoded as `# Title` so a blocks-less reload still restores them
+ * (RTDB/clients that drop `checklistBlocks` must not erase section structure).
+ */
 export function blocksToLegacy(blocks: ChecklistBlock[]): {
   checklist: string[];
   checklistProgress: boolean[];
 } {
-  const items = blocks.filter((b): b is ChecklistItemBlock => b.type === "item");
-  return {
-    checklist: items.map((item) => item.text),
-    checklistProgress: items.map((item) => item.done),
-  };
+  const checklist: string[] = [];
+  const checklistProgress: boolean[] = [];
+  for (const block of blocks) {
+    if (block.type === "heading") {
+      checklist.push(`# ${block.text}`);
+      checklistProgress.push(false);
+    } else {
+      checklist.push(block.text);
+      checklistProgress.push(block.done);
+    }
+  }
+  return { checklist, checklistProgress };
 }
 
 export function ensureTrailingBlankItem(blocks: ChecklistBlock[]): ChecklistBlock[] {
