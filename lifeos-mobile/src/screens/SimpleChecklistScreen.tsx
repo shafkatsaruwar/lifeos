@@ -1,7 +1,9 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActionSheetIOS,
+  Alert,
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
@@ -15,12 +17,24 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Page } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
-import { applyChecklistItemTextChange } from "../lib/checklistSmartPaste";
+import {
+  blocksToLegacy,
+  createHeadingBlock,
+  createItemBlock,
+  deleteHeadingKeepItems,
+  ensureTrailingBlankItem,
+  isTrailingBlankItem,
+  moveHeadingAlone,
+  moveSection,
+  resolveChecklistBlocks,
+  type ChecklistBlock,
+} from "../lib/checklistBlocks";
+import { applyChecklistBlockTextChange } from "../lib/checklistSmartPaste";
 import { useLifeOS } from "../lib/LifeOSContext";
 
 /**
- * Apple Notes–style checklist: circular checkboxes + one line per item.
- * Backed by an existing Task's checklist / checklistProgress (same Firebase sync).
+ * Apple Notes–style checklist: circular checkboxes + section headings.
+ * Backed by Task.checklistBlocks (with legacy checklist mirrors for sync).
  */
 export function SimpleChecklistScreen() {
   const navigation = useNavigation<any>();
@@ -32,31 +46,72 @@ export function SimpleChecklistScreen() {
   const task = useMemo(() => workspace.tasks.find((t) => t.id === taskId), [workspace.tasks, taskId]);
   const titleRef = useRef<TextInput>(null);
   const lastInputRef = useRef<TextInput>(null);
-  const inputRefs = useRef<Map<number, TextInput>>(new Map());
-  const selectionByIndex = useRef<Map<number, { start: number; end: number }>>(new Map());
+  const inputRefs = useRef<Map<string, TextInput>>(new Map());
+  const selectionById = useRef<Map<string, { start: number; end: number }>>(new Map());
+  const [insertIndex, setInsertIndex] = useState<number | null>(null);
 
-  const items = task?.checklist ?? [];
-  const progress = task?.checklistProgress ?? [];
+  const blocks = useMemo(
+    () =>
+      task
+        ? resolveChecklistBlocks({
+            checklistBlocks: task.checklistBlocks,
+            checklist: task.checklist,
+            checklistProgress: task.checklistProgress,
+            taskId: task.id,
+          })
+        : [],
+    [task],
+  );
 
-  const persist = (patch: Partial<typeof task>) => {
+  const persistBlocks = (nextBlocks: ChecklistBlock[]) => {
     if (!task) return;
-    void updateTasks(workspace.tasks.map((t) => (t.id === task.id ? { ...t, ...patch } : t)));
+    const ensured = ensureTrailingBlankItem(nextBlocks);
+    const legacy = blocksToLegacy(ensured);
+    void updateTasks(
+      workspace.tasks.map((t) =>
+        t.id === task.id
+          ? {
+              ...t,
+              checklistBlocks: ensured,
+              checklist: legacy.checklist,
+              checklistProgress: legacy.checklistProgress,
+            }
+          : t,
+      ),
+    );
   };
 
-  // Keep a blank trailing row so typing feels like Notes.
+  // Migrate legacy → blocks once, and keep a trailing blank item.
   useEffect(() => {
     if (!task) return;
-    const list = task.checklist ?? [];
-    const done = task.checklistProgress ?? [];
-    if (list.length === 0 || (list[list.length - 1] ?? "").trim() !== "") {
-      const nextProgress = [...done.slice(0, list.length), false];
-      persist({
-        checklist: [...list, ""],
-        checklistProgress: nextProgress,
-      });
+    const resolved = resolveChecklistBlocks({
+      checklistBlocks: task.checklistBlocks,
+      checklist: task.checklist,
+      checklistProgress: task.checklistProgress,
+      taskId: task.id,
+    });
+    const ensured = ensureTrailingBlankItem(resolved);
+    const needsMigrate = !task.checklistBlocks?.length && (task.checklist?.length ?? 0) > 0;
+    const needsTrailing =
+      ensured.length !== resolved.length ||
+      ensured[ensured.length - 1]?.id !== resolved[resolved.length - 1]?.id;
+    if (needsMigrate || needsTrailing) {
+      const legacy = blocksToLegacy(ensured);
+      void updateTasks(
+        workspace.tasks.map((t) =>
+          t.id === task.id
+            ? {
+                ...t,
+                checklistBlocks: ensured,
+                checklist: legacy.checklist,
+                checklistProgress: legacy.checklistProgress,
+              }
+            : t,
+        ),
+      );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when list shape needs a trailing blank
-  }, [task?.id, items.length, items[items.length - 1]]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- shape-driven migrate / trailing blank
+  }, [task?.id, blocks.length, blocks[blocks.length - 1]?.type, blocks[blocks.length - 1]?.text]);
 
   if (!task) {
     return (
@@ -71,30 +126,46 @@ export function SimpleChecklistScreen() {
     );
   }
 
-  const setTitle = (title: string) => persist({ title });
-
-  const toggle = (index: number) => {
-    const next = items.map((_, i) => progress[i] ?? false);
-    next[index] = !next[index];
-    persist({ checklistProgress: next });
+  const setTitle = (title: string) => {
+    void updateTasks(workspace.tasks.map((t) => (t.id === task.id ? { ...t, title } : t)));
   };
 
-  const focusRow = (index: number) => {
+  const focusBlock = (id: string) => {
     requestAnimationFrame(() => {
-      const node = inputRefs.current.get(index) ?? (index >= items.length - 1 ? lastInputRef.current : null);
-      node?.focus();
+      setTimeout(() => {
+        inputRefs.current.get(id)?.focus();
+      }, 30);
     });
   };
 
-  const setItem = (index: number, value: string) => {
-    const previousText = items[index] ?? "";
-    const sel = selectionByIndex.current.get(index) ?? {
+  const focusIndex = (index: number) => {
+    const block = blocks[index];
+    if (block) focusBlock(block.id);
+  };
+
+  const toggleItem = (index: number) => {
+    const block = blocks[index];
+    if (!block || block.type !== "item") return;
+    if (isTrailingBlankItem(blocks, index)) {
+      lastInputRef.current?.focus();
+      return;
+    }
+    const next = blocks.map((b, i) =>
+      i === index && b.type === "item" ? { ...b, done: !b.done } : b,
+    );
+    persistBlocks(next);
+  };
+
+  const setItemText = (index: number, value: string) => {
+    const block = blocks[index];
+    if (!block || block.type !== "item") return;
+    const previousText = block.text;
+    const sel = selectionById.current.get(block.id) ?? {
       start: previousText.length,
       end: previousText.length,
     };
-    const change = applyChecklistItemTextChange({
-      items,
-      progress: items.map((_, i) => progress[i] ?? false),
+    const change = applyChecklistBlockTextChange({
+      blocks,
       index,
       previousText,
       nextText: value,
@@ -103,60 +174,150 @@ export function SimpleChecklistScreen() {
     });
 
     if (change.kind === "split") {
-      // One persist = one undoable checklist mutation where the host supports it.
-      let checklist = change.checklist;
-      let checklistProgress = change.checklistProgress;
-      if (checklist.length === 0 || (checklist[checklist.length - 1] ?? "").trim() !== "") {
-        checklist = [...checklist, ""];
-        checklistProgress = [...checklistProgress, false];
-      }
-      persist({ checklist, checklistProgress });
-      focusRow(change.focusIndex);
+      persistBlocks(change.blocks);
+      const focus = change.blocks[change.focusIndex];
+      if (focus) focusBlock(focus.id);
       return;
     }
 
-    const next = items.map((c, i) => (i === index ? change.text : c));
-    const nextProgress = items.map((_, i) => progress[i] ?? false);
-    // Growing the last blank into text → append a new blank.
-    if (index === items.length - 1 && change.text.trim() !== "" && (items[items.length - 1] ?? "") === "") {
-      next.push("");
-      nextProgress.push(false);
-    }
-    persist({ checklist: next, checklistProgress: nextProgress });
+    const next = blocks.map((b, i) => (i === index && b.type === "item" ? { ...b, text: change.text } : b));
+    persistBlocks(next);
+  };
+
+  const setHeadingText = (index: number, value: string) => {
+    const next = blocks.map((b, i) => (i === index && b.type === "heading" ? { ...b, text: value } : b));
+    persistBlocks(next);
   };
 
   const removeEmptyOnBlur = (index: number) => {
-    // Don't remove the trailing blank; drop mid-list empties.
-    if (index >= items.length - 1) return;
-    if ((items[index] ?? "").trim() !== "") return;
-    persist({
-      checklist: items.filter((_, i) => i !== index),
-      checklistProgress: progress.filter((_, i) => i !== index),
-    });
+    const block = blocks[index];
+    if (!block) return;
+    if (block.type === "heading") {
+      if (block.text.trim() === "") {
+        persistBlocks(blocks.filter((_, i) => i !== index));
+      }
+      return;
+    }
+    if (isTrailingBlankItem(blocks, index)) return;
+    if (block.text.trim() !== "") return;
+    persistBlocks(blocks.filter((_, i) => i !== index));
   };
 
   const onSubmitItem = (index: number) => {
-    const text = items[index] ?? "";
-    // Empty Return → dismiss editing (native Notes / Reminders feel).
-    if (text.trim() === "") {
+    const block = blocks[index];
+    if (!block || block.type !== "item") return;
+    if (block.text.trim() === "") {
       Keyboard.dismiss();
       return;
     }
+    const nextIsEmptyItem =
+      index < blocks.length - 1 &&
+      blocks[index + 1]?.type === "item" &&
+      (blocks[index + 1] as { text: string }).text.trim() === "";
+    let next = [...blocks];
+    if (!nextIsEmptyItem) {
+      next = [...blocks.slice(0, index + 1), createItemBlock(""), ...blocks.slice(index + 1)];
+    }
+    persistBlocks(next);
+    focusIndex(index + 1);
+  };
 
-    const next = [...items];
-    const nextProgress = items.map((_, i) => progress[i] ?? false);
-    const nextIsEmpty = index < items.length - 1 && (items[index + 1] ?? "").trim() === "";
-    if (!nextIsEmpty) {
-      next.splice(index + 1, 0, "");
-      nextProgress.splice(index + 1, 0, false);
+  const onSubmitHeading = (index: number) => {
+    const block = blocks[index];
+    if (!block || block.type !== "heading") return;
+    if (block.text.trim() === "") {
+      persistBlocks(blocks.filter((_, i) => i !== index));
+      Keyboard.dismiss();
+      return;
     }
-    // Ensure trailing blank still exists after a mid-list insert.
-    if ((next[next.length - 1] ?? "").trim() !== "") {
-      next.push("");
-      nextProgress.push(false);
+    const item = createItemBlock("");
+    const next = [...blocks.slice(0, index + 1), item, ...blocks.slice(index + 1)];
+    persistBlocks(next);
+    focusBlock(item.id);
+  };
+
+  const insertionAt = () => {
+    if (insertIndex != null && insertIndex >= 0 && insertIndex <= blocks.length) return insertIndex;
+    // Default: before the trailing blank (or at end).
+    if (blocks.length > 0 && isTrailingBlankItem(blocks, blocks.length - 1)) return blocks.length - 1;
+    return blocks.length;
+  };
+
+  const insertChecklistItem = () => {
+    const at = insertionAt();
+    const item = createItemBlock("");
+    persistBlocks([...blocks.slice(0, at), item, ...blocks.slice(at)]);
+    focusBlock(item.id);
+  };
+
+  const insertSectionHeading = () => {
+    const at = insertionAt();
+    const heading = createHeadingBlock("");
+    persistBlocks([...blocks.slice(0, at), heading, ...blocks.slice(at)]);
+    focusBlock(heading.id);
+  };
+
+  const openInsertMenu = () => {
+    const options = ["Checklist item", "Section heading", "Cancel"];
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: 2,
+          userInterfaceStyle: "light",
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) insertChecklistItem();
+          if (buttonIndex === 1) insertSectionHeading();
+        },
+      );
+      return;
     }
-    persist({ checklist: next, checklistProgress: nextProgress });
-    focusRow(index + 1);
+    Alert.alert("Insert", undefined, [
+      { text: "Checklist item", onPress: insertChecklistItem },
+      { text: "Section heading", onPress: insertSectionHeading },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const openHeadingMenu = (index: number) => {
+    const deleteOnly = () => persistBlocks(deleteHeadingKeepItems(blocks, index));
+    const moveAlone = (dir: -1 | 1) => persistBlocks(moveHeadingAlone(blocks, index, dir));
+    const moveSect = (dir: -1 | 1) => persistBlocks(moveSection(blocks, index, dir));
+
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: [
+            "Move heading up",
+            "Move heading down",
+            "Move section up",
+            "Move section down",
+            "Delete heading",
+            "Cancel",
+          ],
+          destructiveButtonIndex: 4,
+          cancelButtonIndex: 5,
+          userInterfaceStyle: "light",
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) moveAlone(-1);
+          if (buttonIndex === 1) moveAlone(1);
+          if (buttonIndex === 2) moveSect(-1);
+          if (buttonIndex === 3) moveSect(1);
+          if (buttonIndex === 4) deleteOnly();
+        },
+      );
+      return;
+    }
+    Alert.alert("Section heading", undefined, [
+      { text: "Move heading up", onPress: () => moveAlone(-1) },
+      { text: "Move heading down", onPress: () => moveAlone(1) },
+      { text: "Move section up", onPress: () => moveSect(-1) },
+      { text: "Move section down", onPress: () => moveSect(1) },
+      { text: "Delete heading", style: "destructive", onPress: deleteOnly },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   return (
@@ -178,6 +339,14 @@ export function SimpleChecklistScreen() {
           <View style={styles.headSpacer} />
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Insert"
+            onPress={openInsertMenu}
+            style={styles.iconBtn}
+          >
+            <Feather name="plus" size={22} color={theme.text} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
             accessibilityLabel="Open full task"
             onPress={() => navigation.replace("TaskDetail", { taskId: task.id })}
             style={styles.iconBtn}
@@ -196,26 +365,50 @@ export function SimpleChecklistScreen() {
         />
 
         <FlatList
-          data={items}
-          keyExtractor={(_, index) => `c-${task.id}-${index}`}
+          data={blocks}
+          keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={[styles.list, { paddingBottom: tabBarPad + 24 }]}
           renderItem={({ item, index }) => {
-            const checked = Boolean(progress[index]);
-            const isTrailing = index === items.length - 1 && item.trim() === "";
+            if (item.type === "heading") {
+              return (
+                <Pressable
+                  onLongPress={() => openHeadingMenu(index)}
+                  onPress={() => setInsertIndex(index)}
+                  delayLongPress={350}
+                  style={styles.headingWrap}
+                >
+                  <TextInput
+                    ref={(node) => {
+                      if (node) inputRefs.current.set(item.id, node);
+                      else inputRefs.current.delete(item.id);
+                    }}
+                    value={item.text}
+                    onChangeText={(v) => setHeadingText(index, v)}
+                    onFocus={() => setInsertIndex(index)}
+                    onBlur={() => removeEmptyOnBlur(index)}
+                    onSubmitEditing={() => onSubmitHeading(index)}
+                    style={[styles.heading, { color: theme.text }]}
+                    placeholder="Section"
+                    placeholderTextColor={theme.muted}
+                    returnKeyType="next"
+                    multiline
+                    blurOnSubmit
+                    scrollEnabled={false}
+                  />
+                </Pressable>
+              );
+            }
+
+            const checked = Boolean(item.done);
+            const isTrailing = isTrailingBlankItem(blocks, index);
             return (
               <View style={styles.row}>
                 <Pressable
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked }}
                   accessibilityLabel={checked ? "Mark incomplete" : "Mark complete"}
-                  onPress={() => {
-                    if (isTrailing) {
-                      lastInputRef.current?.focus();
-                      return;
-                    }
-                    toggle(index);
-                  }}
+                  onPress={() => toggleItem(index)}
                   style={[
                     styles.circle,
                     { borderColor: checked ? theme.accent : theme.border },
@@ -226,15 +419,16 @@ export function SimpleChecklistScreen() {
                 </Pressable>
                 <TextInput
                   ref={(node) => {
-                    if (node) inputRefs.current.set(index, node);
-                    else inputRefs.current.delete(index);
+                    if (node) inputRefs.current.set(item.id, node);
+                    else inputRefs.current.delete(item.id);
                     if (isTrailing) lastInputRef.current = node;
                   }}
-                  value={item}
-                  onChangeText={(v) => setItem(index, v)}
+                  value={item.text}
+                  onChangeText={(v) => setItemText(index, v)}
+                  onFocus={() => setInsertIndex(index)}
                   onSelectionChange={(e) => {
                     const { start, end } = e.nativeEvent.selection;
-                    selectionByIndex.current.set(index, { start, end });
+                    selectionById.current.set(item.id, { start, end });
                   }}
                   onBlur={() => removeEmptyOnBlur(index)}
                   onSubmitEditing={() => onSubmitItem(index)}
@@ -249,8 +443,6 @@ export function SimpleChecklistScreen() {
                   placeholder="List item"
                   placeholderTextColor={theme.muted}
                   returnKeyType="next"
-                  // multiline so iOS keeps newlines on paste; blurOnSubmit so Return
-                  // creates the next item instead of inserting a newline while typing.
                   multiline
                   blurOnSubmit
                   scrollEnabled={false}
@@ -290,6 +482,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     minHeight: 44,
+    paddingVertical: 4,
+  },
+  headingWrap: {
+    marginTop: 18,
+    marginBottom: 4,
+    paddingVertical: 2,
+  },
+  heading: {
+    fontSize: 20,
+    fontWeight: "600",
+    letterSpacing: -0.3,
+    lineHeight: 26,
     paddingVertical: 4,
   },
   circle: {

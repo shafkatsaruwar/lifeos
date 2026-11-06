@@ -5,20 +5,29 @@ import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { Empty, Eyebrow, Page, Title } from "../components/UI";
 import { SwipeDeleteRow } from "../components/SwipeDeleteRow";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
+import {
+  blocksHaveContent,
+  listItemProgress,
+  resolveChecklistBlocks,
+} from "../lib/checklistBlocks";
 import { useLifeOS } from "../lib/LifeOSContext";
 import type { Task } from "../types";
 
 function isListTask(task: Task): boolean {
   if (task.project === "Lists") return true;
+  if (blocksHaveContent(task.checklistBlocks)) return true;
   const steps = task.checklist ?? [];
   return steps.some((step) => step.trim().length > 0);
 }
 
 function listProgress(task: Task): { done: number; total: number } {
-  const steps = (task.checklist ?? []).filter((step) => step.trim().length > 0);
-  const progress = task.checklistProgress ?? [];
-  const done = steps.reduce((count, _, index) => count + (progress[index] ? 1 : 0), 0);
-  return { done, total: steps.length };
+  const blocks = resolveChecklistBlocks({
+    checklistBlocks: task.checklistBlocks,
+    checklist: task.checklist,
+    checklistProgress: task.checklistProgress,
+    taskId: task.id,
+  });
+  return listItemProgress(blocks);
 }
 
 /**
@@ -49,6 +58,7 @@ export function ListsHomeScreen() {
       status: "Not started",
       checklist: [""],
       checklistProgress: [false],
+      checklistBlocks: [{ id: `new-${id}`, type: "item", text: "", done: false }],
     };
     void updateTasks([...workspace.tasks, task]);
     navigation.navigate("SimpleChecklist", { taskId: id });

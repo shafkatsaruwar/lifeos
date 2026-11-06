@@ -1,7 +1,10 @@
+import { createItemBlock } from "../lifeos-mobile/src/lib/checklistBlocks";
 import {
+  applyChecklistBlockTextChange,
   applyChecklistItemTextChange,
   extractInsertedText,
   isMultilineChecklistPaste,
+  parsePastedChecklistBlocks,
   parsePastedChecklistLines,
   stripChecklistListMarker,
 } from "../lifeos-mobile/src/lib/checklistSmartPaste";
@@ -192,5 +195,60 @@ describe("applyChecklistItemTextChange", () => {
     expect(result.kind).toBe("split");
     if (result.kind !== "split") return;
     expect(result.checklist).toEqual(["買う", "café"]);
+  });
+});
+
+describe("parsePastedChecklistBlocks / headings", () => {
+  it("recognizes markdown headings and ordinary item lines", () => {
+    expect(parsePastedChecklistBlocks("# Health\n- Run\n## Clothes\nSocks")).toEqual([
+      { type: "heading", text: "Health" },
+      { type: "item", text: "Run" },
+      { type: "heading", text: "Clothes" },
+      { type: "item", text: "Socks" },
+    ]);
+  });
+});
+
+describe("applyChecklistBlockTextChange", () => {
+  it("inserts heading and item blocks from a markdown paste", () => {
+    const result = applyChecklistBlockTextChange({
+      blocks: [createItemBlock("", false, "i0")],
+      index: 0,
+      previousText: "",
+      nextText: "# Health\nRun\n## Clothes\nFold laundry",
+      selectionStart: 0,
+      selectionEnd: 0,
+    });
+    expect(result.kind).toBe("split");
+    if (result.kind !== "split") return;
+    expect(result.blocks.map((b) => ({ type: b.type, text: b.text }))).toEqual([
+      { type: "heading", text: "Health" },
+      { type: "item", text: "Run" },
+      { type: "heading", text: "Clothes" },
+      { type: "item", text: "Fold laundry" },
+    ]);
+  });
+
+  it("keeps siblings when pasting headings into the middle of a list", () => {
+    const result = applyChecklistBlockTextChange({
+      blocks: [
+        createItemBlock("Before", false, "a"),
+        createItemBlock("Focus", false, "b"),
+        createItemBlock("After", true, "c"),
+      ],
+      index: 1,
+      previousText: "Focus",
+      nextText: "# Mid\nX",
+      selectionStart: 0,
+      selectionEnd: 5,
+    });
+    expect(result.kind).toBe("split");
+    if (result.kind !== "split") return;
+    expect(result.blocks.map((b) => ({ type: b.type, text: b.text, done: b.type === "item" ? b.done : undefined }))).toEqual([
+      { type: "item", text: "Before", done: false },
+      { type: "heading", text: "Mid", done: undefined },
+      { type: "item", text: "X", done: false },
+      { type: "item", text: "After", done: true },
+    ]);
   });
 });
