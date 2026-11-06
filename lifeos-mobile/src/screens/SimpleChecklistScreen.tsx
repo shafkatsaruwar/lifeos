@@ -19,6 +19,7 @@ import { Page } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
 import {
   blocksToLegacy,
+  convertChecklistBlockType,
   createHeadingBlock,
   createItemBlock,
   deleteHeadingKeepItems,
@@ -312,8 +313,37 @@ export function SimpleChecklistScreen() {
     ]);
   };
 
+  const convertAt = (index: number, to: "heading" | "item") => {
+    const next = convertChecklistBlockType(blocksRef.current, index, to);
+    if (next === blocksRef.current) return;
+    persistBlocks(next);
+  };
+
+  const openItemMenu = (index: number) => {
+    if (isTrailingBlankItem(blocksRef.current, index)) return;
+    const toHeading = () => convertAt(index, "heading");
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Convert to Heading", "Cancel"],
+          cancelButtonIndex: 1,
+          userInterfaceStyle: "light",
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) toHeading();
+        },
+      );
+      return;
+    }
+    Alert.alert("Checklist item", undefined, [
+      { text: "Convert to Heading", onPress: toHeading },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
   const openHeadingMenu = (index: number) => {
     const current = () => blocksRef.current;
+    const toItem = () => convertAt(index, "item");
     const deleteOnly = () => persistBlocks(deleteHeadingKeepItems(current(), index));
     const moveAlone = (dir: -1 | 1) => persistBlocks(moveHeadingAlone(current(), index, dir));
     const moveSect = (dir: -1 | 1) => persistBlocks(moveSection(current(), index, dir));
@@ -322,6 +352,7 @@ export function SimpleChecklistScreen() {
       ActionSheetIOS.showActionSheetWithOptions(
         {
           options: [
+            "Convert to Checklist Item",
             "Move heading up",
             "Move heading down",
             "Move section up",
@@ -329,21 +360,23 @@ export function SimpleChecklistScreen() {
             "Delete heading",
             "Cancel",
           ],
-          destructiveButtonIndex: 4,
-          cancelButtonIndex: 5,
+          destructiveButtonIndex: 5,
+          cancelButtonIndex: 6,
           userInterfaceStyle: "light",
         },
         (buttonIndex) => {
-          if (buttonIndex === 0) moveAlone(-1);
-          if (buttonIndex === 1) moveAlone(1);
-          if (buttonIndex === 2) moveSect(-1);
-          if (buttonIndex === 3) moveSect(1);
-          if (buttonIndex === 4) deleteOnly();
+          if (buttonIndex === 0) toItem();
+          if (buttonIndex === 1) moveAlone(-1);
+          if (buttonIndex === 2) moveAlone(1);
+          if (buttonIndex === 3) moveSect(-1);
+          if (buttonIndex === 4) moveSect(1);
+          if (buttonIndex === 5) deleteOnly();
         },
       );
       return;
     }
     Alert.alert("Section heading", undefined, [
+      { text: "Convert to Checklist Item", onPress: toItem },
       { text: "Move heading up", onPress: () => moveAlone(-1) },
       { text: "Move heading down", onPress: () => moveAlone(1) },
       { text: "Move section up", onPress: () => moveSect(-1) },
@@ -436,7 +469,11 @@ export function SimpleChecklistScreen() {
             const checked = Boolean(item.done);
             const isTrailing = isTrailingBlankItem(blocks, index);
             return (
-              <View style={styles.row}>
+              <Pressable
+                onLongPress={() => openItemMenu(index)}
+                delayLongPress={350}
+                style={styles.row}
+              >
                 <Pressable
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked }}
@@ -480,7 +517,7 @@ export function SimpleChecklistScreen() {
                   blurOnSubmit
                   scrollEnabled={false}
                 />
-              </View>
+              </Pressable>
             );
           }}
           ListEmptyComponent={null}

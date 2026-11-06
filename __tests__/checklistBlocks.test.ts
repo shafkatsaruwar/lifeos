@@ -1,6 +1,7 @@
 import {
   blocksToLegacy,
   coerceChecklistBlocks,
+  convertChecklistBlockType,
   createHeadingBlock,
   createItemBlock,
   deleteHeadingKeepItems,
@@ -222,5 +223,62 @@ describe("finalizeItemEdit", () => {
   it("keeps trailing blank items", () => {
     const items = [createItemBlock("A", false, "a"), createItemBlock("", false, "b")];
     expect(finalizeItemEdit(items, 1, "")).toEqual(items);
+  });
+});
+
+describe("convertChecklistBlockType", () => {
+  it("converts an item to a heading in place (id, text, position)", () => {
+    const blocks = [
+      createItemBlock("Before", false, "a"),
+      createItemBlock("Health", true, "mid"),
+      createItemBlock("After", true, "c"),
+    ];
+    const next = convertChecklistBlockType(blocks, 1, "heading");
+    expect(next.map((b) => b.id)).toEqual(["a", "mid", "c"]);
+    expect(next[1]).toEqual({
+      id: "mid",
+      type: "heading",
+      text: "Health",
+      priorDone: true,
+    });
+    expect(next[0]).toMatchObject({ type: "item", text: "Before", done: false });
+    expect(next[2]).toMatchObject({ type: "item", text: "After", done: true });
+  });
+
+  it("converts a heading back to an unchecked item", () => {
+    const blocks = [
+      createItemBlock("Before", false, "a"),
+      { id: "mid", type: "heading" as const, text: "Health", priorDone: true },
+      createItemBlock("After", true, "c"),
+    ];
+    const next = convertChecklistBlockType(blocks, 1, "item");
+    expect(next[1]).toEqual({ id: "mid", type: "item", text: "Health", done: false });
+    expect(next[0]).toMatchObject({ text: "Before", done: false });
+    expect(next[2]).toMatchObject({ text: "After", done: true });
+  });
+
+  it("does not convert the trailing blank item", () => {
+    const blocks = [createItemBlock("A", false, "a"), createItemBlock("", false, "blank")];
+    expect(convertChecklistBlockType(blocks, 1, "heading")).toBe(blocks);
+  });
+
+  it("survives persistence round-trip after convert", () => {
+    const blocks = [
+      createItemBlock("Milk", true, "i0"),
+      createItemBlock("Health", false, "i1"),
+      createItemBlock("Eggs", false, "i2"),
+    ];
+    const converted = convertChecklistBlockType(blocks, 1, "heading");
+    const saved = ensureTrailingBlankItem(converted);
+    const legacy = blocksToLegacy(saved);
+    const reloaded = resolveChecklistBlocks({
+      checklistBlocks: saved,
+      checklist: legacy.checklist,
+      checklistProgress: legacy.checklistProgress,
+      taskId: 7,
+    });
+    expect(reloaded[1]).toMatchObject({ id: "i1", type: "heading", text: "Health" });
+    expect(reloaded[0]).toMatchObject({ text: "Milk", done: true });
+    expect(reloaded[2]).toMatchObject({ text: "Eggs", done: false });
   });
 });

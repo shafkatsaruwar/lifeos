@@ -14,6 +14,11 @@ export type ChecklistHeadingBlock = {
   id: string;
   type: "heading";
   text: string;
+  /**
+   * Prior item completion, kept when converting item → heading.
+   * Never shown as a checkbox on headings.
+   */
+  priorDone?: boolean;
 };
 
 export type ChecklistBlock = ChecklistItemBlock | ChecklistHeadingBlock;
@@ -114,11 +119,13 @@ export function finalizeItemEdit(
 
 function normalizeBlock(block: ChecklistBlock): ChecklistBlock {
   if (block.type === "heading") {
-    return {
+    const heading: ChecklistHeadingBlock = {
       id: block.id || createChecklistBlockId("h"),
       type: "heading",
       text: typeof block.text === "string" ? block.text : "",
     };
+    if (block.priorDone) heading.priorDone = true;
+    return heading;
   }
   return {
     id: block.id || createChecklistBlockId("i"),
@@ -126,6 +133,42 @@ function normalizeBlock(block: ChecklistBlock): ChecklistBlock {
     text: typeof block.text === "string" ? block.text : "",
     done: Boolean(block.done),
   };
+}
+
+/**
+ * Convert a checklist item ↔ heading in place.
+ * Preserves id, text, and list position; does not touch neighbors.
+ * Item → heading: stores `priorDone` when the item was completed (no checkbox shown).
+ * Heading → item: always unchecked per product rules.
+ */
+export function convertChecklistBlockType(
+  blocks: ChecklistBlock[],
+  index: number,
+  to: "heading" | "item",
+): ChecklistBlock[] {
+  const block = blocks[index];
+  if (!block) return blocks;
+
+  if (to === "heading") {
+    if (block.type === "heading") return blocks;
+    if (isTrailingBlankItem(blocks, index)) return blocks;
+    const heading: ChecklistHeadingBlock = {
+      id: block.id,
+      type: "heading",
+      text: block.text,
+    };
+    if (block.done) heading.priorDone = true;
+    return blocks.map((b, i) => (i === index ? heading : b));
+  }
+
+  if (block.type === "item") return blocks;
+  const item: ChecklistItemBlock = {
+    id: block.id,
+    type: "item",
+    text: block.text,
+    done: false,
+  };
+  return blocks.map((b, i) => (i === index ? item : b));
 }
 
 /** Mirror blocks back to legacy fields (items only — headings omitted). */
