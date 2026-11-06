@@ -50,22 +50,66 @@ export function migrateLegacyChecklistToBlocks(
   );
 }
 
+/** RTDB may return lists as arrays or as sparse objects — normalize either. */
+export function coerceChecklistBlocks(
+  value: ChecklistBlock[] | Record<string, ChecklistBlock> | null | undefined,
+): ChecklistBlock[] {
+  if (Array.isArray(value)) return value.map((block) => normalizeBlock(block));
+  if (value && typeof value === "object") {
+    return Object.values(value).map((block) => normalizeBlock(block as ChecklistBlock));
+  }
+  return [];
+}
+
 /** Prefer persisted blocks; otherwise migrate legacy arrays. */
 export function resolveChecklistBlocks(input: {
-  checklistBlocks?: ChecklistBlock[] | null;
+  checklistBlocks?: ChecklistBlock[] | Record<string, ChecklistBlock> | null;
   checklist?: string[] | null;
   checklistProgress?: boolean[] | null;
   taskId?: number;
 }): ChecklistBlock[] {
-  const existing = input.checklistBlocks;
-  if (Array.isArray(existing) && existing.length > 0) {
-    return existing.map((block) => normalizeBlock(block));
-  }
+  const existing = coerceChecklistBlocks(input.checklistBlocks);
+  if (existing.length > 0) return existing;
   return migrateLegacyChecklistToBlocks(
     input.checklist ?? undefined,
     input.checklistProgress ?? undefined,
     input.taskId,
   );
+}
+
+/**
+ * End editing on a heading: commit the draft text, discard only if genuinely empty.
+ * Pure — used by the screen and regression tests (no React state / timers).
+ */
+export function finalizeHeadingEdit(
+  blocks: ChecklistBlock[],
+  index: number,
+  draftText: string,
+): ChecklistBlock[] {
+  const block = blocks[index];
+  if (!block || block.type !== "heading") return blocks;
+  if (draftText.trim() === "") {
+    return blocks.filter((_, i) => i !== index);
+  }
+  if (block.text === draftText) return blocks;
+  return blocks.map((b, i) => (i === index && b.type === "heading" ? { ...b, text: draftText } : b));
+}
+
+/** End editing on an item: drop mid-list empties; keep trailing blank. */
+export function finalizeItemEdit(
+  blocks: ChecklistBlock[],
+  index: number,
+  draftText: string,
+): ChecklistBlock[] {
+  const block = blocks[index];
+  if (!block || block.type !== "item") return blocks;
+  const withText =
+    block.text === draftText
+      ? blocks
+      : blocks.map((b, i) => (i === index && b.type === "item" ? { ...b, text: draftText } : b));
+  if (isTrailingBlankItem(withText, index)) return withText;
+  if (draftText.trim() !== "") return withText;
+  return withText.filter((_, i) => i !== index);
 }
 
 function normalizeBlock(block: ChecklistBlock): ChecklistBlock {
