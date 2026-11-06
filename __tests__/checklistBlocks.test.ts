@@ -1,9 +1,12 @@
 import {
   blocksToLegacy,
+  coerceChecklistBlocks,
   createHeadingBlock,
   createItemBlock,
   deleteHeadingKeepItems,
   ensureTrailingBlankItem,
+  finalizeHeadingEdit,
+  finalizeItemEdit,
   listItemProgress,
   migrateLegacyChecklistToBlocks,
   moveHeadingAlone,
@@ -111,5 +114,113 @@ describe("ensureTrailingBlankItem / listItemProgress", () => {
         createItemBlock(""),
       ]),
     ).toEqual({ done: 1, total: 2 });
+  });
+});
+
+describe("finalizeHeadingEdit (keyboard dismiss / blur regression)", () => {
+  it("keeps a nonempty heading when React state still has empty text", () => {
+    // Mirrors the bug: onChangeText saved "Health" in a draft, but `blocks`
+    // from the last render still has text "" when onBlur runs.
+    const items = [
+      createItemBlock("Milk", true, "i0"),
+      createHeadingBlock("", "h-new"),
+      createItemBlock("Eggs", false, "i1"),
+      createItemBlock("", false, "i2"),
+    ];
+    const next = finalizeHeadingEdit(items, 1, "Health");
+    expect(next.find((b) => b.id === "h-new")).toMatchObject({
+      type: "heading",
+      text: "Health",
+    });
+    expect(next.find((b) => b.id === "i0")).toMatchObject({ text: "Milk", done: true });
+    expect(next.find((b) => b.id === "i1")).toMatchObject({ text: "Eggs", done: false });
+  });
+
+  it("discards only a genuinely empty heading on blur", () => {
+    const items = [
+      createItemBlock("Milk", false, "i0"),
+      createHeadingBlock("", "h-new"),
+      createItemBlock("", false, "i1"),
+    ];
+    const next = finalizeHeadingEdit(items, 1, "   ");
+    expect(next.map((b) => b.id)).toEqual(["i0", "i1"]);
+  });
+
+  it("preserves heading position among existing items", () => {
+    const items = [
+      createItemBlock("A", false, "a"),
+      createHeadingBlock("Mid", "h"),
+      createItemBlock("B", true, "b"),
+    ];
+    const next = finalizeHeadingEdit(items, 1, "Mid");
+    expect(next).toBe(items); // no change when draft matches
+    expect(next.map((b) => b.id)).toEqual(["a", "h", "b"]);
+  });
+});
+
+describe("heading create → edit → dismiss → reload (persistence)", () => {
+  it("survives legacy mirror + resolve after create/edit (nav / restart)", () => {
+    const started = [
+      createItemBlock("Milk", true, "legacy-1-0"),
+      createItemBlock("Eggs", false, "legacy-1-1"),
+      createItemBlock("", false, "legacy-1-2"),
+    ];
+    const withHeading = [
+      ...started.slice(0, 1),
+      createHeadingBlock("", "h1"),
+      ...started.slice(1),
+    ];
+    // Type + dismiss keyboard (draft ahead of committed empty text).
+    const afterBlur = finalizeHeadingEdit(withHeading, 1, "Health");
+    const saved = ensureTrailingBlankItem(afterBlur);
+    const legacy = blocksToLegacy(saved);
+
+    // Simulate Firebase round-trip: blocks as sparse object, legacy arrays present.
+    const asObject = Object.fromEntries(saved.map((b, i) => [String(i), b]));
+    const reloaded = resolveChecklistBlocks({
+      checklistBlocks: asObject,
+      checklist: legacy.checklist,
+      checklistProgress: legacy.checklistProgress,
+      taskId: 1,
+    });
+
+    expect(reloaded.map((b) => ({ type: b.type, text: b.text, done: b.type === "item" ? b.done : undefined }))).toEqual(
+      expect.arrayContaining([
+        { type: "item", text: "Milk", done: true },
+        { type: "heading", text: "Health", done: undefined },
+        { type: "item", text: "Eggs", done: false },
+      ]),
+    );
+    expect(reloaded.find((b) => b.type === "heading")).toMatchObject({ text: "Health" });
+    // Heading sits between Milk and Eggs.
+    const headingAt = reloaded.findIndex((b) => b.type === "heading");
+    expect(reloaded[headingAt - 1]).toMatchObject({ text: "Milk" });
+    expect(reloaded[headingAt + 1]).toMatchObject({ text: "Eggs" });
+  });
+
+  it("coerceChecklistBlocks reads RTDB object lists", () => {
+    const coerced = coerceChecklistBlocks({
+      0: createHeadingBlock("Clothes", "h"),
+      1: createItemBlock("Socks", false, "i"),
+    });
+    expect(coerced).toHaveLength(2);
+    expect(coerced[0]).toMatchObject({ type: "heading", text: "Clothes" });
+  });
+
+  it("does not remigrate from legacy when blocks exist (headings would be lost)", () => {
+    const resolved = resolveChecklistBlocks({
+      checklistBlocks: [createHeadingBlock("Health", "h"), createItemBlock("Run", false, "i")],
+      checklist: ["Run", "ONLY_LEGACY"],
+      checklistProgress: [false, true],
+      taskId: 9,
+    });
+    expect(resolved.map((b) => b.text)).toEqual(["Health", "Run"]);
+  });
+});
+
+describe("finalizeItemEdit", () => {
+  it("keeps trailing blank items", () => {
+    const items = [createItemBlock("A", false, "a"), createItemBlock("", false, "b")];
+    expect(finalizeItemEdit(items, 1, "")).toEqual(items);
   });
 });

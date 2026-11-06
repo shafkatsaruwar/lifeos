@@ -23,6 +23,8 @@ import {
   createItemBlock,
   deleteHeadingKeepItems,
   ensureTrailingBlankItem,
+  finalizeHeadingEdit,
+  finalizeItemEdit,
   isTrailingBlankItem,
   moveHeadingAlone,
   moveSection,
@@ -31,6 +33,7 @@ import {
 } from "../lib/checklistBlocks";
 import { applyChecklistBlockTextChange } from "../lib/checklistSmartPaste";
 import { useLifeOS } from "../lib/LifeOSContext";
+import type { Workspace } from "../types";
 
 /**
  * Apple Notes–style checklist: circular checkboxes + section headings.
@@ -48,7 +51,13 @@ export function SimpleChecklistScreen() {
   const lastInputRef = useRef<TextInput>(null);
   const inputRefs = useRef<Map<string, TextInput>>(new Map());
   const selectionById = useRef<Map<string, { start: number; end: number }>>(new Map());
+  /** Latest draft text per block id — updated synchronously in onChangeText. */
+  const draftById = useRef<Map<string, string>>(new Map());
+  const blocksRef = useRef<ChecklistBlock[]>([]);
+  const workspaceRef = useRef<Workspace>(workspace);
   const [insertIndex, setInsertIndex] = useState<number | null>(null);
+
+  workspaceRef.current = workspace;
 
   const blocks = useMemo(
     () =>
@@ -62,14 +71,26 @@ export function SimpleChecklistScreen() {
         : [],
     [task],
   );
+  blocksRef.current = blocks;
+  // Keep drafts aligned with committed blocks when not actively typing a field.
+  for (const block of blocks) {
+    if (!draftById.current.has(block.id)) {
+      draftById.current.set(block.id, block.text);
+    }
+  }
 
   const persistBlocks = (nextBlocks: ChecklistBlock[]) => {
-    if (!task) return;
+    const currentTask = workspaceRef.current.tasks.find((t) => t.id === taskId);
+    if (!currentTask) return;
     const ensured = ensureTrailingBlankItem(nextBlocks);
+    blocksRef.current = ensured;
+    for (const block of ensured) {
+      draftById.current.set(block.id, block.text);
+    }
     const legacy = blocksToLegacy(ensured);
     void updateTasks(
-      workspace.tasks.map((t) =>
-        t.id === task.id
+      workspaceRef.current.tasks.map((t) =>
+        t.id === currentTask.id
           ? {
               ...t,
               checklistBlocks: ensured,
@@ -91,24 +112,12 @@ export function SimpleChecklistScreen() {
       taskId: task.id,
     });
     const ensured = ensureTrailingBlankItem(resolved);
-    const needsMigrate = !task.checklistBlocks?.length && (task.checklist?.length ?? 0) > 0;
+    const needsMigrate = !coerceHasBlocks(task.checklistBlocks) && (task.checklist?.length ?? 0) > 0;
     const needsTrailing =
       ensured.length !== resolved.length ||
       ensured[ensured.length - 1]?.id !== resolved[resolved.length - 1]?.id;
     if (needsMigrate || needsTrailing) {
-      const legacy = blocksToLegacy(ensured);
-      void updateTasks(
-        workspace.tasks.map((t) =>
-          t.id === task.id
-            ? {
-                ...t,
-                checklistBlocks: ensured,
-                checklist: legacy.checklist,
-                checklistProgress: legacy.checklistProgress,
-              }
-            : t,
-        ),
-      );
+      persistBlocks(ensured);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- shape-driven migrate / trailing blank
   }, [task?.id, blocks.length, blocks[blocks.length - 1]?.type, blocks[blocks.length - 1]?.text]);
@@ -127,45 +136,50 @@ export function SimpleChecklistScreen() {
   }
 
   const setTitle = (title: string) => {
-    void updateTasks(workspace.tasks.map((t) => (t.id === task.id ? { ...t, title } : t)));
+    void updateTasks(
+      workspaceRef.current.tasks.map((t) => (t.id === task.id ? { ...t, title } : t)),
+    );
   };
 
   const focusBlock = (id: string) => {
     requestAnimationFrame(() => {
-      setTimeout(() => {
-        inputRefs.current.get(id)?.focus();
-      }, 30);
+      inputRefs.current.get(id)?.focus();
     });
   };
 
   const focusIndex = (index: number) => {
-    const block = blocks[index];
+    const block = blocksRef.current[index];
     if (block) focusBlock(block.id);
   };
 
+  const draftTextFor = (block: ChecklistBlock) =>
+    draftById.current.has(block.id) ? (draftById.current.get(block.id) as string) : block.text;
+
   const toggleItem = (index: number) => {
-    const block = blocks[index];
+    const current = blocksRef.current;
+    const block = current[index];
     if (!block || block.type !== "item") return;
-    if (isTrailingBlankItem(blocks, index)) {
+    if (isTrailingBlankItem(current, index)) {
       lastInputRef.current?.focus();
       return;
     }
-    const next = blocks.map((b, i) =>
-      i === index && b.type === "item" ? { ...b, done: !b.done } : b,
+    persistBlocks(
+      current.map((b, i) => (i === index && b.type === "item" ? { ...b, done: !b.done } : b)),
     );
-    persistBlocks(next);
   };
 
   const setItemText = (index: number, value: string) => {
-    const block = blocks[index];
+    const current = blocksRef.current;
+    const block = current[index];
     if (!block || block.type !== "item") return;
+    draftById.current.set(block.id, value);
     const previousText = block.text;
     const sel = selectionById.current.get(block.id) ?? {
       start: previousText.length,
       end: previousText.length,
     };
     const change = applyChecklistBlockTextChange({
-      blocks,
+      blocks: current,
       index,
       previousText,
       nextText: value,
@@ -180,89 +194,107 @@ export function SimpleChecklistScreen() {
       return;
     }
 
-    const next = blocks.map((b, i) => (i === index && b.type === "item" ? { ...b, text: change.text } : b));
-    persistBlocks(next);
+    persistBlocks(
+      current.map((b, i) => (i === index && b.type === "item" ? { ...b, text: change.text } : b)),
+    );
   };
 
   const setHeadingText = (index: number, value: string) => {
-    const next = blocks.map((b, i) => (i === index && b.type === "heading" ? { ...b, text: value } : b));
-    persistBlocks(next);
+    const current = blocksRef.current;
+    const block = current[index];
+    if (!block || block.type !== "heading") return;
+    draftById.current.set(block.id, value);
+    // Optimistic ref update so blur/submit never see a stale empty heading.
+    blocksRef.current = current.map((b, i) =>
+      i === index && b.type === "heading" ? { ...b, text: value } : b,
+    );
+    persistBlocks(blocksRef.current);
   };
 
-  const removeEmptyOnBlur = (index: number) => {
-    const block = blocks[index];
+  const endEditAt = (index: number) => {
+    const current = blocksRef.current;
+    const block = current[index];
     if (!block) return;
-    if (block.type === "heading") {
-      if (block.text.trim() === "") {
-        persistBlocks(blocks.filter((_, i) => i !== index));
-      }
-      return;
-    }
-    if (isTrailingBlankItem(blocks, index)) return;
-    if (block.text.trim() !== "") return;
-    persistBlocks(blocks.filter((_, i) => i !== index));
+    const draft = draftTextFor(block);
+    const next =
+      block.type === "heading"
+        ? finalizeHeadingEdit(current, index, draft)
+        : finalizeItemEdit(current, index, draft);
+    if (next === current) return;
+    persistBlocks(next);
   };
 
   const onSubmitItem = (index: number) => {
-    const block = blocks[index];
-    if (!block || block.type !== "item") return;
-    if (block.text.trim() === "") {
+    const before = blocksRef.current[index];
+    if (!before || before.type !== "item") return;
+    const draft = draftTextFor(before);
+    endEditAt(index);
+    if (draft.trim() === "") {
       Keyboard.dismiss();
       return;
     }
+    const current = blocksRef.current;
     const nextIsEmptyItem =
-      index < blocks.length - 1 &&
-      blocks[index + 1]?.type === "item" &&
-      (blocks[index + 1] as { text: string }).text.trim() === "";
-    let next = [...blocks];
+      index < current.length - 1 &&
+      current[index + 1]?.type === "item" &&
+      (current[index + 1] as { text: string }).text.trim() === "";
     if (!nextIsEmptyItem) {
-      next = [...blocks.slice(0, index + 1), createItemBlock(""), ...blocks.slice(index + 1)];
+      persistBlocks([
+        ...current.slice(0, index + 1),
+        createItemBlock(""),
+        ...current.slice(index + 1),
+      ]);
     }
-    persistBlocks(next);
     focusIndex(index + 1);
   };
 
   const onSubmitHeading = (index: number) => {
-    const block = blocks[index];
-    if (!block || block.type !== "heading") return;
-    if (block.text.trim() === "") {
-      persistBlocks(blocks.filter((_, i) => i !== index));
+    const before = blocksRef.current[index];
+    if (!before || before.type !== "heading") {
       Keyboard.dismiss();
       return;
     }
+    const draft = draftTextFor(before);
+    endEditAt(index);
+    if (draft.trim() === "") {
+      Keyboard.dismiss();
+      return;
+    }
+    const current = blocksRef.current;
     const item = createItemBlock("");
-    const next = [...blocks.slice(0, index + 1), item, ...blocks.slice(index + 1)];
-    persistBlocks(next);
+    persistBlocks([...current.slice(0, index + 1), item, ...current.slice(index + 1)]);
     focusBlock(item.id);
   };
 
   const insertionAt = () => {
-    if (insertIndex != null && insertIndex >= 0 && insertIndex <= blocks.length) return insertIndex;
-    // Default: before the trailing blank (or at end).
-    if (blocks.length > 0 && isTrailingBlankItem(blocks, blocks.length - 1)) return blocks.length - 1;
-    return blocks.length;
+    const current = blocksRef.current;
+    if (insertIndex != null && insertIndex >= 0 && insertIndex <= current.length) return insertIndex;
+    if (current.length > 0 && isTrailingBlankItem(current, current.length - 1)) return current.length - 1;
+    return current.length;
   };
 
   const insertChecklistItem = () => {
     const at = insertionAt();
     const item = createItemBlock("");
-    persistBlocks([...blocks.slice(0, at), item, ...blocks.slice(at)]);
+    const current = blocksRef.current;
+    persistBlocks([...current.slice(0, at), item, ...current.slice(at)]);
     focusBlock(item.id);
   };
 
   const insertSectionHeading = () => {
     const at = insertionAt();
     const heading = createHeadingBlock("");
-    persistBlocks([...blocks.slice(0, at), heading, ...blocks.slice(at)]);
+    draftById.current.set(heading.id, "");
+    const current = blocksRef.current;
+    persistBlocks([...current.slice(0, at), heading, ...current.slice(at)]);
     focusBlock(heading.id);
   };
 
   const openInsertMenu = () => {
-    const options = ["Checklist item", "Section heading", "Cancel"];
     if (Platform.OS === "ios") {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options,
+          options: ["Checklist item", "Section heading", "Cancel"],
           cancelButtonIndex: 2,
           userInterfaceStyle: "light",
         },
@@ -281,9 +313,10 @@ export function SimpleChecklistScreen() {
   };
 
   const openHeadingMenu = (index: number) => {
-    const deleteOnly = () => persistBlocks(deleteHeadingKeepItems(blocks, index));
-    const moveAlone = (dir: -1 | 1) => persistBlocks(moveHeadingAlone(blocks, index, dir));
-    const moveSect = (dir: -1 | 1) => persistBlocks(moveSection(blocks, index, dir));
+    const current = () => blocksRef.current;
+    const deleteOnly = () => persistBlocks(deleteHeadingKeepItems(current(), index));
+    const moveAlone = (dir: -1 | 1) => persistBlocks(moveHeadingAlone(current(), index, dir));
+    const moveSect = (dir: -1 | 1) => persistBlocks(moveSection(current(), index, dir));
 
     if (Platform.OS === "ios") {
       ActionSheetIOS.showActionSheetWithOptions(
@@ -386,7 +419,7 @@ export function SimpleChecklistScreen() {
                     value={item.text}
                     onChangeText={(v) => setHeadingText(index, v)}
                     onFocus={() => setInsertIndex(index)}
-                    onBlur={() => removeEmptyOnBlur(index)}
+                    onBlur={() => endEditAt(index)}
                     onSubmitEditing={() => onSubmitHeading(index)}
                     style={[styles.heading, { color: theme.text }]}
                     placeholder="Section"
@@ -430,7 +463,7 @@ export function SimpleChecklistScreen() {
                     const { start, end } = e.nativeEvent.selection;
                     selectionById.current.set(item.id, { start, end });
                   }}
-                  onBlur={() => removeEmptyOnBlur(index)}
+                  onBlur={() => endEditAt(index)}
                   onSubmitEditing={() => onSubmitItem(index)}
                   style={[
                     styles.line,
@@ -455,6 +488,14 @@ export function SimpleChecklistScreen() {
       </KeyboardAvoidingView>
     </Page>
   );
+}
+
+function coerceHasBlocks(
+  value: ChecklistBlock[] | Record<string, ChecklistBlock> | null | undefined,
+): boolean {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === "object") return Object.keys(value).length > 0;
+  return false;
 }
 
 const styles = StyleSheet.create({
