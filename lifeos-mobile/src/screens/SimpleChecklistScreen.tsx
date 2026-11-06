@@ -3,6 +3,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { useEffect, useMemo, useRef } from "react";
 import {
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Page } from "../components/UI";
 import { useFloatingTabBarContentPadding } from "../components/FloatingTabBar";
+import { applyChecklistItemTextChange } from "../lib/checklistSmartPaste";
 import { useLifeOS } from "../lib/LifeOSContext";
 
 /**
@@ -30,6 +32,8 @@ export function SimpleChecklistScreen() {
   const task = useMemo(() => workspace.tasks.find((t) => t.id === taskId), [workspace.tasks, taskId]);
   const titleRef = useRef<TextInput>(null);
   const lastInputRef = useRef<TextInput>(null);
+  const inputRefs = useRef<Map<number, TextInput>>(new Map());
+  const selectionByIndex = useRef<Map<number, { start: number; end: number }>>(new Map());
 
   const items = task?.checklist ?? [];
   const progress = task?.checklistProgress ?? [];
@@ -75,11 +79,46 @@ export function SimpleChecklistScreen() {
     persist({ checklistProgress: next });
   };
 
+  const focusRow = (index: number) => {
+    requestAnimationFrame(() => {
+      const node = inputRefs.current.get(index) ?? (index >= items.length - 1 ? lastInputRef.current : null);
+      node?.focus();
+    });
+  };
+
   const setItem = (index: number, value: string) => {
-    const next = items.map((c, i) => (i === index ? value : c));
+    const previousText = items[index] ?? "";
+    const sel = selectionByIndex.current.get(index) ?? {
+      start: previousText.length,
+      end: previousText.length,
+    };
+    const change = applyChecklistItemTextChange({
+      items,
+      progress: items.map((_, i) => progress[i] ?? false),
+      index,
+      previousText,
+      nextText: value,
+      selectionStart: sel.start,
+      selectionEnd: sel.end,
+    });
+
+    if (change.kind === "split") {
+      // One persist = one undoable checklist mutation where the host supports it.
+      let checklist = change.checklist;
+      let checklistProgress = change.checklistProgress;
+      if (checklist.length === 0 || (checklist[checklist.length - 1] ?? "").trim() !== "") {
+        checklist = [...checklist, ""];
+        checklistProgress = [...checklistProgress, false];
+      }
+      persist({ checklist, checklistProgress });
+      focusRow(change.focusIndex);
+      return;
+    }
+
+    const next = items.map((c, i) => (i === index ? change.text : c));
     const nextProgress = items.map((_, i) => progress[i] ?? false);
     // Growing the last blank into text → append a new blank.
-    if (index === items.length - 1 && value.trim() !== "" && (items[items.length - 1] ?? "") === "") {
+    if (index === items.length - 1 && change.text.trim() !== "" && (items[items.length - 1] ?? "") === "") {
       next.push("");
       nextProgress.push(false);
     }
@@ -94,6 +133,30 @@ export function SimpleChecklistScreen() {
       checklist: items.filter((_, i) => i !== index),
       checklistProgress: progress.filter((_, i) => i !== index),
     });
+  };
+
+  const onSubmitItem = (index: number) => {
+    const text = items[index] ?? "";
+    // Empty Return → dismiss editing (native Notes / Reminders feel).
+    if (text.trim() === "") {
+      Keyboard.dismiss();
+      return;
+    }
+
+    const next = [...items];
+    const nextProgress = items.map((_, i) => progress[i] ?? false);
+    const nextIsEmpty = index < items.length - 1 && (items[index + 1] ?? "").trim() === "";
+    if (!nextIsEmpty) {
+      next.splice(index + 1, 0, "");
+      nextProgress.splice(index + 1, 0, false);
+    }
+    // Ensure trailing blank still exists after a mid-list insert.
+    if ((next[next.length - 1] ?? "").trim() !== "") {
+      next.push("");
+      nextProgress.push(false);
+    }
+    persist({ checklist: next, checklistProgress: nextProgress });
+    focusRow(index + 1);
   };
 
   return (
@@ -162,15 +225,19 @@ export function SimpleChecklistScreen() {
                   {checked ? <Feather name="check" size={14} color={theme.surface} /> : null}
                 </Pressable>
                 <TextInput
-                  ref={isTrailing ? lastInputRef : undefined}
+                  ref={(node) => {
+                    if (node) inputRefs.current.set(index, node);
+                    else inputRefs.current.delete(index);
+                    if (isTrailing) lastInputRef.current = node;
+                  }}
                   value={item}
                   onChangeText={(v) => setItem(index, v)}
-                  onBlur={() => removeEmptyOnBlur(index)}
-                  onSubmitEditing={() => {
-                    // Focus next / trailing row
-                    if (index < items.length - 1) return;
-                    lastInputRef.current?.focus();
+                  onSelectionChange={(e) => {
+                    const { start, end } = e.nativeEvent.selection;
+                    selectionByIndex.current.set(index, { start, end });
                   }}
+                  onBlur={() => removeEmptyOnBlur(index)}
+                  onSubmitEditing={() => onSubmitItem(index)}
                   style={[
                     styles.line,
                     {
@@ -182,7 +249,11 @@ export function SimpleChecklistScreen() {
                   placeholder="List item"
                   placeholderTextColor={theme.muted}
                   returnKeyType="next"
-                  blurOnSubmit={false}
+                  // multiline so iOS keeps newlines on paste; blurOnSubmit so Return
+                  // creates the next item instead of inserting a newline while typing.
+                  multiline
+                  blurOnSubmit
+                  scrollEnabled={false}
                 />
               </View>
             );
