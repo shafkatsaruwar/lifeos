@@ -1,8 +1,10 @@
 import type { CareerHub } from "./lib/career/careerTypes";
+import type { ChecklistBlock } from "./lib/checklistBlocks";
 import type { WorkHubState } from "./lib/workos";
 import type { TimeTrackingState } from "./lib/timeTracking";
 export type { CareerHub, WorkHubState };
 export type { TimeTrackingState };
+export type { ChecklistBlock };
 
 export type EnergyLevel = "Low" | "Medium" | "High";
 export type TaskStatus = "Not started" | "In progress" | "Waiting" | "Blocked" | "Done" | "Canceled";
@@ -31,6 +33,8 @@ export type Task = {
   customProperties?: TaskProperty[];
   checklist?: string[];
   checklistProgress?: boolean[];
+  /** Ordered checklist blocks (items + section headings). Mirrors checklist* for older surfaces. */
+  checklistBlocks?: ChecklistBlock[];
   focusRemainingSeconds?: number;
   focusSessionStarted?: boolean;
   focusSessionRunning?: boolean;
