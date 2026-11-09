@@ -554,26 +554,231 @@ struct DeadlineView: View {
 
 struct CalendarWidgetView: View {
   let snap: WidgetSnapshot?
+  let date: Date
+  @Environment(\.widgetFamily) private var family
 
   var body: some View {
     let block = snap?.calendar
-    WidgetChrome(eyebrow: "CALENDAR", dot: LifeOSWidgetPalette.calendar, deepLink: "lifeos://calendar") {
-      Text(block?.whenLabel ?? "Clear")
-        .font(.system(size: 20, weight: .bold))
-        .foregroundStyle(LifeOSWidgetPalette.ink)
-        .lineLimit(2)
-        .padding(.top, 2)
-      Text(block?.title ?? "No upcoming events")
-        .font(.system(size: 13, weight: .medium))
-        .foregroundStyle(LifeOSWidgetPalette.muted)
-        .lineLimit(2)
-      if let prep = block?.prep, !prep.isEmpty {
-        Text(prep)
-          .font(.system(size: 12, weight: .medium))
+    let deep = block?.deepLink ?? "lifeos://calendar"
+    if family == .systemMedium {
+      CalendarMonthMediumView(date: date, block: block)
+        .widgetURL(URL(string: deep) ?? URL(string: "lifeos://calendar")!)
+    } else {
+      WidgetChrome(eyebrow: "CALENDAR", dot: LifeOSWidgetPalette.calendar, deepLink: deep) {
+        Text(block?.whenLabel ?? "Clear")
+          .font(.system(size: 20, weight: .bold))
+          .foregroundStyle(LifeOSWidgetPalette.ink)
+          .lineLimit(2)
+          .padding(.top, 2)
+        Text(block?.title ?? "No upcoming events")
+          .font(.system(size: 13, weight: .medium))
           .foregroundStyle(LifeOSWidgetPalette.muted)
-          .lineLimit(1)
+          .lineLimit(2)
+        if let prep = block?.prep, !prep.isEmpty {
+          Text(prep)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(LifeOSWidgetPalette.muted)
+            .lineLimit(1)
+        }
       }
     }
+  }
+}
+
+/// Medium calendar: date summary (left) + month grid (right) — LifeOS glass / ink theme.
+struct CalendarMonthMediumView: View {
+  let date: Date
+  let block: CalendarBlock?
+
+  var body: some View {
+    HStack(alignment: .center, spacing: 12) {
+      VStack(alignment: .leading, spacing: 6) {
+        CalendarBrandMark()
+          .frame(width: 22, height: 22)
+          .padding(.bottom, 2)
+        Text(weekdayHeadline(date))
+          .font(.system(size: 17, weight: .bold))
+          .foregroundStyle(LifeOSWidgetPalette.ink)
+          .lineLimit(1)
+          .minimumScaleFactor(0.85)
+        Text(monthDayHeadline(date))
+          .font(.system(size: 17, weight: .bold))
+          .foregroundStyle(LifeOSWidgetPalette.ink)
+          .lineLimit(1)
+          .minimumScaleFactor(0.85)
+        Text(upcomingLabel(block))
+          .font(.system(size: 13, weight: .medium))
+          .foregroundStyle(LifeOSWidgetPalette.muted)
+          .lineLimit(1)
+          .padding(.top, 2)
+        Spacer(minLength: 0)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+
+      MonthCalendarGrid(date: date)
+        .frame(width: 168)
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 14)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+  }
+
+  private func weekdayHeadline(_ date: Date) -> String {
+    let f = DateFormatter()
+    f.locale = .current
+    f.dateFormat = "EEEE"
+    return "It's \(f.string(from: date))"
+  }
+
+  private func monthDayHeadline(_ date: Date) -> String {
+    let cal = Calendar.current
+    let day = cal.component(.day, from: date)
+    let f = DateFormatter()
+    f.locale = .current
+    f.dateFormat = "MMMM"
+    return "\(f.string(from: date)) \(ordinal(day))"
+  }
+
+  private func ordinal(_ day: Int) -> String {
+    let suffix: String
+    let mod100 = day % 100
+    if mod100 >= 11 && mod100 <= 13 {
+      suffix = "th"
+    } else {
+      switch day % 10 {
+      case 1: suffix = "st"
+      case 2: suffix = "nd"
+      case 3: suffix = "rd"
+      default: suffix = "th"
+      }
+    }
+    return "\(day)\(suffix)"
+  }
+
+  private func upcomingLabel(_ block: CalendarBlock?) -> String {
+    if let title = block?.title, !title.isEmpty {
+      if let when = block?.whenLabel, !when.isEmpty {
+        return when
+      }
+      return title
+    }
+    return "No Upcoming"
+  }
+}
+
+struct CalendarBrandMark: View {
+  var body: some View {
+    Circle()
+      .fill(
+        LinearGradient(
+          colors: [
+            LifeOSWidgetPalette.now,
+            LifeOSWidgetPalette.calendar,
+            Color(red: 0.96, green: 0.45, blue: 0.71),
+          ],
+          startPoint: .topLeading,
+          endPoint: .bottomTrailing
+        )
+      )
+  }
+}
+
+struct MonthCalendarGrid: View {
+  let date: Date
+
+  private var cells: [MonthDayCell] {
+    MonthDayCell.build(for: date)
+  }
+
+  var body: some View {
+    let columns = Array(repeating: GridItem(.flexible(minimum: 16), spacing: 2), count: 7)
+    LazyVGrid(columns: columns, spacing: 5) {
+      ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
+        VStack(spacing: 2) {
+          Text(cell.label)
+            .font(.system(size: 12, weight: cell.isToday ? .bold : .medium))
+            .foregroundStyle(cellColor(cell))
+            .monospacedDigit()
+            .frame(maxWidth: .infinity)
+          Capsule()
+            .fill(cell.isToday ? LifeOSWidgetPalette.deadline : Color.clear)
+            .frame(width: 12, height: 2)
+        }
+        .frame(height: 18)
+      }
+    }
+  }
+
+  private func cellColor(_ cell: MonthDayCell) -> Color {
+    if !cell.inMonth { return LifeOSWidgetPalette.muted.opacity(0.35) }
+    if cell.isWeekend && !cell.isToday { return LifeOSWidgetPalette.muted.opacity(0.55) }
+    return LifeOSWidgetPalette.ink
+  }
+}
+
+struct MonthDayCell {
+  let label: String
+  let inMonth: Bool
+  let isToday: Bool
+  let isWeekend: Bool
+
+  static func build(for date: Date) -> [MonthDayCell] {
+    let cal = Calendar.current
+    let todayStart = cal.startOfDay(for: date)
+    guard let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: date)) else {
+      return []
+    }
+    let weekdayOfFirst = cal.component(.weekday, from: monthStart) // 1=Sun … 7=Sat
+    let leading = weekdayOfFirst - 1
+    let daysInMonth = cal.range(of: .day, in: .month, for: date)?.count ?? 30
+    var cells: [MonthDayCell] = []
+
+    if leading > 0, let prevMonth = cal.date(byAdding: .month, value: -1, to: monthStart) {
+      let prevDays = cal.range(of: .day, in: .month, for: prevMonth)?.count ?? 30
+      for i in 0..<leading {
+        let day = prevDays - leading + i + 1
+        let weekday = ((weekdayOfFirst - 1 - leading + i) % 7 + 7) % 7 // 0=Sun
+        cells.append(
+          MonthDayCell(
+            label: "\(day)",
+            inMonth: false,
+            isToday: false,
+            isWeekend: weekday == 0 || weekday == 6
+          )
+        )
+      }
+    }
+
+    for day in 1...daysInMonth {
+      guard let dayDate = cal.date(byAdding: .day, value: day - 1, to: monthStart) else { continue }
+      let weekday = cal.component(.weekday, from: dayDate)
+      cells.append(
+        MonthDayCell(
+          label: "\(day)",
+          inMonth: true,
+          isToday: cal.isDate(dayDate, inSameDayAs: todayStart),
+          isWeekend: weekday == 1 || weekday == 7
+        )
+      )
+    }
+
+    let remainder = cells.count % 7
+    if remainder != 0 {
+      let trailing = 7 - remainder
+      for day in 1...trailing {
+        let col = cells.count % 7 // 0=Sun before this append
+        cells.append(
+          MonthDayCell(
+            label: "\(day)",
+            inMonth: false,
+            isToday: false,
+            isWeekend: col == 0 || col == 6
+          )
+        )
+      }
+    }
+
+    return cells
   }
 }
 
@@ -665,7 +870,7 @@ struct LifeOSWidgetRoot: View {
       case .attention: AttentionView(snap: entry.snapshot)
       case .tasks: TasksView(snap: entry.snapshot)
       case .deadline: DeadlineView(snap: entry.snapshot)
-      case .calendar: CalendarWidgetView(snap: entry.snapshot)
+      case .calendar: CalendarWidgetView(snap: entry.snapshot, date: entry.date)
       case .today: TodayView(snap: entry.snapshot)
       }
     }
@@ -730,8 +935,8 @@ struct LifeOSCalendarWidget: Widget {
       LifeOSWidgetRoot(entry: entry)
     }
     .configurationDisplayName("Calendar")
-    .description("Next event on your calendar.")
-    .supportedFamilies([.systemSmall])
+    .description("Month view with today’s date and next event.")
+    .supportedFamilies([.systemSmall, .systemMedium])
   }
 }
 
