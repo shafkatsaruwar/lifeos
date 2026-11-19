@@ -159,7 +159,7 @@ import {
   type CareerView,
 } from "@/app/components/CareerDashboard";
 import { normalizeCareerHub } from "@/lib/careerHelpers";
-import { ExecutivePanel } from "@/app/components/ExecutivePanel";
+import { ExecutiveActiveStrip, ExecutivePanel } from "@/app/components/ExecutivePanel";
 import { NowWeatherWidget } from "@/app/components/NowWeatherWidget";
 import {
   executeCaptureCommand,
@@ -3259,7 +3259,7 @@ export default function LifeOS() {
               />
             )}
             {view === "Mastery" && <MasterOSDashboard />}
-            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onOpenTimesheet={() => { setWorkView("timesheet"); go("Work"); }} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableCareerOS={settingsState.enableCareerOS !== false} enableSchoolOS={settingsState.enableSchoolOS !== false} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableTreasuryOS={settingsState.enableTreasuryOS !== false} enableMasterOS={settingsState.enableMasterOS !== false} onboardingCompletedAt={settingsState.onboardingCompletedAt} onMarkOnboarded={() => setSettingsState(current => ({ ...current, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} flash={flash} />}
+            {(view === "Now" || view === "Dashboard") && <NowView tasks={tasks} projects={projectItems} classes={classes} events={calendarFeed} user={user} workspaceName={workspaceName} nowTaskId={settingsState.nowTaskId ?? null} ambientActivity={settingsState.ambientActivity ?? null} currentEnergy={settingsState.currentEnergy ?? "Medium"} momentumLog={settingsState.momentumLog ?? []} onChoose={chooseNowTask} onFocus={openFocus} onOpenTask={openTaskPage} onUpdateTask={updateTaskDetails} onComplete={complete} onCapture={() => setCapture(true)} onSmartCapture={() => setAiTaskComposer(true)} onDailyReset={() => setDailyResetOpen(true)} onWeeklyReview={() => setWeeklyReviewOpen(true)} onStartAmbient={() => setAmbientStartOpen(true)} onWrapAmbient={() => setAmbientWrapupOpen(true)} onGo={go} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} onSetWorkHub={setWorkHub} onSetStudyAbroadHub={setStudyAbroadHub} studyAbroadHub={studyAbroadHub} timeTracking={timeTracking} onTimeTrackingChange={setTimeTracking} onOpenTimesheet={() => { setWorkView("timesheet"); go("Work"); }} onAddTask={(title, options) => addTask(title, undefined, "", options)} onAddProject={(name) => addProject(name)} onAddNote={(title) => createNote(undefined, undefined, title)} onAddAssignment={(title) => { const activeClasses = classes.filter(item => !isClassArchived(item)); if (!activeClasses.length) { flash("Add a course first"); setSpaceComposer("class"); return; } addAcademicTask(activeClasses[0].id, { title, due: toDateKey(new Date()), priority: "Medium", focusMinutes: settingsState.defaultFocusMinutes, energy: settingsState.defaultEnergy, academicType: "Assignment" }); }} onBreak={() => setBreakOpen(true)} showCaptureCommands={settingsState.showCaptureCommands !== false} onDismissCaptureCommands={() => updateSettings({ showCaptureCommands: false })} nowQueueIds={settingsState.nowQueueIds ?? []} onEnqueue={enqueueNowTask} onSetQueue={setNowQueueIds} enableCareerOS={settingsState.enableCareerOS !== false} enableSchoolOS={settingsState.enableSchoolOS !== false} enableWorkOS={settingsState.enableWorkOS !== false} enableStudyAbroad={settingsState.enableStudyAbroad !== false} enableTreasuryOS={settingsState.enableTreasuryOS !== false} enableMasterOS={settingsState.enableMasterOS !== false} onboardingCompletedAt={settingsState.onboardingCompletedAt} onMarkOnboarded={() => setSettingsState(current => ({ ...current, onboardingCompletedAt: current.onboardingCompletedAt ?? new Date().toISOString(), onboardingVersion: current.onboardingVersion ?? 1 }))} flash={flash} guidedHub={guidedHub} onGuidedChange={setGuidedHub} onOpenGuided={() => go(isNavigationOwner(user?.email) ? "Navigation" : "Now")} />}
             {view === "Spaces" && <SpacesView projects={projectItems} classes={classes} tasks={tasks} notes={notes} resources={resources} selectedProjectName={selectedProjectName} selectedClassId={selectedClassId} onBack={() => { setSelectedProjectName(null); setSelectedClassId(null); }} onNew={() => setSpaceComposer("project")} onActionProject={setActionProjectName} onActionClass={setActionClassId} onOpenProject={openProjectSpace} onOpenClass={openClassSpace} onNewAcademicItem={setAcademicComposerClassId} onNewNote={createNote} onOpenTask={openTaskPage} onOpenNote={(id) => { setSelectedNoteId(id); setSelectedClassId(null); setSelectedProjectName(null); setView("Library"); }} onEditClass={setEditingClassId} onDeleteClass={deleteClass} onUploadResource={uploadResource} onDeleteResource={deleteResource} onReplaceResource={replaceResource} onDownloadResource={downloadResource} linkTask={linkTaskToProject} initialFilter={spacesFilter} onFilterChange={setSpacesFilter} />}
             {view === "Tasks" && <Tasks tasks={tasks} classes={classes} viewMode={normalizeTasksViewMode(settingsState.tasksViewMode)} onViewModeChange={(tasksViewMode) => { if (tasksViewMode === "calendar") { go("Calendar"); return; } updateSettings({ tasksViewMode }); }} onComplete={complete} onNew={() => setComposer("task")} onTaskMenu={setActionTaskId} onOpenTask={openTaskPage} onDeleteMany={deleteTasks} onUpdateStatus={(id, status) => updateTaskDetails(id, statusMutationPatch(status))} />}
             {view === "Navigation" && canAccessNavigation && (
@@ -3383,10 +3383,15 @@ export default function LifeOS() {
   );
 }
 
-function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, timeTracking, onTimeTrackingChange, onOpenTimesheet, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableCareerOS, enableSchoolOS, enableWorkOS, enableStudyAbroad, enableTreasuryOS, enableMasterOS, onboardingCompletedAt, onMarkOnboarded, flash}: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; timeTracking: TimeTrackingState; onTimeTrackingChange: (next: TimeTrackingState) => void; onOpenTimesheet: () => void; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableCareerOS: boolean; enableSchoolOS: boolean; enableWorkOS: boolean; enableStudyAbroad: boolean; enableTreasuryOS: boolean; enableMasterOS: boolean; onboardingCompletedAt?: string; onMarkOnboarded: () => void; flash: (message: string) => void }) {
+function NowView({ tasks, projects, classes, events, user, workspaceName, nowTaskId, ambientActivity, currentEnergy, momentumLog, onChoose, onFocus, onOpenTask, onUpdateTask, onComplete, onCapture, onSmartCapture, onDailyReset, onWeeklyReview, onStartAmbient, onWrapAmbient, onGo, weeklyPlan, setWeeklyPlan, onSetWorkHub, onSetStudyAbroadHub, studyAbroadHub, timeTracking, onTimeTrackingChange, onOpenTimesheet, onAddTask, onAddProject, onAddNote, onAddAssignment, onBreak, showCaptureCommands, onDismissCaptureCommands, nowQueueIds, onEnqueue, onSetQueue, enableCareerOS, enableSchoolOS, enableWorkOS, enableStudyAbroad, enableTreasuryOS, enableMasterOS, onboardingCompletedAt, onMarkOnboarded, flash, guidedHub, onGuidedChange, onOpenGuided}: { tasks: Task[]; projects: Project[]; classes: ClassRecord[]; events: CalendarEvent[]; user?: any; workspaceName: string; nowTaskId: number | null; ambientActivity: AmbientActivity | null; currentEnergy: EnergyLevel; momentumLog: SettingsState["momentumLog"]; onChoose: (id: number | null) => void; onFocus: (id: number) => void; onOpenTask: (id: number) => void; onUpdateTask: (id: number, updates: Partial<Task>) => void; onComplete: (id: number) => void; onCapture: () => void; onSmartCapture: () => void; onDailyReset: () => void; onWeeklyReview: () => void; onStartAmbient: () => void; onWrapAmbient: () => void; onGo: (view: View) => void; weeklyPlan: WeeklyPlan; setWeeklyPlan: (plan: WeeklyPlan) => void; onSetWorkHub: (updater: (current: WorkHubState) => WorkHubState) => void; onSetStudyAbroadHub: (updater: (current: StudyAbroadHub) => StudyAbroadHub) => void; studyAbroadHub: StudyAbroadHub; timeTracking: TimeTrackingState; onTimeTrackingChange: (next: TimeTrackingState) => void; onOpenTimesheet: () => void; onAddTask: (title: string, options?: { energy?: EnergyLevel; priority?: Task["priority"]; focusMinutes?: number; flashLabel?: string }) => number; onAddProject: (name: string) => void; onAddNote: (title: string) => void; onAddAssignment: (title: string) => void; onBreak: () => void; showCaptureCommands: boolean; onDismissCaptureCommands: () => void; nowQueueIds: number[]; onEnqueue: (id: number) => void; onSetQueue: (ids: number[]) => void; enableCareerOS?: boolean; enableSchoolOS?: boolean; enableWorkOS: boolean; enableStudyAbroad: boolean; enableTreasuryOS?: boolean; enableMasterOS: boolean; onboardingCompletedAt?: string; onMarkOnboarded: () => void; flash: (message: string) => void; guidedHub: ExecutiveHub; onGuidedChange: (hub: ExecutiveHub) => void; onOpenGuided: () => void }) {
   const [handoff, setHandoff] = useState("");
+  const [captureInput, setCaptureInput] = useState("");
+  const [captureFocused, setCaptureFocused] = useState(false);
+  const [suggestedCommandIndex, setSuggestedCommandIndex] = useState(-1);
   const [queueOpen, setQueueOpen] = useState(false);
   const [dragQueueId, setDragQueueId] = useState<number | null>(null);
+  const captureInputRef = useRef<HTMLInputElement | null>(null);
+  const captureBlurTimer = useRef<number | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false;
     if (onboardingCompletedAt) return false;
@@ -3398,6 +3403,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
   }, [onboardingCompletedAt]);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
+  useEffect(() => () => { if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current); }, []);
   const today = toDateKey(new Date());
   const allActive = tasks.filter(task => !task.done && !task.canceled);
   const active = allActive.filter(task => getTaskStatus(task) !== "Waiting" || !task.followUpDate || task.followUpDate <= today);
@@ -3412,19 +3418,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     };
     return score(b) - score(a);
   }).filter(task => task.id !== current?.id).slice(0, 5);
-  const todayTimed = events
-    .filter(event => eventOccursOnDate(event, today) && classifyCalendarItem(event) !== "deadline")
-    .sort((a, b) => a.start.localeCompare(b.start))
-    .slice(0, 8);
-  const todayDeadlines = events
-    .filter(event => eventOccursOnDate(event, today) && classifyCalendarItem(event) === "deadline")
-    .filter(event => {
-      const taskId = parseDeadlineEventId(event.id);
-      if (taskId == null) return true;
-      return !todayTimed.some(item => item.linkedTaskId === taskId || item.id === `task-${taskId}`);
-    })
-    .slice(0, 5);
-  const todayEvents = todayTimed;
+  const todayEvents = events.filter(event => eventOccursOnDate(event, today)).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 8);
   const activeSpace = current?.classId ? classes.find(item => item.id === current.classId)?.code : current?.project;
   const hasDue = (due: string) => /^\d{4}-\d{2}-\d{2}/.test(due);
   const resurfacing = allActive.filter(task => task.id !== current?.id && ((hasDue(task.due) && task.due < today) || (getTaskStatus(task) === "Waiting" && Boolean(task.followUpDate && task.followUpDate <= today)))).slice(0, 3);
@@ -3457,6 +3451,285 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
     if (typeof window !== 'undefined') localStorage.setItem('lifeos-onboarding-seen', 'true');
     onMarkOnboarded();
   };
+  const commands = [
+    { shortcut: '/t', label: 'Add task', desc: 'Create a new task' },
+    { shortcut: '/tm', label: 'Minor task', desc: 'Low-energy errand — water, charge, quick chore' },
+    { shortcut: '/proj', label: 'Add project', desc: 'Start a new project' },
+    { shortcut: '/asg', label: 'Add assignment', desc: 'School mode only' },
+    { shortcut: '/note', label: 'Add note', desc: 'Capture a quick note' },
+    { shortcut: '/focus', label: 'Start focus', desc: 'Enter a focus session' },
+    { shortcut: '/break', label: 'Break', desc: 'I need a break' },
+    { shortcut: '/clock', label: 'Clock in/out', desc: 'Start or stop contractor timesheet' },
+    { shortcut: '/timesheet', label: 'Timesheet', desc: 'Open full timesheet editor' },
+    { shortcut: '/spaces', label: 'Spaces', desc: 'Open your spaces' },
+    { shortcut: '/w', label: 'I\'m doing something', desc: 'Start ambient activity' },
+    { shortcut: '/a', label: 'AI task', desc: 'Create with AI assistance' },
+    ...(enableWorkOS ? [
+      { shortcut: '/w proj', label: 'Work project', desc: 'Start a work project' },
+      { shortcut: '/w deliver', label: 'Deliverable', desc: 'Add a work deliverable' },
+      { shortcut: '/w task', label: 'Work task', desc: 'Add a work task' },
+      { shortcut: '/w tasks', label: 'Work task', desc: 'Add a work task (alias)' },
+      { shortcut: '/w meet', label: 'Schedule meeting', desc: 'Schedule a meeting' },
+    ] : []),
+    ...(enableStudyAbroad ? [
+      { shortcut: '/sa', label: 'Study Abroad', desc: 'Open Study Abroad' },
+      { shortcut: '/sa country', label: 'Country', desc: 'Add a country path' },
+      { shortcut: '/sa uni', label: 'University', desc: 'Add a university' },
+      { shortcut: '/sa prog', label: 'Program', desc: 'Add a program' },
+      { shortcut: '/sa app', label: 'Application', desc: 'Start an application' },
+      { shortcut: '/sa fund', label: 'Scholarship', desc: 'Add funding / scholarship' },
+      { shortcut: '/sa note', label: 'Note', desc: 'Add study-abroad knowledge' },
+      { shortcut: '/sa task', label: 'SA task', desc: 'Add a study-abroad task' },
+    ] : []),
+    ...(enableMasterOS ? [
+      { shortcut: '/mos', label: 'Mastery', desc: 'Open teaching workspace (web / iPad)' },
+    ] : []),
+  ];
+  const captureQuery = captureInput.startsWith('/') ? captureInput.trim().toLowerCase() : '';
+  const showCommandHelp = showCaptureCommands && captureFocused && (!captureInput || captureInput.startsWith('/'));
+  const filtered = captureQuery
+    ? commands.filter(c => c.shortcut.startsWith(captureQuery) || c.shortcut.includes(captureQuery) || c.label.toLowerCase().includes(captureQuery.slice(1)))
+    : (showCommandHelp ? commands : []);
+  const showSuggestions = filtered.length > 0 && (captureFocused || Boolean(captureQuery));
+  const runInstantCommand = (raw: string) => {
+    const val = raw.trim().toLowerCase();
+    if (val === '/w') { onStartAmbient(); return true; }
+    if (val === '/break') { onBreak(); return true; }
+    if (val === '/clock') {
+      const active = getActiveEntry(timeTracking);
+      if (active) {
+        onTimeTrackingChange(clockOut(timeTracking));
+        flash("Clocked out");
+      } else {
+        onTimeTrackingChange(clockIn(timeTracking, {
+          clientName: timeTracking.defaultClientName,
+          title: current?.title || "Work session",
+        }));
+        flash("Clocked in");
+      }
+      return true;
+    }
+    if (val === '/timesheet') { onOpenTimesheet(); return true; }
+    if (val === '/a') { onSmartCapture(); return true; }
+    if (val === '/focus') {
+      const target = current ?? recommendations[0];
+      if (target) onFocus(target.id);
+      return true;
+    }
+    if (val === '/spaces') { onGo('Spaces'); return true; }
+    if (val === '/guide' || val === '/guided' || val === '/executive' || val === '/unfreeze') { onOpenGuided(); return true; }
+    if (enableStudyAbroad && (val === '/sa' || val === '/study abroad')) { onGo('Study Abroad'); return true; }
+    if (enableMasterOS && (val === '/mos' || val === '/masteros')) { onGo('Mastery'); return true; }
+    return false;
+  };
+  const handleCaptureFocus = () => {
+    if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current);
+    setCaptureFocused(true);
+  };
+  const handleCaptureBlur = () => {
+    captureBlurTimer.current = window.setTimeout(() => setCaptureFocused(false), 160);
+  };
+  /** After a command runs, clear + unfocus so the help list does not pop back open. */
+  const finishCaptureCommand = () => {
+    if (captureBlurTimer.current) window.clearTimeout(captureBlurTimer.current);
+    setCaptureInput("");
+    setSuggestedCommandIndex(-1);
+    setCaptureFocused(false);
+    captureInputRef.current?.blur();
+  };
+  const handleCaptureKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSuggestedCommandIndex(Math.min(suggestedCommandIndex + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSuggestedCommandIndex(Math.max(suggestedCommandIndex - 1, -1));
+    } else if (e.key === 'Escape') {
+      setCaptureFocused(false);
+      e.currentTarget.blur();
+    } else if (e.key === 'Enter') {
+      const val = e.currentTarget.value.trim();
+      if (suggestedCommandIndex >= 0) {
+        const cmd = filtered[suggestedCommandIndex];
+        if (['/w', '/break', '/a', '/focus', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
+          runInstantCommand(cmd.shortcut);
+          finishCaptureCommand();
+        } else {
+          setCaptureInput(cmd.shortcut + ' ');
+          setSuggestedCommandIndex(-1);
+        }
+      } else if (val) {
+        if (runInstantCommand(val)) {
+          finishCaptureCommand();
+        } else if (val.startsWith('/t ')) {
+          const taskTitle = val.slice(3).trim();
+          if (taskTitle) {
+            const id = onAddTask(taskTitle);
+            if (id) {
+              if (nowTaskId) onEnqueue(id);
+              else onChoose(id);
+            }
+          }
+          finishCaptureCommand();
+        } else if (val.startsWith('/tm ')) {
+          const taskTitle = val.slice(4).trim();
+          if (taskTitle) {
+            const id = onAddTask(taskTitle, {
+              energy: 'Low',
+              priority: 'Low',
+              focusMinutes: 5,
+              flashLabel: 'Minor task added',
+            });
+            if (id) {
+              if (nowTaskId) onEnqueue(id);
+              else onChoose(id);
+            }
+          }
+          finishCaptureCommand();
+        } else if (val.startsWith('/proj ')) {
+          const projectName = val.slice(6).trim();
+          if (projectName) onAddProject(projectName);
+          finishCaptureCommand();
+        } else if (val.startsWith('/asg ')) {
+          const assignmentTitle = val.slice(5).trim();
+          if (assignmentTitle) onAddAssignment(assignmentTitle);
+          finishCaptureCommand();
+        } else if (val.startsWith('/note ')) {
+          const noteTitle = val.slice(6).trim();
+          if (noteTitle) onAddNote(noteTitle);
+          finishCaptureCommand();
+        } else if (enableWorkOS && val.startsWith('/w proj ')) {
+          const projName = val.slice(8).trim() || 'New Project';
+          const newProj: WorkProject = { id: `proj-${Date.now()}`, name: projName, color: '#625af6', status: 'active', createdAt: new Date().toISOString() };
+          onSetWorkHub((current: WorkHubState) => ({ ...current, projects: [...current.projects, newProj] }));
+          finishCaptureCommand();
+        } else if (enableWorkOS && val.startsWith('/w deliver ')) {
+          const title = val.slice(11).trim() || 'New deliverable';
+          onSetWorkHub((current: WorkHubState) => {
+            const project = current.projects.find(item => item.status === 'active');
+            if (!project) return current;
+            const deliverable: WorkDeliverable = { id: `del-${Date.now()}`, projectId: project.id, title, type: 'document', status: 'planned', priority: 'medium', dueDate: toDateKey(new Date()), createdAt: new Date().toISOString() };
+            return { ...current, deliverables: [...current.deliverables, deliverable] };
+          });
+          finishCaptureCommand();
+        } else if (enableWorkOS && (val.startsWith('/w task ') || val.startsWith('/w tasks '))) {
+          const title = val.startsWith('/w tasks ') ? val.slice(9).trim() : val.slice(8).trim();
+          onSetWorkHub((current: WorkHubState) => captureAddWorkTask(current, title || "New task"));
+          flash(title ? `Work task added: ${title}` : "Work task added");
+          finishCaptureCommand();
+        } else if (!enableWorkOS && (val.startsWith('/w task ') || val.startsWith('/w tasks ') || val.startsWith('/w proj ') || val.startsWith('/w deliver ') || val.startsWith('/w meet '))) {
+          flash("Enable WorkOS in Settings to use /w work commands");
+          finishCaptureCommand();
+        } else if (enableWorkOS && val.startsWith('/w meet ')) {
+          const meetTitle = val.slice(8).trim() || 'New Meeting';
+          const newMeet: WorkMeeting = { id: `meet-${Date.now()}`, title: meetTitle, start: new Date().toISOString(), type: 'other', createdAt: new Date().toISOString() };
+          onSetWorkHub((current: WorkHubState) => ({ ...current, meetings: [...current.meetings, newMeet] }));
+          finishCaptureCommand();
+        } else if (enableStudyAbroad && val.startsWith('/sa country ')) {
+          const name = val.slice(12).trim();
+          if (name) {
+            const stamp = nowIso();
+            onSetStudyAbroadHub(current => appendHistory({
+              ...current,
+              countries: [...current.countries, { id: newId('country'), name, createdAt: stamp, updatedAt: stamp }],
+            }, 'Added country', name, 'country'));
+            flash(`Country added: ${name}`);
+          }
+          finishCaptureCommand();
+        } else if (enableStudyAbroad && val.startsWith('/sa uni ')) {
+          const name = val.slice(8).trim();
+          if (name) {
+            const country = studyAbroadHub.countries[0];
+            if (!country) flash('Add a country first with /sa country');
+            else {
+              const stamp = nowIso();
+              onSetStudyAbroadHub(current => appendHistory({
+                ...current,
+                universities: [...current.universities, { id: newId('uni'), name, countryId: country.id, createdAt: stamp, updatedAt: stamp }],
+              }, 'Added university', name, 'university'));
+              flash(`University added: ${name}`);
+            }
+          }
+          finishCaptureCommand();
+        } else if (enableStudyAbroad && val.startsWith('/sa prog ')) {
+          const name = val.slice(9).trim();
+          if (name) {
+            const university = studyAbroadHub.universities[0];
+            if (!university) flash('Add a university first with /sa uni');
+            else {
+              const stamp = nowIso();
+              onSetStudyAbroadHub(current => appendHistory({
+                ...current,
+                programs: [...current.programs, { id: newId('prog'), name, universityId: university.id, status: 'discovering', shortlisted: false, createdAt: stamp, updatedAt: stamp }],
+              }, 'Added program', name, 'program'));
+              flash(`Program added: ${name}`);
+            }
+          }
+          finishCaptureCommand();
+        } else if (enableStudyAbroad && val.startsWith('/sa app ')) {
+          const name = val.slice(8).trim();
+          const program = name
+            ? studyAbroadHub.programs.find(item => item.name.toLowerCase() === name.toLowerCase()) || studyAbroadHub.programs[0]
+            : studyAbroadHub.programs[0];
+          if (!program) flash('Add a program first with /sa prog');
+          else {
+            const stamp = nowIso();
+            onSetStudyAbroadHub(current => appendHistory({
+              ...current,
+              applications: [...current.applications, { id: newId('app'), programId: program.id, stage: 'preparing', createdAt: stamp, updatedAt: stamp }],
+              programs: current.programs.map(item => item.id === program.id ? { ...item, status: 'preparing', shortlisted: true, updatedAt: stamp } : item),
+            }, 'Started application', program.name, 'application'));
+            flash(`Application started: ${program.name}`);
+          }
+          finishCaptureCommand();
+        } else if (enableStudyAbroad && (val.startsWith('/sa fund ') || val.startsWith('/sa scholarship '))) {
+          const name = val.startsWith('/sa scholarship ') ? val.slice(16).trim() : val.slice(9).trim();
+          if (name) {
+            const stamp = nowIso();
+            onSetStudyAbroadHub(current => appendHistory({
+              ...current,
+              funding: [...current.funding, { id: newId('fund'), name, kind: 'scholarship', countryId: current.countries[0]?.id, status: 'researching', createdAt: stamp, updatedAt: stamp }],
+            }, 'Added funding', name, 'funding'));
+            flash(`Scholarship added: ${name}`);
+          }
+          finishCaptureCommand();
+        } else if (enableStudyAbroad && val.startsWith('/sa task ')) {
+          const title = val.slice(9).trim();
+          if (title) {
+            const parentProgramId = studyAbroadHub.sessionMemory?.lastProgramId || studyAbroadHub.programs[0]?.id;
+            const parentCountryId = studyAbroadHub.countries[0]?.id;
+            if (!parentProgramId && !parentCountryId) flash('Add a country or program first');
+            else {
+              const stamp = nowIso();
+              const parentType = parentProgramId ? 'program' as const : 'country' as const;
+              const parentId = parentProgramId || parentCountryId!;
+              onSetStudyAbroadHub(current => appendHistory({
+                ...current,
+                tasks: [...current.tasks, { id: newId('task'), title, parentType, parentId, createdAt: stamp, updatedAt: stamp }],
+              }, 'Added study-abroad task', title, parentType, parentId));
+              flash(`Study Abroad task: ${title}`);
+            }
+          }
+          finishCaptureCommand();
+        } else if (enableStudyAbroad && val.startsWith('/sa note ')) {
+          const title = val.slice(9).trim();
+          if (title) {
+            const stamp = nowIso();
+            onSetStudyAbroadHub(current => appendHistory({
+              ...current,
+              knowledge: [...current.knowledge, { id: newId('know'), title, contextType: 'general', createdAt: stamp, updatedAt: stamp }],
+              sessionMemory: { ...current.sessionMemory, lastNote: title, updatedAt: stamp },
+            }, 'Added knowledge note', title, 'general'));
+            flash(`Study Abroad note: ${title}`);
+          }
+          finishCaptureCommand();
+        } else if (!val.startsWith('/')) {
+          onStartAmbient();
+          finishCaptureCommand();
+        }
+      }
+    }
+  };
   return <div className="now-view">
     {showOnboarding && (
       <div className="ob-overlay" role="dialog" aria-modal="true" aria-labelledby="postauth-onboarding-title">
@@ -3477,7 +3750,7 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             <h2 id="postauth-onboarding-title" className="ob-title">Ready to start your week?</h2>
             <p className="ob-body">A few habits that keep Now clear — capture fast, focus on one thing, let Copilot suggest the next move.</p>
             <div className="ob-tips">
-              <div className="ob-tip"><span className="ob-tip-icon"><Command size={16} /></span><div><strong>Command bar</strong><p>Use <code>⌘ K</code> or Search anything — type <code>/t</code> for tasks, <code>/break</code>, <code>/focus</code>.</p></div></div>
+              <div className="ob-tip"><span className="ob-tip-icon"><Command size={16} /></span><div><strong>Capture commands</strong><p>Type <code>/t</code> for tasks, <code>/proj</code> for projects, <code>/asg</code> for assignments.</p></div></div>
               <div className="ob-tip"><span className="ob-tip-icon"><Focus size={16} /></span><div><strong>Current task</strong><p>Click any task to focus on it. Your active work shows here with focus tools.</p></div></div>
               <div className="ob-tip"><span className="ob-tip-icon"><Sparkles size={16} /></span><div><strong>LifeOS Copilot</strong><p>Suggestions based on your priorities and context — you decide what runs.</p></div></div>
             </div>
@@ -3539,9 +3812,8 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
             {todayEvents.length ? todayEvents.map((event, index) => {
               const start = new Date(event.start);
               const time = Number.isNaN(start.getTime()) ? "—" : start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-              const kind = classifyCalendarItem(event);
               return (
-                <div key={event.id} className={`now-today-row now-today-${kind}`}>
+                <div key={event.id} className="now-today-row">
                   <time dateTime={event.start}>{time}</time>
                   <div className="now-today-track" aria-hidden>
                     <i style={{ background: event.color || "var(--accent)" }} />
@@ -3549,26 +3821,12 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
                   </div>
                   <div className="now-today-body">
                     <strong>{event.title}</strong>
-                    <span>{layerLabel(kind)}{event.location ? ` · ${event.location}` : ""}</span>
+                    <span>{event.source}{event.location ? ` · ${event.location}` : ""}</span>
                   </div>
                 </div>
               );
-            }) : <div className="now-today-empty">No timed blocks for today. Protect a session when you’re ready.</div>}
+            }) : <div className="now-today-empty">No events on the calendar for today. Protect a block when you’re ready.</div>}
           </div>
-          {todayDeadlines.length ? (
-            <div className="now-today-deadlines" aria-label="Deadlines due today">
-              {todayDeadlines.map(event => (
-                <button type="button" key={event.id} className="now-deadline-chip" onClick={() => {
-                  const taskId = parseDeadlineEventId(event.id);
-                  if (taskId != null) onOpenTask(taskId);
-                }}>
-                  <i style={{ background: event.color || "var(--accent)" }} />
-                  <span>{event.title}</span>
-                  <em>Due today</em>
-                </button>
-              ))}
-            </div>
-          ) : null}
           <div className="now-today-footer"><button type="button" onClick={() => onGo("Today")}>View full day</button></div>
         </section>
 
@@ -3645,44 +3903,85 @@ function NowView({ tasks, projects, classes, events, user, workspaceName, nowTas
           </section>
 
           <div className="atelier-hub-tiles" aria-label="Spaces">
-            {(() => {
-              type StripTile = { key: string; label: string; sub: string; view: View; className: string; Icon: typeof Home };
-              const byKey: Record<string, StripTile> = {
-                home: { key: "home", label: "Home", sub: `${lifeOpen} open`, view: "Life", className: "tile-life", Icon: Home },
-                work: { key: "work", label: "Work", sub: "Workspace", view: "Work", className: "tile-work", Icon: BriefcaseBusiness },
-                career: { key: "career", label: "Career", sub: "Pipeline", view: "Career", className: "tile-career", Icon: Target },
-                school: { key: "school", label: "School", sub: `${schoolOpen} open`, view: "School", className: "tile-school", Icon: GraduationCap },
-                "study-abroad": { key: "study-abroad", label: "Study Abroad", sub: "Paths", view: "Study Abroad", className: "tile-study", Icon: Globe2 },
-                treasury: { key: "treasury", label: "Treasury", sub: "Money", view: "Treasury", className: "tile-treasury", Icon: WalletCards },
-                mastery: { key: "mastery", label: "Mastery", sub: "Teaching", view: "Mastery", className: "tile-mastery", Icon: NotebookPen },
-                calendar: { key: "calendar", label: "Calendar", sub: "Schedule", view: "Calendar", className: "tile-calendar", Icon: CalendarDays },
-                tasks: { key: "tasks", label: "Tasks", sub: `${active.length} open`, view: "Tasks", className: "tile-tasks", Icon: CheckCircle2 },
-                library: { key: "library", label: "Library", sub: "Notes & files", view: "Library", className: "tile-library", Icon: Library },
-              };
-              // Home → all enabled hubs (sidebar order) → Calendar → Tasks; Library if no hubs.
-              const tiles = buildFocusStripKeys({
-                enableWorkOS,
-                enableCareerOS,
-                enableSchoolOS,
-                enableStudyAbroad,
-                enableTreasuryOS,
-                enableMasterOS,
-              }).map((key) => byKey[key]);
-              return tiles.map((tile) => (
-                <button key={tile.key} type="button" className={`atelier-hub-tile ${tile.className}`} onClick={() => onGo(tile.view)}>
-                  <tile.Icon size={18} /><strong>{tile.label}</strong><span>{tile.sub}</span>
-                </button>
-              ));
-            })()}
+            <button type="button" className="atelier-hub-tile tile-career" onClick={() => onGo("Career")}>
+              <Target size={18} /><strong>Career</strong><span>Pipeline</span>
+            </button>
+            <button type="button" className="atelier-hub-tile tile-life" onClick={() => onGo("Life")}>
+              <Home size={18} /><strong>Life</strong><span>{lifeOpen} open</span>
+            </button>
+            <button type="button" className="atelier-hub-tile tile-school" onClick={() => onGo("School")}>
+              <GraduationCap size={18} /><strong>School</strong><span>{schoolOpen} open</span>
+            </button>
+            <button type="button" className="atelier-hub-tile tile-tasks" onClick={() => onGo("Tasks")}>
+              <CheckCircle2 size={18} /><strong>Tasks</strong><span>{active.length} open</span>
+            </button>
           </div>
         </div>
       </div>
 
       <div className="atelier-now-bottom">
+        <section className="card atelier-capture-panel">
+          <div className="card-head"><div><h2>Quick capture</h2></div></div>
+          <div className="atelier-capture-body">
+            <input
+              ref={captureInputRef}
+              type="text"
+              placeholder="Drop a thought, task, or idea…"
+              value={captureInput}
+              onChange={(e) => { setCaptureInput(e.currentTarget.value); setSuggestedCommandIndex(-1); }}
+              onFocus={handleCaptureFocus}
+              onClick={handleCaptureFocus}
+              onBlur={handleCaptureBlur}
+              onKeyDown={handleCaptureKeyDown}
+            />
+            <button type="button" className="atelier-capture-add" onClick={onCapture} aria-label="Capture"><Plus size={18} /></button>
+          </div>
+          {showSuggestions ? (
+            <div className="capture-suggestions" onMouseDown={(e) => e.preventDefault()}>
+              <div className="capture-suggestions-list">
+                {filtered.map((cmd, idx) => (
+                  <button
+                    key={cmd.shortcut}
+                    type="button"
+                    className={idx === suggestedCommandIndex ? "suggested" : ""}
+                    onClick={() => {
+                      if (['/w', '/break', '/a', '/focus', '/spaces', '/sa', '/mos'].includes(cmd.shortcut)) {
+                        runInstantCommand(cmd.shortcut);
+                        finishCaptureCommand();
+                      } else {
+                        setCaptureInput(cmd.shortcut + " ");
+                        setSuggestedCommandIndex(-1);
+                        captureInputRef.current?.focus();
+                      }
+                    }}
+                  >
+                    <strong>{cmd.shortcut}</strong>
+                    <span>{cmd.desc}</span>
+                  </button>
+                ))}
+              </div>
+              {showCaptureCommands ? (
+                <div className="capture-suggestions-footer">
+                  <button type="button" className="capture-dismiss" onClick={() => { onDismissCaptureCommands(); setCaptureFocused(false); }}>
+                    Don&apos;t show again
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="atelier-capture-hint">/t · /tm · /break · /focus · /clock{enableMasterOS ? " · /mos" : ""}</p>
+          )}
+        </section>
         <LifeOSCopilot tasks={active} classes={classes} events={todayEvents} current={current} recommendations={recommendations} onChoose={switchTo} onFocus={onFocus} onComplete={onComplete} onPlan={() => onGo("Today")} studyAbroadContext={enableStudyAbroad ? buildStudyAbroadCopilotContext(studyAbroadHub) : null} />
       </div>
 
       <div className="atelier-now-utility">
+        <div className="atelier-utility-actions">
+          <button type="button" className="atelier-chip" onClick={onDailyReset}>Daily reset</button>
+          <button type="button" className="atelier-chip" onClick={onWeeklyReview}>Weekly review</button>
+          <button type="button" className="atelier-chip primary" onClick={() => onGo("Today")}><CalendarDays size={15} /> Plan today</button>
+        </div>
+        <ExecutiveActiveStrip hub={guidedHub} onChange={onGuidedChange} flash={flash} onOpen={onOpenGuided} />
         <TimesheetNowStrip
           timeTracking={timeTracking}
           onChange={onTimeTrackingChange}
