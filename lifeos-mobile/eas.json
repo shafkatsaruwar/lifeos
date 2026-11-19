@@ -47,6 +47,9 @@
       "env": {
         "RCT_USE_PREBUILT_RNCORE": "0",
         "RCT_USE_RN_DEP": "0"
+      },
+      "ios": {
+        "image": "latest"
       }
     }
   },

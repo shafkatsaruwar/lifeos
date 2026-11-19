@@ -1,0 +1,23 @@
+# Always build production iOS and submit to TestFlight / App Store Connect.
+# No Mac required — run from Expo dashboard → Workflows, or:
+#   npx eas-cli@latest workflow:run .eas/workflows/production-ios-submit.yml
+name: Production iOS + Submit
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build_ios:
+    name: Build iOS production
+    type: build
+    params:
+      platform: ios
+      profile: production
+
+  submit_ios:
+    name: Submit to App Store Connect
+    needs: [build_ios]
+    type: submit
+    params:
+      build_id: ${{ needs.build_ios.outputs.build_id }}
+      profile: production

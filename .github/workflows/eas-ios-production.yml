@@ -1,0 +1,76 @@
+name: EAS iOS Production (build + auto-submit)
+
+# Path B without a Mac: native production build, then always submit to
+# App Store Connect / TestFlight. Run from GitHub Actions → Run workflow
+# (works from the GitHub mobile app too).
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "EAS build profile (always auto-submits with the production submit profile)"
+        required: false
+        default: "production"
+        type: string
+
+concurrency:
+  group: eas-ios-production-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build_and_submit:
+    name: Build + auto-submit iOS
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lifeos-mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: lifeos-mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: EAS build + auto-submit
+        env:
+          EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+          EXPO_PUBLIC_EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          BUILD_PROFILE: ${{ github.event.inputs.profile }}
+        run: |
+          PROFILE="${BUILD_PROFILE:-production}"
+          if ! printf '%s' "$PROFILE" | grep -Eq '^[A-Za-z0-9._-]+$'; then
+            echo "Invalid build profile '$PROFILE'."
+            exit 1
+          fi
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "Missing GitHub secret EXPO_TOKEN."
+            echo "Create a token at https://expo.dev/accounts/mohammedsaruwars-organization/settings/access-tokens"
+            echo "Then add it: GitHub repo → Settings → Secrets and variables → Actions → EXPO_TOKEN."
+            exit 1
+          fi
+          if [ -n "$EAS_PROJECT_ID" ] && ! echo "$EAS_PROJECT_ID" | grep -Eq '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'; then
+            echo "Warning: EAS_PROJECT_ID secret is not a UUID; using projectId from app config instead."
+            unset EAS_PROJECT_ID
+            unset EXPO_PUBLIC_EAS_PROJECT_ID
+          fi
+          RESOLVED="$(node -e 'const c=require("./app.config.js"); process.stdout.write(String(c.expo?.extra?.eas?.projectId||""))')"
+          if ! echo "$RESOLVED" | grep -Eq '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'; then
+            echo "No valid EAS project UUID in secret or app config."
+            exit 1
+          fi
+          export EAS_PROJECT_ID="$RESOLVED"
+          export EXPO_PUBLIC_EAS_PROJECT_ID="$RESOLVED"
+          # Always auto-submit — no Mac / no Expo dashboard checkbox required.
+          npx eas-cli@latest build \
+            --platform ios \
+            --profile "$PROFILE" \
+            --auto-submit \
+            --non-interactive \
+            --no-wait
