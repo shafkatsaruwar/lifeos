@@ -1,21 +1,20 @@
 import { ReticleDev } from './reticle-dev';
 import type { Metadata, Viewport } from "next";
-import { Instrument_Serif, Inter } from "next/font/google";
+import localFont from "next/font/local";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PrivacyTelemetryBoot } from "@/app/components/PrivacyTelemetry";
 import "./globals.css";
 
-const inter = Inter({
-  subsets: ["latin"],
+const inter = localFont({
+  src: [
+    { path: "./fonts/inter-latin-400-normal.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/inter-latin-500-normal.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/inter-latin-600-normal.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/inter-latin-700-normal.woff2", weight: "700", style: "normal" },
+  ],
+  display: "swap",
   variable: "--font-inter",
-  display: "swap",
-});
-
-const instrument = Instrument_Serif({
-  subsets: ["latin"],
-  weight: "400",
-  variable: "--font-instrument",
-  display: "swap",
+  fallback: ["system-ui", "Segoe UI", "sans-serif"],
 });
 
 export const metadata: Metadata = {
@@ -43,8 +42,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${instrument.variable}`} suppressHydrationWarning>
-      <body>{process.env.NODE_ENV === 'development' ? <ReticleDev /> : null}
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <body className={inter.className}>{process.env.NODE_ENV === 'development' ? <ReticleDev /> : null}
         <PrivacyTelemetryBoot />
         <ErrorBoundary>{children}</ErrorBoundary>
       </body>
