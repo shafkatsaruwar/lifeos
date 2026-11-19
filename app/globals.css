@@ -2,14 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Single UI font everywhere: shipped SFProDisplay-Medium.ttf (no system / Inter / serif fallbacks). */
-@font-face {
-  font-family: "LifeOS";
-  src: url("/fonts/SFProDisplay-Medium.ttf") format("truetype");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: block;
-}
+/* Pre-lock Now chrome: Inter + Instrument Serif (Google Fonts loaded in layout). */
 
 /* ─── Atelier Light (source of truth — freeze hexes; see docs/design-system.md) ─── */
 :root,
@@ -27,8 +20,8 @@
   --radius-md:12px;
   --radius-lg:16px;
   --shadow-card:0 1px 2px rgba(15,23,42,.04),0 10px 28px rgba(15,23,42,.06);
-  --font-sans:"LifeOS";
-  --font-display:"LifeOS";
+  --font-sans:var(--font-inter),Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --font-display:var(--font-instrument),"Instrument Serif",Iowan Old Style,Baskerville,"Times New Roman",serif;
   color-scheme:light;
 }
 
@@ -62,17 +55,14 @@
   color-scheme:dark;
 }
 * { box-sizing:border-box; }
-html, body, button, input, textarea, select, option, kbd, code, pre {
-  font-family: "LifeOS", sans-serif !important;
-}
-body { margin:0; background:var(--canvas); color:var(--ink); font-family:var(--font-sans); -webkit-font-smoothing:antialiased; font-synthesis:none; }
+body { margin:0; background:var(--canvas); color:var(--ink); font-family:var(--font-sans),sans-serif; -webkit-font-smoothing:antialiased; }
 button,input,textarea,select { font:inherit; color:inherit; } button { cursor:pointer; }
 .app-shell { min-height:100vh; display:flex; }
 .sidebar { position:fixed; inset:0 auto 0 0; z-index:30; width:236px; padding:22px 14px 15px; border-right:1px solid var(--line); background:color-mix(in srgb,var(--canvas) 96%, transparent); backdrop-filter:blur(16px); display:flex; flex-direction:column; }
 .brand { display:flex; align-items:center; gap:10px; padding:0 8px; font-weight:700; letter-spacing:-.025em; }
-/* LifeOS mark: white tile + black bars (short / tall / mid). On dark chrome use .brand-mark.light. */
-.brand-mark { width:26px; height:26px; border-radius:8px; background:#ffffff; border:1px solid #e8e8e8; display:flex; align-items:flex-end; justify-content:center; gap:2px; padding:7px; box-sizing:border-box; }
-.brand-mark span { width:3px; background:#111111; border-radius:3px; }.brand-mark span:nth-child(1){height:6px}.brand-mark span:nth-child(2){height:11px}.brand-mark span:nth-child(3){height:8px}
+/* Pre-lock mark: dark tile + white bars (short / tall / mid). */
+.brand-mark { width:26px; height:26px; border-radius:8px; background:#242428; display:flex; align-items:flex-end; justify-content:center; gap:2px; padding:7px; box-sizing:border-box; }
+.brand-mark span { width:3px; background:white; border-radius:3px; }.brand-mark span:nth-child(1){height:6px}.brand-mark span:nth-child(2){height:11px}.brand-mark span:nth-child(3){height:8px}
 .brand-mark.light { background:#ffffff13; border-color:transparent; }
 .brand-mark.light span { background:#ffffff; }
 .search-trigger { height:36px; margin:25px 2px 22px; padding:0 9px; border:1px solid var(--line); border-radius:9px; display:flex; align-items:center; gap:8px; color:var(--muted); background:var(--panel); font-size:12px; box-shadow:0 1px 2px rgba(0,0,0,.02); }
@@ -1017,7 +1007,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .atelier-quote-widget p{margin:0;font-family:var(--font-display);font-size:18px;line-height:1.25;color:var(--ink);max-width:16ch}
 .atelier-quote-widget svg{color:var(--accent);flex:0 0 auto}
 .atelier-now-main{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1.2fr);gap:16px;align-items:stretch}
-.atelier-today-panel,.atelier-focus-panel{border-radius:20px}
+.atelier-today-panel,.atelier-focus-panel,.atelier-capture-panel{border-radius:20px}
 .atelier-today-panel{min-height:340px;display:flex;flex-direction:column}
 .atelier-today-panel .now-today-list{flex:1}
 .atelier-now-mid{display:grid;grid-template-rows:1fr auto;gap:12px;min-height:340px}
@@ -1075,7 +1065,7 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 .atelier-focus-tools{display:flex;gap:10px;margin-top:10px}
 .atelier-focus-tools .text-button{color:#CBD5E1;background:transparent;border:0;font-size:11px;cursor:pointer}
 .atelier-focus-panel .now-queue-panel{grid-column:1/-1;border-radius:12px;background:rgba(15,23,42,.45);border-top:1px solid rgba(248,250,252,.08)}
-.atelier-hub-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:10px}
+.atelier-hub-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 .atelier-hub-tile{border:1px solid var(--line);border-radius:16px;background:var(--panel);box-shadow:var(--shadow-card);padding:14px 12px;display:grid;gap:6px;justify-items:start;text-align:left;cursor:pointer;transition:transform .15s ease,border-color .15s ease}
 .atelier-hub-tile:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
 .atelier-hub-tile strong{font-size:13px;color:var(--ink)}.atelier-hub-tile span{font-size:11px;color:var(--muted)}
@@ -1111,10 +1101,18 @@ main { margin-left:236px; min-width:0; width:calc(100% - 236px); }.topbar { posi
 [data-personality="atelier-dark"] .tile-tasks svg{background:#88133755;color:#FDA4AF}
 .dark .tile-library svg,
 [data-personality="atelier-dark"] .tile-library svg{background:#1E293B55;color:#CBD5E1}
-.atelier-now-bottom{display:grid;grid-template-columns:1fr;gap:16px;align-items:stretch}
+.atelier-now-bottom{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.15fr);gap:16px;align-items:stretch}
+.atelier-capture-panel{min-height:180px}
+.atelier-capture-body{display:flex;gap:10px;padding:4px 18px 8px;align-items:center;position:relative}
+.atelier-capture-body input{flex:1;height:48px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2);padding:0 14px;font-size:14px;outline:0;color:var(--ink)}
+.atelier-capture-body input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
+.atelier-capture-add{width:48px;height:48px;border:0;border-radius:14px;background:var(--accent);color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 8px 18px color-mix(in srgb,var(--accent) 30%,transparent)}
+.atelier-capture-hint{margin:0 18px 16px;font-size:11px;color:var(--muted)}
+.atelier-capture-panel .capture-suggestions{position:relative;top:auto;left:auto;right:auto;margin:0 18px 14px}
 .atelier-now-bottom .copilot-card{min-height:180px;border-radius:20px;background:linear-gradient(160deg,color-mix(in srgb,var(--panel) 88%,var(--accent-2) 12%),var(--panel));border-color:color-mix(in srgb,var(--accent-2) 18%,var(--line))}
 .command-results>button.suggested{background:color-mix(in srgb,var(--accent) 10%,var(--canvas))}
 .atelier-now-utility{display:grid;gap:12px;margin-top:4px}
+.atelier-utility-actions{display:flex;flex-wrap:wrap;gap:8px}
 .now-today-list{padding:6px 0 10px}
 .now-today-row{display:grid;grid-template-columns:56px 16px 1fr;gap:10px;padding:10px 18px;align-items:stretch}
 .now-today-row time{font-size:12px;font-weight:650;color:var(--muted);padding-top:3px;text-align:right;font-variant-numeric:tabular-nums}
